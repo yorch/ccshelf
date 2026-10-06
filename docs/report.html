@@ -1,0 +1,662 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude Profile Research</title>
+<style>
+:root{
+  --bg:#ECEFF2;--panel:#F7F9FA;--ink:#111B26;--muted:#566474;--rule:#CBD3DB;--accent:#2548D6;--accent-ink:#fff;
+  --mask:#9AA6B3;--chip:#DFE5EA;--v:#17725F;--r:#9A6200;--u:#B03A48;--focus:#2548D6;
+  --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI Variable Text","Segoe UI",Roboto,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0B121A;--panel:#121B25;--ink:#E6ECF2;--muted:#92A0B0;--rule:#25313E;--accent:#86A1FF;--accent-ink:#0B121A;
+  --mask:#4A5766;--chip:#1A2531;--v:#4FC3A5;--r:#E0AE55;--u:#EE8A98;--focus:#86A1FF}}
+:root[data-theme="dark"]{
+  --bg:#0B121A;--panel:#121B25;--ink:#E6ECF2;--muted:#92A0B0;--rule:#25313E;--accent:#86A1FF;--accent-ink:#0B121A;
+  --mask:#4A5766;--chip:#1A2531;--v:#4FC3A5;--r:#E0AE55;--u:#EE8A98;--focus:#86A1FF}
+*{box-sizing:border-box}
+html{scroll-padding-top:16px}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 var(--sans);-webkit-text-size-adjust:100%}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:3px}
+.shell{display:grid;grid-template-columns:15rem minmax(0,1fr);min-height:100vh}
+.rail{position:sticky;top:0;align-self:start;height:100vh;overflow-y:auto;padding:28px 20px 20px 24px;border-right:1px solid var(--rule);display:flex;flex-direction:column;gap:22px}
+.brand h1{margin:0;font:700 1.25rem/1.2 var(--mono);letter-spacing:-.02em}
+.brand p{margin:6px 0 0;color:var(--muted);font-size:.85rem;line-height:1.45}
+#tabs{display:flex;flex-direction:column;gap:2px}
+#tabs button{all:unset;box-sizing:border-box;cursor:pointer;padding:7px 10px 7px 12px;border-left:2px solid transparent;color:var(--muted);font-size:.95rem;border-radius:0 4px 4px 0}
+#tabs button:hover{color:var(--ink);background:var(--chip)}
+#tabs button[aria-selected="true"]{color:var(--ink);font-weight:650;border-left-color:var(--accent);background:var(--chip)}
+#tabs button:focus-visible{outline:2px solid var(--focus);outline-offset:-2px}
+.legend{margin-top:auto;font-size:.82rem;color:var(--muted);line-height:1.7}
+.legend b{color:var(--ink);font-weight:600}
+.lg{display:inline-block;width:1.4em;font-size:.95rem;line-height:1}
+.lg.gv{color:var(--v)}.lg.gr{color:var(--r)}.lg.gu{color:var(--u)}
+.themebtn{all:unset;cursor:pointer;color:var(--muted);font-size:.85rem;padding:4px 0;border-bottom:1px solid var(--rule)}
+.themebtn:hover{color:var(--ink)}
+main{padding:36px clamp(16px,4vw,48px) 80px;max-width:60rem;width:100%}
+section{display:none}section.on{display:block}
+h2{margin:0 0 6px;font:720 clamp(1.6rem,3.2vw,2.2rem)/1.15 var(--sans);letter-spacing:-.025em}
+h3{margin:34px 0 8px;font:680 1.1rem/1.3 var(--sans);letter-spacing:-.01em}
+p,li{max-width:68ch}
+a{color:var(--accent)}
+.toc{display:flex;flex-wrap:wrap;gap:4px 16px;margin:10px 0 18px;padding:0 0 12px;border-bottom:1px solid var(--rule);font-size:.88rem}
+.toc a{color:var(--muted);text-decoration:none}
+.toc a:hover{color:var(--accent);text-decoration:underline}
+.card{border-top:2px solid var(--ink);padding:10px 0 4px;margin:16px 0}
+.card h3:first-child{margin-top:0}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(16rem,1fr));gap:8px 36px}
+.tag{display:inline-block;font-size:.75rem;padding:1px 8px;border-radius:3px;background:var(--chip);color:var(--muted);margin-right:4px}
+.V,.R,.U{font-size:0;line-height:1;white-space:nowrap}
+.V::before,.R::before,.U::before{font-size:.9rem;vertical-align:baseline}
+.V::before{content:"\25CF";color:var(--v)}.R::before{content:"\25D0";color:var(--r)}.U::before{content:"\25CB";color:var(--u)}
+td.V,td.R,td.U{font-size:inherit}
+td.V::before,td.R::before,td.U::before{margin-right:.4em}
+td.V{color:var(--v)}td.R{color:var(--r)}td.U{color:var(--u)}
+table{width:100%;border-collapse:collapse;border-spacing:0;font-size:.92rem;display:block;overflow-x:auto;margin:8px 0}
+th,td{text-align:left;padding:9px 14px 9px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+th{color:var(--muted);font-weight:600;white-space:nowrap;border-bottom-color:var(--ink)}
+tbody tr:hover td{background:var(--panel)}
+input[type=search],select{padding:9px 12px;border:1px solid var(--rule);border-radius:4px;background:var(--panel);color:var(--ink);font:inherit}
+input[type=search]{width:100%;max-width:34rem;margin:6px 0 10px}
+input[type=range],input[type=checkbox]{accent-color:var(--accent)}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 12px}
+.chips button{border:1px solid var(--rule);background:transparent;color:var(--ink);padding:4px 12px;border-radius:4px;cursor:pointer;font:inherit;font-size:.86rem}
+.chips button:hover{border-color:var(--ink)}
+.chips button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+details{border-top:1px solid var(--rule);padding:10px 0}
+details:last-of-type{border-bottom:1px solid var(--rule)}
+summary{cursor:pointer;font-weight:600}
+code,pre{font-family:var(--mono);font-size:.84rem}
+pre{background:var(--panel);border:1px solid var(--rule);border-radius:4px;padding:12px 14px;overflow-x:auto;line-height:1.5}
+code{background:var(--chip);padding:1px 5px;border-radius:3px}
+pre code{background:none;padding:0}
+.bar{height:10px;background:var(--chip);border-radius:2px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent);transition:width .25s}
+.callout{border-left:3px solid var(--accent);padding:8px 16px;background:var(--panel);margin:16px 0;max-width:72ch}
+.callout ul,.callout ol{margin:6px 0}
+label.task{display:flex;gap:10px;align-items:flex-start;padding:6px 0}
+ul,ol{padding-left:22px}
+.small{font-size:.86rem;color:var(--muted)}
+
+/* loadout hero */
+.hero{margin:0 0 36px;padding:0 0 28px;border-bottom:1px solid var(--rule)}
+.hero p{color:var(--muted)}
+.seg{display:inline-flex;border:1px solid var(--ink);border-radius:5px;overflow:hidden;margin:6px 0 10px;flex-wrap:wrap}
+.seg button{all:unset;cursor:pointer;padding:7px 16px;font-size:.92rem;border-right:1px solid var(--ink)}
+.seg button:last-child{border-right:0}
+.seg button[aria-checked="true"]{background:var(--ink);color:var(--bg)}
+.seg button:focus-visible{outline:2px solid var(--focus);outline-offset:-3px}
+.policy{display:flex;gap:8px;align-items:center;font-size:.9rem;margin:2px 0 14px;color:var(--muted)}
+.loadout{display:grid;grid-template-columns:repeat(auto-fill,minmax(15.5rem,1fr));gap:2px 28px;margin:6px 0 10px}
+.plug{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--rule);font-family:var(--mono);font-size:.84rem;color:var(--muted);transition:color .2s}
+.plug.on{color:var(--ink)}
+.sw{flex:none;position:relative;width:28px;height:16px;border-radius:8px;background:var(--mask);transition:background .2s;transition-delay:var(--d,0s)}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:var(--bg);transition:transform .2s;transition-delay:var(--d,0s)}
+.plug.on .sw{background:var(--accent)}
+.plug.on .sw::after{transform:translateX(12px)}
+.plug .lock{margin-left:auto;font-family:var(--sans);font-size:.74rem;color:var(--muted);border:1px solid var(--rule);border-radius:3px;padding:0 6px}
+.count{font-size:1rem;color:var(--ink);margin:10px 0}
+.count b{font-variant-numeric:tabular-nums}
+@media (max-width:860px){
+  .shell{display:block}
+  .rail{position:sticky;top:0;z-index:5;height:auto;flex-direction:row;flex-wrap:wrap;align-items:center;gap:2px 12px;padding:8px 12px 0;border-right:0;border-bottom:1px solid var(--rule);background:var(--bg);overflow:visible}
+  .brand p,.legend{display:none}
+  .brand{flex:1}
+  .brand h1{font-size:1rem}
+  .themebtn{order:2}
+  nav{order:3;flex-basis:100%;min-width:0;overflow-x:auto}
+  #tabs{flex-direction:row;gap:2px}
+  #tabs button{white-space:nowrap;border-left:0;border-bottom:2px solid transparent;border-radius:3px 3px 0 0;padding:6px 10px}
+  #tabs button[aria-selected="true"]{border-bottom-color:var(--accent)}
+  main{padding-top:20px}
+  th,td{min-width:8rem}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="shell">
+<aside class="rail">
+<div class="brand"><h1>claude-profile</h1><p>Research and design notes, 2026-10-06. Claude Code 2.1.290.</p></div>
+<nav aria-label="Sections"><div id="tabs" role="tablist" aria-orientation="vertical"></div></nav>
+<div class="legend" aria-label="Confidence markers"><b>How sure we are</b><br><span class="lg gv" aria-hidden="true">&#9679;</span>verified in docs, gh or the CLI<br><span class="lg gr" aria-hidden="true">&#9680;</span>reported by a research agent<br><span class="lg gu" aria-hidden="true">&#9675;</span>unverified or inferred</div>
+<button class="themebtn" id="themebtn" type="button">Switch theme</button>
+</aside>
+<main>
+
+<section id="overview">
+<div class="hero">
+<h2>One install, a different loadout per terminal</h2>
+<p>Pick a profile to see what the launcher would mask for one session. The plugin names are made up. The mechanism is real and was tested: a generated <code>--settings</code> file sets <code>enabledPlugins</code> to <code>false</code> for every installed plugin the profile doesn't list.</p>
+<div class="seg" id="seg" role="radiogroup" aria-label="Profile"></div>
+<label class="policy"><input type="checkbox" id="pol"> Org policy force-enables audit-logger</label>
+<div class="loadout" id="loadout"></div>
+<p class="count" id="lcount" aria-live="polite"></p>
+<pre id="lcmd"></pre>
+</div>
+<div class="grid">
+<div class="card"><h3 style="margin-top:0">Use case 1: Profiles</h3><p>Plugins, skills and MCP servers are installed globally, so every session carries all of them. Want: named profiles (frontend, SRE, SEO...) that differ per terminal, concurrently.</p></div>
+<div class="card"><h3 style="margin-top:0">Use case 2: Discoverability</h3><p>In a company with ~50 internal plugins in a git marketplace, people can't tell what exists, what to use when, what overlaps, what's new, or who owns it.</p></div>
+</div>
+<div class="callout"><b>Bottom line.</b> Both problems are real but narrower than they first look. Native features cover much of each. The unserved parts are: default-deny and composable named profiles (launcher), and a derived catalog with ownership/status/overlap/new-since views (catalog). Build both thin, in one repo, as independent modules sharing a small <code>core/</code>.</div>
+<h3>Key facts that shaped the plan</h3>
+<ul>
+<li>The "42k tokens of skills" pain is probably outdated: the listing is capped at 1% of context and MCP tools are deferred. What remains is <b>routing quality and clutter</b>. <span class="V">V</span></li>
+<li><code>enabledPlugins</code> and <code>skillOverrides</code> work inside a <code>--settings</code> file; shell aliases already cover ~80-90% of profile needs. <span class="V">V</span>/<span class="R">R</span></li>
+<li><code>disableSideloadFlags</code> can kill <code>--plugin-dir</code>, <code>--agents</code>, <code>--mcp-config</code>; managed force-enabled plugins can't be masked. The launcher must detect policy, not bypass it. <span class="V">V</span></li>
+<li>Bundles (a plugin with only <code>dependencies</code>) are native; <code>metadata</code> in marketplace.json is not read or rendered by Claude Code. <span class="V">V</span></li>
+<li>Keychain auth is per <code>CLAUDE_CONFIG_DIR</code>, so config-dir-per-profile means a login per profile. <span class="V">V</span></li>
+</ul>
+</section>
+
+<section id="evidence">
+<h2>Evidence</h2>
+<input type="search" id="evq" aria-label="Filter issues" placeholder="Filter issues (e.g. skills, profiles, open, closed)">
+<table id="evtable"><thead><tr><th>Issue</th><th>Topic</th><th>Status</th><th>Signal</th></tr></thead><tbody></tbody></table>
+<p class="small">Closures are by the stale bot, with no human reply or roadmap statement: nobody triaged them, which is not proof the need is unmet. No Reddit/HN evidence found.</p>
+<h3>Is the token argument still valid?</h3>
+<div class="card">
+<p>Per official docs the skill listing is capped at <b>1% of the context window</b>. Compare it with the #14882 report:</p>
+<label>Context window: <select id="ctx" aria-label="Context window size"><option value="200000">200k</option><option value="1000000">1M</option></select></label>
+<p style="margin:8px 0 4px">Skill listing budget: <b id="bud"></b> tokens</p>
+<div class="bar"><i id="budbar"></i></div>
+<p style="margin:12px 0 4px">Reported in #14882 (189 skills): <b>42,207</b> tokens <span class="small">(likely a pre-v2.1.196 display artifact)</span></p>
+<div class="bar"><i id="repbar" style="background:var(--bad)"></i></div>
+</div>
+</section>
+
+<section id="native">
+<h2>Native mechanisms</h2>
+<h3>Profiles-relevant flags and settings</h3>
+<table><thead><tr><th>Mechanism</th><th>What it does</th><th>Caveat</th></tr></thead><tbody>
+<tr><td><code>--settings</code></td><td>Per-session settings; carries <code>enabledPlugins</code>, <code>skillOverrides</code>, hooks, env. Merges per key.</td><td>Masking user-level true with false not yet tested here (see Stage 0).</td></tr>
+<tr><td><code>--setting-sources</code></td><td>Choose layers: user, project, local.</td><td>Dropping user also drops base prefs; launcher must re-add.</td></tr>
+<tr><td><code>--mcp-config --strict-mcp-config</code></td><td>Per-session MCP set only.</td><td>Blocked by <code>disableSideloadFlags</code> (non-SDK).</td></tr>
+<tr><td><code>--plugin-dir</code>, <code>CLAUDE_CODE_PLUGIN_DIRS</code></td><td>Session-only plugins.</td><td>Blocked by <code>disableSideloadFlags</code>.</td></tr>
+<tr><td><code>skillOverrides</code></td><td>Per-skill on / name-only / user-invocable-only / off.</td><td>Does not apply to plugin skills.</td></tr>
+<tr><td><code>--bare</code></td><td>Skips almost everything.</td><td>No OAuth/keychain: API key only.</td></tr>
+<tr><td><code>CLAUDE_CONFIG_DIR</code></td><td>Full isolation (settings, plugins, skills, history, creds).</td><td>Separate login per dir; plugin cache duplicated; symlinked <code>plugins/</code> warns "corrupted".</td></tr>
+</tbody></table>
+<h3>Discoverability-relevant features</h3>
+<table><thead><tr><th>Feature</th><th>Notes</th></tr></thead><tbody>
+<tr><td>marketplace.json fields</td><td><code>description, category, tags, relevance, dependencies, defaultEnabled, displayName, metadata</code>; also author/homepage/repository/license/keywords. No deprecation/status field.</td></tr>
+<tr><td>Bundles</td><td>Manifest with only <code>name</code> + <code>dependencies</code> installs the set. Whether disabling a bundle disables deps: unverified (probably not).</td></tr>
+<tr><td>Relevance signals</td><td><code>cwd, cli, hosts, filesRead, manifestDeps</code>; needs <code>pluginSuggestionMarketplaces</code>; rate-limited (1 per 3 sessions; Discover pin once per machine).</td></tr>
+<tr><td><code>/plugin</code> Discover</td><td>Type-to-search. No facets, no new/trending. Cost/last-updated only for official marketplace.</td></tr>
+<tr><td><code>claude plugin list --json --available</code></td><td>Gives id, name, description, version, installCount. No tags/category/metadata. No search subcommand.</td></tr>
+<tr><td><code>/skill-doctor</code></td><td>Per-skill cost and unused skills; text with <code>-p</code>. v2.1.252+.</td></tr>
+<tr><td>Telemetry</td><td>OTel <code>plugin_loaded</code>, <code>skill_activated</code> (names redacted unless <code>OTEL_LOG_TOOL_DETAILS=1</code>); Enterprise Analytics API per plugin/day.</td></tr>
+</tbody></table>
+<div class="callout"><b>Policy constraint.</b> Managed <code>disableSideloadFlags</code> rejects <code>--plugin-dir</code>, <code>--plugin-url</code>, <code>--agents</code>, non-SDK <code>--mcp-config</code> and <code>CLAUDE_CODE_PLUGIN_DIRS</code> (exit 1). Managed <code>enabledPlugins:true</code> can't be overridden.</div>
+</section>
+
+<section id="tools">
+<h2>Existing tools</h2>
+<div class="chips" id="toolchips"></div>
+<table id="tooltable"><thead><tr><th>Tool</th><th>Area</th><th>Approach</th><th>Stars</th><th>Limits</th></tr></thead><tbody></tbody></table>
+<div class="callout">Nothing found that combines task profiles (plugins+skills+MCP) with per-terminal launch, nor catalog + search + recommendation + bundles for a git-based marketplace.json. Search was not exhaustive.</div>
+</section>
+
+<section id="options">
+<h2>Options &amp; adversarial review</h2>
+<h3>Solution space</h3>
+<div class="chips" id="optchips"></div>
+<table id="opttable"><thead><tr><th></th><th>Approach</th><th>Concurrent-safe</th><th>Effort</th><th>Upstream risk</th><th>Verdict</th></tr></thead><tbody></tbody></table>
+<h3>Adversary's ranked objections</h3>
+<details open><summary>1. Launcher is least useful in locked-down orgs</summary><p>Those orgs (disableSideloadFlags, managed force-enables) tend to have the biggest marketplaces.</p></details>
+<details><summary>2. "Shared core" is thin</summary><p>About 200 lines of marketplace.json parsing: weak ground for calling it one product. Resolution: shared <code>core/</code>, independent modules.</p></details>
+<details><summary>3. Native features and upstream are closing the gap</summary><p>Relevance, /skill-doctor, Stats tab, installCount, Analytics API. Faceted Discover is plausible next. Build only what's cheap to delete.</p></details>
+<details><summary>4. Metadata drift</summary><p>Any field without a CI gate rots. Derive the catalog; never a second source of truth.</p></details>
+<details><summary>5. Adoption</summary><p>Users live in /plugin. Link a web page from the README and push recommendations via <code>relevance</code> blocks.</p></details>
+<details><summary>6. Security</summary><p>Launcher must detect policy and say "blocked by policy", never work around it, especially when the user governs the org's policy.</p></details>
+<h3>When is a custom catalog worth it?</h3>
+<div class="card">
+<label>Plugins in registry: <b id="nval">50</b></label>
+<input type="range" id="nrange" aria-label="Number of plugins in the registry" min="5" max="600" value="50" style="width:100%">
+<p id="nmsg" style="margin:6px 0 0"></p>
+</div>
+</section>
+
+<section id="plan">
+<h2>Recommendation &amp; roadmap</h2>
+<div class="card"><b>One repo, three modules.</b>
+<pre>core/      read marketplace.json + installed state, resolve sets (pure)
+profiles/  local per-terminal launcher           (depends on core)
+catalog/   metadata lint + static site, run in CI (depends on core)</pre>
+<p class="small">Bridge: profile = bundle plugin, so catalog-published bundles become selectable profiles.</p></div>
+<h3>Principles</h3>
+<ul>
+<li>Never write shared state; write only content-addressed files in the launcher's own cache dir and start <code>claude</code> (spawn and wait, so it works on Windows).</li>
+<li>Respect org policy; report "blocked by policy".</li>
+<li>Prefer <code>--settings</code> masking + <code>skillOverrides</code> over sideload flags.</li>
+<li>Everything cheap to delete; launcher thin enough to drop if native profiles ship (#91770).</li>
+<li>Lead the pitch with routing quality and clutter, not tokens.</li>
+</ul>
+<h3>Roadmap (tick to track; saved in this browser)</h3>
+<div class="card" id="roadmap"></div>
+<h3>How the launcher invokes Claude Code</h3>
+<ol>
+<li><b>Resolve</b> the profile: sources, <code>extends</code>, one resolved profile.</li>
+<li><b>Look at the machine</b> (read-only): <code>claude --version</code>, <code>claude plugin list --json</code>, policy signals; report plugins not installed.</li>
+<li><b>Compile</b> content-addressed files in the launcher's cache dir: a settings file (<code>enabledPlugins</code> false for everything not in the profile, <code>skillOverrides</code>, env/model) and, if <code>strict</code>, an MCP config.</li>
+<li><b>Build the command line:</b> <code>claude --settings &lt;file&gt; [--strict-mcp-config --mcp-config &lt;file&gt;] [--model ...] &lt;your passthrough args&gt;</code>; <code>--setting-sources project,local</code> when <code>inherit_user_settings = false</code>.</li>
+<li><b>Spawn and step aside:</b> inherited TTY, launcher ignores Ctrl+C, forwards termination, returns Claude's exit code. It never proxies the conversation.</li>
+<li><b>Write nothing shared</b> (<code>~/.claude</code>, <code>~/.claude.json</code>, plugin cache).</li>
+</ol>
+<h3>What profiles share, and combining with accounts</h3>
+<p>No <code>CLAUDE_CONFIG_DIR</code> is set, so all profiles share auth (tested), projects and trust, session history (mixed in <code>/resume</code>), auto memory and CLAUDE.md (decided: fine), user settings by default, the plugin cache, and claude.ai connector auth. A profile is a loading filter, not a security or identity boundary. A repo's own <code>.mcp.json</code>, <code>.claude/</code> skills/agents/settings still apply.</p>
+<div class="callout"><b>Profiles and accounts are two axes.</b> A profile chooses what is active; an account (a separate <code>CLAUDE_CONFIG_DIR</code>) chooses the identity and data dir. Ways to combine:
+<ol><li><b>Honor the environment:</b> <code>CLAUDE_CONFIG_DIR=~/.claude-work cprof run sre</code> works from day one; the launcher must never override that variable, and its plugin-list call runs under it.</li>
+<li><b>Built-in accounts:</b> <code>[accounts.work] config_dir = "~/.claude-work"</code> in config; <code>cprof run sre --account personal</code>; a profile may pin <code>account</code>; <code>cprof account add</code> prints the one-time <code>/login</code> steps and never touches credentials.</li>
+<li><b>Delegate</b> to an existing config-dir switcher and run cprof inside it.</li></ol>
+Per account: plugins and marketplaces are installed separately, the plugin cache is duplicated (don't symlink <code>plugins/</code>; <code>CLAUDE_CODE_PLUGIN_SEED_DIR</code> untested), each account has its own login, managed settings still apply, and org profiles are shared via the profile sources. To test under a second config dir, a human must do the interactive login first. Details in <code>07-how-it-invokes-claude.md</code>.</div>
+<h3>Tool repo vs data repo (R5)</h3>
+<table><thead><tr><th></th><th>Tool repo (public, github.com)</th><th>Org data repo (private, GHE Cloud or Server)</th></tr></thead><tbody>
+<tr><td>Holds</td><td>Go source, schemas, docs, release binaries, reusable GitHub Action, fictional examples, starter template</td><td>marketplace.json, plugins, <code>profiles/*.toml</code>, generated catalog and bundles, org config</td></tr>
+<tr><td>Org data?</td><td>Never</td><td>Yes</td></tr>
+<tr><td>Changed by</td><td>Open-source contributors</td><td>The org's platform team</td></tr>
+</tbody></table>
+<ul>
+<li>The data repo's workflow calls the public tool via <code>uses: owner/claude-profile/action@&lt;pin&gt;</code> or by downloading a pinned release binary. GHE Server needs GitHub Connect or a mirror (e.g. actions-sync) for the first; the binary variant can be mirrored to an internal registry.</li>
+<li>Pin the tool version (and verify a checksum where possible): it runs in the org's CI and on developers' machines.</li>
+<li>Ship a starter template data repo (sample marketplace, profiles, CI workflow, publish recipes for Pages and a static host).</li>
+<li>Config points from the data repo to the tool, not the reverse. No telemetry by default.</li>
+</ul>
+<div class="callout"><b>License: MIT</b> for the tool repo. To do: add a LICENSE file (copyright holder and year) and confirm your employer allows open-sourcing this before the first public commit. The org's data repo is its own.</div>
+<h3>Policy spectrum and open source (R3, R4)</h3>
+<p>The org enforces managed settings; the tool must also work with none or partial policy, and will be open source. The launcher is <b>capability-driven</b>: it probes each capability and degrades per feature.</p>
+<table><thead><tr><th>Capability</th><th>Needed for</th><th>If blocked</th></tr></thead><tbody>
+<tr><td><code>--settings</code> masking</td><td>plugin/skill filtering</td><td>Core. If this fails, refuse and explain.</td></tr>
+<tr><td><code>--strict-mcp-config</code> + <code>--mcp-config</code></td><td>hiding MCP servers and connectors</td><td>Skip MCP control; warn.</td></tr>
+<tr><td><code>--plugin-dir</code></td><td>generated local plugins</td><td>Skip; suggest marketplace packaging.</td></tr>
+<tr><td><code>--agents</code></td><td>profile subagents</td><td>Skip.</td></tr>
+<tr><td><code>--setting-sources</code></td><td>dropping the user layer</td><td>Fall back to per-key masking.</td></tr>
+<tr><td>Force-enabled plugins</td><td>masking</td><td>Can't be masked; listed as "always on by policy".</td></tr>
+</tbody></table>
+<p class="small">Detection: managed-settings files per OS (best effort) plus detection by failure (exit 1 on a blocked flag); <code>doctor --policy</code> prints available / blocked / unknown. Never bypass policy in any mode. Test fixtures: no policy, permissive, sideload blocked, force-enabled, both. Open source: no org-specific names, URLs or defaults in code; neutral project name, license and contribution docs needed.</p>
+<h3>Stack decisions</h3>
+<p><b>Decided:</b> Go; GitHub / GitHub Enterprise and GitHub Actions. Implications (assessment, untested against your GHE):</p>
+<table><thead><tr><th>Area</th><th>Implication</th></tr></thead><tbody>
+<tr><td>Which GHE</td><td>Cloud vs Server is unknown and matters for Actions availability, Pages and egress.</td></tr>
+<tr><td>CI action</td><td>Composite action in this repo; fetch a pinned release binary from the same GHE, or build with setup-go. On GHE Server, third-party actions must be mirrored/allowed.</td></tr>
+<tr><td>Releases</td><td>goreleaser with GitHub Enterprise endpoints; private repos need a token for brew/scoop downloads.</td></tr>
+<tr><td>Catalog hosting</td><td>GitHub Pages (access-controlled) or an internal static host; visibility must match who may see the plugin list.</td></tr>
+<tr><td>Marketplace and profile git sources</td><td>GHE likely needs git URL sources rather than the <code>github</code> source type (verify); use the user's git credential helper/SSH config, never stored tokens. Affects <code>strictKnownMarketplaces</code> patterns.</td></tr>
+<tr><td>Bundle tags</td><td>CI creates <code>&lt;plugin&gt;--v&lt;version&gt;</code> tags (<code>claude plugin tag</code>); needs tag-write permission.</td></tr>
+</tbody></table>
+<div class="callout"><b>R2: support both GHE Cloud and GHE Server.</b> Design to the lowest common denominator:
+<ul>
+<li>CLI first, workflow second: all logic in the Go binary, the Actions workflow is a thin wrapper, so the same binary runs in any CI.</li>
+<li>No hard-coded hosts; use <code>GITHUB_SERVER_URL</code> / <code>GITHUB_API_URL</code> or config; test against a non-github.com host.</li>
+<li>Minimal third-party actions; where needed (<code>setup-go</code>, pages upload) document mirroring/allowlisting on GHE Server and offer an alternative.</li>
+<li>Offline-tolerant: binary from the internal instance, no runtime fetches from github.com, catalog site fully self-contained (no CDN).</li>
+<li>Version skew: avoid or make optional newer Actions syntax, artifact attestations and some Pages options; record a minimum Server version.</li>
+<li>Auth via the user's git credential helper / SSH, <code>GITHUB_TOKEN</code> in CI; no stored tokens.</li>
+<li>Catalog output is a plain static directory; Pages is one publish option.</li>
+</ul></div>
+<p class="small">Go choices: one module with core/profiles/catalog packages and one binary; TOML library; JSON Schema validation; shell out to the user's <code>git</code>; static HTML + small vanilla JS for the catalog; goreleaser; CI matrix on macOS, Ubuntu and Windows; golden-file tests with a fake <code>claude</code>.</p>
+<h3>Cross-platform requirement (R1)</h3>
+<p>The tooling must work on macOS, Linux (WSL counts as Linux) and native Windows with the same profile files. Stage 0 ran on macOS only; Linux and Windows behavior is untested.</p>
+<table><thead><tr><th>Area</th><th>Change from the Unix-only draft</th></tr></thead><tbody>
+<tr><td>Starting claude</td><td>No <code>exec</code> on Windows: spawn a child, ignore Ctrl+C in the launcher, forward termination, return the exit code.</td></tr>
+<tr><td>Generated files</td><td>Content-addressed files in the launcher's cache dir (name = hash of the resolved config): concurrent runs never collide, no cleanup problem, no overwriting open files on Windows. Atomic write, GC at launch.</td></tr>
+<tr><td>Finding claude</td><td>PATH lookup (<code>.exe</code>/<code>.cmd</code>), fallback <code>~/.local/bin</code>, override option.</td></tr>
+<tr><td>Paths</td><td>Accept <code>~</code> and forward slashes, normalize backslashes, write forward slashes into generated JSON. Launcher dirs: XDG or <code>~/.config</code> on Unix, <code>%APPDATA%</code> / <code>%LOCALAPPDATA%</code> on Windows.</td></tr>
+<tr><td>Shortcuts</td><td><code>shell-init</code> for bash, zsh, fish, pwsh; <code>.cmd</code> shims for cmd. Never depend on symlinks (Windows needs Developer Mode).</td></tr>
+<tr><td>MCP npx servers</td><td>Per-OS command override in the MCP registry. Whether native Windows needs <code>cmd /c</code> is unverified (docs agent said no; my recollection says yes).</td></tr>
+<tr><td>Policy detection</td><td>Managed-settings paths are known per OS; Windows registry/MDM and server-managed settings are not readable reliably, so also detect by failure (exit 1 on a sideload flag).</td></tr>
+<tr><td>Credentials</td><td>Linux/Windows keep <code>.credentials.json</code> inside the config dir with no documented locking; concurrent refresh is untested there.</td></tr>
+<tr><td>Encoding</td><td>Write UTF-8 no BOM + LF; read tolerant of BOM/CRLF; reject UTF-16 (PowerShell 5 redirection) clearly.</td></tr>
+<tr><td>Distribution</td><td>No self-update (running .exe can't be replaced); Homebrew, Scoop/WinGet, release downloads; signing/notarization or SmartScreen friction.</td></tr>
+<tr><td>Testing</td><td>CI matrix on macOS, Ubuntu, Windows with a fake <code>claude</code> test double; real-claude test opt-in.</td></tr>
+</tbody></table>
+<div class="callout"><b>Supported targets, first release:</b> darwin/arm64, darwin/amd64, linux/amd64, linux/arm64, windows/amd64, windows/arm64. goreleaser builds all six; unit and fake-claude tests run natively where hosted runners exist (arm64 runners for public repos need verification; otherwise compile-checked and marked "built, not natively tested"). Publish via Homebrew, Scoop and WinGet; signing/notarization or package-manager coverage required. The real-claude test stays opt-in.</div>
+<p class="small">Strengthens Go (os/exec, build tags, cross-compilation, goreleaser to Homebrew/Scoop/WinGet). TypeScript with bun --compile is possible; Windows console handling is the weaker spot.</p>
+<h3>Profile sources and sharing</h3>
+<p>Claude Code has no native profile repo: marketplaces distribute plugins, and a bundle distributes "which plugins go together" but not masking, MCP definitions or session defaults. Profiles need their own path.</p>
+<table><thead><tr><th>Source</th><th>How</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>plugin</code> (planned after dir and git)</td><td>Data-only plugin (e.g. <code>org-profiles@acme</code>) holding <code>profiles/*.toml</code>; found via <code>claude plugin list --json</code>.</td><td>Reuses native auth, pinning, autoUpdate, strictKnownMarketplaces. Must be installed and never masked. Untested under policy.</td></tr>
+<tr><td><code>git</code></td><td>Launcher clones a repo at a pinned ref into a cache.</td><td>Works for a profiles-only repo; adds its own fetch/auth path.</td></tr>
+<tr><td><code>dir</code></td><td>Personal dir or <code>.claude-profile/</code> in a project repo.</td><td>Always available.</td></tr>
+</tbody></table>
+<p><b>Precedence:</b> personal, then project, then org; <code>extends</code> can still pull in org profiles.</p>
+<pre>[[sources]]
+type = "dir"
+path = "~/.config/claude-profile/profiles"      # personal
+
+[[sources]]
+type = "plugin"
+plugin = "org-profiles@acme"                    # org profiles shipped as a plugin
+path = "profiles"
+
+[trust]
+require_pin = true     # refuse git sources without a pinned ref
+on_change = "prompt"   # prompt | fail | allow, when a profile adds MCP commands, env or prompt text</pre>
+<div class="callout"><b>Trust.</b> A shared profile can define MCP commands, env and system-prompt text, so loading one is effectively running code from that source. The launcher loads org profiles only from sources the org already trusts, records hashes in a lockfile, shows a diff and asks before accepting risky changes (<code>cprof trust</code>), and never bypasses org policy.</div>
+<h3>Manifest sketch (annotated)</h3>
+<p class="small">Design proposal; field names are not final. One file per profile; the file name must match <code>name</code>.</p>
+<pre># ---- Identity (shown in ls, search, and the catalog page) ----
+name = "frontend"             # Unique id, kebab-case. What you type: `cprof run frontend`.
+                              # Also the name of the generated bundle plugin profile-frontend.
+description = "React, CSS and accessibility work"   # One line, shown in listings and the catalog.
+owner = "@web-platform"       # Team or person who maintains it. Required for org profiles
+                              # (CI lint); optional for personal ones.
+status = "active"             # active | experimental | deprecated. Deprecated profiles still
+                              # run but warn and point to superseded_by.
+superseded_by = ""            # Only when deprecated: the replacement profile.
+
+# ---- Account (optional) ----
+account = ""                  # Default account (separate CLAUDE_CONFIG_DIR) for this profile.
+                              # Precedence: --account flag, this field, config default_account,
+                              # then Claude Code's default dir. Empty = the default dir.
+
+# ---- Composition ----
+extends = ["base"]            # Parents, applied in order. Lists are unioned; a later off or
+                              # exclude beats an earlier include. Cycles are an error.
+
+# ---- Discovery hints (used by search, recommend, and the catalog) ----
+when_to_use = ["UI components", "visual QA"]   # Tasks this profile fits.
+avoid_when  = ["infra changes"]                # Tasks it does not fit.
+
+# ---- Plugins ----
+[plugins]
+mode = "allow-only"           # allow-only (default-deny): every installed plugin not listed is
+                              #   masked with enabledPlugins:false, regenerated on each launch
+                              #   so newly installed plugins stay off.
+                              # additive: only plugins in exclude are masked.
+include = ["design-kit@acme", "playwright@acme"]   # name@marketplace; dependencies are followed,
+                              # so a bundle brings its parts.
+exclude = []                  # Always masked, even if a parent included them.
+
+# ---- Standalone skills (~/.claude/skills; NOT plugin skills) ----
+[skills]
+off = ["legacy-helper"]       # Hidden via skillOverrides "off". Plugin skills can only be
+                              # controlled per whole plugin, so use [plugins] for those.
+name_only = ["docs-writer"]   # Name visible, description dropped (smaller listing).
+
+# ---- MCP servers ----
+[mcp]
+servers = ["figma"]           # Names resolved from an MCP registry file; become the per-session
+                              # --mcp-config.
+claudeai_connectors = "none"  # none | keep. Connectors ignore enabledPlugins; "none" needs
+                              # --strict-mcp-config, which org policy can block.
+strict = true                 # Pass --strict-mcp-config so only the servers above load.
+
+# ---- Session defaults ----
+[session]
+model = "opus"                # Model for this profile (optional).
+effort = "high"               # low | medium | high | xhigh | max (optional).
+append_system_prompt_file = "prompts/frontend.md"   # Appended to the system prompt.
+inherit_user_settings = true  # true: keep ~/.claude/settings.json, mask plugins per key.
+                              # false: --setting-sources project,local (drops user plugins,
+                              # skills, MCP, hooks, model); re-add only what the profile sets.
+[session.env]
+FIGMA_TOKEN_REF = "op://dev/figma/token"   # Prefer secret-store references over raw values.
+                              # Never commit secrets.
+
+# ---- Policy behavior ----
+[policy]
+on_blocked = "warn"           # warn | fail. What to do when org policy blocks something the
+                              # profile needs. The launcher never bypasses policy.</pre>
+<h3>CLI sketch</h3>
+<pre>run &lt;profile&gt; [-- claude args]   ls   show &lt;p&gt;   diff &lt;a&gt; &lt;b&gt;   dry-run &lt;p&gt;
+init   compile   lint   catalog build   search &lt;q&gt;   recommend   doctor</pre>
+<h3>Do not build (yet)</h3>
+<p>Registry server/DB, vector search, TUI, custom install path, MCP gateway, config-dir-per-profile, concierge before there is usage data, anything that writes shared settings.</p>
+</section>
+
+<section id="workflows">
+<h2>Example workflows</h2>
+<p class="small">Illustrative mockups. Nothing is built; <code>cprof</code> is a placeholder name. Masking and parallel runs were tested in Stage 0; everything else is design intent. Full text in <code>06-example-workflows.md</code>.</p>
+<div class="chips" id="wfchips"></div>
+<div class="card" id="wfbody"></div>
+</section>
+
+<section id="stage0">
+<h2>Stage 0 results</h2>
+<p class="small">Run 2026-10-06 on Claude Code 2.1.291, haiku, scratch cwd. Observed via the <code>system/init</code> event. No user config was modified. Details in <code>05-stage0-results.md</code>.</p>
+<table><thead><tr><th>Test</th><th>Result</th><th>Verdict</th></tr></thead><tbody>
+<tr><td>T1 <code>--settings</code> enabledPlugins:false</td><td>Masks user-scope and synced plugins; per-key merge (unlisted stay on). Masking 4 plugins: plugins 20→16, skills 53→39, agents 15→12, their MCP gone. claude.ai connectors unaffected.</td><td class="V">Confirmed</td></tr>
+<tr><td>T2 <code>--setting-sources project,local</code></td><td>User layer dropped: plugins 3, skills 19, plugin MCP gone, synced skills gone. Auth still works. 9 claude.ai connectors remain.</td><td class="V">Confirmed</td></tr>
+<tr><td>T3 <code>skillOverrides</code></td><td>"off" removes standalone user skills; does NOT remove plugin skills (any key). Token effect within noise.</td><td class="R">Partly</td></tr>
+<tr><td>T4 Concurrency</td><td>3 parallel sessions with different masks, ~4,771 JSON parses of ~/.claude.json, 0 failures, no cross-contamination. The CLI itself rewrites that file.</td><td class="V">No issue seen (not a stress test)</td></tr>
+<tr><td>T5 <code>--strict-mcp-config</code> + empty config</td><td>All MCP servers gone, including claude.ai connectors; tools 157→29. Plugin skills still load.</td><td class="V">Confirmed</td></tr>
+<tr><td>T6 Managed settings</td><td>None on this machine (MDM/server-side not checked).</td><td class="R">No policy here</td></tr>
+<tr><td>T7 Bundles</td><td>Skipped (requires installing).</td><td class="U">Untested</td></tr>
+</tbody></table>
+<h3>Token measurement (single runs, noisy)</h3>
+<div class="card" id="tokbars"></div>
+<div class="callout"><b>Takeaway.</b> Dropping the whole user layer saved only ~2.4k of ~27k tokens (~9%). Raw token cost is a weak argument on this machine; the case for profiles is routing quality, clutter, MCP startup/connection noise. Plugin skills can only be controlled per whole plugin; claude.ai connectors need <code>--strict-mcp-config</code>, which sideload policy can block.</div>
+<h3>Still untested</h3>
+<ul><li>Bundle enable/disable semantics</li><li>Behavior under <code>disableSideloadFlags</code> / managed force-enables</li><li>A real concurrency stress test; content diff of <code>~/.claude.json</code></li><li>Whether <code>name-only</code> reduces tokens</li><li>Routing quality with vs. without a profile (the actual benefit claim)</li></ul>
+</section>
+
+<section id="decisions">
+<h2>Open decisions</h2>
+<div class="card"><ol>
+<li>Managed settings: <b>decided</b>. The org enforces them; the tool must work across none, partial and strict policy (R3) and be open source (R4). Still unknown: which managed keys the org sets.</li>
+<li>Order: <b>decided, both in parallel</b>: shared <code>core/</code> first, then a thin slice of each track.</li>
+<li>Implementation language: <b>decided, Go</b>. Still open: whether <code>core/</code> is a Go library package or a convention.</li>
+<li>GitHub Enterprise Cloud and Server: <b>both supported (R2)</b>. Still to verify: marketplace/plugin git source behavior on each, and the minimum GHE Server version for the workflows.</li>
+<li>Catalog hosting: <b>adopter's choice</b> (static directory output; template shows Pages and a static host). <b>Metadata ownership decided: hybrid</b>: authors write, a platform reviewer approves; CI lint enforces required fields, CODEOWNERS routes review, <code>reviewBy</code> dates let <code>doctor</code> flag stale entries.</li>
+<li>Profile distribution: <b>decided, <code>dir</code> + <code>git</code> first; <code>plugin</code> later</b> once tested under managed policy. (Changed from the earlier plugin-default lean: with the tool/data repo split, a pinned git source fits any private repo and uses your git credentials.)</li>
+<li>Cross-platform: do concurrent sessions refresh credentials safely on Linux/Windows? Does masking behave identically on Windows? Does MCP npx need <code>cmd /c</code>? Which architectures and distros are in scope for a first release?</li>
+<li>Standalone skills: <b>decided</b>: explicit off-list via <code>skillOverrides</code> plus guidance to package skills as plugins; <code>doctor</code> warns about unlisted standalone skills; no generated <code>--plugin-dir</code> plugin. For non-plugin MCP: <code>--strict-mcp-config</code> where allowed, and to verify: <code>deniedMcpServers</code> in the <code>--settings</code> file where <code>--mcp-config</code> is blocked. Original question: how profiles handle standalone <code>~/.claude/skills</code> and non-plugin MCP that bundles cannot express.</li>
+</ol></div>
+<p class="small">Sources: markdown notes in this folder (<code>01</code>-<code>05</code>). Re-verify flags against current docs before relying on them.</p>
+</section>
+
+</main>
+</div>
+<script>
+const $=(s,r=document)=>r.querySelector(s);
+const tabs=[["overview","Overview"],["evidence","Evidence"],["native","Native"],["tools","Tools"],["options","Options"],["plan","Plan"],["workflows","Workflows"],["stage0","Stage 0"],["decisions","Decisions"]];
+const tb=$("#tabs"),root=document.documentElement,reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+tabs.forEach(([id,l])=>{const b=document.createElement("button");b.type="button";b.textContent=l;b.setAttribute("role","tab");b.id="tab-"+id;b.setAttribute("aria-controls",id);b.dataset.id=id;b.onclick=()=>{show(id);scrollTo(0,0)};tb.appendChild(b)});
+document.querySelectorAll("section").forEach(s=>{s.setAttribute("role","tabpanel");s.setAttribute("aria-labelledby","tab-"+s.id)});
+tb.addEventListener("keydown",e=>{const bs=[...tb.querySelectorAll("[role=tab]")];let i=bs.indexOf(document.activeElement);if(i<0)return;const k=e.key;if(k==="ArrowDown"||k==="ArrowRight")i=(i+1)%bs.length;else if(k==="ArrowUp"||k==="ArrowLeft")i=(i-1+bs.length)%bs.length;else if(k==="Home")i=0;else if(k==="End")i=bs.length-1;else return;e.preventDefault();bs[i].focus();show(bs[i].dataset.id)});
+try{const t=localStorage.getItem("cp-theme");if(t)root.dataset.theme=t}catch(e){}
+$("#themebtn").onclick=()=>{const d=root.dataset.theme==="dark"||(!root.dataset.theme&&matchMedia("(prefers-color-scheme:dark)").matches);root.dataset.theme=d?"light":"dark";try{localStorage.setItem("cp-theme",root.dataset.theme)}catch(e){}};
+document.querySelectorAll("main .V,main .R,main .U").forEach(el=>{if(el.tagName==="TD")return;const k=el.classList.contains("V")?"verified":el.classList.contains("R")?"reported":"unverified";el.setAttribute("role","img");el.setAttribute("aria-label",k);el.title=k});
+function toc(sec){const old=sec.querySelector(".toc");if(old)old.remove();if(sec.id==="overview")return;const hs=[...sec.querySelectorAll("h3")];if(hs.length<3)return;const n=document.createElement("nav");n.className="toc";n.setAttribute("aria-label","On this page");hs.forEach((h,i)=>{if(!h.id)h.id=sec.id+"-"+i;const a=document.createElement("a");a.href="#"+h.id;a.textContent=h.textContent;a.onclick=e=>{e.preventDefault();h.scrollIntoView({behavior:reduce?"auto":"smooth"})};n.appendChild(a)});sec.querySelector("h2").after(n)}
+let heroPlay=()=>{};
+function show(id){if(!document.getElementById(id))id="overview";document.querySelectorAll("section").forEach(s=>{const on=s.id===id;s.classList.toggle("on",on);if(on)toc(s)});tb.querySelectorAll("[role=tab]").forEach(b=>{const on=b.dataset.id===id;b.setAttribute("aria-selected",on);b.tabIndex=on?0:-1;if(on&&innerWidth<=860)b.scrollIntoView({inline:"center",block:"nearest"})});try{history.replaceState(null,"","#"+id)}catch(e){}if(id==="overview")heroPlay()}
+window.addEventListener("hashchange",()=>show((location.hash||"#overview").slice(1)));
+
+const issues=[
+["#14882","Skills consume full token count at startup","open","20 thumbs, 20 comments"],
+["#35319","Skill usage analytics (org grew 67 to 183 skills)","closed","43 thumbs; pointed to OTel"],
+["#9716","Claude not aware of available skills","open","75 thumbs, 69 comments"],
+["#43928","Per-skill enable/disable","closed","7 thumbs, stale bot"],
+["#26352","--enable-plugin/--disable-plugin flags","closed","1 thumb, stale bot"],
+["#14843","Bulk plugin enable/disable","closed","5 thumbs, stale bot"],
+["#62174","Per-project enabledPlugins","closed","0 thumbs, stale bot"],
+["#91770","Profiles within one account","open","1 thumb"],
+["#92645","Machine-wide plugin scope (8 config-dir profiles)","open","symlinked plugins/ warns corrupted"],
+["#90818","VSCode per-session settings profiles","open","0 thumbs"],
+["#86098","Overlapping plugins cause suggestion noise","closed","Anthropic shipped relevance suggestions"],
+["#54996","skillOverrides off did not free context","closed","fixed"]];
+const evb=$("#evtable tbody");
+function drawEv(){const q=$("#evq").value.toLowerCase();evb.innerHTML="";issues.filter(r=>r.join(" ").toLowerCase().includes(q)).forEach(r=>{const tr=document.createElement("tr");r.forEach(c=>{const td=document.createElement("td");td.textContent=c;tr.appendChild(td)});evb.appendChild(tr)})}
+$("#evq").oninput=drawEv;drawEv();
+function drawBud(){const c=+$("#ctx").value,b=c*0.01;$("#bud").textContent=b.toLocaleString();$("#budbar").style.width=Math.min(100,b/42207*100)+"%";$("#repbar").style.width="100%"}
+$("#ctx").onchange=drawBud;drawBud();
+
+const tools=[
+["quinnjr/claude-code-profiles","profiles","Config dir per profile","96","Account-oriented; duplicates plugins"],
+["spences10/mcpick","profiles","TUI toggles MCP + plugins, saved profiles","94","Likely edits shared config (unverified)"],
+["claude-profile-switch / account-switcher / Claude Switch","profiles","Config-dir + symlinks","2-6","Account-oriented, small"],
+["MetaMCP","profiles","MCP gateway with namespaces","2.7k","MCP only"],
+["skills.sh / npx skills","catalog","Public skill search + install","33k","Public; not org-private"],
+["iflytek/skillhub","catalog","Self-hosted registry, RBAC, audit","5.1k","Separate server; not git-marketplace-native"],
+["claude-skills-mcp / skill-router","catalog","MCP search over skills","7-407","Skills only; no governance"],
+["claudemarketplaces.com etc.","catalog","Web aggregators","n/a","Public only"],
+["Backstage","catalog","General catalog","34k","No Claude plugin support yet"]];
+let tf="all";
+function drawTools(){const b=$("#tooltable tbody");b.innerHTML="";tools.filter(r=>tf==="all"||r[1]===tf).forEach(r=>{const tr=document.createElement("tr");r.forEach(c=>{const td=document.createElement("td");td.textContent=c;tr.appendChild(td)});b.appendChild(tr)})}
+function chips(id,vals,get,set,draw){const el=$(id);vals.forEach(v=>{const b=document.createElement("button");b.textContent=v;b.onclick=()=>{set(v);el.querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===b));draw()};if(v==="all")b.classList.add("on");el.appendChild(b)})}
+chips("#toolchips",["all","profiles","catalog"],()=>tf,v=>tf=v,drawTools);drawTools();
+
+const opts=[
+["A","Compiling launcher (per-session --settings/--mcp-config)","Yes","S","Medium","Core","profiles"],
+["B","CLAUDE_CONFIG_DIR per profile + shared plugin store","Yes","M","High","Fallback","profiles"],
+["C","Per-project enabledPlugins + direnv","Yes","XS","Low","Default layer","profiles"],
+["D","Profile as bundle plugin","Yes","S","Medium","Packaging bridge","both"],
+["E","MCP gateway","Yes","L","Low","Later","profiles"],
+["F","Subagent profiles","Yes","S","Low","Complement","profiles"],
+["G","TUI that edits shared config","No","M","Medium","Front-end only","profiles"],
+["H","CI static catalog from marketplace.json + metadata","n/a","S-M","Low","Core of catalog","catalog"],
+["I","Concierge skill/MCP","n/a","M","High","Later","catalog"],
+["J","OTel telemetry loop","n/a","M-L","Medium","Later","catalog"]];
+let of="all";
+function drawOpts(){const b=$("#opttable tbody");b.innerHTML="";opts.filter(r=>of==="all"||r[6]===of||r[6]==="both").forEach(r=>{const tr=document.createElement("tr");r.slice(0,6).forEach(c=>{const td=document.createElement("td");td.textContent=c;tr.appendChild(td)});b.appendChild(tr)})}
+chips("#optchips",["all","profiles","catalog"],()=>of,v=>of=v,drawOpts);drawOpts();
+
+function nmsg(){const n=+$("#nrange").value;$("#nval").textContent=n;let m;
+if(n<=25)m="Native is enough: a README table generated from marketplace.json plus a CI lint requiring author, tags, category.";
+else if(n<=80)m="At the threshold (~50-80, or more than one publishing team): metadata convention + CI lint + a generated static page is worth it.";
+else if(n<=250)m="Flat search breaks down and overlap is real: facets, owner/status, new-since diff and usage counts pay off.";
+else m="You need a governed registry: required metadata, deprecation workflow, dedup review, usage-driven pruning (skillhub / Backstage territory).";
+$("#nmsg").textContent=m}
+$("#nrange").oninput=nmsg;nmsg();
+
+(function(){const d=[["Baseline",27167],["Mask 14 plugin skills (T1)",26688],["Drop user layer (T2)",24765],["12 standalone skills off",27652]];const el=document.getElementById("tokbars");d.forEach(([l,v])=>{const w=document.createElement("div");w.style.margin="6px 0";w.innerHTML='<div class="small"></div><div class="bar"><i></i></div>';w.firstChild.textContent=l+": "+v.toLocaleString();w.querySelector("i").style.width=(v/27652*100)+"%";el.appendChild(w)})})();
+const wf=[
+["Daily use","Two terminals, two profiles, at the same time.",
+`# terminal 1
+$ cprof run frontend
+profile: frontend (extends base)  plugins: 6 on / 14 masked  mcp: figma  connectors: none
+
+# terminal 2, same time
+$ cprof run sre
+profile: sre (extends base)       plugins: 5 on / 15 masked  mcp: pagerduty, grafana`,
+["Each run writes a generated settings file (content-addressed, in the launcher's own cache dir) and starts claude --settings, passing back its exit code; same on macOS, Linux and Windows. Nothing shared is modified, so terminals can't affect each other (tested on macOS).","Plugins not in the profile are masked with enabledPlugins:false, regenerated from claude plugin list --json on every launch so new installs don't leak (masking tested).","Extra args pass through: cprof run sre -- --model opus"]],
+["Dry run / show","See exactly what will happen before running.",
+`$ cprof dry-run frontend
+claude --settings /tmp/cprof/48213/settings.json --strict-mcp-config --mcp-config /tmp/cprof/48213/mcp.json
+
+$ cprof show frontend
+resolved from: base -> frontend
+plugins on  (6): design-kit@acme, playwright@acme, ...
+plugins off (14): sre-kit@acme, seo-tools@acme, ...
+skills off  (2): legacy-helper, old-notes
+mcp: figma    claude.ai connectors: none
+est. saved vs. no profile: ~2.1k tokens, 41 fewer tools`,
+["dry-run prints the exact command so you can trust, debug or alias it.","Token estimates are rough. Stage 0 measured small savings (~9%), so the pitch is clutter and routing."]],
+["Personal profile","Build on an org profile.",
+`$ cprof new my-frontend --from frontend
+created ~/.config/claude-profile/profiles/my-frontend.toml
+$ cprof edit my-frontend
+$ cprof diff frontend my-frontend
++ plugins.include: my-experiments@me
+- plugins.include: playwright@acme
+$ cprof run my-frontend`,
+["Personal profiles live outside the repo and can extend org profiles.","A later off/exclude beats an earlier include."]],
+["Onboarding","New hire gets a vetted set.",
+`1. Open the internal catalog page, pick "Backend engineer".
+2. See profile "backend": plugins with owner + status + when_to_use.
+3. Install the role bundle once via native /plugin (profile-backend pulls its dependencies).
+4. $ cprof run backend
+   missing: audit-kit@acme  ->  /plugin install audit-kit@acme`,
+["The launcher says what's missing and prints the install command; it never installs silently."]],
+["Search / recommend","What should I use for X?",
+`$ cprof search "incident postmortem"
+sre-kit@acme          active      owner @sre   "Runbooks, incident timeline, postmortems"
+postmortem-lite@acme  deprecated  -> sre-kit
+$ cprof recommend
+In ./infra (terraform files found): sre, platform`,
+["recommend is rule-based (cwd, files, relevance signals); no LLM.","The same data renders on the catalog page as facets, an overlap view and a 'new since last tag' list."]],
+["Publish a plugin","Platform owner flow through CI.",
+`1. Add the plugin to marketplace.json: author, category, tags,
+   metadata: owner, status, whenToUse, (overlapsWith)
+2. PR -> CI: cprof lint + claude plugin validate
+   FAIL  plugin "x": metadata.owner missing
+3. Merge -> CI: cprof compile (profile-* bundles)
+              cprof catalog build (site + catalog.json)
+4. Optional: add a relevance block so Claude Code suggests it in the right dirs`,
+["CI gates are what stop metadata from rotting."]],
+["Retire a plugin","Deprecation without breaking people.",
+`1. metadata.status = "deprecated", metadata.supersededBy = "new-plugin"
+2. cprof doctor lists profiles still including it
+3. Catalog shows a deprecated badge + replacement; runs warn
+4. After the grace period: remove from marketplace.json (use renames)`,
+["Claude Code has no native deprecation field, so this is a metadata convention enforced in CI."]],
+["Doctor","Housekeeping report.",
+`$ cprof doctor
+overlap:      sre-kit@acme and ops-helper@acme share 9 of 12 tags
+unused:       seo-tools@acme in no profile, 0 skill_activated events in 30 days
+deprecated:   postmortem-lite@acme still in profiles: sre
+stale owners: 3 plugins have no reviewBy in 180 days
+policy:       none detected on this machine`,
+["Usage counts need OTel (OTEL_LOG_TOOL_DETAILS=1) or the Enterprise Analytics API; otherwise that line is skipped."]],
+["Under org policy","The launcher reports limits, never bypasses.",
+`$ cprof run frontend
+policy: disableSideloadFlags is set (managed). --mcp-config is blocked.
+  - plugin masking via --settings: allowed
+  - claude.ai connectors: cannot be masked (needs --strict-mcp-config)
+  - force-enabled plugins cannot be masked: audit-logger@acme
+applied with limits (on_blocked = "warn"). Use "fail" to refuse instead.`,
+["Design intent: policy detection is untested, and Stage 0 found no managed policy on the test machine."]],
+["Sharing","Central profiles, with a trust check.",
+`$ cprof ls
+frontend   org       active   React, CSS and accessibility work
+sre        org       active   Incident response and observability
+my-sre     personal  active   (extends sre)
+
+$ cprof run sre
+sre changed since you last accepted it:
+  + mcp.servers: pagerduty-ro (command: npx -y @acme/pagerduty-mcp)
+accept? [y/N]`,
+["CI publishes profiles/*.toml as a data-only plugin; users add it as a source once.","Accepted hashes live in a lockfile; risky changes (MCP command, env, prompt text) need explicit acceptance.","Org profiles load only from trusted sources: an allowlisted marketplace or a pinned git ref."]],
+["Shortcuts","Speed, per shell.",
+`# bash / zsh
+alias cf='cprof run frontend --'
+
+# PowerShell
+function cf { cprof run frontend -- @args }`,
+["cprof shell-init <bash|zsh|fish|pwsh> could print these (cmd would get .cmd shims). A statusline hook can show the active profile from $CPROF_PROFILE."]]];
+(function(){const c=document.getElementById("wfchips"),b=document.getElementById("wfbody");
+function draw(i){c.querySelectorAll("button").forEach((x,j)=>x.classList.toggle("on",j===i));const [t,d,code,notes]=wf[i];b.textContent="";
+const h=document.createElement("h3");h.style.marginTop="0";h.textContent=t;const p=document.createElement("p");p.textContent=d;const pre=document.createElement("pre");pre.textContent=code;const ul=document.createElement("ul");notes.forEach(n=>{const li=document.createElement("li");li.textContent=n;ul.appendChild(li)});b.append(h,p,pre,ul)}
+wf.forEach((w,i)=>{const x=document.createElement("button");x.textContent=w[0];x.onclick=()=>draw(i);c.appendChild(x)});draw(0)})();
+const road=[
+"Stage 0: launcher experiments (done 2026-10-06, see Stage 0 tab)",
+"Decided: build both tracks in parallel, shared core/ first",
+"Catalog 1: metadata convention (owner, status, supersededBy, whenToUse, overlapsWith, reviewBy)",
+"Catalog 2: CI lint requiring author/category/tags/metadata",
+"Catalog 3: static catalog generator (facets, overlap, new-since diff, owner/status)",
+"Catalog 4: relevance blocks + role bundles in marketplace.json",
+"Profiles 1: manifest + resolver + run/show/ls/dry-run with policy detection",
+"Profiles 2: extends, diff, doctor",
+"Profiles 3: compile bundle plugins into the marketplace",
+"Later: OTel importer + recommend; concierge only if data shows need"];
+const rm=$("#roadmap");let st={0:true,1:true};try{const x=localStorage.getItem("cp-road");if(x)st=JSON.parse(x)}catch(e){}
+road.forEach((t,i)=>{const l=document.createElement("label");l.className="task";const c=document.createElement("input");c.type="checkbox";c.checked=!!st[i];c.onchange=()=>{st[i]=c.checked;try{localStorage.setItem("cp-road",JSON.stringify(st))}catch(e){}};l.appendChild(c);l.appendChild(document.createTextNode(t));rm.appendChild(l)});
+
+(function(){
+const P=["design-kit@acme","playwright@acme","frontend-design@official","chrome-devtools@official","code-review@official","docs-writer@acme","sre-kit@acme","pagerduty-tools@acme","grafana-helper@acme","terraform-helpers@acme","release-notes@acme","seo-tools@acme","content-lint@acme","analytics-kit@acme","feature-dev@official","audit-logger@acme"];
+const S={"No profile":null,frontend:["design-kit@acme","playwright@acme","frontend-design@official","chrome-devtools@official","code-review@official","docs-writer@acme"],sre:["sre-kit@acme","pagerduty-tools@acme","grafana-helper@acme","terraform-helpers@acme","code-review@official","release-notes@acme"],seo:["seo-tools@acme","content-lint@acme","analytics-kit@acme","docs-writer@acme","chrome-devtools@official"]};
+const seg=$("#seg"),lo=$("#loadout"),pol=$("#pol");let cur="frontend",played=false;
+const hash=s=>{let h=5381;for(const c of s)h=((h<<5)+h+c.charCodeAt(0))>>>0;return h.toString(16).padStart(8,"0")};
+Object.keys(S).forEach(k=>{const b=document.createElement("button");b.type="button";b.textContent=k;b.setAttribute("role","radio");b.onclick=()=>{cur=k;draw(false)};seg.appendChild(b)});
+seg.addEventListener("keydown",e=>{const ks=Object.keys(S);let i=ks.indexOf(cur);if(e.key==="ArrowRight"||e.key==="ArrowDown")i=(i+1)%ks.length;else if(e.key==="ArrowLeft"||e.key==="ArrowUp")i=(i-1+ks.length)%ks.length;else return;e.preventDefault();cur=ks[i];draw(false);seg.querySelector("[aria-checked=true]").focus()});
+pol.onchange=()=>draw(false);
+function state(){const set=S[cur];const forced=pol.checked;return P.map(p=>{const inProf=set===null||set.includes(p);const lock=forced&&p==="audit-logger@acme"&&!inProf;return{p,on:inProf||lock,lock,written:inProf}})}
+function draw(initial){const st=state();seg.querySelectorAll("button").forEach(b=>{const on=b.textContent===cur;b.setAttribute("aria-checked",on);b.tabIndex=on?0:-1});
+lo.textContent="";const els=st.map((x,i)=>{const d=document.createElement("div");d.className="plug";d.style.setProperty("--d",initial?(i*35)+"ms":"0s");const sw=document.createElement("span");sw.className="sw";const c=document.createElement("code");c.textContent=x.p;c.style.background="none";c.style.padding="0";d.append(sw,c);if(x.lock){const l=document.createElement("span");l.className="lock";l.textContent="forced by policy";d.appendChild(l)}lo.appendChild(d);return[d,x]});
+const apply=()=>els.forEach(([d,x])=>d.classList.toggle("on",x.on));
+if(initial&&!reduce){requestAnimationFrame(()=>requestAnimationFrame(apply))}else apply();
+const on=st.filter(x=>x.on).length,off=st.length-on,forced=st.some(x=>x.lock);
+$("#lcount").innerHTML="<b>"+on+"</b> on, <b>"+off+"</b> masked"+(forced?". Policy keeps audit-logger on even though the launcher writes <code>false</code> for it.":".");
+if(S[cur]===null){$("#lcmd").textContent="$ claude\n# no profile: nothing is generated and every installed plugin stays enabled"}
+else{const j={enabledPlugins:Object.fromEntries(st.map(x=>[x.p,x.written]))};const txt=JSON.stringify(j,null,2);$("#lcmd").textContent="$ cprof run "+cur+"\n# starts: claude --settings ~/.cache/claude-profile/settings-"+hash(txt)+".json\n\n"+txt}}
+heroPlay=()=>{if(played)return;played=true;draw(true)};
+draw(false);
+})();
+show((location.hash||"#overview").slice(1)||"overview");
+</script>
+</body>
+</html>
