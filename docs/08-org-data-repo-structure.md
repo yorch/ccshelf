@@ -1,12 +1,12 @@
 # 08. Structure of the org data repo (profiles and catalog)
 
-This describes the **private repo an adopting organization keeps** (R5): its marketplace, profiles and catalog data. The public tool repo (this one) ships a starter template of it in `examples/org-data-repo/` once code starts. Everything here is a design proposal except where marked decided; names are provisional. The `cprof` commands shown don't exist yet.
+This describes the **private repo an adopting organization keeps** (R5): its marketplace, profiles and catalog data. The public tool repo (this one) ships a starter template of it in `examples/org-data-repo/` once code starts. Everything here is a design proposal except where marked decided; names are provisional. The `cprof` commands shown don't exist yet (`cprof` is the chosen command name for the project `claude-profile`).
 
 ## Principles
 1. **Native first.** `marketplace.json` and plugin folders stay exactly what Claude Code expects, so `/plugin` works with the repo unchanged.
 2. **Hand-written data is small and reviewable; everything else is derived.** Catalog site and `catalog.json` are built in CI and not committed.
 3. **Ownership is routable.** Review rules must be expressible in `CODEOWNERS` (which works per file, not per JSON entry).
-4. **Pinned and releasable.** Consumers pin a tag of this repo for profile sources; plugins are tagged `<plugin>--v<version>` for native dependency resolution.
+4. **Pinned and releasable.** Consumers pin a tag of this org data repo for profile sources; plugins are tagged `<plugin>--v<version>` for native dependency resolution.
 5. **Works for small and large registries.** ~50 plugins is the design point; a single-file mode exists for tiny registries.
 
 ## Layout
@@ -14,7 +14,7 @@ This describes the **private repo an adopting organization keeps** (R5): its mar
 acme-claude-marketplace/                 # private repo on GHE (Cloud or Server)
 ├── .claude-plugin/
 │   └── marketplace.json                 # native; hand-written; plugin list + description/category/tags/author
-├── plugins/                             # plugins whose source lives in this repo
+├── plugins/                             # plugins whose source lives in this org data repo
 │   ├── design-kit/
 │   │   ├── .claude-plugin/plugin.json
 │   │   ├── skills/  agents/  hooks/
@@ -60,15 +60,15 @@ Not in the repo: the built catalog (`dist/`, published as an artifact or to a st
 | `mcp/registry.toml` | Humans | Yes | Named MCP server definitions. Security-sensitive: commands and env are code execution on developer machines. |
 | `catalog/plugins/<name>.toml` | Plugin authors | Yes | Catalog-only metadata, one file per plugin (see below). |
 | `catalog/taxonomy.toml` | Platform team | Yes | Allowed categories and tags, so the catalog's facets stay clean. |
-| `claude-profile.toml` | Platform team | Yes | Which sidecar fields are required, lint severity, catalog title and sources, default profile sources. |
+| `claude-profile.toml` | Platform team | Yes | Which sidecar fields are required, lint severity, catalog title and the marketplace files that feed the catalog. Users configure their own profile sources in `~/.config/claude-profile/config.toml`; `cprof init` can write that from the data repo's URL (proposed). |
 | `dist/`, `catalog.json` | CI | No | Built catalog. |
 
 ## Where catalog metadata lives: a sidecar per plugin (decided 2026-10-06)
-The earlier convention put `owner`, `status`, `whenToUse`, etc. into each marketplace entry's free-form `metadata`. That has a problem: with ~50 plugins in one `marketplace.json`, **`CODEOWNERS` can't route review per entry**, so the decided "authors write, platform team reviews" model can't be enforced by file ownership. A sidecar file per plugin fixes this: a PR that touches `catalog/plugins/*.toml` requires platform review, while plugin source stays with the author's team.
+The earlier convention put `owner`, `status`, `when_to_use`, etc. into each marketplace entry's free-form `metadata`. That has a problem: with ~50 plugins in one `marketplace.json`, **`CODEOWNERS` can't route review per entry**, so the decided "authors write, platform team reviews" model can't be enforced by file ownership. A sidecar file per plugin fixes this: a PR that touches `catalog/plugins/*.toml` requires platform review, while plugin source stays with the author's team.
 
-- `marketplace.json` keeps only what Claude Code reads (plus `category` and `tags`, which are native and searchable in some clients).
+- `marketplace.json` keeps only what Claude Code reads (plus `category` and `tags`, which are native; whether the `/plugin` UI searches them is unverified).
 - The catalog is **derived from** `marketplace.json` + sidecars + git data (last change, contributors). Nothing is duplicated into `metadata`.
-- Plugins hosted outside this repo get a sidecar too; the sidecar directory is uniform, not colocated with plugin source.
+- Plugins hosted outside this org data repo get a sidecar too; the sidecar directory is uniform, not colocated with plugin source.
 - **Small registries** (for example under 20 plugins) can opt into **single-file mode** (`claude-profile.toml`: `metadata_source = "marketplace"`), reading the same fields from each entry's `metadata` object, so one file is enough.
 
 Sidecar example (`catalog/plugins/sre-kit.toml`; fields are provisional):
@@ -98,7 +98,7 @@ taxonomy = "catalog/taxonomy.toml"
 [catalog]
 title = "Acme plugin catalog"
 metadata_source = "sidecar"          # sidecar | marketplace (single-file mode)
-sources = [".claude-plugin/marketplace.json"]   # more than one marketplace may feed one catalog
+marketplaces = [".claude-plugin/marketplace.json"]   # more than one marketplace may feed one catalog
 
 [profiles]
 dir = "profiles"
@@ -133,17 +133,17 @@ All steps call the same pinned binary from the public tool repo (R2, R5): `uses:
 
 ## Consumption
 - **Plugins:** users add the marketplace natively (`extraKnownMarketplaces` or `/plugin marketplace add <git URL>`), and bundles install profile plugin sets in one step.
-- **Profiles:** users configure a `git` source pointing at this repo at a pinned tag, or a local clone as a `dir` source (see 04, "Profile sources and sharing"). The `plugin` source (profiles shipped inside a plugin) comes later.
+- **Profiles:** users configure a `git` source pointing at this org data repo at a pinned tag, or a local clone as a `dir` source (see 04, "Profile sources and sharing"). The `plugin` source (profiles shipped inside a plugin) comes later.
 - **Catalog:** the published site, and `cprof search` or `cprof doctor` reading the same data locally.
 
 ## Variants
 - **Plugins in other repos:** `source` entries point at external git repos; sidecars still live here; `lint` can't inspect external plugin contents beyond the marketplace entry.
-- **Several teams, several marketplaces:** each team keeps its own marketplace repo; one central catalog build lists multiple `sources`.
+- **Several teams, several marketplaces:** each team keeps its own marketplace repo; one central catalog build lists multiple `marketplaces`.
 - **Public marketplaces:** nothing prevents a public data repo; then R4 applies to the data as well.
 
 ## Open questions
 1. ~~Sidecar versus in-entry metadata~~: **decided, sidecar per plugin** (single-file mode stays available for small registries).
-2. Whether committed bundles should live under `plugins/` or a separate `bundles/` (proposed: separate, to make "generated" obvious).
+2. ~~Where committed bundles live~~: **decided, a separate `bundles/` directory** (makes "generated" obvious).
 3. Whether the catalog should also commit a human-readable index (for example `CATALOG.md`) so the repo is browsable without the site.
 4. How to treat plugins that bundle MCP servers or hooks in `lint`: an extra review path may be warranted because they run code.
 5. Release cadence and naming for repo tags that consumers pin.

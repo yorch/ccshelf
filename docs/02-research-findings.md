@@ -8,13 +8,13 @@ Labels: **V** verified in docs/gh/CLI, **R** reported by subagent, **U** unverif
 | Issue | Ask | Status |
 |---|---|---|
 | #14882 | Skills consume full token count at startup | OPEN, 20 thumbs, 20 comments |
-| #26352 | `--enable-plugin/--disable-plugin` flags | closed not_planned (stale bot) |
+| #26352 | `--enable-plugin/--disable-plugin` flags | closed not_planned (stale bot), 1 thumb |
 | #43928 | Enable/disable individual skills (7 thumbs) | closed not_planned (stale bot) |
-| #14843 | Bulk plugin enable/disable | closed not_planned (stale) |
-| #11596, #62174 | Per-project plugin enable | closed not_planned (#11461 closed "completed"; contradictory) |
+| #14843 | Bulk plugin enable/disable | closed not_planned (stale), 5 thumbs |
+| #11596, #62174 | Per-project plugin enable | closed not_planned, 0 thumbs each (#11461, 7 thumbs, closed "completed"; contradictory) |
 | #91770 | Profiles within one account | OPEN, 1 thumb |
 | #92645 | Machine-wide plugin scope; author runs 8 `CLAUDE_CONFIG_DIR` profiles, symlinking `plugins/` triggers "corrupted" warnings (#82272, #85325) | OPEN |
-| #90818 | VSCode per-session settings profiles | OPEN |
+| #90818 | VSCode per-session settings profiles | OPEN, 0 thumbs |
 
 - The closures are by the stale bot, not a human reply; no roadmap statement was found. They show nobody triaged them, not that the need is unmet. (R)
 - No Reddit/HN evidence found (absence is not proof).
@@ -23,7 +23,7 @@ Labels: **V** verified in docs/gh/CLI, **R** reported by subagent, **U** unverif
 - Skill listing is capped at **1% of the context window** (~2k tokens on 200k, ~10k on 1M).
 - The 42k-token / 189-skill report in #14882 predates v2.1.196; docs say earlier `/context` counted full description text and could show values several times the budget. Likely a display artifact.
 - MCP tool search is on by default: only tool names cost context up front.
-- What remains is **routing quality** (when the listing overflows, descriptions of rarely used skills get dropped so matching degrades) plus clutter: plugin hooks, agent descriptions, MCP startup, tool-name noise. **Pitch should lead with routing and clutter, not tokens.**
+- What remains is **routing quality** (when the listing overflows, descriptions of rarely used skills get dropped so matching degrades) plus clutter: plugin hooks, agent descriptions, MCP startup, tool-name noise. **Pitch should lead with routing and clutter, not tokens.** Caveat (U): the routing-quality benefit of profiles is an inference and was not measured; Stage 0 only measured token effects (small).
 
 ## B. Native mechanisms (profiles)
 - Settings precedence: managed > CLI `--settings` > local project > shared project > user. Keys merge; arrays append, objects nest. (V)
@@ -41,7 +41,7 @@ Labels: **V** verified in docs/gh/CLI, **R** reported by subagent, **U** unverif
 |---|---|---|
 | quinnjr/claude-code-profiles (96★) | Full config dir per profile | Account-oriented; duplicates plugins/skills |
 | spences10/mcpick (94★) | TUI toggling MCP servers + plugins, saved profiles | Likely edits shared config, so probably not concurrent-safe (U) |
-| henkisdabro MCP selector (8★), guibes/claude-profile-switch (6★, stale), ukogan/claude-account-switcher (2★), claude-profile (Go), Claude Switch | Config-dir/symlink model | Account-oriented |
+| henkisdabro MCP selector (8★), guibes/claude-profile-switch (6★, stale), ukogan/claude-account-switcher (2★), claude-profile (Go; **same name as this project**, see 04 "Name"), Claude Switch | Config-dir/symlink model | Account-oriented |
 | MetaMCP (2.7k★) | MCP gateway | MCP only. MCP Router discontinued 2026-09-18 |
 | Hand-rolled gists/blogs | `CLAUDE_CONFIG_DIR` aliases + symlinks | Same plugin-store sharing problems |
 
@@ -49,7 +49,7 @@ Labels: **V** verified in docs/gh/CLI, **R** reported by subagent, **U** unverif
 
 ## D. Discoverability evidence
 - **#35319** (43 thumbs, closed): an org went from 67 to 183 skills in under a month, citing bloat/redundancy. Anthropic closed it pointing to OTel `claude_code.skill_activated` (needs `OTEL_LOG_TOOL_DETAILS=1`): telemetry, not a catalog.
-- **#9716** (75 thumbs, open): Claude unaware of available skills.
+- **#9716** (75 thumbs, 69 comments, open): Claude unaware of available skills.
 - **#86098** (closed 2026-09-20): overlapping plugins cause persistent suggestion noise; Anthropic shipped plugin relevance suggestions.
 - No issue found asking for plugin search/tags/enterprise catalog UI (search shallow; U).
 - Practitioner posts (Thoughtworks Radar "Trial", DEV.to, mpt.solutions) treat the marketplace as a governance layer (`strictKnownMarketplaces`, SHA pinning). One commenter: listings need rights/cost/verification metadata or shadow IT returns.
@@ -69,7 +69,7 @@ Labels: **V** verified in docs/gh/CLI, **R** reported by subagent, **U** unverif
 - Public: skills.sh / `npx skills` (vercel-labs/skills, 33k★), claudemarketplaces.com and other aggregators, official community mirror (4.5k★), awesome lists. Public only; unaware of a private marketplace.
 - Closest to an org catalog: **iflytek/skillhub** (5.1k★), self-hosted registry with RBAC/versioning/audit; separate server, not git-marketplace-native.
 - Skill routers: sorcerai/skill-router (7★), K-Dense claude-skills-mcp (407★). Search skills, not plugins; no governance/profiles.
-- Backstage: no Claude plugin catalog exists (possible later integration).
+- Backstage (34k★): no Claude plugin catalog exists (possible later integration).
 - **Nothing found** combining catalog + search + recommendation + bundles for a git-based `marketplace.json` (search not exhaustive).
 
 ## G. Corrections made along the way

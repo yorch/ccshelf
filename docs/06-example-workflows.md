@@ -1,6 +1,6 @@
 # 06. Example workflows
 
-Illustrative only. Nothing is built yet: the command name `cprof` is a placeholder, and the outputs are mockups of the intended behavior. Behavior marked *(tested)* was confirmed in Stage 0 (see 05); the rest is design intent. The manifest fields used below are explained in 04.
+Illustrative only. Nothing is built yet: the command is `cprof` (project `claude-profile`), the outputs are mockups, and plugin names are fictional (`@official` stands for the official marketplace) of the intended behavior. Behavior marked *(tested)* was confirmed in Stage 0 (see 05); the rest is design intent. The manifest fields used below are explained in 04.
 
 ## 1. Daily use: two terminals, two profiles
 You work on a React app in the morning and debug production in the afternoon, and sometimes both at once.
@@ -8,30 +8,30 @@ You work on a React app in the morning and debug production in the afternoon, an
 ```
 # terminal 1
 $ cprof run frontend
-profile: frontend (extends base)  plugins: 6 on / 14 masked  mcp: figma  connectors: none
+profile: frontend (extends base)  plugins: 6 on / 10 masked  mcp: figma  connectors: none
 claude> ...
 
 # terminal 2, at the same time
 $ cprof run sre
-profile: sre (extends base)       plugins: 5 on / 15 masked  mcp: pagerduty, grafana
+profile: sre (extends base)       plugins: 6 on / 10 masked  mcp: pagerduty, grafana
 claude> ...
 ```
-- Each run writes a generated settings file (content-addressed, in the launcher's own cache dir, so concurrent runs never collide) and starts `claude --settings <file>`, passing back its exit code. The same on macOS, Linux and Windows. Nothing shared (`~/.claude/settings.json`, `~/.claude.json`, plugin cache) is modified, so the two terminals can't affect each other. *(masking and parallel runs tested)*
-- Plugins not in the profile are masked with `enabledPlugins:false`. The list is regenerated from `claude plugin list --json` on every launch, so a plugin you installed yesterday doesn't leak into the profile. *(masking tested)*
+- Each run writes a generated settings file (content-addressed, in the launcher's own cache dir, so concurrent runs never collide) and starts `claude --settings <file>`, passing back its exit code. The same on macOS, Linux and Windows by design (only macOS has been tested). Nothing shared (`~/.claude/settings.json`, `~/.claude.json`, plugin cache) is modified, so the two terminals can't affect each other. *(masking and parallel runs tested)*
+- Plugins not in the profile are masked with `enabledPlugins:false`. The list is regenerated from `claude plugin list --json` on every launch, so a plugin you installed yesterday doesn't leak into the profile. *(masking tested on macOS)*
 - Extra arguments pass through: `cprof run sre -- --model opus`.
 
 ## 2. See exactly what will happen before running
 ```
 $ cprof dry-run frontend
-claude --settings /tmp/cprof/48213/settings.json --strict-mcp-config --mcp-config /tmp/cprof/48213/mcp.json
+claude --settings ~/.cache/claude-profile/settings-9f3a1c27.json --strict-mcp-config --mcp-config ~/.cache/claude-profile/mcp-5be02d41.json
 
 $ cprof show frontend
 resolved from: base -> frontend
 plugins on  (6): design-kit@acme, playwright@acme, frontend-design@official, ...
-plugins off (14): sre-kit@acme, seo-tools@acme, ...
+plugins off (10): sre-kit@acme, seo-tools@acme, ...
 skills off  (2): legacy-helper, old-notes            # standalone skills only
 mcp: figma    claude.ai connectors: none
-est. context saved vs. no profile: ~2.1k tokens, 41 fewer tools
+est. context saved vs. no profile: ~2.1k tokens, 41 fewer tools   # illustrative; Stage 0 measured ~2.4k tokens for dropping the whole user layer and ~0.5k for masking 14 skills
 ```
 `dry-run` prints the exact command so you can trust it, debug it, or copy it into a shell alias. `show` prints the resolved closure including parents. Token estimates are rough: Stage 0 measured small savings (~9%), so the pitch is clutter and routing, not tokens.
 
@@ -51,7 +51,11 @@ Personal profiles live outside the repo and can `extends` org profiles. Later `o
 1. They open the internal catalog page (linked from the README) and pick the role: "Backend engineer".
 2. The page shows the `backend` profile, its plugins with owner and status, and `when_to_use` hints.
 3. They install the role bundle once through native `/plugin` (the bundle plugin `profile-backend` pulls in its dependencies).
-4. They run `cprof run backend`. If a listed plugin isn't installed, the launcher says which one and prints the install command; it doesn't install anything silently.
+4. They run `cprof run backend`. If a listed plugin isn't installed, the launcher says which one and prints the install command; it doesn't install anything silently:
+   ```
+   $ cprof run backend
+   missing: audit-kit@acme  ->  /plugin install audit-kit@acme
+   ```
 
 ## 5. "What should I use for X?"
 ```
@@ -65,7 +69,10 @@ The same data renders on the catalog page: facets by category/tag/team/status, a
 
 ## 6. Publishing a plugin to the internal marketplace (platform owner)
 1. Add the plugin to `marketplace.json` with `author`, `category`, `tags`, and create its sidecar `catalog/plugins/<name>.toml` with `owner`, `status`, `when_to_use`, optionally `overlaps_with`. The sidecar needs platform review via `CODEOWNERS`.
-2. Open a PR. CI runs `cprof lint` (plus `claude plugin validate`). Missing `owner` or `status` fails the build with a clear message.
+2. Open a PR. CI runs `cprof lint` (plus `claude plugin validate`). Missing `owner` or `status` fails the build with a clear message:
+   ```
+   FAIL  catalog/plugins/x.toml: owner missing
+   ```
 3. On merge, CI runs `cprof compile` (regenerates the `profile-*` bundle plugins) and `cprof catalog build` (regenerates the static site and `catalog.json`).
 4. Optionally add a `relevance` block so Claude Code itself suggests the plugin in the right directories.
 
@@ -81,7 +88,7 @@ $ cprof doctor
 overlap:      sre-kit@acme and ops-helper@acme share 9 of 12 tags
 unused:       seo-tools@acme not active in any profile and 0 skill_activated events in 30 days
 deprecated:   postmortem-lite@acme still in profiles: sre
-stale owners: 3 plugins have no reviewBy in the last 180 days
+stale owners: 3 plugins have no review_by in the last 180 days
 policy:       none detected on this machine
 ```
 Usage counts need OTel (`OTEL_LOG_TOOL_DETAILS=1` for real names) or the Enterprise Analytics API; without them that line is skipped.
@@ -109,10 +116,10 @@ function cf { cprof run frontend -- @args }
 
 ## 11. Sharing profiles centrally
 Platform owner publishes, everyone else consumes.
-1. The marketplace repo contains `profiles/*.toml`. CI runs `cprof lint` and publishes them as a data-only plugin, `org-profiles@acme`.
-2. A user installs it once through `/plugin` and adds it as a source in `~/.config/claude-profile/config.toml` (`type = "plugin"`). A team could also ship that config in a project repo.
+1. The org data repo contains `profiles/*.toml`. CI runs `cprof lint` on every PR, and the platform team tags a release (for example `v2026.10.1`) when profiles change.
+2. A user (or `cprof init` with the repo URL, proposed) adds the data repo as a `git` source pinned to that tag in `~/.config/claude-profile/config.toml`. A team could also ship a config for it in a project repo. (A `plugin` source, with profiles shipped inside a data-only plugin, is planned for a later release.)
 3. `cprof ls` shows profiles from all sources, labeled by origin (personal, project, org). A personal profile with the same name wins.
-4. When the plugin updates and a profile adds an MCP command or env value, the launcher shows the diff and asks before accepting: `cprof trust sre`. Accepted hashes are stored in a lockfile.
+4. When the pinned tag moves and a profile adds an MCP command or env value, the launcher shows the diff and asks before accepting: `cprof trust sre`. Accepted hashes are stored in a lockfile.
 ```
 $ cprof ls
 frontend   org       active   React, CSS and accessibility work

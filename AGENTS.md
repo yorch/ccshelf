@@ -1,16 +1,16 @@
 # AGENTS.md
 
-Guidance for AI coding agents (and humans) working in this repo.
+Guidance for AI coding agents (and humans) working in this repo, the public **tool repo**. The org's private repo that holds its profiles and catalog data is the **org data repo**; definitions of these and other terms are in the glossary in `docs/README.md`.
 
 ## What this project is
-`claude-profile` (command: `cprof`, both names are provisional) is an open-source tool for Claude Code with two parts that live in one repo:
+`claude-profile` (command: `cprof`; the names are decided, with the brand risk noted in `docs/04`) is an open-source tool for Claude Code with two parts that live in one repo:
 1. **Launcher (profiles):** starts `claude` with a named profile (a set of plugins, standalone skills and MCP servers), so different terminals can run different sets at once.
 2. **Catalog (discoverability):** metadata lint plus a generated static catalog for an organization's git-based plugin marketplace.
 
 **Status:** research and design only. There is no code yet. Everything lives in `docs/`. Start with `docs/README.md`, then `docs/04-recommendation-and-roadmap.md` (decisions and requirements).
 
 ## Decided requirements (do not relitigate without the user)
-- **R1:** macOS, Linux and native Windows; arm64 and x64 (Windows too). WSL counts as Linux.
+- **R1:** macOS, Linux and native Windows; six targets (darwin, linux and windows, each arm64 and amd64). WSL counts as Linux.
 - **R2:** works with GitHub.com, GHE Cloud and GHE Server, and GitHub Actions. No hard-coded hosts.
 - **R3:** works with no, partial or strict Claude Code managed policy. Capability-driven; **never bypass policy**.
 - **R4:** open source (MIT). No org-specific names, URLs or data in code, schemas, defaults or examples.
@@ -28,7 +28,7 @@ Guidance for AI coding agents (and humans) working in this repo.
 - Do not publish anything outward-facing (artifacts, public repos, issues, PRs) unless the user asks.
 
 ## Documentation conventions
-- Docs are numbered Markdown in `docs/`, plus `docs/report.html`, a single self-contained interactive version of them. **Keep them in sync**: when a decision or finding changes, update the relevant `.md` file and the matching part of `report.html`.
+- Docs are numbered Markdown in `docs/`, plus `docs/report.html`, a single self-contained interactive version of them. **Keep them in sync** (the Markdown is the source of truth): when a decision or finding changes, update the relevant `.md` file and the matching part of `report.html` in the same commit. Use the glossary terms from `docs/README.md` consistently (profile, profile bundle, catalog, sidecar, marketplace, tool repo, org data repo, account).
 - Mark confidence for every factual claim about Claude Code: **verified** (docs, `gh`, or ran it), **reported** (subagent said so), **unverified** (inferred or snippet-only). The report uses ● ◐ ○ for these.
 - Record decisions in `docs/04-recommendation-and-roadmap.md` (open decisions list: strike through and mark **decided** with the date) and the requirement list in `docs/README.md`.
 - Keep outputs shown as examples clearly labeled as mockups until the behavior exists.

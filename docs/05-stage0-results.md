@@ -1,6 +1,6 @@
 # 05. Stage 0 results (empirical)
 
-Run 2026-10-06 on Claude Code 2.1.291, macOS, `--model haiku`, cwd = a scratch dir (no project settings). Harness: `claude -p "reply with the single word ok" --output-format stream-json --verbose --max-turns 1 --model haiku <args>`; the `system/init` event lists plugins, skills, slash commands, agents, tools and MCP servers. Raw outputs and scripts live in the session scratchpad (`.../scratchpad/stage0/`), not in the repo. Reported by a subagent; the numbers below are its measurements.
+Run 2026-10-06 on Claude Code 2.1.291 (earlier research used 2.1.290; the local CLI probably auto-updated in between), macOS, `--model haiku`, cwd = a scratch dir (no project settings). Harness: `claude -p "reply with the single word ok" --output-format stream-json --verbose --max-turns 1 --model haiku <args>`; the `system/init` event lists plugins, skills, slash commands, agents, tools and MCP servers. Raw outputs and scripts live in the session scratchpad (`.../scratchpad/stage0/`), not in the repo. Reported by a subagent; the numbers below are its measurements.
 
 Safety: no user config was modified by the experiments (read-only inspection only). The CLI itself rewrites `~/.claude.json` on use (see T4).
 

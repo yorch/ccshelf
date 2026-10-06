@@ -1,6 +1,6 @@
 # 07. How the launcher invokes Claude Code, what is shared, and combining with accounts
 
-Design description. Stage 0 (macOS only) tested masking via `--settings`, `--setting-sources`, `--strict-mcp-config`, auth under those flags, and parallel runs. Everything else here is design intent or inference from the docs, marked as such. `cprof` is a placeholder name.
+Design description. Stage 0 (macOS only) tested masking via `--settings`, `--setting-sources`, `--strict-mcp-config`, auth under those flags, and parallel runs. Everything else here is design intent or inference from the docs, marked as such. `cprof` is the chosen command name.
 
 ## 1. Invocation flow: `cprof run sre -- --resume`
 The launcher is a compiler plus a process starter. It is never in the data path: it doesn't proxy or intercept the conversation.
@@ -53,7 +53,7 @@ The launcher never sets `CLAUDE_CONFIG_DIR`, so all profiles use the same `~/.cl
 | Plugin install cache | Yes | One copy of each plugin; profiles only change what's enabled. Avoids the duplication and "corrupted" warnings of config-dir-per-profile. |
 | claude.ai connector auth | Yes | Connected once; `strict` hides connectors for a session without affecting their auth. |
 
-Not hidden by a profile: a repo's own `.mcp.json`, `.claude/skills/`, `.claude/agents/` and `.claude/settings.json` still apply. Plugin masking outranks project settings (`--settings` has higher precedence); `strict` also drops project `.mcp.json` servers.
+Not hidden by a profile: a repo's own `.claude/skills/`, `.claude/agents/` and `.claude/settings.json` still apply, and so does its `.mcp.json` unless the profile uses `strict`, which drops project `.mcp.json` servers too. Plugin masking outranks project settings (`--settings` has higher precedence).
 
 A profile is a **loading filter, not a security or identity boundary**: profiles share credentials, history and memory.
 
@@ -69,11 +69,12 @@ An account switch isolates credentials, user settings, installed plugins and mar
 2. **Built-in accounts (nicer UX).** Config names accounts and the launcher sets the variable for the child:
    ```toml
    # ~/.config/claude-profile/config.toml
+   default_account = "work"            # top-level key; omit to use Claude Code's default dir
+
    [accounts.work]
    config_dir = "~/.claude-work"       # sets CLAUDE_CONFIG_DIR for the child
    [accounts.personal]
    config_dir = "~/.claude-personal"
-   default_account = "work"            # omit to use Claude Code's default dir
    ```
    Usage: `cprof run sre --account personal`. A profile may pin a default with the top-level `account = "work"` field; precedence is CLI flag, then profile field, then `default_account`, then Claude Code's default directory.
    `cprof account add work` creates the dir and prints the one-time steps (run `claude` with the variable set and `/login` inside it). The launcher never copies, reads or moves credentials.

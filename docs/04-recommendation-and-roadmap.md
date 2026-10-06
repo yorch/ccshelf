@@ -1,9 +1,9 @@
 # 04. Recommendation and roadmap
 
 ## Recommendation
-One repo, three modules, no cross-dependencies except on `core`:
+**Code layout of the tool repo** (the public repo; the org's private data repo is described in `08-org-data-repo-structure.md`). One Go module that builds one binary, split into three packages with no cross-dependencies except on `core`:
 
-- `core/`: read `marketplace.json` and installed state (`claude plugin list --json --available`), resolve sets. Pure, no side effects.
+- `core/`: read `marketplace.json` and installed state (`claude plugin list --json` for installed plugins, `--available` when the catalog needs uninstalled ones), resolve sets. Pure, no side effects.
 - `profiles/`: local per-terminal launcher. Depends on `core`.
 - `catalog/`: metadata lint + static catalog site, runs in CI. Depends on `core`.
 
@@ -23,9 +23,9 @@ Decided by the user (2026-10-06): **Go** for the implementation; **GitHub / GitH
 ### What GHE + GitHub Actions imply (design assessment; not yet tested against the user's GHE)
 | Area | Implication |
 |---|---|
-| Which GHE | Unknown whether it is GHE Cloud (github.com with enterprise accounts, possibly data-residency) or GHE Server (self-hosted). It matters for Actions availability, Pages and egress. Open question. |
-| CI lint/catalog action | Provide a **composite action** in this repo. Two ways to get the binary: download a pinned release asset from the same GHE instance (needs the repo accessible to the workflow's `GITHUB_TOKEN`), or build from source with `actions/setup-go` (slower; works where release downloads are restricted). On GHE Server, third-party actions such as `setup-go` must be mirrored or allowed by the admin. Pin by tag or SHA. |
-| Releases | `goreleaser` supports GitHub Enterprise endpoints (`github_urls`). Publish binaries for darwin/linux/windows to the internal repo's releases; mirror to an internal package registry or Homebrew tap/Scoop bucket as needed. Private repos need a token for downloads, which affects `brew`/`scoop` install steps. |
+| Which GHE | **Both GHE Cloud and GHE Server must be supported (R2).** The flavor matters for Actions availability, Pages and egress, so the design assumes the lowest common denominator (see R2 below). |
+| CI lint/catalog action | Provide a **composite action** in this repo. Two ways to get the binary: download a pinned release asset from the tool's public GitHub Releases (or from an internal mirror of them, which GHE Server without internet access needs), or build from source with `actions/setup-go` (slower; works where release downloads are restricted). On GHE Server, third-party actions such as `setup-go` must be mirrored or allowed by the admin. Pin by tag or SHA. |
+| Releases | `goreleaser` supports GitHub Enterprise endpoints (`github_urls`). Publish binaries for all six targets to the public tool repo's GitHub Releases; adopters can mirror them to an internal package registry, Homebrew tap or Scoop bucket. A mirror that lives in a private repo needs a token for downloads, which affects `brew`/`scoop` install steps. |
 | Catalog hosting | GitHub Pages (access-controlled on GHE Cloud; available on GHE Server if enabled), or any internal static host. The CI job publishes `catalog.json` + HTML as a Pages artifact. Pages visibility must match who may see the plugin list. |
 | Marketplace source type | Claude Code marketplace sources of type `github` target github.com; for GHE hosts a **git URL** source is likely required (`git@ghe.example.com:org/marketplace.git` or https). Needs verification against the marketplace docs and the user's auth (SSH keys/credential helper). Also affects `strictKnownMarketplaces` patterns. |
 | Profile `git` source | Same: use git URLs for GHE; honor the user's existing git credential helper/SSH config rather than storing tokens. |
@@ -47,7 +47,7 @@ Design to the lowest common denominator, so nothing assumes github.com or the ne
 Still to verify: how Claude Code's marketplace and plugin source types behave with GHE Cloud vs Server hosts (including data-residency domains), and the minimum GHE Server version the Actions workflows must support.
 
 ### Go stack choices (proposed)
-- Module layout: `core/`, `profiles/`, `catalog/` as Go packages in one module; one `cprof` binary with subcommands (name is a placeholder). Cobra or a small stdlib-based CLI parser; stdlib `os/exec`, `encoding/json`, `html/template`, `embed`.
+- Module layout: `core/`, `profiles/`, `catalog/` as Go packages in one module; one `cprof` binary with subcommands (project name `claude-profile`, command `cprof`; see "Name" below). Cobra or a small stdlib-based CLI parser; stdlib `os/exec`, `encoding/json`, `html/template`, `embed`.
 - TOML: a maintained library (`pelletier/go-toml/v2` or `BurntSushi/toml`; pick one that preserves useful error positions).
 - JSON Schema validation for manifests: a Go validator library, with schemas in `schema/` shared with editors.
 - Git access for `git` sources: shell out to the user's `git` (inherits credential helper/SSH config, important for GHE) rather than embedding a git library.
@@ -56,13 +56,13 @@ Still to verify: how Claude Code's marketplace and plugin source types behave wi
 - Tests: golden files for generated settings, a fake `claude` binary built from `testdata/`, opt-in real-`claude` integration test.
 
 ## Cross-platform requirement (macOS, Linux, Windows)
-**Requirement R1:** the launcher, the catalog tooling and the CI lint must work on macOS (arm64, x64), Linux (x64, arm64; WSL counts as Linux) and native Windows 10/11 (x64, arm64 if feasible), with the same behavior and the same profile files everywhere. Everything below is a design assessment; Stage 0 was run on macOS only, so Linux and Windows behavior is **not yet tested**.
+**Requirement R1:** the launcher, the catalog tooling and the CI lint must work on macOS (arm64, x64), Linux (x64, arm64; WSL counts as Linux) and native Windows 10/11 (x64, arm64), with the same behavior and the same profile files everywhere. Everything below is a design assessment; Stage 0 was run on macOS only, so Linux and Windows behavior is **not yet tested**.
 
 ### Facts from the docs (reported by a research agent; managed-settings registry details were truncated)
 - Native Windows: `%USERPROFILE%\.local\bin\claude.exe` (PowerShell/CMD installer or WinGet), or npm (Node 22+). The shell tool is PowerShell, and Git Bash is optional (`CLAUDE_CODE_GIT_BASH_PATH`). WSL is a separate Linux install with its own `~/.claude`.
 - Config: `~/.claude/` and `~/.claude.json` (`%USERPROFILE%` on Windows). Linux does not use XDG for Claude Code.
 - Managed settings: macOS `/Library/Application Support/ClaudeCode/`, Linux `/etc/claude-code/`, Windows `C:\Program Files\ClaudeCode\`. Windows registry/MDM/GPO is mentioned but its details were not retrieved.
-- Credentials: macOS Keychain (keyed per `CLAUDE_CONFIG_DIR`, file fallback); **Linux and Windows use `<config dir>/.credentials.json`**, with no locking documented.
+- Credentials: macOS Keychain (keyed per `CLAUDE_CONFIG_DIR`, file fallback; verified in the docs by the adversary's check); **Linux and Windows use `<config dir>/.credentials.json`**, with no locking documented.
 - Paths in JSON settings/MCP configs: forward slashes everywhere, `~` and `${VAR}` expansion supported. `CLAUDE_CODE_PLUGIN_DIRS` uses `:` on Unix and `;` on Windows; `--plugin-dir` is repeated per path.
 - No Claude Code temp-dir override; it uses OS defaults (`TMPDIR`, or `TEMP`/`TMP` on Windows).
 - Symlinks on Windows need Developer Mode or admin. WinGet upgrades can fail while `claude.exe` is running.
@@ -102,7 +102,7 @@ This strengthens **Go**: `os/exec`, build tags for platform differences, `filepa
 2. Does masking via `--settings` behave identically on Windows (Stage 0 repeated there)?
 3. Does the MCP `npx` command need `cmd /c` on native Windows?
 4. How do Windows registry/MDM managed settings appear, and can they be detected?
-5. Which Windows architectures and Linux distros are in scope for the first release?
+5. ~~Which architectures are in scope~~: **decided, all six targets** (see "Supported targets"). Still open: which Linux distros and packaging formats beyond release archives.
 
 ## Policy spectrum and open source (R3, R4)
 Decided 2026-10-06. The user's org **does enforce managed settings** (exact keys not yet known), and the tool must also work with no policy and with partial policy. It will be used inside the org and released as **open source**.
@@ -113,7 +113,7 @@ Decided 2026-10-06. The user's org **does enforce managed settings** (exact keys
 |---|---|---|
 | `--settings` masking (`enabledPlugins`, `skillOverrides`, env) | plugin/skill filtering | Core feature. If even this fails, refuse and explain. |
 | `--strict-mcp-config` + `--mcp-config` | hiding MCP servers and claude.ai connectors | Skip MCP control, warn that servers/connectors stay active. |
-| `--plugin-dir` / `CLAUDE_CODE_PLUGIN_DIRS` | session-only plugins (e.g. generated local plugins for standalone skills) | Skip those plugins; suggest packaging them in the marketplace. |
+| `--plugin-dir` / `CLAUDE_CODE_PLUGIN_DIRS` | session-only plugins (none are generated by default, per the standalone-skills decision) | Skip those plugins; suggest packaging them in the marketplace. |
 | `--agents` | profile-defined subagents | Skip. |
 | `--setting-sources` | dropping the user layer | Fall back to per-key masking (`inherit_user_settings = true` behavior). |
 | Force-enabled plugins (managed `enabledPlugins: true`) | masking | Can't be masked; list them in `show`/`doctor` as "always on by policy". |
@@ -123,23 +123,23 @@ Decided 2026-10-06. The user's org **does enforce managed settings** (exact keys
 - **Never bypass policy.** This holds in every mode, including open-source use.
 - **Cases to test:** no policy; permissive policy (e.g. only `strictKnownMarketplaces`); sideload blocked; force-enabled plugins; both. Each needs a fixture (a fake managed-settings file plus the fake `claude` that mimics the exit-1 behavior).
 
-**R4: open source.** No org-specific names, URLs or assumptions in code, schemas or defaults; everything org-specific lives in config and in the org's marketplace repo. Needs a license, contribution docs, a neutral project/command name (`cprof` is still a placeholder), and docs that don't depend on internal infrastructure. This reinforces R2 (GitHub.com, GHE Cloud and GHE Server all supported) and R1 (all three operating systems).
+**R4: open source.** No org-specific names, URLs or assumptions in code, schemas or defaults; everything org-specific lives in config and in the org's marketplace repo. Needs a license, contribution docs, a project and command name (decided: `claude-profile` / `cprof`, with the brand risk noted; see "Name"), and docs that don't depend on internal infrastructure. This reinforces R2 (GitHub.com, GHE Cloud and GHE Server all supported) and R1 (all three operating systems).
 
 ## Tool repo vs data repo (R5)
 Decided 2026-10-06: the **tool is hosted in a public GitHub repo** (this one), and an adopting company stores its **profiles and catalog data in its own private GHE repo**. The tool never assumes the two live together.
 
 | | Tool repo (public, github.com) | Org data repo (private, GHE Cloud or Server) |
 |---|---|---|
-| Holds | Go source, schemas, docs, release binaries, a reusable GitHub Action, example/fictional profiles, a starter template | The org's `marketplace.json`, plugins, `profiles/*.toml`, generated `catalog.json` and bundles, org config |
+| Holds | Go source, schemas, docs, release binaries, a reusable GitHub Action, example/fictional profiles, a starter template | The org's `marketplace.json`, plugins, `profiles/*.toml`, generated profile bundles (`bundles/`), org config. The built catalog (`catalog.json`, site) is produced in CI and not committed |
 | Contains org data? | Never. Examples are fictional. | Yes |
-| Released how | Public GitHub Releases (goreleaser); package managers | Not released; consumed by the tool |
+| Released how | Public GitHub Releases (goreleaser); package managers; adopters may mirror internally | Not released; consumed by the tool |
 | Changes by | Open-source contributors | The org's platform team |
 
 Consequences:
 - **Reusable CI:** the data repo's workflow calls the public tool, either `uses: <owner>/claude-profile/action@<pinned tag or SHA>` or a step that downloads a pinned release binary. GHE Cloud can use public actions directly; **GHE Server needs GitHub Connect or a mirror** (e.g. `actions-sync`), or the binary-download variant (also mirrorable to an internal registry). Both variants must be documented; the logic stays in the binary (R2).
 - **Pin everything.** The data repo pins the tool version and (where supported) verifies a checksum, since the tool runs in the org's CI and on developers' machines.
 - **Starter template** (layout in `08-org-data-repo-structure.md`): ship a template/example data repo (`examples/org-data-repo/`, possibly also a GitHub template repository) with a sample `marketplace.json`, `profiles/`, a CI workflow and a catalog publish recipe, so adopting takes minutes.
-- **Configuration points to the data repo**, not the reverse: profile sources (`git`/`plugin`/`dir`), catalog metadata schema location, and lint rules all come from the org's config, with sane defaults.
+- **Configuration lives with the adopter, not in the tool:** profile sources (`dir`/`git`, later `plugin`), the catalog metadata schema location and lint rules come from the org's `claude-profile.toml` in the data repo and the user's own `~/.config/claude-profile/config.toml`, with sane defaults. The tool repo never needs to know about a particular org.
 - **Catalog hosting is the adopter's choice** (R2): the tool outputs a plain static directory; the starter template shows GitHub Pages and an internal static host. We don't pick one for the org.
 - **Telemetry:** none by default. An open-source tool that runs in corporate CI must not phone home.
 - **Security reporting, license and contribution docs** live in the public repo (R4).
@@ -147,28 +147,33 @@ Consequences:
 ### License (decided 2026-10-06)
 **MIT** for the tool repo (code and docs). Still to do: add a `LICENSE` file (needs the copyright holder name and year), and confirm that the user's employer allows open-sourcing this before the first public commit. The data repo (the org's profiles and catalog data) is the org's own and is not covered by this license.
 
+### Name (decided 2026-10-06)
+Project **`claude-profile`**, command **`cprof`**. The user accepted two known risks: "Claude" in the name of an open-source tool may conflict with Anthropic's brand guidelines if published widely, and a similarly named Go tool already exists (`claude-profile`, a Go binary that wraps `CLAUDE_CONFIG_DIR`; see 02). Revisit before the first public release; a rename is cheap now and costly later.
+
 ### Do not build (yet)
 Registry server/DB, vector search, TUI, custom install path (bundles cover install), MCP gateway, config-dir-per-profile, a concierge search tool before there is usage data, anything that writes shared settings.
 
 ## Staged roadmap
 **Build order (decided 2026-10-06): both tracks in parallel.** Start with the shared `core/` package (read `marketplace.json`, installed-plugin state, resolve sets, capability probe), then one thin slice of each track: launcher `run`/`show`/`dry-run` with policy detection, and catalog metadata lint plus a minimal static page. Risk to watch: spreading effort. Keep each slice shippable on its own.
-- **Stage 0 (DONE 2026-10-06): de-risk the launcher.** Results in `05-stage0-results.md`: T1 masking via `--settings` confirmed (per-key); T2 `--setting-sources project,local` confirmed and auth works; T3 `skillOverrides` works for standalone skills only; T4 no concurrency problem observed; T5 `--strict-mcp-config` confirmed (also removes claude.ai connectors, which `enabledPlugins` can't); T6 no managed policy on this machine. Token savings were small (~2.4k of ~27k), so the pitch rests on routing/clutter. Still untested: bundles, locked-down policy.
-  - T1 `--settings` `enabledPlugins:false` masks a user-level `true`?
-  - T2 `--setting-sources project,local` drops user plugins/skills/MCP? Auth still works?
-  - T3 `skillOverrides` reduces what loads / `/context` tokens?
-  - T4 concurrent sessions don't corrupt `~/.claude.json`?
-  - T5 `--strict-mcp-config` with an empty config removes user and plugin MCP?
-  - T6 managed settings present on this machine?
-  - Fallback if T1 fails: `--setting-sources project,local` + generated settings.
+- **Stage 0 (DONE 2026-10-06): de-risk the launcher.** Full results in `05-stage0-results.md` (run on macOS only; reported by a subagent with raw outputs kept):
+  - T1 `--settings` `enabledPlugins:false` masks a user-level `true`: confirmed, per-key merge.
+  - T2 `--setting-sources project,local` drops user plugins, skills and MCP; auth still works: confirmed.
+  - T3 `skillOverrides`: works for standalone skills only; token effect within noise.
+  - T4 concurrent sessions: no `~/.claude.json` corruption seen (not a stress test).
+  - T5 `--strict-mcp-config` with an empty config removes plugin MCP servers and claude.ai connectors: confirmed.
+  - T6 managed settings: none on the test machine (MDM and server-side not checked).
+  - T7 bundle behavior: skipped (needs installing a plugin).
+  - Token savings were small (~2.4k of ~27k), so the pitch rests on routing and clutter. Still untested: bundles, locked-down policy, Linux and Windows.
 - **Catalog track (no experiments needed, low risk, can start now):**
   1. Metadata convention: native `author`, `category`, `tags` stay in the marketplace entry; catalog-only fields (`owner`, `status` (active/experimental/deprecated), `superseded_by`, `when_to_use`, `avoid_when`, `overlaps_with`, `review_by`, `support`) live in a **sidecar file per plugin**, `catalog/plugins/<name>.toml` (decided 2026-10-06; see `08-org-data-repo-structure.md`). Small registries may opt into single-file mode.
   2. CI lint (extends `claude plugin validate`) failing on missing required fields.
   3. Static catalog generator: facets by category/tag/team/status, overlap view, "new or changed since last tag" diff, owner/status badges; optional usage join from the Analytics API.
-  4. `relevance` blocks and role bundles in marketplace.json (native, push-style discovery).
+  4. `relevance` blocks and profile bundles (`bundles/`) in marketplace.json (native, push-style discovery).
 - **Profiles track:**
-  1. Profile manifest + resolver + `run`/`show`/`ls`/`dry-run`; per-process temp files; policy detection.
+  1. Profile manifest + resolver + `run`/`show`/`ls`/`dry-run`; content-addressed generated files in the cache dir; policy detection.
   2. Inheritance (`extends`), `diff`, `doctor` (resolved set, leaks, overlap, token estimate).
-  3. `compile`: emit bundle meta-plugins (`profile-<name>`) into the marketplace so catalog-published bundles become selectable profiles.
+  3. `compile`: emit bundle meta-plugins (`profile-<name>`) into `bundles/` (committed; `compile --check` fails CI on drift). The bundle's `marketplace.json` entry is written by hand once and checked by `lint`. Catalog-published bundles then become selectable profiles.
+- **Project setup (both tracks):** add the `LICENSE` file (MIT; copyright holder and year) and confirm the employer allows open-sourcing; add `SECURITY.md` and `CONTRIBUTING.md`; reusable GitHub Action and goreleaser packaging (Homebrew, Scoop, WinGet); starter template data repo (`examples/org-data-repo/`); trust and lockfile for shared profiles; `shell-init`; the `--account` option (see 07).
 - **Later, only if data shows need:** OTel importer + `recommend`; concierge.
 
 ## Profile sources and sharing
@@ -194,14 +199,15 @@ type = "dir"
 path = ".claude-profile/profiles"               # per-project defaults, relative to the repo root
 
 [[sources]]
-type = "plugin"
-plugin = "org-profiles@acme"                    # org profiles shipped as a plugin
-path = "profiles"                               # folder inside the plugin
+type = "git"
+url = "git@ghe.example.com:acme/claude-marketplace.git"   # the org data repo (use the GHE URL)
+ref = "v2026.10.1"                              # pinned tag or commit, not a moving branch
+path = "profiles"                               # folder inside the repo
 
-# [[sources]]                                   # alternative: a dedicated git repo
-# type = "git"
-# url = "git@github.com:acme/claude-profiles.git"
-# ref = "v1.4.0"                                # pinned tag or commit, not a moving branch
+# [[sources]]                                   # planned for a later release, after testing under policy
+# type = "plugin"
+# plugin = "org-profiles@acme"                  # org profiles shipped as a data-only plugin
+# path = "profiles"
 
 [trust]
 require_pin = true            # refuse git sources without a pinned ref
@@ -290,16 +296,16 @@ on_blocked = "warn"           # warn | fail. What to do when org policy blocks s
 Rule for `extends`: lists union in order; a later `off` or `exclude` beats an earlier include. Personal profiles in `~/.config/claude-profile/profiles/` may extend org profiles. `compile` also writes a bundle plugin `profile-<name>` (dependencies only) into the marketplace so the profile's plugins can be installed natively.
 
 ## CLI sketch
-`run <profile> [-- claude args]` · `ls` · `show <p>` (resolved closure, overrides, token estimate) · `diff <a> <b>` · `dry-run <p>` (prints exact `claude` command) · `init` · `compile` · `lint` · `catalog build` · `search <q>` · `recommend` (rule-based, no LLM) · `doctor` (overlap, unused, deprecated-in-use, stale owners, policy shadowing).
+`run <profile> [-- claude args]` · `ls` · `show <p>` (resolved closure, overrides, token estimate) · `diff <a> <b>` · `dry-run <p>` (prints exact `claude` command) · `init` (create config, optionally from an org data repo URL) · `new <p> [--from <p2>]` · `edit <p>` · `trust <p>` · `account add <name>` · `shell-init <bash|zsh|fish|pwsh>` · `compile [--check]` · `lint` · `catalog build` · `search <q>` · `recommend` (rule-based, no LLM) · `doctor [--policy]` (overlap, unused, deprecated-in-use, stale owners, policy shadowing, capability matrix).
 
 ## Repo layout
-This repo: `core/ profiles/ catalog/ schema/ action/ site/ examples/ docs/`.
-Marketplace repo: `.claude-plugin/marketplace.json`, `plugins/`, `profiles/*.toml`, generated `plugins/profile-*/`, generated `catalog.json`.
+Tool repo (this one): `core/ profiles/ catalog/ schema/ action/ site/ examples/ docs/`.
+Org data repo: see `08-org-data-repo-structure.md` (marketplace, plugins, `profiles/`, generated `bundles/`, `catalog/` sidecars, org config, CI). Built catalog output is not committed.
 
 ## Open decisions
 1. ~~Does the user's org use managed settings?~~ **Decided:** yes, enforced; the tool must work across none, partial and strict policy (R3), and be open source (R4). Still unknown: which managed keys the org actually sets.
 2. ~~Order~~: **decided, both in parallel** (core first, then a thin slice of each).
 3. ~~Implementation language~~: **decided, Go** (see "Stack and platform decisions"). Still open: whether `core/` is a Go library package or just a convention. GHE Cloud vs Server: **both must be supported** (R2).
-4. ~~Where the catalog is published~~: **adopter's choice** (tool outputs a static directory; the starter template shows GitHub Pages and a static host); see R5. **Metadata ownership decided: hybrid.** Plugin authors write their own metadata; a platform reviewer approves it (wording, overlaps, deprecations, taxonomy). Mechanics: CI lint enforces required fields; `CODEOWNERS` routes review of a plugin's sidecar file (`catalog/plugins/`) to the platform team, while plugin source stays with the owning team (sidecar location decided 2026-10-06); `reviewBy` dates let `doctor` flag stale entries. The tool provides the lint rules and the staleness check; review routing is the data repo's `CODEOWNERS`, so the tool stays out of org process.
+4. ~~Where the catalog is published~~: **adopter's choice** (tool outputs a static directory; the starter template shows GitHub Pages and a static host); see R5. **Metadata ownership decided: hybrid.** Plugin authors write their own metadata; a platform reviewer approves it (wording, overlaps, deprecations, taxonomy). Mechanics: CI lint enforces required fields; `CODEOWNERS` routes review of a plugin's sidecar file (`catalog/plugins/`) to the platform team, while plugin source stays with the owning team (sidecar location decided 2026-10-06); `review_by` dates let `doctor` flag stale entries. The tool provides the lint rules and the staleness check; review routing is the data repo's `CODEOWNERS`, so the tool stays out of org process.
 5. ~~Profile distribution~~: **decided, `dir` + `git` sources first; `plugin` source later**, once tested under managed policy and `strictKnownMarketplaces`. This changes the earlier lean (plugin as default): the tool-repo / private-data-repo split (R5) makes a pinned git source the natural fit, since it works with any private repo and the user's git credentials and doesn't depend on marketplace policy.
 6. ~~Standalone skills~~: **decided, explicit off-list + guidance to package as plugins.** Profiles list standalone skills to hide via `skillOverrides` (tested, works under any policy). `doctor` warns about standalone skills that no profile mentions, and the docs explain how to package them into a marketplace plugin so profiles can control them as a unit. No generated `--plugin-dir` plugin (blocked by sideload policy) and no silent auto default-deny. For non-plugin MCP servers: `--strict-mcp-config` where allowed; to verify, `deniedMcpServers` inside the `--settings` file as a fallback where `--mcp-config` is blocked (docs say it works in any settings file; untested here). Original question: how `profiles` handles standalone `~/.claude/skills` and non-plugin MCP, which bundles cannot express (idea: library folder injected as a generated local plugin, subject to sideload policy).
