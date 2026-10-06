@@ -1233,3 +1233,104 @@ func TestListMarketplaces(t *testing.T) {
 		t.Error("expected start error")
 	}
 }
+
+func TestListMarketplacesOverTheLimitIsAnError(t *testing.T) {
+	old := maxListOutput
+	maxListOutput = 128
+	defer func() { maxListOutput = old }()
+	big := filepath.Join(t.TempDir(), "mk.json")
+	testutil.WriteFile(t, big, `[{"name":"x","source":"git","url":"https://h.example/o/r.git","installLocation":"/y","pad":"`+strings.Repeat("a", 400)+`"}]`)
+	bin, env := fakeEnv(t, map[string]string{"FAKE_CLAUDE_MARKETPLACES": big})
+	if _, err := ListMarketplaces(context.Background(), bin, "", env); err == nil || !strings.Contains(err.Error(), "more than 128 bytes") {
+		t.Fatalf("err = %v, want the size error", err)
+	}
+}
+
+func TestMarketplaceIdentity(t *testing.T) {
+	parse := func(t *testing.T, j string) Marketplace {
+		t.Helper()
+		l, err := parseMarketplaces([]byte("[" + j + "]"))
+		if err != nil || len(l) != 1 {
+			t.Fatalf("%v %v", l, err)
+		}
+		return l[0]
+	}
+	exp := func(t *testing.T, raw string) string {
+		t.Helper()
+		id, err := ExpectedIdentity(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	cases := []struct {
+		name     string
+		json     string
+		expected string // "" = must not equal any expected form
+		wantID   string
+	}{
+		{"github", `{"name":"a","source":"github","repo":"Acme/Plugins"}`, "acme/plugins", "github:acme/plugins"},
+		{"github with ref", `{"name":"a","source":"github","repo":"acme/plugins","ref":"dev"}`, "", "github:acme/plugins@dev"},
+		{"github with path", `{"name":"a","source":"github","repo":"acme/plugins","path":"sub"}`, "", "github:acme/plugins#sub"},
+		{"git https", `{"name":"a","source":"git","url":"https://GHE.Example.com/acme/plugins.git"}`, "https://ghe.example.com/acme/plugins/", "git:ghe.example.com/acme/plugins"},
+		{"git ssh equals https", `{"name":"a","source":"git","url":"ssh://git@ghe.example.com:22/acme/plugins.git"}`, "https://ghe.example.com/acme/plugins", "git:ghe.example.com/acme/plugins"},
+		{"git scp equals https", `{"name":"a","source":"git","url":"git@ghe.example.com:acme/plugins.git"}`, "https://ghe.example.com/acme/plugins", "git:ghe.example.com/acme/plugins"},
+		{"git path case matters", `{"name":"a","source":"git","url":"https://ghe.example.com/Acme/plugins"}`, "", "git:ghe.example.com/Acme/plugins"},
+		{"git with ref", `{"name":"a","source":"git","url":"https://ghe.example.com/acme/plugins","ref":"v2"}`, "", "git:ghe.example.com/acme/plugins@v2"},
+		{"url kind", `{"name":"a","source":"url","url":"https://github.com/acme/plugins"}`, "", "url:github.com/acme/plugins"},
+		{"directory path that looks like a repo", `{"name":"a","source":"directory","path":"acme/plugins"}`, "", ""},
+		{"plain http", `{"name":"a","source":"git","url":"http://ghe.example.com/acme/plugins"}`, "", "git:http://ghe.example.com/acme/plugins"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := parse(t, tc.json).Identity()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.wantID != "" && got != tc.wantID {
+				t.Errorf("Identity = %q, want %q", got, tc.wantID)
+			}
+			if tc.expected != "" {
+				if want := exp(t, tc.expected); got != want {
+					t.Errorf("Identity = %q, ExpectedIdentity(%q) = %q", got, tc.expected, want)
+				}
+				return
+			}
+			for _, e := range []string{"acme/plugins", "https://github.com/acme/plugins", "https://ghe.example.com/acme/plugins"} {
+				if got == exp(t, e) {
+					t.Errorf("Identity %q must not equal the expected %q", got, e)
+				}
+			}
+		})
+	}
+	// A directory source is identified by a hash, never the machine path.
+	d, err := parse(t, `{"name":"a","source":"directory","path":"/home/me/plugins"}`).Identity()
+	if err != nil || strings.Contains(d, "home") || !strings.HasPrefix(d, "directory:sha256-") {
+		t.Errorf("directory identity = %q, %v", d, err)
+	}
+	for name, m := range map[string]Marketplace{
+		"bad ref type": parse(t, `{"name":"a","source":"github","repo":"o/r","ref":1}`),
+		"bad url":      {Name: "a", Kind: "git", URL: "not a url"},
+		"no path":      {Name: "a", Kind: "git", URL: "https://h.example/"},
+		"unknown kind": {Name: "a", Kind: "weird", URL: "u"},
+	} {
+		if _, err := m.Identity(); err == nil {
+			t.Errorf("%s: no error", name)
+		}
+	}
+	for _, bad := range []string{"", "nonsense", "https://"} {
+		if _, err := ExpectedIdentity(bad); err == nil {
+			t.Errorf("ExpectedIdentity(%q): no error", bad)
+		}
+	}
+	list := []Marketplace{parse(t, `{"name":"a","source":"github","repo":"o/r"}`)}
+	if id, err := MarketplaceIdentity(list, "a"); err != nil || id != "github:o/r" {
+		t.Errorf("MarketplaceIdentity = %q, %v", id, err)
+	}
+	if _, err := MarketplaceIdentity(list, "zz"); err == nil {
+		t.Error("unknown marketplace accepted")
+	}
+	if _, err := MarketplaceIdentity(append(list, list[0]), "a"); err == nil {
+		t.Error("duplicate marketplace accepted")
+	}
+}

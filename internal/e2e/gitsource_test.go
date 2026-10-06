@@ -221,7 +221,13 @@ func TestGitSourceCatalogCommandsWithoutAnOrgRepo(t *testing.T) {
 		t.Fatalf("search before the source was fetched: exit %d\n%s%s", r.Code, r.Stdout, r.Stderr)
 	}
 	s.mustRun("ls") // fetches and verifies the checkout into the cache
-	rem.stop()      // from here on the server is gone
+	// A fetched commit is not a trusted one: the catalog is read only from a
+	// commit the user accepted.
+	if r = s.run("search", "seo"); r.Code != 1 {
+		t.Fatalf("search before any trust: exit %d\n%s%s", r.Code, r.Stdout, r.Stderr)
+	}
+	s.mustRun("trust", "seo", "--accept", s.closureHash("seo"))
+	rem.stop() // from here on the server is gone
 
 	r = s.mustRun("search", "seo")
 	contains(t, "search", r.Stdout, "seo-tools")

@@ -47,7 +47,7 @@ func TestPluginSourceMarketplaceBinding(t *testing.T) {
 	if r.Code != 1 {
 		t.Fatalf("a lookalike marketplace: exit %d, want 1\n%s", r.Code, r.Stderr)
 	}
-	contains(t, "stderr", r.Stderr, `was added from "acme/plugins", not from the expected "evil/plugins"`)
+	contains(t, "stderr", r.Stderr, `was added from "github:acme/plugins", not from the expected "evil/plugins"`)
 	contains(t, "stderr", r.Stderr, "/plugin marketplace")
 	if n := len(s.launches()); n != 1 {
 		t.Errorf("claude started %d times, want 1", n)

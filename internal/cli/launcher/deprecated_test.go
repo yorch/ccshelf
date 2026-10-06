@@ -115,3 +115,42 @@ func TestDeprecationWarningFromAGitSource(t *testing.T) {
 		t.Errorf("no warning:\n%s", h.errb)
 	}
 }
+
+// A sidecar describes the plugins of the marketplaces its org source
+// publishes: the same plugin name from another marketplace is not deprecated.
+func TestDeprecationWarningIsKeyedByMarketplace(t *testing.T) {
+	h, org := deprecationHarness(t, deprecatedSidecar)
+	testutil.WriteFile(t, filepath.Join(org, "profiles", "other.toml"), "name = \"other\"\ndescription = \"d\"\n[plugins]\ninclude = [\"seo-tools@elsewhere\", \"seo-tools@acme\"]\n")
+	h.mustRun("trust", "other", "--accept", orgHash(t, h, "other"))
+	h.out.Reset()
+	h.mustRun("--json", "dry-run", "other")
+	out := h.out.String()
+	if !strings.Contains(out, "plugin seo-tools@acme is deprecated") {
+		t.Errorf("the org marketplace plugin must be reported:\n%s", out)
+	}
+	if strings.Contains(out, "seo-tools@elsewhere is deprecated") {
+		t.Errorf("a plugin of another marketplace got the org sidecar's warning:\n%s", out)
+	}
+}
+
+// Only org sources carry catalog data: the sidecars of a personal or project
+// profile source are ignored.
+func TestDeprecationWarningIgnoresNonOrgSources(t *testing.T) {
+	h := newHarness(t)
+	// A personal profile that includes the plugin, with sidecars and a
+	// marketplace file next to it (in the config folder and in the profiles
+	// folder, whichever the source reports as its root).
+	pdir := filepath.Join(h.configDir(), "profiles")
+	testutil.WriteFile(t, filepath.Join(pdir, "mine.toml"), "name = \"mine\"\ndescription = \"d\"\n[plugins]\ninclude = [\"seo-tools@acme\"]\n")
+	for _, root := range []string{h.configDir(), pdir} {
+		testutil.WriteFile(t, filepath.Join(root, "ccshelf.toml"), "[catalog]\nmarketplaces = [\".claude-plugin/marketplace.json\"]\n")
+		testutil.WriteFile(t, filepath.Join(root, ".claude-plugin", "marketplace.json"), `{"name":"acme","owner":{"name":"x"},"plugins":[]}`)
+		testutil.WriteFile(t, filepath.Join(root, "catalog", "plugins", "seo-tools.toml"), deprecatedSidecar)
+	}
+	if code := h.run("run", "mine"); code != 0 {
+		t.Fatalf("code %d\n%s", code, h.errb)
+	}
+	if strings.Contains(h.errb.String(), "deprecated") {
+		t.Errorf("a personal source's sidecar was used:\n%s", h.errb)
+	}
+}

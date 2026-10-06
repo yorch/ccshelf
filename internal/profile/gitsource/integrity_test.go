@@ -2,6 +2,8 @@ package gitsource
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"os"
 	"os/exec"
@@ -223,4 +225,96 @@ func TestOrgConfigHygieneFailuresAreFatalInvalid(t *testing.T) {
 			t.Fatalf("err = %v, want orgconfig.ErrInvalid", err)
 		}
 	})
+}
+
+// oldUrlKey is the folder name an earlier build gave a repository (no layout
+// version in the hash).
+func oldURLKey(u string) string {
+	sum := sha256.Sum256([]byte(u))
+	return hex.EncodeToString(sum[:8])
+}
+
+func TestCheckoutOfAnOlderLayoutIsIgnoredNotTampered(t *testing.T) {
+	f := newFixture(t)
+	f.seed()
+	f.write("catalog/plugins/x.toml", sidecarDeprecated)
+	f.write(".claude-plugin/marketplace.json", `{"name":"acme","owner":{"name":"x"},"plugins":[]}`)
+	sha := f.commit("catalog")
+	f.git("tag", "v1")
+	s := f.source("v1", "")
+	if err := s.Prepare(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	// Turn the fresh checkout into what the previous build left: under the old
+	// folder name, without the catalog files.
+	cur := CheckoutDir(f.cache, f.url(), sha)
+	old := filepath.Join(f.cache, oldURLKey(f.url()), sha)
+	if old == cur {
+		t.Fatal("the layout version must change the checkout folder")
+	}
+	if err := os.MkdirAll(filepath.Dir(old), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(cur, old); err != nil {
+		t.Fatal(err)
+	}
+	for _, rel := range []string{"catalog", ".claude-plugin"} {
+		if err := os.RemoveAll(filepath.Join(old, rel)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s2 := f.source("v1", "")
+	if err := s2.Prepare(context.Background()); err != nil {
+		t.Fatalf("Prepare after an upgrade: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(s2.Root(), "catalog", "plugins", "x.toml")); err != nil {
+		t.Errorf("catalog data not extracted: %v", err)
+	}
+	if err := f.source("v1", "").PrepareCached(context.Background(), sha); err != nil {
+		t.Errorf("PrepareCached after Prepare: %v", err)
+	}
+	if _, err := os.Stat(old); err != nil {
+		t.Errorf("the old checkout should be left for the pruning: %v", err)
+	}
+}
+
+func TestMissingCatalogFilesInTheSameLayoutAreRestored(t *testing.T) {
+	f := newFixture(t)
+	f.seed()
+	f.write("catalog/plugins/x.toml", sidecarDeprecated)
+	f.write(".claude-plugin/marketplace.json", `{"name":"acme","owner":{"name":"x"},"plugins":[]}`)
+	sha := f.commit("catalog")
+	f.git("tag", "v1")
+	if err := f.source("v1", "").Prepare(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	dir := CheckoutDir(f.cache, f.url(), sha)
+	for _, rel := range []string{"catalog", ".claude-plugin"} {
+		if err := os.RemoveAll(filepath.Join(dir, rel)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Both entry points repair it from the verified object store.
+	for name, prep := range map[string]func(*Source) error{
+		"Prepare":       func(s *Source) error { return s.Prepare(context.Background()) },
+		"PrepareCached": func(s *Source) error { return s.PrepareCached(context.Background(), sha) },
+	} {
+		for _, rel := range []string{"catalog", ".claude-plugin"} {
+			_ = os.RemoveAll(filepath.Join(dir, rel))
+		}
+		if err := prep(f.source("v1", "")); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		b, err := os.ReadFile(filepath.Join(dir, "catalog", "plugins", "x.toml"))
+		if err != nil || string(b) != sidecarDeprecated {
+			t.Errorf("%s: restored sidecar = %q, %v", name, b, err)
+		}
+	}
+	// Missing files of the older, always watched parts are still tampering.
+	if err := os.Remove(filepath.Join(dir, "prompts", "p.md")); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.source("v1", "").Prepare(context.Background()); !errors.Is(err, ErrTampered) {
+		t.Errorf("a deleted prompt: err = %v, want ErrTampered", err)
+	}
 }

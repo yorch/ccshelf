@@ -269,14 +269,14 @@ func TestMarketplaceSourceIsBoundAndChecked(t *testing.T) {
 		}
 		return s
 	}
-	s := mk("https://github.com/acme/plugins.git", nil, "https://github.com/ACME/plugins/")
+	s := mk("git:github.com/acme/plugins", nil, "https://GitHub.com/acme/plugins/")
 	if s.ID() != "plugin:a@b" {
 		t.Errorf("before Prepare: %q", s.ID())
 	}
 	if err := s.Prepare(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if want := "plugin:a@b from https://github.com/acme/plugins.git"; s.ID() != want || s.Locator() != want {
+	if want := "plugin:a@b from git:github.com/acme/plugins"; s.ID() != want || s.Locator() != want {
 		t.Errorf("ID = %q, Locator = %q", s.ID(), s.Locator())
 	}
 	f, err := s.Open("base")
@@ -284,12 +284,12 @@ func TestMarketplaceSourceIsBoundAndChecked(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 	// a different origin is a different identity
-	other := mk("https://evil.example/plugins", nil, "")
+	other := mk("git:evil.example/plugins", nil, "")
 	if err := other.Prepare(context.Background()); err != nil || other.Locator() == s.Locator() {
 		t.Errorf("an unexpected origin without ExpectedMarketplace must still change the key: %v %q", err, other.Locator())
 	}
 	for name, tt := range map[string]*Source{
-		"mismatch": mk("https://evil.example/plugins", nil, "https://github.com/acme/plugins"),
+		"mismatch": mk("git:evil.example/plugins", nil, "https://github.com/acme/plugins"),
 		"lookup":   mk("", errors.New("boom"), ""),
 		"empty":    mk("  ", nil, ""),
 		"control":  mk("https://x/\x1b[2J", nil, ""),
@@ -415,26 +415,56 @@ func TestOrgConfigWithCustomPathAndMissingRoot(t *testing.T) {
 	}
 }
 
-func TestNormalizeSource(t *testing.T) {
-	same := [][2]string{
-		{"acme/plugins", "https://github.com/acme/plugins.git"},
-		{"acme/plugins", "git@github.com:acme/plugins.git"},
-		{"acme/plugins", "ssh://git@github.com/acme/plugins"},
-		{"ACME/plugins", "https://GitHub.com/acme/plugins/"},
-		{"https://ghe.example/a/b.git", "https://ghe.example/a/b"},
-	}
-	for _, p := range same {
-		if !strings.EqualFold(normalizeSource(p[0]), normalizeSource(p[1])) {
-			t.Errorf("%q and %q should match", p[0], p[1])
+func TestMatchesExpected(t *testing.T) {
+	for _, p := range [][2]string{
+		{"github:acme/plugins", "acme/plugins"},
+		{"github:acme/plugins", "ACME/Plugins"},
+		{"git:github.com/acme/plugins", "https://github.com/acme/plugins.git"},
+		{"git:github.com/acme/plugins", "git@github.com:acme/plugins.git"},
+		{"git:ghe.example/a/b", "https://GHE.example/a/b.git"},
+		{"git:ghe.example/a/b", "ssh://git@ghe.example/a/b"},
+		{"git:ghe.example/a/b", "git@ghe.example:a/b"},
+	} {
+		if !matchesExpected(p[0], p[1]) {
+			t.Errorf("%q should match the expected %q", p[0], p[1])
 		}
 	}
 	for _, p := range [][2]string{
-		{"acme/plugins", "https://ghe.example/acme/plugins"},
-		{"acme/plugins", "acme/plugins-evil"},
-		{"https://github.com/acme/plugins", "https://github.com.evil.example/acme/plugins"},
+		{"github:acme/plugins", "https://github.com/acme/plugins"}, // kinds differ
+		{"git:github.com/acme/plugins", "acme/plugins"},
+		{"url:github.com/acme/plugins", "acme/plugins"},
+		{"directory:sha256-0123456789abcdef", "acme/plugins"},
+		{"github:acme/plugins@dev", "acme/plugins"}, // another ref
+		{"github:acme/plugins#sub", "acme/plugins"}, // another folder
+		{"git:ghe.example/Acme/b", "https://ghe.example/acme/b"},
+		{"github:acme/plugins", "acme/plugins-evil"},
+		{"git:github.com.evil.example/acme/plugins", "https://github.com/acme/plugins"},
+		{"github:acme/plugins", "not a source"},
 	} {
-		if strings.EqualFold(normalizeSource(p[0]), normalizeSource(p[1])) {
-			t.Errorf("%q and %q must not match", p[0], p[1])
+		if matchesExpected(p[0], p[1]) {
+			t.Errorf("%q must not match the expected %q", p[0], p[1])
 		}
+	}
+}
+
+func TestIDCarriesNoMachinePath(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "profiles/base.toml", "name = \"base\"\ndescription = \"d\"\n")
+	id, err := (claude.Marketplace{Name: "b", Kind: "directory", Path: dir}).Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := New(Options{
+		Plugin: "a@b", Installed: list(claude.Plugin{ID: "a@b", Scope: "user", Enabled: true, InstallPath: dir}),
+		MarketplaceSource: func(context.Context, string) (string, error) { return id, nil },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Prepare(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(s.ID(), filepath.Base(dir)) || !strings.Contains(s.ID(), "directory:sha256-") {
+		t.Errorf("ID = %q must not embed the path", s.ID())
 	}
 }

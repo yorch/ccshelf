@@ -35,8 +35,10 @@ type Options struct {
 	// Installed lists installed plugins. The caller injects it (usually a
 	// wrapper around claude.ListInstalled) so tests never run claude.
 	Installed func(ctx context.Context) ([]claude.Plugin, error)
-	// MarketplaceSource returns the real source (a URL or owner/repo) the
-	// named marketplace was added from. The "@marketplace" part of a plugin id
+	// MarketplaceSource returns the identity of the real source the named
+	// marketplace was added from, in the canonical, kind-tagged form of
+	// claude.Marketplace.Identity ("github:owner/repo", "git:host/path", a hash
+	// for a local directory). The "@marketplace" part of a plugin id
 	// is only a local alias: anyone can add a marketplace under any name, so
 	// without this the id proves nothing about where the plugin came from.
 	// When set, the source is bound into ID and Locator, so the trust record
@@ -46,7 +48,10 @@ type Options struct {
 	MarketplaceSource func(ctx context.Context, marketplace string) (string, error)
 	// ExpectedMarketplace is the source the organization says the marketplace
 	// must come from. When set, MarketplaceSource is required and Prepare
-	// fails unless they match (ignoring case, a trailing slash and ".git").
+	// fails unless the identity of the real source equals what the expected
+	// source stands for (claude.ExpectedIdentity: the kind, the host without
+	// case, no trailing slash or ".git", the same repository over ssh or
+	// https, and no ref or sub-path).
 	ExpectedMarketplace string
 }
 
@@ -315,6 +320,17 @@ func (s *Source) checkInstalled(p *claude.Plugin) error {
 	return nil
 }
 
+// matchesExpected reports whether src, the identity of the marketplace as
+// claude.Marketplace.Identity gives it, is the one the organization expects (an
+// owner/repo shorthand or a git URL, see claude.ExpectedIdentity). The source
+// kinds must agree, the host is the only part compared without case, and a
+// marketplace added at a ref or sub-path never equals an expected source that
+// names none. An expected source that cannot be read matches nothing.
+func matchesExpected(src, want string) bool {
+	id, err := claude.ExpectedIdentity(want)
+	return err == nil && id == src
+}
+
 // checkMarketplace looks up the real source of the plugin's marketplace and
 // compares it with the expected one. It returns the source to bind into the
 // identity, or "" when no lookup was configured.
@@ -331,24 +347,8 @@ func (s *Source) checkMarketplace(ctx context.Context) (string, error) {
 	if src == "" || ui.HasControl(src) {
 		return "", fmt.Errorf("marketplace %q reports no usable source", ui.SanitizeLine(mkt))
 	}
-	if want := s.opts.ExpectedMarketplace; want != "" && !strings.EqualFold(normalizeSource(src), normalizeSource(want)) {
+	if want := s.opts.ExpectedMarketplace; want != "" && !matchesExpected(src, want) {
 		return "", fmt.Errorf("marketplace %q was added from %q, not from the expected %q; remove it with /plugin marketplace remove %s and add the expected one with /plugin marketplace add %s", ui.SanitizeLine(mkt), ui.SanitizeLine(src), ui.SanitizeLine(want), ui.SanitizeLine(mkt), ui.SanitizeLine(want))
 	}
 	return src, nil
-}
-
-// normalizeSource reduces a marketplace source to a comparable form: trailing
-// slashes and ".git" are dropped, and the github.com URL forms (https, ssh and
-// scp-like) become the owner/repo shorthand Claude Code reports for GitHub
-// marketplaces. Other hosts compare as written.
-func normalizeSource(s string) string {
-	s = strings.TrimSpace(s)
-	s = strings.TrimRight(s, "/")
-	s = strings.TrimSuffix(s, ".git")
-	for _, p := range []string{"https://github.com/", "ssh://git@github.com/", "git@github.com:"} {
-		if len(s) > len(p) && strings.EqualFold(s[:len(p)], p) {
-			return s[len(p):]
-		}
-	}
-	return s
 }

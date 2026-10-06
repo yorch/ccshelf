@@ -305,6 +305,11 @@ func CheckoutDir(base, url, sha string) string {
 	return filepath.Join(base, urlKey(url), sha)
 }
 
+// layoutVersion is part of the folder name of every checkout (see urlKey). It
+// changes when the set of files a checkout holds changes, so a checkout made
+// by an older build is never reused (it is pruned by age like any other).
+const layoutVersion = "layout2"
+
 // ensureHooksDir creates the empty directory core.hooksPath points at.
 func (s *Source) ensureHooksDir(base string) error {
 	dir := filepath.Join(base, ".nohooks")
@@ -376,7 +381,7 @@ func pickRef(out, name string) string {
 }
 
 func urlKey(u string) string {
-	sum := sha256.Sum256([]byte(u))
+	sum := sha256.Sum256([]byte(layoutVersion + "\x00" + u))
 	return hex.EncodeToString(sum[:8])
 }
 
@@ -445,7 +450,7 @@ func (s *Source) materialize(ctx context.Context, base, sha string) (string, err
 	if err != nil {
 		return "", err
 	}
-	if err := s.extract(ctx, tmp, pl); err != nil {
+	if err := s.extract(ctx, tmp, pl, nil); err != nil {
 		return "", err
 	}
 	if err := os.Rename(tmp, final); err != nil {
@@ -480,9 +485,36 @@ func (s *Source) verify(ctx context.Context, checkout, sha string) (root string,
 		return "", nil, false, err
 	}
 	if err := verifyDisk(checkout, base, entries, pl.watch); err != nil {
-		return "", nil, false, err
+		var mf *missingFilesError
+		if !errors.As(err, &mf) || !restorable(mf.paths, base, pl.watch) {
+			return "", nil, false, err
+		}
+		// A checkout from an older layout lacks only files the current layout
+		// added. The object store has just been verified, so the files are
+		// written again from it and the checkout is verified once more.
+		if err := s.extract(ctx, checkout, pl, mf.paths); err != nil {
+			return "", nil, false, err
+		}
+		if err := verifyDisk(checkout, base, entries, pl.watch); err != nil {
+			return "", nil, false, err
+		}
 	}
 	return root, pl.cfg, pl.found, nil
+}
+
+// restorable reports whether every missing path (a tree path) belongs to the
+// files only the current layout watches.
+func restorable(missing []string, base string, w watchSet) bool {
+	for _, p := range missing {
+		rel := p
+		if base != "" {
+			rel = strings.TrimPrefix(p, base+"/")
+		}
+		if !w.restorable(rel) {
+			return false
+		}
+	}
+	return true
 }
 
 // plan is what the committed tree says before anything is read from it: where
@@ -700,13 +732,22 @@ func (s *Source) listTree(ctx context.Context, dir, sha string) ([]treeEntry, er
 	return parseLsTree(out)
 }
 
-// extract writes the watched files from the object store into dir. The tree
-// has been checked, so every path is a clean relative path.
-func (s *Source) extract(ctx context.Context, dir string, pl *plan) error {
+// extract writes the watched files from the object store into dir, or only
+// the tree paths in only when it is not empty. The tree has been checked, so
+// every path is a clean relative path.
+func (s *Source) extract(ctx context.Context, dir string, pl *plan, only []string) error {
 	files, _ := expectedFiles(pl.entries, pl.base, pl.watch)
 	paths := make([]string, 0, len(files))
-	for p := range files {
-		paths = append(paths, p)
+	if len(only) > 0 {
+		for _, p := range only {
+			if _, ok := files[p]; ok {
+				paths = append(paths, p)
+			}
+		}
+	} else {
+		for p := range files {
+			paths = append(paths, p)
+		}
 	}
 	sort.Strings(paths)
 	if len(paths) == 0 {

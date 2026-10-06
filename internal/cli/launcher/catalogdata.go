@@ -3,6 +3,7 @@ package launcher
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/ccshelf/ccshelf/internal/cli/clicore"
 	"github.com/ccshelf/ccshelf/internal/config"
@@ -18,9 +19,9 @@ import (
 // an org data repo checkout. Only opt.NewGit is used.
 //
 // It never touches the network. A dir source is used as it is. A git source is
-// used from its verified cache: the commit the trust lockfile pinned for its
-// tag, else the newest cached checkout that passes the gitsource verification
-// (the same fallback the launcher uses offline). Sources are tried in the
+// used from its verified cache, and only at a commit that was accepted: the
+// one a full-SHA ref names, else a commit the trust lockfile recorded for its
+// tag (never merely the newest cached checkout). Sources are tried in the
 // order of the configuration and the first one whose org config and first
 // marketplace file read cleanly wins; a source with nothing usable is skipped.
 // With none left it returns clicore.ErrNoCatalog.
@@ -43,6 +44,7 @@ func (l *launcher) catalogData(ctx context.Context, cc *clicore.Context) (*clico
 	if newGit == nil {
 		newGit = defaultGit
 	}
+	untrusted := false
 	for i, sc := range cfg.Sources {
 		var root, label string
 		switch sc.Type {
@@ -59,6 +61,7 @@ func (l *launcher) catalogData(ctx context.Context, cc *clicore.Context) (*clico
 			}
 			commit := s.cachedCheckout(ctx, g, sc)
 			if commit == "" {
+				untrusted = untrusted || len(s.catalogCommits(sc)) == 0
 				continue
 			}
 			root, label = g.Root(), fmt.Sprintf("git %s at %s", ui.SanitizeLine(sc.URL), shortSHA(commit))
@@ -69,33 +72,38 @@ func (l *launcher) catalogData(ctx context.Context, cc *clicore.Context) (*clico
 			return &clicore.CatalogData{Root: root, Source: label}, nil
 		}
 	}
+	if untrusted {
+		return nil, fmt.Errorf("%w: a git source has no accepted commit yet (run `ccshelf ls --refresh`, then `ccshelf trust`)", clicore.ErrNoCatalog)
+	}
 	return nil, clicore.ErrNoCatalog
 }
 
 // cachedCheckout prepares g from a verified checkout already in the cache,
-// without network access, and returns the commit it used ("" when none).
+// without network access, and returns the commit it used ("" when none). Only
+// a commit the user accepted is ever read: the one a full-SHA ref names, else
+// the commits the trust lockfile recorded for the tag, the most recent first.
+// The cache is never searched for "the newest checkout": that commit may never
+// have been reviewed (the offline fallback of run feeds the trust check, a
+// catalog read has none).
 func (s *session) cachedCheckout(ctx context.Context, g PreparedSource, sc config.SourceConfig) string {
 	cp, ok := g.(cachedPreparer)
 	if !ok {
 		return ""
 	}
-	if commit := s.lockedCommit(sc); commit != "" && cp.PrepareCached(ctx, commit) == nil {
-		return commit
-	}
-	cl, ok := g.(cachedLister)
-	if !ok {
-		return ""
-	}
-	commits, err := cl.CachedCommits()
-	if err != nil {
-		return ""
-	}
-	for _, c := range commits {
-		if cp.PrepareCached(ctx, c) == nil {
-			return c
+	for _, commit := range s.catalogCommits(sc) {
+		if cp.PrepareCached(ctx, commit) == nil {
+			return commit
 		}
 	}
 	return ""
+}
+
+// catalogCommits lists the commits a catalog read may use for a git source.
+func (s *session) catalogCommits(sc config.SourceConfig) []string {
+	if ref := strings.ToLower(sc.Ref); fullSHA.MatchString(ref) {
+		return []string{ref}
+	}
+	return s.lockedCommits(sc)
 }
 
 // hasCatalogData reports whether root holds an org config that parses and a

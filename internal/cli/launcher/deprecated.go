@@ -5,7 +5,8 @@ import (
 	"sort"
 
 	"github.com/ccshelf/ccshelf/internal/catalog/sidecar"
-	"github.com/ccshelf/ccshelf/internal/claude"
+	"github.com/ccshelf/ccshelf/internal/marketplace"
+	"github.com/ccshelf/ccshelf/internal/orgconfig"
 	"github.com/ccshelf/ccshelf/internal/profile"
 	"github.com/ccshelf/ccshelf/internal/ui"
 )
@@ -22,6 +23,9 @@ func (s *session) deprecationWarnings(r *profile.Resolved) []string {
 	if len(include) == 0 {
 		return nil
 	}
+	// known is keyed by the full plugin id: a sidecar describes the plugins of
+	// the marketplaces its org source publishes, not a plugin of the same name
+	// from another marketplace.
 	known := map[string]*sidecar.Sidecar{}
 	seenRoot := map[string]bool{}
 	for _, f := range r.Chain {
@@ -38,17 +42,18 @@ func (s *session) deprecationWarnings(r *profile.Resolved) []string {
 		if err != nil {
 			continue
 		}
-		for name, v := range sc {
-			if _, dup := known[name]; !dup {
-				known[name] = v
+		for _, mkt := range marketplaceNames(src.Root(), cfg) {
+			for name, v := range sc {
+				if _, dup := known[name+"@"+mkt]; !dup {
+					known[name+"@"+mkt] = v
+				}
 			}
 		}
 	}
 	var out []string
 	seen := map[string]bool{}
 	for _, id := range include {
-		name, _ := claude.SplitID(id)
-		sc := known[name]
+		sc := known[id]
 		if sc == nil || seen[id] || (sc.Status != sidecar.StatusDeprecated) {
 			continue
 		}
@@ -61,4 +66,19 @@ func (s *session) deprecationWarnings(r *profile.Resolved) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// marketplaceNames returns the names of the marketplaces that the org config
+// of the source at root lists (catalog.marketplaces). A file that cannot be
+// read contributes nothing, so its plugins get no warning.
+func marketplaceNames(root string, cfg *orgconfig.Config) []string {
+	var names []string
+	for _, f := range cfg.Catalog.Marketplaces {
+		m, err := marketplace.LoadFile(root, f)
+		if err != nil || m.Name == "" {
+			continue
+		}
+		names = append(names, m.Name)
+	}
+	return names
 }

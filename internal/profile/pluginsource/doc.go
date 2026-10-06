@@ -44,9 +44,13 @@
 // MarketplaceSource (the real source the marketplace was added from)
 // and ExpectedMarketplace (what the organization requires). When the lookup
 // is given, the real source is bound into ID and Locator ("plugin:<id> from
-// <source>"), which keys the trust record to it; a mismatch with the expected
-// source fails Prepare (owner/repo and the https, ssh and scp forms of a
-// github.com URL compare equal). The profiles folder must be named "profiles", because
+// <source>"), which keys the trust record to it. The source is the canonical,
+// kind-tagged identity of claude.Marketplace.Identity (github:owner/repo,
+// git:host/path, a hash for a local directory, ref and sub-path included), so
+// no machine path is bound. A mismatch with the expected source fails Prepare:
+// owner/repo is compared only with a github marketplace, a git URL only with a
+// git one, the https, ssh and scp forms of the same repository on any host
+// compare equal, and a marketplace at a ref or sub-path never matches. The profiles folder must be named "profiles", because
 // whether prompts/ and mcp/ sit next to it is decided from that name and a
 // wrapper cannot pass the decision on. Root is the directory source's root.
 package pluginsource

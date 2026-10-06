@@ -580,21 +580,44 @@ func (s *session) lockedCommit(sc config.SourceConfig) string {
 	if s.refresh || !s.cfg.Trust.RequirePin || fullSHA.MatchString(strings.ToLower(sc.Ref)) {
 		return ""
 	}
+	if c := s.lockedCommits(sc); len(c) > 0 {
+		return c[0]
+	}
+	return ""
+}
+
+// lockedCommits lists every commit the trust lockfile recorded for the tag of
+// a git source, the most recent acceptance first, whatever require_pin and
+// --refresh say: it answers "which commits did the user accept", not "which
+// commit does a run use".
+func (s *session) lockedCommits(sc config.SourceConfig) []string {
 	locator := "git:" + sc.URL
-	var best string
-	var bestAt time.Time
+	type rec struct {
+		commit string
+		at     time.Time
+	}
+	var found []rec
 	for _, e := range s.lockEntries() {
 		recs := e.Sources
 		if len(recs) == 0 {
 			recs = []trust.SourceRecord{{Source: e.Source, Ref: e.Ref, Commit: e.Commit}}
 		}
 		for _, r := range recs {
-			if r.Source == locator && r.Ref == sc.Ref && fullSHA.MatchString(r.Commit) && (best == "" || e.AcceptedAt.After(bestAt)) {
-				best, bestAt = r.Commit, e.AcceptedAt
+			if r.Source == locator && r.Ref == sc.Ref && fullSHA.MatchString(r.Commit) {
+				found = append(found, rec{r.Commit, e.AcceptedAt})
 			}
 		}
 	}
-	return best
+	sort.SliceStable(found, func(i, j int) bool { return found[i].at.After(found[j].at) })
+	var out []string
+	seen := map[string]bool{}
+	for _, f := range found {
+		if !seen[f.commit] {
+			seen[f.commit] = true
+			out = append(out, f.commit)
+		}
+	}
+	return out
 }
 
 // lockEntries returns the trust lockfile entries (none when it cannot be read:
@@ -661,19 +684,26 @@ func (s *session) listInstalledFor(ctx context.Context) ([]claude.Plugin, error)
 }
 
 // marketplaceSourceFor returns the real source the named marketplace was added
-// from, by asking the read-only `claude plugin marketplace list --json`. The
-// answer is never cached and any unknown shape is an error (SR2: the plugin
-// source is bound to where its marketplace really comes from).
+// from (its canonical, kind-tagged identity, see claude.Marketplace.Identity),
+// by asking the read-only `claude plugin marketplace list --json`. The answer
+// is never cached and any unknown shape is an error (SR2: the plugin source is
+// bound to where its marketplace really comes from). The command runs from the
+// cache directory, not the project: a project's extraKnownMarketplaces must
+// not be able to add or shadow the org marketplace (SR3).
 func (s *session) marketplaceSourceFor(ctx context.Context, name string) (string, error) {
 	bin, err := s.locate()
 	if err != nil {
 		return "", err
 	}
-	list, err := claude.ListMarketplaces(ctx, bin, s.cwd, s.env)
+	dir, err := cache.Dir()
+	if err != nil {
+		return "", fmt.Errorf("finding a neutral directory to list marketplaces from: %w", err)
+	}
+	list, err := claude.ListMarketplaces(ctx, bin, dir, s.env)
 	if err != nil {
 		return "", err
 	}
-	return claude.MarketplaceOrigin(list, name)
+	return claude.MarketplaceIdentity(list, name)
 }
 
 // orgConfigOf returns the org config of a shared source and whether the source

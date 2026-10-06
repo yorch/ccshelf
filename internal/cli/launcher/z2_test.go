@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ccshelf/ccshelf/internal/cache"
 	"github.com/ccshelf/ccshelf/internal/testutil"
 	"github.com/ccshelf/ccshelf/internal/ui"
 )
@@ -52,9 +53,13 @@ func TestPluginSourceExpectedMarketplace(t *testing.T) {
 		wantErr      string
 	}{
 		{"matches the shorthand", "", cfg("acme/plugins"), true, ""},
-		{"matches a github url", "", cfg("https://github.com/acme/plugins.git"), true, ""},
+		{"a git marketplace matches the same url", `[{"name":"acme","source":"git","url":"ssh://git@ghe.example.com/acme/plugins.git","installLocation":"/x"}]`, cfg("https://ghe.example.com/acme/plugins"), true, ""},
+		{"a github marketplace is not a url", "", cfg("https://github.com/acme/plugins.git"), false, "was added from \"github:acme/plugins\""},
+		{"a directory that looks like the repo", `[{"name":"acme","source":"directory","path":"acme/plugins","installLocation":"/x"}]`, cfg("acme/plugins"), false, "was added from \"directory:sha256-"},
+		{"another ref of the same repo", `[{"name":"acme","source":"github","repo":"acme/plugins","ref":"dev","installLocation":"/x"}]`, cfg("acme/plugins"), false, "was added from \"github:acme/plugins@dev\""},
+		{"another folder of the same repo", `[{"name":"acme","source":"github","repo":"acme/plugins","path":"sub","installLocation":"/x"}]`, cfg("acme/plugins"), false, "was added from \"github:acme/plugins#sub\""},
 		{"no expected source still binds", "", cfg(""), true, ""},
-		{"lookalike marketplace", `[{"name":"acme","source":"github","repo":"evil/plugins","installLocation":"/x"}]`, cfg("acme/plugins"), false, "was added from \"evil/plugins\""},
+		{"lookalike marketplace", `[{"name":"acme","source":"github","repo":"evil/plugins","installLocation":"/x"}]`, cfg("acme/plugins"), false, "was added from \"github:evil/plugins\""},
 		{"marketplace not configured", `[]`, cfg("acme/plugins"), false, "not configured"},
 		{"unknown shape", `{"marketplaces":[]}`, cfg("acme/plugins"), false, "expected a JSON array"},
 		{"unknown source kind", `[{"name":"acme","source":"weird","installLocation":"/x"}]`, cfg(""), false, "unknown source kind"},
@@ -125,5 +130,32 @@ func TestPluginSourceTrustFollowsMarketplaceSource(t *testing.T) {
 	h.errb.Reset()
 	if code := h.run("run", "pp"); code != ui.ExitTrust {
 		t.Fatalf("a different marketplace source must need trust again: code %d\n%s", code, h.errb)
+	}
+}
+
+// The marketplace listing runs from the cache directory, never from the
+// project: a project's extraKnownMarketplaces must not shadow the org one.
+func TestPluginSourceMarketplaceListRunsFromANeutralDirectory(t *testing.T) {
+	h := pluginSourceHarness(t, "")
+	log := filepath.Join(t.TempDir(), "claude.log")
+	t.Setenv("FAKE_CLAUDE_LOG", log)
+	h.writeConfig("[[sources]]\ntype = \"plugin\"\nplugin = \"orgprofiles@acme\"\n")
+	h.run("run", "pp")
+	cdir, err := cache.Dir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, _ := filepath.EvalSymlinks(cdir)
+	listed := 0
+	for _, inv := range testutil.ReadLog(t, log) {
+		if len(inv.Argv) >= 3 && inv.Argv[0] == "plugin" && inv.Argv[1] == "marketplace" && inv.Argv[2] == "list" {
+			listed++
+			if got, _ := filepath.EvalSymlinks(inv.Cwd); got != want {
+				t.Errorf("marketplace list ran in %q, want the cache directory %q (project is %q)", inv.Cwd, want, h.cwd)
+			}
+		}
+	}
+	if listed == 0 {
+		t.Fatal("no marketplace list invocation was logged")
 	}
 }

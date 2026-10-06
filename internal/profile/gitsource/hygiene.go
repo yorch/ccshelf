@@ -12,6 +12,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode"
@@ -51,6 +52,10 @@ const promptsDir = "prompts"
 type watchSet struct {
 	dirs  []string
 	files []string
+	// catalog lists the watched paths that an older layout did not read (the
+	// catalog sidecar folder and the marketplace files); a checkout made by an
+	// older build lacks them (see restorable).
+	catalog []string
 }
 
 // newWatch builds the watch set for an org config (nil means the defaults).
@@ -60,9 +65,10 @@ func newWatch(cfg *orgconfig.Config) watchSet {
 	if cfg == nil {
 		cfg = orgconfig.Default()
 	}
-	w := watchSet{dirs: []string{path.Clean(cfg.Profiles.Dir), promptsDir, sidecar.Dir}, files: []string{orgconfig.FileName}}
+	w := watchSet{dirs: []string{path.Clean(cfg.Profiles.Dir), promptsDir, sidecar.Dir}, files: []string{orgconfig.FileName}, catalog: []string{sidecar.Dir}}
 	for _, m := range cfg.Catalog.Marketplaces {
 		w.files = append(w.files, path.Clean(m))
+		w.catalog = append(w.catalog, path.Clean(m))
 	}
 	reg := path.Clean(cfg.Profiles.MCPRegistry)
 	if d := path.Dir(reg); d != "." {
@@ -90,6 +96,28 @@ func (w watchSet) has(rel string) bool {
 	}
 	return false
 }
+
+// restorable reports whether rel (relative to the source root) is part of what
+// only the current layout watches, so that its absence is a checkout from an
+// older build and not damage.
+func (w watchSet) restorable(rel string) bool {
+	for _, c := range w.catalog {
+		if inDir(rel, c) {
+			return true
+		}
+	}
+	return false
+}
+
+// missingFilesError is the ErrTampered failure of verifyDisk when the only
+// difference is files of the commit that are not on disk.
+type missingFilesError struct{ paths []string }
+
+func (e *missingFilesError) Error() string {
+	return fmt.Sprintf("%v: %s is missing", ErrTampered, e.paths[0])
+}
+
+func (e *missingFilesError) Unwrap() error { return ErrTampered }
 
 // loneFiles returns the watched files that are not inside a watched folder.
 func (w watchSet) loneFiles() []string {
@@ -380,10 +408,15 @@ func verifyDisk(checkout, base string, entries []treeEntry, w watchSet) error {
 			return err
 		}
 	}
+	var missing []string
 	for p := range files {
 		if !seen[p] {
-			return fmt.Errorf("%w: %s is missing", ErrTampered, p)
+			missing = append(missing, p)
 		}
+	}
+	if len(missing) > 0 {
+		sort.Strings(missing)
+		return &missingFilesError{paths: missing}
 	}
 	return nil
 }

@@ -3,8 +3,12 @@ package claude
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net/url"
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -148,6 +152,122 @@ func MarketplaceOrigin(list []Marketplace, name string) (string, error) {
 		return "", fmt.Errorf("marketplace %q is not configured", name)
 	case 1:
 		return found[0].Origin()
+	}
+	return "", fmt.Errorf("marketplace %q is listed %d times", name, len(found))
+}
+
+// scpAddress is the scp-like git address [user@]host:path.
+var scpAddress = regexp.MustCompile(`^(?:[^@/\s]+@)?([^:/\s]+):(.+)$`)
+
+// ownerRepo is the owner/repo shorthand of a GitHub marketplace.
+var ownerRepo = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$`)
+
+// canonicalGitURL reduces a git or URL address to host[:port]/path so that the
+// ssh and https forms of the same repository compare equal on any host (GitHub
+// Enterprise included): the scheme (https and ssh only), the user name, a
+// default port, a trailing slash and a ".git" suffix are dropped, scp-like
+// addresses are read as ssh, and only the host is case-folded. Other schemes
+// stay in the result, so they never equal an https or ssh address.
+func canonicalGitURL(raw string) (string, error) {
+	s := strings.TrimSpace(raw)
+	var scheme, host, p string
+	if strings.Contains(s, "://") {
+		u, err := url.Parse(s)
+		if err != nil || u.Hostname() == "" {
+			return "", fmt.Errorf("%q is not a usable repository address", raw)
+		}
+		scheme, host, p = strings.ToLower(u.Scheme), strings.ToLower(u.Hostname()), u.Path
+		if port := u.Port(); port != "" && !(scheme == "https" && port == "443") && !(scheme == "ssh" && port == "22") {
+			host += ":" + port
+		}
+	} else if m := scpAddress.FindStringSubmatch(s); m != nil {
+		scheme, host, p = "ssh", strings.ToLower(m[1]), m[2]
+	} else {
+		return "", fmt.Errorf("%q is not a usable repository address", raw)
+	}
+	p = strings.Trim(strings.TrimSuffix(strings.TrimRight(p, "/"), ".git"), "/")
+	if p == "" {
+		return "", fmt.Errorf("%q has no repository path", raw)
+	}
+	key := host + "/" + p
+	if scheme != "https" && scheme != "ssh" {
+		key = scheme + "://" + key
+	}
+	return key, nil
+}
+
+// Identity returns a canonical, kind-tagged identity of where the marketplace
+// comes from, for comparing it with an expected source and for binding trust to
+// it: "github:owner/repo" (case-folded), "git:host/path" and "url:host/path"
+// (see canonicalGitURL), and for a local "directory" or "file" source a hash of
+// the path, so no machine path leaks into an identifier. For the repository
+// kinds a "ref" and a sub-"path" are part of the identity ("@ref", "#path"),
+// so two marketplaces of one repository at different refs or folders differ.
+// An unknown kind, a missing key or a malformed ref is an error.
+func (m Marketplace) Identity() (string, error) {
+	origin, err := m.Origin()
+	if err != nil {
+		return "", err
+	}
+	kind := strings.ToLower(m.Kind)
+	switch kind {
+	case "directory", "file":
+		sum := sha256.Sum256([]byte(origin))
+		return kind + ":sha256-" + hex.EncodeToString(sum[:8]), nil
+	case "github":
+		origin = strings.ToLower(origin)
+	default:
+		if origin, err = canonicalGitURL(origin); err != nil {
+			return "", fmt.Errorf("marketplace %q: %w", m.Name, err)
+		}
+	}
+	id := kind + ":" + origin
+	if raw, ok := m.Extra["ref"]; ok {
+		var ref string
+		if err := json.Unmarshal(raw, &ref); err != nil {
+			return "", fmt.Errorf("marketplace %q: key \"ref\": %w", m.Name, err)
+		}
+		if ref = strings.TrimSpace(ref); ref != "" {
+			id += "@" + ref
+		}
+	}
+	if p := strings.Trim(strings.TrimSpace(m.Path), "/"); p != "" {
+		id += "#" + p
+	}
+	return id, nil
+}
+
+// ExpectedIdentity returns the [Marketplace.Identity] an organization's
+// expected marketplace source stands for: the owner/repo shorthand is a
+// "github" source, a git URL (https, ssh or scp-like) a "git" source, with no
+// ref and no sub-path. A marketplace added with a ref or sub-path, or as a
+// "url" or local source, therefore never equals it.
+func ExpectedIdentity(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if ownerRepo.MatchString(raw) {
+		return "github:" + strings.ToLower(raw), nil
+	}
+	c, err := canonicalGitURL(raw)
+	if err != nil {
+		return "", err
+	}
+	return "git:" + c, nil
+}
+
+// MarketplaceIdentity is [MarketplaceOrigin] for the [Marketplace.Identity] of
+// the named marketplace.
+func MarketplaceIdentity(list []Marketplace, name string) (string, error) {
+	var found []Marketplace
+	for _, m := range list {
+		if m.Name == name {
+			found = append(found, m)
+		}
+	}
+	switch len(found) {
+	case 0:
+		return "", fmt.Errorf("marketplace %q is not configured", name)
+	case 1:
+		return found[0].Identity()
 	}
 	return "", fmt.Errorf("marketplace %q is listed %d times", name, len(found))
 }
