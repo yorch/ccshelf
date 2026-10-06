@@ -45,6 +45,12 @@ func defaultGit(opts gitsource.Options) (PreparedSource, error) {
 	return s, nil
 }
 
+// cachedLister is implemented by git sources that can list the commits they
+// have cached (gitsource.Source), newest first.
+type cachedLister interface {
+	CachedCommits() ([]string, error)
+}
+
 // cachedPreparer is implemented by git sources that can be prepared from a
 // verified cached checkout of a known commit without any network access
 // (gitsource.Source). Sources that do not implement it are always prepared
@@ -109,12 +115,18 @@ type session struct {
 	// failed lists the shared sources that could not be loaded; their profiles
 	// are unavailable but nothing else is affected.
 	failed []sourceFailure
+	// warnings are the warnings raised while the sources were prepared; run
+	// adds them to the structured warnings (dry-run --json), because the
+	// terminal of the claude TUI hides what was printed before it started.
+	warnings []string
 	// gitIDs holds the ids of the prepared git sources, which are the ones
 	// expected to carry a ccshelf.toml.
 	gitIDs map[string]bool
 	// lock caches the trust lockfile entries read for the cached commits.
 	lock       []trust.Entry
 	lockLoaded bool
+	// lockErr is why the lockfile could not be read (lock is then empty).
+	lockErr error
 }
 
 // loadConfig reads the configuration named by --config or the default path.
@@ -351,7 +363,7 @@ func (s *session) buildSources(ctx context.Context, prepare bool) error {
 			}
 			src := s.orgDirSource(i, p)
 			if prepare {
-				s.addShared(fmt.Sprintf("sources[%d] (dir %s)", i, ui.Sanitize(p)), src, "")
+				s.addShared(fmt.Sprintf("sources[%d] (dir %s)", i, ui.Sanitize(p)), src)
 			} else {
 				s.sources = append(s.sources, src)
 			}
@@ -365,10 +377,10 @@ func (s *session) buildSources(ctx context.Context, prepare bool) error {
 				if errors.Is(err, orgconfig.ErrInvalid) {
 					return fmt.Errorf("%s: %w", label, err)
 				}
-				s.failSource(label, err, "git:"+sc.URL)
+				s.failSource(label, err, nil)
 				continue
 			}
-			if s.addShared(label, g, "git:"+sc.URL) {
+			if s.addShared(label, g) {
 				s.gitIDs[g.ID()] = true
 			}
 		case config.SourcePlugin:
@@ -379,7 +391,7 @@ func (s *session) buildSources(ctx context.Context, prepare bool) error {
 			label := fmt.Sprintf("sources[%d] (plugin %s)", i, ui.Sanitize(sc.Plugin))
 			ps, err := pluginsource.New(pluginsource.Options{Plugin: sc.Plugin, Path: sc.Path, Installed: s.listInstalledFor})
 			if err != nil {
-				s.failSource(label, err, "")
+				s.failSource(label, err, nil)
 				continue
 			}
 			// The plugin that carries the profiles is protected even when it
@@ -389,10 +401,10 @@ func (s *session) buildSources(ctx context.Context, prepare bool) error {
 				if errors.Is(err, orgconfig.ErrInvalid) {
 					return fmt.Errorf("%s: %w", label, err)
 				}
-				s.failSource(label, err, "")
+				s.failSource(label, err, nil)
 				continue
 			}
-			s.addShared(label, ps, "")
+			s.addShared(label, ps)
 		default:
 			return fmt.Errorf("sources[%d]: unknown type %q", i, sc.Type)
 		}
@@ -415,34 +427,43 @@ func (s *session) buildSources(ctx context.Context, prepare bool) error {
 // source that was never trusted or loaded, of which nothing is known, is
 // simply left out. locator is the lockfile key of the source ("" when it has
 // none).
-func (s *session) failSource(label string, err error, locator string) {
+func (s *session) failSource(label string, err error, src profile.Source) {
 	s.failed = append(s.failed, sourceFailure{label: label, err: err})
-	plugins, mcp := s.lastKnownProtected(locator)
-	msg := "nothing is known about the plugins and MCP servers it protects, so none are enforced for it"
+	plugins, mcp := s.lastKnownProtected()
+	// A source that was prepared and verified but cannot be used (for example
+	// its profiles folder is refused) still has a verified org config: its
+	// protect lists are enforced from it, whatever the lockfile says.
+	if src != nil {
+		if oc, found, oerr := orgConfigOf(src); oerr == nil && found {
+			plugins = append(plugins, oc.Protect.Plugins...)
+			mcp = append(mcp, oc.Protect.MCP...)
+		}
+	}
+	msg := "LOUD WARNING: nothing is known about the plugins and MCP servers it protects, so none are enforced for it; a plugin or MCP server it protects may be masked by a profile"
 	if len(plugins)+len(mcp) > 0 {
 		s.assumedPlugins = append(s.assumedPlugins, plugins...)
 		s.assumedMCP = append(s.assumedMCP, mcp...)
-		msg = "the protected plugins and MCP servers recorded when it was last trusted are still enforced"
+		msg = "the protected plugins and MCP servers recorded for the trusted sources are still enforced"
 	}
-	warnf(s.cc, "%s is unavailable: %s; its profiles are not available in this run; %s", label, ui.SanitizeLine(err.Error()), msg)
+	s.warn("%s is unavailable: %s; its profiles are not available in this run; %s", label, ui.SanitizeLine(err.Error()), msg)
+}
+
+// warn prints a warning and keeps it for the structured warnings of run.
+func (s *session) warn(format string, a ...any) {
+	msg := fmt.Sprintf(format, a...)
+	s.warnings = append(s.warnings, msg)
+	warnf(s.cc, "%s", msg)
 }
 
 // lastKnownProtected returns the protected plugins and MCP labels pinned in
-// the trust lockfile entries that involve the source with the given locator.
-// The entries pin every protected control of their closure, so the result may
-// include controls of other sources; that only protects more.
-func (s *session) lastKnownProtected(locator string) (plugins, mcp []string) {
-	if locator == "" {
-		return nil, nil
-	}
+// all the trust lockfile entries. A source that only declares [protect] never
+// appears in the sources of an entry (it has no profile of its own), so the
+// entries cannot be matched to the unavailable source; the union of all of
+// them is enforced instead. Every entry pins the protected controls of its
+// whole closure, so this may protect more than the failed source declared,
+// which is the safe direction.
+func (s *session) lastKnownProtected() (plugins, mcp []string) {
 	for _, e := range s.lockEntries() {
-		involved := e.Source == locator
-		for _, r := range e.Sources {
-			involved = involved || r.Source == locator
-		}
-		if !involved {
-			continue
-		}
 		for _, it := range e.Items {
 			switch it.Kind {
 			case itemProtectPlugin:
@@ -467,9 +488,9 @@ func (s *session) failedSummary() string {
 // addShared adds a prepared shared source, after checking that its profiles
 // can be listed; a source that cannot is reported like any other failure. It
 // reports whether the source was added.
-func (s *session) addShared(label string, src profile.Source, locator string) bool {
+func (s *session) addShared(label string, src profile.Source) bool {
 	if _, err := src.Names(); err != nil {
-		s.failSource(label, err, locator)
+		s.failSource(label, err, src)
 		return false
 	}
 	s.sources = append(s.sources, src)
@@ -495,10 +516,53 @@ func (s *session) prepareGit(ctx context.Context, newGit GitFactory, sc config.S
 		// Not cached, or the cached copy failed its checks: Prepare fetches
 		// again, or reports the problem with the folder to delete.
 	}
-	if err := g.Prepare(ctx); err != nil {
+	err = g.Prepare(ctx)
+	if err == nil {
+		return g, nil
+	}
+	if errors.Is(err, orgconfig.ErrInvalid) || s.refresh {
+		// A broken org config is fatal, and a review (trust, ls --refresh)
+		// wants the current state of the remote, never an older checkout.
 		return nil, err
 	}
-	return g, nil
+	if s.prepareNewestCached(ctx, g, sc, err) {
+		return g, nil
+	}
+	return nil, err
+}
+
+// prepareNewestCached is the offline fallback for a source whose remote cannot
+// be used and for which nothing usable is pinned: it prepares the newest
+// cached checkout of the repository that passes the verification of the
+// gitsource package, so that the protected plugins and MCP servers of the org
+// stay enforced and its profiles stay available. What runs is still checked
+// against the trust lockfile like any closure. It reports whether a checkout
+// was used, and says so (the checkout may be older than the tag).
+func (s *session) prepareNewestCached(ctx context.Context, g PreparedSource, sc config.SourceConfig, cause error) bool {
+	cl, ok := g.(cachedLister)
+	cp, ok2 := g.(cachedPreparer)
+	if !ok || !ok2 {
+		return false
+	}
+	commits, err := cl.CachedCommits()
+	if err != nil {
+		return false
+	}
+	for _, c := range commits {
+		if cp.PrepareCached(ctx, c) == nil {
+			s.warn("git %s is unreachable (%s); using the newest verified cached checkout (commit %s), which may be older than %s",
+				ui.Sanitize(sc.URL), ui.SanitizeLine(cause.Error()), shortSHA(c), ui.Sanitize(sc.Ref))
+			return true
+		}
+	}
+	return false
+}
+
+func shortSHA(c string) string {
+	if len(c) > 12 {
+		return c[:12]
+	}
+	return c
 }
 
 var fullSHA = regexp.MustCompile(`^([0-9a-f]{40}|[0-9a-f]{64})$`)
@@ -533,20 +597,23 @@ func (s *session) lockedCommit(sc config.SourceConfig) string {
 // lockEntries returns the trust lockfile entries (none when it cannot be read:
 // the trust check reports that problem itself).
 func (s *session) lockEntries() []trust.Entry {
-	if s.lockLoaded {
-		return s.lock
+	if !s.lockLoaded {
+		s.lock, s.lockErr = s.readLock()
+		s.lockLoaded = true
 	}
-	s.lockLoaded = true
+	return s.lock
+}
+
+func (s *session) readLock() ([]trust.Entry, error) {
 	p, err := config.LockfilePath()
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	st, err := trust.Open(p)
 	if err != nil {
-		return nil
+		return nil, err
 	}
-	s.lock = st.List()
-	return s.lock
+	return st.List(), nil
 }
 
 // orgDirSource builds the source of a configured directory. When the folder is
@@ -757,7 +824,14 @@ func (s *session) pruneCache() {
 	}
 	pinned := map[string]bool{}
 	base := filepath.Join(dir, "git")
-	for _, e := range s.lockEntries() {
+	entries := s.lockEntries()
+	if s.lockErr != nil {
+		// What the lockfile pins is unknown, so the checkouts that a run
+		// without network needs must not be pruned: only the other cache files.
+		s.pruneCacheFiles(dir, base)
+		return
+	}
+	for _, e := range entries {
 		for _, r := range e.Sources {
 			if url, ok := strings.CutPrefix(r.Source, "git:"); ok && fullSHA.MatchString(r.Commit) {
 				pinned[filepath.Clean(gitsource.CheckoutDir(base, url, r.Commit))] = true
@@ -768,4 +842,13 @@ func (s *session) pruneCache() {
 		}
 	}
 	_, _ = cache.PruneDir(dir, cache.DefaultMaxAge, func(p string) bool { return pinned[filepath.Clean(p)] })
+}
+
+// pruneCacheFiles prunes the cache without touching the git folder.
+func (s *session) pruneCacheFiles(dir, gitDir string) {
+	keep := filepath.Clean(gitDir)
+	_, _ = cache.PruneDir(dir, cache.DefaultMaxAge, func(p string) bool {
+		p = filepath.Clean(p)
+		return p == keep || strings.HasPrefix(p, keep+string(filepath.Separator))
+	})
 }

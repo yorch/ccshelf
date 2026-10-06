@@ -32,6 +32,23 @@
 //  10. write the prompt file and MCP config, assemble the arguments and the
 //     environment, and start claude (exec on Unix, spawn on Windows).
 //
+// # Shared sources that fail
+//
+// A shared source that cannot be loaded (unreachable remote, broken checkout)
+// is left out with a warning, which is also part of the structured warnings
+// of dry-run --json. For a git source with nothing pinned for its tag, the
+// newest cached checkout that passes verification is used, loudly. The
+// protected plugins and MCP servers pinned in all trust lockfile entries stay
+// enforced, plus those of the failed source's own verified org config when it
+// has one. When nothing is known, a LOUD WARNING says that none are enforced.
+// Pruning never touches the git checkouts when the lockfile cannot be read.
+//
+// For personal profiles a moved tag's protect list is taken without a trust
+// prompt by design: personal closures are never trust-checked, so the
+// protect list of a source's current ccshelf.toml applies to them as it
+// resolves, while the protect lists pinned in a trusted closure change its
+// hash and need a review.
+//
 // Every interactive flow ends by printing the equivalent flag command line.
 // The package never writes outside the ccshelf configuration and cache
 // directories and never touches Claude Code's own state.

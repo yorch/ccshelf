@@ -2,6 +2,7 @@ package launcher
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -25,8 +26,9 @@ const (
 // fakeRemote is the shared behavior of the fake git sources of one test.
 type fakeRemote struct {
 	org        string
-	prepareErr error // returned by Prepare; nil means reachable
-	cachedErr  error // returned by PrepareCached; nil means cached
+	prepareErr error    // returned by Prepare; nil means reachable
+	cachedErr  error    // returned by PrepareCached; nil means cached
+	cachedList []string // returned by CachedCommits (newest first)
 	calls      []string
 	useCfg     bool // answer OrgConfig from the source instead of the disk
 }
@@ -62,6 +64,8 @@ func (g *fakeGit) PrepareCached(_ context.Context, commit string) error {
 	g.rem.calls = append(g.rem.calls, "cached:"+commit)
 	return g.rem.cachedErr
 }
+
+func (g *fakeGit) CachedCommits() ([]string, error) { return g.rem.cachedList, nil }
 
 func (g *fakeGit) OrgConfig() (*orgconfig.Config, bool) {
 	if !g.rem.useCfg {
@@ -183,15 +187,42 @@ func TestUnreachableUncachedKeepsLastKnownProtectionForEveryProfile(t *testing.T
 func TestNeverLoadedSourceProtectsNothingButWarns(t *testing.T) {
 	h := newHarness(t)
 	rem := newRemote(h)
+	if err := os.WriteFile(filepath.Join(rem.org, "ccshelf.toml"), []byte("[protect]\nplugins = [\"seo-tools@acme\"]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	rem.prepareErr = errors.New("offline")
 	rem.cachedErr = gitsource.ErrNotCached
 	h.useFakeGit(rem)
 	h.writeProfile("mine", personalMine)
-	if code := h.run("run", "mine"); code != 0 {
-		t.Fatalf("code %d\n%s", code, h.errb)
+	if code := h.run("run", "mine"); code != 0 || h.started != 1 {
+		t.Fatalf("code %d started %d\n%s", code, h.started, h.errb)
 	}
+	// Nothing is known about the source, so nothing is enforced: the profile
+	// masks the installed plugin the org would have protected.
 	if !h.pluginWritten("seo-tools@acme") {
-		t.Skip("the fake claude does not list seo-tools@acme; masking cannot be observed")
+		t.Errorf("masking was expected without any known protect list: %v", h.settingsOf(h.startArgs)["enabledPlugins"])
+	}
+	for _, want := range []string{"LOUD WARNING", "nothing is known", "offline"} {
+		if !strings.Contains(h.errb.String(), want) {
+			t.Errorf("stderr lacks %q:\n%s", want, h.errb)
+		}
+	}
+	// The same warning is in the structured warnings of dry-run --json.
+	h.mustRun("--json", "dry-run", "mine")
+	var env struct {
+		Data struct {
+			Warnings []string `json:"warnings"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(h.out.Bytes(), &env); err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, w := range env.Data.Warnings {
+		found = found || (strings.Contains(w, "unavailable") && strings.Contains(w, "nothing is known"))
+	}
+	if !found {
+		t.Errorf("no source warning in the JSON warnings: %v", env.Data.Warnings)
 	}
 }
 

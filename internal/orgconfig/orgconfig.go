@@ -272,6 +272,11 @@ func (c *Config) Validate() error {
 			add("%s: must not be empty", key)
 		} else if err := safepath.CheckRel(p); err != nil {
 			add("%s: %v", key, err)
+		} else if c, bad := unplainComponent(p); bad {
+			// The launcher's directory source refuses these (profile.Layout), so
+			// the validator must too: a value accepted here but refused there
+			// would make a valid org config unusable.
+			add("%s: %q has the component %q; use plain components (no empty or dot-prefixed ones, so write \"profiles\", not \"./profiles\")", key, p, c)
 		}
 	}
 
@@ -329,6 +334,18 @@ func contains(list []string, s string) bool {
 		}
 	}
 	return false
+}
+
+// unplainComponent returns the first slash separated component of p that is
+// empty or starts with ".", and whether there is one. It agrees with
+// profile.Layout, which refuses the same components.
+func unplainComponent(p string) (string, bool) {
+	for _, comp := range strings.Split(p, "/") {
+		if comp == "" || strings.HasPrefix(comp, ".") {
+			return comp, true
+		}
+	}
+	return "", false
 }
 
 var releasePatternRe = regexp.MustCompile(`^[A-Za-z0-9*?\[\]!._/+-]{1,100}$`)

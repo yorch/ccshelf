@@ -609,6 +609,21 @@ func TestDeniableMCP(t *testing.T) {
 	}
 }
 
+func TestDeniableMCPNameCollision(t *testing.T) {
+	srv := map[string]json.RawMessage{"audit": json.RawMessage(`{}`)}
+	installed := []claude.Plugin{
+		{ID: "audit@acme", Name: "audit", Marketplace: "acme", MCPServers: srv},
+		{ID: "audit@community", Name: "audit", Marketplace: "community", MCPServers: srv},
+	}
+	if got := deniableMCP(installed, nil, []string{"audit@acme"}, nil, nil); len(got) != 0 {
+		t.Errorf("protected plugin's label denied: %v", got)
+	}
+	installed[0].RequiredByOrg = true
+	if got := deniableMCP(installed, nil, nil, nil, nil); len(got) != 0 {
+		t.Errorf("org-required plugin's label denied: %v", got)
+	}
+}
+
 func TestRedactPass(t *testing.T) {
 	for _, c := range []struct{ in, want []string }{
 		{[]string{"-p", "hi", "--", "--api-key", "sk-abc"}, []string{"-p", "hi", "--", "--api-key", "<redacted>"}},
