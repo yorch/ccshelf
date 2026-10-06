@@ -1,0 +1,30 @@
+Profile: web (org)
+Description: Web work
+Owner: @fixture/web
+Status: active
+Chain: base [dir:org] -> web [dir:org]
+Plugins:
+  mode: allow-only
+  include: design-kit@acme
+MCP:
+  server figma: stdio npx
+  claudeai_connectors: none
+  strict: true
+Session:
+  model: opus
+  effort: high
+  prompt: prompts/web.md (30 bytes, sha256:add7e1537131)
+  inherit_user_settings: true
+  env FIGMA_TOKEN_REF = <redacted>
+Policy:
+  on_blocked: warn
+Closure: sha256:3c66bad88f7d92bdb5a27f1065655da8cb1e8ced9dde6e76cda6b3625b3292b3
+  plugin design-kit@acme ca0dcd784f5b risky
+  profile base 843b76f0a5a2
+  profile web 850902f43c38
+  profile-controls base faa7280794c3 risky
+  profile-controls web 4d28a255884c risky
+  prompt prompts/web.md add7e1537131 risky
+  registry figma f6c9e4b5ca1c risky
+  source dir:org 932392424fb6
+Trust: new

@@ -1,0 +1,20 @@
+name = "web"
+description = "Web work"
+owner = "@fixture/web"
+status = "active"
+extends = ["base"]
+
+[plugins]
+mode = "allow-only"
+include = ["design-kit@acme"]
+
+[mcp]
+servers = ["figma"]
+
+[session]
+model = "opus"
+effort = "high"
+append_system_prompt_file = "prompts/web.md"
+
+[session.env]
+FIGMA_TOKEN_REF = "op://dev/figma/token"

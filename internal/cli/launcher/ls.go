@@ -1,0 +1,99 @@
+package launcher
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/spf13/cobra"
+
+	"github.com/ccshelf/ccshelf/internal/cli/clicore"
+	"github.com/ccshelf/ccshelf/internal/profile"
+	"github.com/ccshelf/ccshelf/internal/ui"
+)
+
+type lsRow struct {
+	Name        string   `json:"name"`
+	Description string   `json:"description,omitempty"`
+	Owner       string   `json:"owner,omitempty"`
+	Status      string   `json:"status,omitempty"`
+	Kind        string   `json:"kind"`
+	Source      string   `json:"source"`
+	Shadows     []string `json:"shadows"`
+	Conflict    []string `json:"conflict"`
+	Error       string   `json:"error,omitempty"`
+}
+
+func (l *launcher) lsCmd() *cobra.Command {
+	c := &cobra.Command{
+		Use:     "ls",
+		Aliases: []string{"list"},
+		Short:   "List the profiles of all sources",
+		Long: `List the profiles of every source: your personal directory, the configured
+sources and, only when trusted, the repository's .ccshelf folder. Invalid
+profiles are listed with their error. Use --json for a stable machine-readable form.`,
+		Args: cobra.NoArgs,
+	}
+	c.RunE = l.do(func(ctx context.Context, cc *clicore.Context, _ *cobra.Command, _ []string) error {
+		s, err := l.open(ctx, cc, true, false)
+		if err != nil {
+			return err
+		}
+		list, err := profile.List(s.sources)
+		if err != nil {
+			return ui.Failure(err)
+		}
+		labels := s.sourceLabels()
+		rows := make([]lsRow, 0, len(list))
+		for _, p := range list {
+			label := labels[p.Source]
+			if label == "" {
+				label = p.Source
+			}
+			shadows := make([]string, 0, len(p.Shadows))
+			for _, x := range p.Shadows {
+				shadows = append(shadows, labelOr(labels, x))
+			}
+			conflict := make([]string, 0, len(p.Conflict))
+			for _, x := range p.Conflict {
+				conflict = append(conflict, labelOr(labels, x))
+			}
+			rows = append(rows, lsRow{
+				Name: p.Name, Description: ui.Sanitize(p.Description), Owner: ui.Sanitize(p.Owner), Status: p.Status,
+				Kind: p.Kind.String(), Source: ui.Sanitize(label), Shadows: shadows, Conflict: conflict, Error: ui.Sanitize(p.Err),
+			})
+		}
+		if cc.Mode.JSON {
+			return ui.WriteJSON(cc.Streams.Out, "profiles", rows)
+		}
+		if s.proj.Present && !s.proj.Allowed {
+			warnf(cc, "this directory has a .ccshelf folder that is not loaded: %s", s.proj.Reason)
+		}
+		if len(rows) == 0 {
+			fmt.Fprintln(cc.Streams.Err, "no profiles found; create one with: ccshelf new <name>")
+			return nil
+		}
+		table := make([][]string, 0, len(rows))
+		for _, r := range rows {
+			desc := r.Description
+			status := r.Status
+			switch {
+			case r.Error != "":
+				status, desc = "invalid", r.Error
+			case len(r.Conflict) > 0:
+				status, desc = "conflict", "name exists in: "+join(r.Conflict)
+			case len(r.Shadows) > 0:
+				desc += " (shadows " + join(r.Shadows) + ")"
+			}
+			table = append(table, []string{r.Name, status, r.Kind, r.Owner, desc})
+		}
+		return ui.Table(cc.Streams.Out, []string{"NAME", "STATUS", "KIND", "OWNER", "DESCRIPTION"}, table, cc.Mode)
+	})
+	return c
+}
+
+func labelOr(labels map[string]string, id string) string {
+	if l, ok := labels[id]; ok {
+		return l
+	}
+	return id
+}

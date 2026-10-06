@@ -1,0 +1,4 @@
+[servers.figma]
+type = "stdio"
+command = "npx"
+args = ["-y", "@fixture/figma-mcp@1.0.0"]

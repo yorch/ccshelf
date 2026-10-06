@@ -1,0 +1,5 @@
+NAME  STATUS  KIND      OWNER              DESCRIPTION
+────  ──────  ────────  ─────────────────  ───────────────
+base  active  org       @fixture/platform  Shared defaults
+mine  active  personal                     My profile
+web   active  org       @fixture/web       Web work

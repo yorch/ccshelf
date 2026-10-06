@@ -1,0 +1,12 @@
+--- base
++++ web
+plugins.include:
+  + design-kit@acme
+mcp.servers:
+  + figma
+session.env (names):
+  + FIGMA_TOKEN_REF
+session.model: (unset) -> opus
+session.effort: medium -> high
+session.append_system_prompt_file: (unset) -> prompts/web.md
+session.prompt (sha256): (unset) -> add7e1537131
