@@ -14,7 +14,7 @@ Guidance for AI coding agents (and humans) working in this repo, the public **to
 - **R2:** works with GitHub.com, GHE Cloud and GHE Server, and GitHub Actions. No hard-coded hosts.
 - **R3:** works with no, partial or strict Claude Code managed policy. Capability-driven; **never bypass policy**.
 - **R4:** open source (MIT). No org-specific names, URLs or data in code, schemas, defaults or examples.
-- **R5:** this public repo holds the tool. Adopting orgs keep profiles and catalog data in their own private repo. Never put real org data here; examples are fictional.
+- **R5:** this public repo holds the tool. Adopting orgs keep profiles and catalog data in their own private repo. Never put real org data here; examples (including the starter template under `examples/`) are fictional. No built-in default profiles: roles are org choices and examples only show the format.
 - Language: **Go**. Build order: shared `core/` first, then a thin slice of launcher and catalog in parallel.
 - Profile sources in the first release: `dir` and `git`. The `plugin` source comes later.
 - Profiles share auth, history and memory (no `CLAUDE_CONFIG_DIR` by default). Accounts are a separate axis (see `docs/07-how-it-invokes-claude.md`).

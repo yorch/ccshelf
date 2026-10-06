@@ -418,6 +418,17 @@ search &lt;q&gt;   recommend   doctor [--policy]</pre>
 <li>Configuration lives with the adopter, not in the tool: profile sources, the catalog schema location and lint rules come from the org's <code>claude-profile.toml</code> and the user's own <code>config.toml</code>, with sane defaults.</li>
 <li>No telemetry by default. Security reporting, license and contribution docs live in the public repo.</li>
 </ul>
+<p><b>What the tool repo contains.</b> No real org definitions, but fictional examples:</p>
+<ul>
+<li><b>Code:</b> Go source for <code>core/</code>, <code>profiles/</code> and <code>catalog/</code>, built into one binary.</li>
+<li><b>Schemas:</b> JSON Schemas for profiles, sidecars and the org config (what is valid, not any actual profile).</li>
+<li><b>Catalog site templates:</b> the HTML, CSS and JS that render a catalog from data.</li>
+<li><b>Reusable GitHub Action</b> and the release and packaging config (goreleaser, Homebrew, Scoop, WinGet).</li>
+<li><b>Tests and fixtures:</b> the fake <code>claude</code>, golden files, simulated managed-policy fixtures.</li>
+<li><b>Docs:</b> research notes, <code>AGENTS.md</code>, license, security policy, contribution guide.</li>
+<li><b>Starter template</b> (<code>examples/org-data-repo/</code>): a complete but fictional org data repo (sample marketplace, example plugins, profiles such as frontend and sre, sidecars, org config, CI workflows). Adopters copy it; it doubles as a test fixture.</li>
+</ul>
+<p class="small">Never in the tool repo: a real org's plugins, profiles, sidecars, marketplace, taxonomy or MCP server definitions, or org-specific URLs, team names and secrets. No built-in default profiles (roles are org choices; examples show the format only). A public demo catalog built from the fictional data is optional.</p>
 <div class="callout"><b>License: MIT</b> for the tool repo. To do: add a LICENSE file (copyright holder and year) and confirm your employer allows open-sourcing this before the first public commit. The org's data repo is its own.</div>
 <h3>Org data repo structure</h3>
 <p>The private repo an adopting org keeps (R5). Native files stay native so <code>/plugin</code> works unchanged; everything else is derived. Full detail in <code>08-org-data-repo-structure.md</code>. Names are provisional. Principles: native first; hand-written data is small and reviewable and everything else is derived; ownership must be routable in CODEOWNERS; pinned and releasable; works from ~50 plugins (single-file mode for tiny registries).</p>

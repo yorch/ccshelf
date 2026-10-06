@@ -144,6 +144,20 @@ Consequences:
 - **Telemetry:** none by default. An open-source tool that runs in corporate CI must not phone home.
 - **Security reporting, license and contribution docs** live in the public repo (R4).
 
+### What the tool repo contains
+The tool repo holds **no real org definitions**, but it does hold **fictional example ones**.
+- **Code:** the Go source for `core/`, `profiles/` and `catalog/`, built into one binary.
+- **Schemas:** JSON Schemas for profiles, sidecars and the org config (they define what is valid, not any actual profile or sidecar).
+- **Catalog site templates:** the HTML, CSS and JS that render a catalog from data.
+- **Reusable GitHub Action** and the release and packaging config (goreleaser, Homebrew, Scoop, WinGet).
+- **Tests and fixtures:** the fake `claude` test double, golden files, and fixtures that simulate managed policy.
+- **Docs:** the research notes, `AGENTS.md`, the license, security policy and contribution guide.
+- **Starter template** (`examples/org-data-repo/`): a complete but fictional org data repo (sample `marketplace.json`, a couple of example plugins, profiles such as `frontend` and `sre`, sidecars, org config and CI workflows). Adopters copy it to start, and it doubles as a test fixture.
+
+Never in the tool repo: a real org's plugins, profiles, sidecars, marketplace, taxonomy or MCP server definitions; org-specific URLs, team names or secrets.
+
+Two choices: (1) **no built-in default profiles**: roles like "frontend" are org choices and a shipped default invites arguments about what belongs in it, so the examples show the format and nothing more; (2) a **public demo catalog** built from the fictional starter data and published (for example on GitHub Pages) is optional, to show what the catalog looks like.
+
 ### License (decided 2026-10-06)
 **MIT** for the tool repo (code and docs). Still to do: add a `LICENSE` file (needs the copyright holder name and year), and confirm that the user's employer allows open-sourcing this before the first public commit. The data repo (the org's profiles and catalog data) is the org's own and is not covered by this license.
 
