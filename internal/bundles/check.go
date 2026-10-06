@@ -21,15 +21,21 @@ type Drift struct {
 	// Modified are files whose bytes differ (including CRLF conversion, and
 	// a path that is not a regular file).
 	Modified []string
-	// Stale are manifests of generated bundles that no profile produces.
+	// Stale are paths inside profile-* directories that no profile
+	// produces (every file and directory, not only the manifest).
 	Stale []string
+	// Extra are any other paths below bundles/ that are not generated: files
+	// beside the manifest in a wanted bundle (hooks/, .mcp.json...) and
+	// entries that are not profile-* directories. Generated-looking or not,
+	// the whole bundles/ tree is generated output, so these are drift.
+	Extra []string
 	// Diff is a unified-style diff, capped at 64 KiB.
 	Diff string
 }
 
 // HasDrift reports whether anything differs.
 func (d *Drift) HasDrift() bool {
-	return len(d.Missing)+len(d.Modified)+len(d.Stale) > 0
+	return len(d.Missing)+len(d.Modified)+len(d.Stale)+len(d.Extra) > 0
 }
 
 // Check compares root/bundles with files without writing anything.
@@ -85,16 +91,31 @@ func Check(root string, files []File) (*Drift, error) {
 		}
 		diff.WriteString(unified(f.Path, cur, f.Content, note))
 	}
-	stale, err := staleBundles(r, wantedDirs(files))
+	extras, err := scanExtras(r, files)
 	if err != nil {
 		return nil, err
 	}
-	for _, n := range stale {
-		rel := Dir + "/" + n + "/.claude-plugin/plugin.json"
-		d.Stale = append(d.Stale, rel)
-		cur, _ := readSmall(filepath.Join(r, filepath.FromSlash(rel)))
-		diff.WriteString(unified(rel, cur, nil, "stale: no profile generates this bundle"))
+	for _, x := range extras {
+		if x.stale {
+			d.Stale = append(d.Stale, x.rel)
+		} else {
+			d.Extra = append(d.Extra, x.rel)
+		}
+		switch x.kind {
+		case kindFile:
+			cur, rerr := readSmall(filepath.Join(r, filepath.FromSlash(x.rel)))
+			if rerr != nil {
+				cur = []byte("(unreadable)\n")
+			}
+			diff.WriteString(unified(x.rel, cur, nil, "unexpected: not generated from any profile"))
+		case kindDir:
+			fmt.Fprintf(&diff, "--- a/%s\n+++ /dev/null\n# unexpected directory\n", x.rel)
+		default:
+			fmt.Fprintf(&diff, "--- a/%s\n+++ /dev/null\n# unexpected symbolic link or special file\n", x.rel)
+		}
 	}
+	sort.Strings(d.Stale)
+	sort.Strings(d.Extra)
 	d.Diff = diff.String()
 	if len(d.Diff) > maxDiff {
 		d.Diff = d.Diff[:maxDiff] + "\n... diff truncated\n"

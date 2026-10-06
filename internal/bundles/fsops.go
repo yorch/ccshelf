@@ -15,8 +15,10 @@ import (
 
 // WriteOptions control Write.
 type WriteOptions struct {
-	// PruneStale removes bundles/profile-* directories that are not in the
-	// file set, but only if they are provably generated.
+	// PruneStale removes everything below bundles/ that is not in the file
+	// set: stale profile-* directories, extra files inside wanted bundles
+	// and non-bundle entries. It refuses (removing nothing) when any of
+	// them is a symbolic link or special file.
 	PruneStale bool
 }
 
@@ -176,72 +178,141 @@ func readSmall(p string) ([]byte, error) {
 	return b, nil
 }
 
-// staleBundles returns the profile-* directory names below root/bundles that
-// are not wanted and are provably generated.
-func staleBundles(root string, wanted map[string]bool) ([]string, error) {
+// entryKind classifies an unexpected entry below bundles/.
+type entryKind int
+
+const (
+	kindFile  entryKind = iota // regular file
+	kindDir                    // directory
+	kindOther                  // symlink, device, socket, FIFO...
+)
+
+// extra is one path below bundles/ that the generated set does not contain.
+type extra struct {
+	rel   string // slash path relative to the root
+	kind  entryKind
+	stale bool // inside (or is) a profile-* directory no profile produces
+}
+
+// maxExtras bounds the number of unexpected entries collected.
+const maxExtras = 10000
+
+// scanExtras lists every entry below root/bundles that is not one of the
+// wanted files or a directory on the way to one. A directory that is itself
+// unexpected is listed with everything below it. Symbolic links and other
+// special files are listed (kindOther) and never followed. A missing bundles
+// directory yields nothing; a symlinked one is an error.
+func scanExtras(root string, files []File) ([]extra, error) {
 	if err := ensureDirs(root, Dir, false); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil, nil
 		}
 		return nil, err
 	}
-	entries, err := os.ReadDir(filepath.Join(root, Dir))
-	if err != nil {
-		return nil, fmt.Errorf("list %s: %w", Dir, err)
-	}
-	var out []string
-	for _, e := range entries {
-		n := e.Name()
-		if !strings.HasPrefix(n, Prefix) || wanted[n] || !e.IsDir() {
-			continue // e.IsDir is false for symlinks, which are never touched
-		}
-		if generatedDir(filepath.Join(root, Dir, n), n) {
-			out = append(out, n)
+	wantedFile := map[string]bool{}
+	wantedDir := map[string]bool{Dir: true}
+	wantedProfile := map[string]bool{}
+	for _, f := range files {
+		wantedFile[f.Path] = true
+		segs := strings.Split(f.Path, "/")
+		wantedProfile[segs[1]] = true
+		for n := 1; n < len(segs); n++ {
+			wantedDir[strings.Join(segs[:n], "/")] = true
 		}
 	}
-	sort.Strings(out)
+	var out []extra
+	var walk func(rel string, stale bool) error
+	walk = func(rel string, stale bool) error {
+		ents, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(rel)))
+		if err != nil {
+			return fmt.Errorf("list %s: %w", rel, err)
+		}
+		for _, e := range ents {
+			child := rel + "/" + e.Name()
+			if rel == Dir && strings.HasPrefix(e.Name(), Prefix) && !wantedProfile[e.Name()] {
+				stale = true
+			} else if rel == Dir {
+				stale = false
+			}
+			if len(out) >= maxExtras {
+				return fmt.Errorf("%s holds more than %d unexpected entries", Dir, maxExtras)
+			}
+			switch {
+			case wantedFile[child]:
+				continue
+			case e.Type()&fs.ModeSymlink != 0 || (!e.IsDir() && !e.Type().IsRegular()):
+				out = append(out, extra{rel: child, kind: kindOther, stale: stale})
+			case e.IsDir() && wantedDir[child]:
+				if err := walk(child, stale); err != nil {
+					return err
+				}
+			case e.IsDir():
+				out = append(out, extra{rel: child, kind: kindDir, stale: stale})
+				if err := walkAll(root, child, stale, &out); err != nil {
+					return err
+				}
+			default:
+				out = append(out, extra{rel: child, kind: kindFile, stale: stale})
+			}
+		}
+		return nil
+	}
+	if err := walk(Dir, false); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
-// generatedDir reports whether dir holds nothing but a generated manifest.
-func generatedDir(dir, name string) bool {
-	top, err := os.ReadDir(dir)
-	if err != nil || len(top) != 1 || top[0].Name() != ".claude-plugin" || !top[0].IsDir() {
-		return false
+// walkAll lists everything below rel (never following symlinks).
+func walkAll(root, rel string, stale bool, out *[]extra) error {
+	ents, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(rel)))
+	if err != nil {
+		return fmt.Errorf("list %s: %w", rel, err)
 	}
-	inner, err := os.ReadDir(filepath.Join(dir, ".claude-plugin"))
-	if err != nil || len(inner) != 1 || inner[0].Name() != "plugin.json" || !inner[0].Type().IsRegular() {
-		return false
-	}
-	b, err := readSmall(filepath.Join(dir, ".claude-plugin", "plugin.json"))
-	return err == nil && isGenerated(name, b)
-}
-
-func wantedDirs(files []File) map[string]bool {
-	w := map[string]bool{}
-	for _, f := range files {
-		if segs := strings.Split(f.Path, "/"); len(segs) > 1 {
-			w[segs[1]] = true
+	for _, e := range ents {
+		child := rel + "/" + e.Name()
+		if len(*out) >= maxExtras {
+			return fmt.Errorf("%s holds more than %d unexpected entries", Dir, maxExtras)
+		}
+		switch {
+		case e.Type()&fs.ModeSymlink != 0 || (!e.IsDir() && !e.Type().IsRegular()):
+			*out = append(*out, extra{rel: child, kind: kindOther, stale: stale})
+		case e.IsDir():
+			*out = append(*out, extra{rel: child, kind: kindDir, stale: stale})
+			if err := walkAll(root, child, stale, out); err != nil {
+				return err
+			}
+		default:
+			*out = append(*out, extra{rel: child, kind: kindFile, stale: stale})
 		}
 	}
-	return w
+	return nil
 }
 
+// prune removes every unexpected entry below bundles/ (see scanExtras). It
+// refuses, before removing anything, when one of them is a symbolic link or
+// a special file, so a surprising tree is left intact for a human to look at.
 func prune(root string, files []File) error {
-	stale, err := staleBundles(root, wantedDirs(files))
+	extras, err := scanExtras(root, files)
 	if err != nil {
 		return err
 	}
-	for _, n := range stale {
-		d := filepath.Join(root, Dir, n)
-		for _, p := range []string{
-			filepath.Join(d, ".claude-plugin", "plugin.json"),
-			filepath.Join(d, ".claude-plugin"),
-			d,
-		} {
-			if err := os.Remove(p); err != nil {
-				return fmt.Errorf("remove stale bundle %s: %w", n, err)
-			}
+	for _, x := range extras {
+		if x.kind == kindOther {
+			return fmt.Errorf("%w: refusing to prune: %s is a symbolic link or special file", errPath, x.rel)
+		}
+	}
+	// Deepest first so directories are empty when removed.
+	sort.Slice(extras, func(i, j int) bool {
+		di, dj := strings.Count(extras[i].rel, "/"), strings.Count(extras[j].rel, "/")
+		if di != dj {
+			return di > dj
+		}
+		return extras[i].rel < extras[j].rel
+	})
+	for _, x := range extras {
+		if err := os.Remove(filepath.Join(root, filepath.FromSlash(x.rel))); err != nil {
+			return fmt.Errorf("remove %s: %w", x.rel, err)
 		}
 	}
 	return nil

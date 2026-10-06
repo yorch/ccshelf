@@ -25,7 +25,14 @@ var (
 type Input struct {
 	// Profile is the profile name (^[a-z0-9][a-z0-9-]{0,62}$).
 	Profile string
+	// Marketplace is the name of the org marketplace that will host the
+	// bundle (required, same character set as a plugin part). Plugins of
+	// this marketplace are written as bare names; plugins of any other
+	// marketplace are written as {"marketplace", "name"} objects.
+	Marketplace string
 	// Plugins are the profile's resolved plugins.include ids, name@marketplace.
+	// An empty list marks an abstract profile (such as a shared base): it is
+	// skipped, not an error.
 	Plugins []string
 }
 
@@ -37,10 +44,42 @@ type File struct {
 	Content []byte
 }
 
-// manifest fixes the key order: dependencies, then name.
+// BundleInfo describes one compiled bundle.
+type BundleInfo struct {
+	// Profile is the profile name.
+	Profile string
+	// Path is the manifest path (same as the matching File.Path).
+	Path string
+	// CrossMarketplaces are the other marketplaces the bundle depends on,
+	// sorted. The hosting marketplace must list each of them in
+	// allowCrossMarketplaceDependenciesOn or Claude Code will not install
+	// those dependencies.
+	CrossMarketplaces []string
+}
+
+// Result is the output of Compile.
+type Result struct {
+	// Files are the generated files, sorted by path.
+	Files []File
+	// Bundles has one entry per generated file, in the same order.
+	Bundles []BundleInfo
+	// Skipped are the profiles that resolve to no plugins (abstract
+	// profiles), sorted.
+	Skipped []string
+}
+
+// crossDep is the object form of a dependency; the field order is the
+// canonical key order (marketplace, name).
+type crossDep struct {
+	Marketplace string `json:"marketplace"`
+	Name        string `json:"name"`
+}
+
+// manifest fixes the key order: dependencies, then name. Each dependency is
+// a string or a crossDep.
 type manifest struct {
-	Dependencies []string `json:"dependencies"`
-	Name         string   `json:"name"`
+	Dependencies []any  `json:"dependencies"`
+	Name         string `json:"name"`
 }
 
 // FilePath returns the relative path of the bundle manifest of a profile.
@@ -49,7 +88,7 @@ func FilePath(profile string) string {
 }
 
 // render produces the canonical bytes.
-func render(name string, deps []string) ([]byte, error) {
+func render(name string, deps []any) ([]byte, error) {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
@@ -60,13 +99,14 @@ func render(name string, deps []string) ([]byte, error) {
 	return buf.Bytes(), nil // Encode already ends with one newline
 }
 
-// Compile generates one bundle manifest per input, sorted by profile name.
-// It rejects invalid profile names, duplicate profiles, a profile without
-// plugins, invalid plugin ids and ambiguous names.
-func Compile(in []Input) ([]File, error) {
+// Compile generates one bundle manifest per input with plugins, sorted by
+// profile name. Profiles without plugins are reported in Result.Skipped. It
+// rejects invalid profile names, duplicate profiles, a missing or invalid
+// marketplace and invalid plugin ids.
+func Compile(in []Input) (*Result, error) {
 	sorted := append([]Input(nil), in...)
 	sort.SliceStable(sorted, func(i, j int) bool { return sorted[i].Profile < sorted[j].Profile })
-	var files []File
+	res := &Result{}
 	seen := map[string]bool{}
 	for _, x := range sorted {
 		if !profileName.MatchString(x.Profile) {
@@ -76,32 +116,53 @@ func Compile(in []Input) ([]File, error) {
 			return nil, fmt.Errorf("profile %q given more than once", x.Profile)
 		}
 		seen[x.Profile] = true
-		if len(x.Plugins) == 0 {
-			return nil, fmt.Errorf("profile %q has no plugins: a bundle needs at least one", x.Profile)
+		if !pluginPart.MatchString(x.Marketplace) {
+			return nil, fmt.Errorf("profile %q: invalid or missing hosting marketplace %q", x.Profile, x.Marketplace)
 		}
-		names := map[string]string{} // plugin name -> marketplace
+		if len(x.Plugins) == 0 {
+			res.Skipped = append(res.Skipped, x.Profile)
+			continue
+		}
+		type key struct{ name, mkt string }
+		uniq := map[key]bool{}
 		for _, id := range x.Plugins {
 			name, mkt, err := splitID(id)
 			if err != nil {
 				return nil, fmt.Errorf("profile %q: %w", x.Profile, err)
 			}
-			if prev, ok := names[name]; ok && prev != mkt {
-				return nil, fmt.Errorf("profile %q: plugin %q comes from two marketplaces (%s and %s); bundle dependencies are bare names and would be ambiguous", x.Profile, name, prev, mkt)
+			uniq[key{name, mkt}] = true
+		}
+		keys := make([]key, 0, len(uniq))
+		for k := range uniq {
+			keys = append(keys, k)
+		}
+		sort.Slice(keys, func(i, j int) bool {
+			a, b := keys[i].name+"@"+keys[i].mkt, keys[j].name+"@"+keys[j].mkt
+			return a < b
+		})
+		deps := make([]any, 0, len(keys))
+		cross := map[string]bool{}
+		for _, k := range keys {
+			if k.mkt == x.Marketplace {
+				deps = append(deps, k.name)
+				continue
 			}
-			names[name] = mkt
+			deps = append(deps, crossDep{Marketplace: k.mkt, Name: k.name})
+			cross[k.mkt] = true
 		}
-		deps := make([]string, 0, len(names))
-		for n := range names {
-			deps = append(deps, n)
-		}
-		sort.Strings(deps)
 		content, err := render(Prefix+x.Profile, deps)
 		if err != nil {
 			return nil, err
 		}
-		files = append(files, File{Path: FilePath(x.Profile), Content: content})
+		info := BundleInfo{Profile: x.Profile, Path: FilePath(x.Profile)}
+		for m := range cross {
+			info.CrossMarketplaces = append(info.CrossMarketplaces, m)
+		}
+		sort.Strings(info.CrossMarketplaces)
+		res.Files = append(res.Files, File{Path: info.Path, Content: content})
+		res.Bundles = append(res.Bundles, info)
 	}
-	return files, nil
+	return res, nil
 }
 
 func splitID(id string) (name, mkt string, err error) {
@@ -113,19 +174,6 @@ func splitID(id string) (name, mkt string, err error) {
 		return "", "", fmt.Errorf("invalid plugin id %q: name and marketplace may use letters, digits, '.', '_' and '-'", id)
 	}
 	return name, mkt, nil
-}
-
-// isGenerated reports whether content is byte-identical to a generated
-// manifest for the given directory name.
-func isGenerated(dirName string, content []byte) bool {
-	var m manifest
-	dec := json.NewDecoder(bytes.NewReader(content))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&m); err != nil || m.Name != dirName || len(m.Dependencies) == 0 {
-		return false
-	}
-	want, err := render(m.Name, m.Dependencies)
-	return err == nil && bytes.Equal(want, content)
 }
 
 var errPath = errors.New("unsafe path")

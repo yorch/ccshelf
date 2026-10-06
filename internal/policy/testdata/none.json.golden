@@ -22,6 +22,11 @@
       "reason": "no readable managed policy sets disableSideloadFlags"
     },
     {
+      "id": "strict-mcp-config",
+      "state": "available",
+      "reason": "no readable managed policy sets disableSideloadFlags"
+    },
+    {
       "id": "plugin-dir",
       "state": "available",
       "reason": "no readable managed policy sets disableSideloadFlags"
@@ -49,5 +54,8 @@
   ],
   "locked_plugins": [],
   "unknown": [],
-  "warnings": []
+  "warnings": [],
+  "partial_visibility": false,
+  "partial_reasons": [],
+  "server_managed_readable": false
 }

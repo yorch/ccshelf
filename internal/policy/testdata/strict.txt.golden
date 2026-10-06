@@ -14,6 +14,7 @@ Capabilities
   hide-connectors            available disableClaudeAiConnectors is valid in any settings file
   deny-mcp-servers           available deniedMcpServers is valid in any settings file; entries need full server names such as plugin:context7:context7
   add-mcp-config             blocked   managed settings set disableSideloadFlags, which rejects --mcp-config
+  strict-mcp-config          blocked   managed settings set disableSideloadFlags, which rejects --strict-mcp-config
   plugin-dir                 blocked   managed settings set disableSideloadFlags, which rejects --plugin-dir and CLAUDE_CODE_PLUGIN_DIRS
   agents                     blocked   managed settings set disableSideloadFlags, which rejects --agents
   setting-sources            available not restricted by any readable managed key
@@ -22,3 +23,5 @@ Capabilities
                                        audit-logger@acme, sre-kit@acme
 
 Force-disabled by policy: legacy@acme
+
+Server-managed settings (claude.ai admin console, Claude apps gateway) cannot be read locally and rank above every source listed here.

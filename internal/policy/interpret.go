@@ -62,11 +62,9 @@ func (d *detector) interpret(doc map[string]any) {
 	if v, ok := doc["permissions"]; ok && v != nil {
 		if m, ok := v.(map[string]any); ok {
 			if dv, ok := m["disableBypassPermissionsMode"]; ok && dv != nil {
+				// normalizeDoc already turned an invalid value into "disable".
 				b := dv == "disable"
 				p.DisableBypassPermissionsMode = &b
-				if !b {
-					warn("permissions.disableBypassPermissionsMode", `"disable"`)
-				}
 			}
 		} else {
 			warn("permissions", "an object")
@@ -88,12 +86,9 @@ func (d *detector) interpret(doc map[string]any) {
 		}
 	}
 
-	strictKey := "strictKnownMarketplaces"
-	if _, ok := doc[strictKey]; !ok {
-		strictKey = "allowedMarketplaces"
-	}
-	p.StrictKnownMarketplaces = d.marketplaceList(doc, strictKey)
-	p.BlockedMarketplaces = d.marketplaceList(doc, "blockedMarketplaces")
+	// Aliases were renamed per document by normalizeDoc.
+	p.StrictKnownMarketplaces = d.marketplaceList(doc, "strictKnownMarketplaces", true)
+	p.BlockedMarketplaces = d.marketplaceList(doc, "blockedMarketplaces", false)
 
 	if v, ok := doc["extraKnownMarketplaces"]; ok && v != nil {
 		if m, ok := v.(map[string]any); ok {
@@ -125,8 +120,8 @@ func (d *detector) interpret(doc map[string]any) {
 			warn("pluginSuggestionMarketplaces", "an array")
 		}
 	}
-	p.DeniedMcpServers = d.serverRules(doc, "deniedMcpServers")
-	p.AllowedMcpServers = d.serverRules(doc, "allowedMcpServers")
+	p.DeniedMcpServers = d.serverRules(doc, "deniedMcpServers", false)
+	p.AllowedMcpServers = d.serverRules(doc, "allowedMcpServers", true)
 	if v, ok := doc["managedMcpServers"]; ok && v != nil {
 		if m, ok := v.(map[string]any); ok {
 			p.ManagedMcpServers = []string{}
@@ -140,13 +135,20 @@ func (d *detector) interpret(doc map[string]any) {
 	}
 }
 
-func (d *detector) marketplaceList(doc map[string]any, key string) []MarketplaceSource {
+// marketplaceList reads a marketplace list. A value that is not an array is,
+// for an allowlist (failEmpty), enforced as an empty list that admits
+// nothing, and otherwise dropped, as in "Invalid entries in managed settings".
+func (d *detector) marketplaceList(doc map[string]any, key string, failEmpty bool) []MarketplaceSource {
 	v, ok := doc[key]
 	if !ok || v == nil {
 		return nil
 	}
 	l, ok := v.([]any)
 	if !ok {
+		if failEmpty {
+			d.p.Warnings = append(d.p.Warnings, fmt.Sprintf("managed key %s should be an array; enforcing it as an empty allowlist (fail closed)", key))
+			return []MarketplaceSource{}
+		}
 		d.p.Warnings = append(d.p.Warnings, fmt.Sprintf("managed key %s should be an array; ignoring the value", key))
 		return nil
 	}
@@ -176,59 +178,95 @@ func redactMarketplace(m map[string]any) MarketplaceSource {
 	return MarketplaceSource{Kind: kind}
 }
 
-// redactURL removes credentials, query and fragment from a URL or scp-like
-// git address.
+// redactURL removes credentials, query and fragment from a URL, a
+// scheme-less "//user:pass@host/path" reference or an scp-like git address.
 func redactURL(s string) string {
-	if !strings.Contains(s, "://") {
-		if i := strings.Index(s, "@"); i >= 0 && !strings.Contains(s[:i], "/") {
-			s = s[i+1:]
+	if strings.HasPrefix(s, "//") || strings.Contains(s, "://") {
+		u, err := url.Parse(s)
+		if err != nil {
+			return "(unparseable url)"
 		}
-		if i := strings.IndexAny(s, "?#"); i >= 0 {
-			s = s[:i]
-		}
-		return s
+		u.User, u.RawQuery, u.Fragment, u.ForceQuery = nil, "", "", false
+		return u.String()
 	}
-	u, err := url.Parse(s)
-	if err != nil {
-		return "(unparseable url)"
+	if i := strings.Index(s, "@"); i >= 0 && !strings.Contains(s[:i], "/") {
+		s = s[i+1:]
 	}
-	u.User, u.RawQuery, u.Fragment = nil, "", ""
-	return u.String()
+	if i := strings.IndexAny(s, "?#"); i >= 0 {
+		s = s[:i]
+	}
+	return s
 }
 
-func (d *detector) serverRules(doc map[string]any, key string) []ServerRule {
+// serverRules reads an MCP allow or deny list. A value that is not an array
+// is, for the allowlist (failEmpty), enforced as an empty list that admits
+// nothing, and otherwise dropped. Entries that are not valid rules (wrong
+// types, missing field) are stripped and counted in one warning.
+func (d *detector) serverRules(doc map[string]any, key string, failEmpty bool) []ServerRule {
 	v, ok := doc[key]
 	if !ok || v == nil {
 		return nil
 	}
 	l, ok := v.([]any)
 	if !ok {
+		if failEmpty {
+			d.p.Warnings = append(d.p.Warnings, fmt.Sprintf("managed key %s should be an array; enforcing it as an empty allowlist (fail closed)", key))
+			return []ServerRule{}
+		}
 		d.p.Warnings = append(d.p.Warnings, fmt.Sprintf("managed key %s should be an array; ignoring the value", key))
 		return nil
 	}
 	out := []ServerRule{} // non-nil: an empty allowlist blocks everything
+	dropped := 0
 	for _, e := range l {
-		m, ok := e.(map[string]any)
+		r, ok := serverRule(e)
 		if !ok {
-			d.p.Warnings = append(d.p.Warnings, fmt.Sprintf("managed key %s has an entry that is not an object; skipping it", key))
+			dropped++
 			continue
 		}
-		switch {
-		case m["serverName"] != nil:
-			s, _ := m["serverName"].(string)
-			out = append(out, ServerRule{Kind: "serverName", Value: s})
-		case m["serverUrl"] != nil:
-			s, _ := m["serverUrl"].(string)
-			out = append(out, ServerRule{Kind: "serverUrl", Value: redactURL(s)})
-		case m["serverCommand"] != nil:
-			exe := ""
-			if c, ok := m["serverCommand"].([]any); ok && len(c) > 0 {
-				exe, _ = c[0].(string)
-			}
-			out = append(out, ServerRule{Kind: "serverCommand", Value: exe})
-		default:
-			d.p.Warnings = append(d.p.Warnings, fmt.Sprintf("managed key %s has an entry with no serverName, serverUrl or serverCommand; skipping it", key))
-		}
+		out = append(out, r)
+	}
+	if dropped > 0 {
+		d.p.Warnings = append(d.p.Warnings, fmt.Sprintf("managed key %s has %d entr%s that are not valid rules (need a string serverName, serverUrl or a serverCommand array); skipped", key, dropped, plural(dropped)))
 	}
 	return out
+}
+
+func plural(n int) string {
+	if n == 1 {
+		return "y"
+	}
+	return "ies"
+}
+
+// serverRule validates one entry. The value types must match exactly: a
+// serverName that is not a string is not a rule.
+func serverRule(e any) (ServerRule, bool) {
+	m, ok := e.(map[string]any)
+	if !ok {
+		return ServerRule{}, false
+	}
+	switch {
+	case m["serverName"] != nil:
+		s, ok := m["serverName"].(string)
+		return ServerRule{Kind: "serverName", Value: s}, ok && s != ""
+	case m["serverUrl"] != nil:
+		s, ok := m["serverUrl"].(string)
+		return ServerRule{Kind: "serverUrl", Value: redactURL(s)}, ok && s != ""
+	case m["serverCommand"] != nil:
+		c, ok := m["serverCommand"].([]any)
+		if !ok {
+			return ServerRule{}, false
+		}
+		exe := ""
+		if len(c) > 0 {
+			s, isStr := c[0].(string)
+			if !isStr {
+				return ServerRule{}, false
+			}
+			exe = s
+		}
+		return ServerRule{Kind: "serverCommand", Value: exe}, true
+	}
+	return ServerRule{}, false
 }

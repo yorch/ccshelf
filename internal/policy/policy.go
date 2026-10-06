@@ -109,6 +109,15 @@ type Policy struct {
 	// Unknown lists sources that could not be read, or cannot be read from
 	// here at all, with the reason.
 	Unknown []string `json:"unknown,omitempty"`
+	// PartialVisibility is true when a source that could carry lock keys is
+	// invisible from here for a reason specific to this machine (for
+	// example WSL without a readable Windows policy). Features that depend
+	// on a lock key then report Unknown instead of Available. Server-managed
+	// settings are always invisible and are not counted here: they are
+	// listed in Unknown on every machine.
+	PartialVisibility bool `json:"partial_visibility"`
+	// PartialReasons explains PartialVisibility.
+	PartialReasons []string `json:"partial_reasons,omitempty"`
 	// Unreadable is true when a source that exists could not be read or
 	// parsed, so the effective policy is genuinely unknown (not "none").
 	Unreadable bool `json:"unreadable"`
@@ -140,6 +149,12 @@ type Options struct {
 	// default reads the real registry on Windows and reports "unsupported"
 	// elsewhere.
 	ReadRegistry func(h Hive) (string, error)
+	// FileOwner returns the owning uid of a file, or false when unknown. It
+	// decides whether a symbolic link that leaves the managed directory may
+	// be followed (target owned by uid 0 and not group/world-writable). The
+	// default reads the real owner on Unix and always reports unknown on
+	// Windows. It is a test hook.
+	FileOwner func(fi fs.FileInfo) (uid uint32, ok bool)
 }
 
 // Documented locations. See doc.go for the verification sources.
@@ -216,6 +231,7 @@ func Detect(ctx context.Context, opt Options) (*Policy, error) {
 	switch goos {
 	case "darwin":
 		tiers = append(tiers, d.plist(), d.files(orDefault(opt.ManagedDir, macDir), "managed settings file"))
+		p.Unknown = append(p.Unknown, "per-user managed preferences (/Library/Managed Preferences/<user>/"+plistDomain+".plist) are not read; a policy delivered only there is not visible")
 	case "windows":
 		tiers = append(tiers, d.registry(HKLM, true), d.files(orDefault(opt.ManagedDir, windowsDir), "managed settings file"), d.registry(HKCU, false))
 	default:
@@ -269,11 +285,19 @@ func (d *detector) wsl(lin *tier) []*tier {
 	d.p.Unknown = append(d.p.Unknown, "Windows registry (HKLM, HKCU) is not readable from WSL; a policy delivered only there is not visible")
 	inherit := false
 	if v, ok := win.m["wslInheritsWindowsSettings"]; ok {
-		b, isBool := toBool(v)
-		inherit = !isBool || b // any other value counts as the chain being on
-		if isBool {
+		// normalizeDoc made this a real boolean (invalid values read as true).
+		if b, isBool := toBool(v); isBool {
+			inherit = b
 			d.p.WSLInheritsWindowsSettings = &b
 		}
+	}
+	switch {
+	case !win.present || win.unreadable:
+		d.p.PartialVisibility = true
+		d.p.PartialReasons = append(d.p.PartialReasons, "WSL: the Windows policy folder ("+dir+") is absent or unreadable, so neither wslInheritsWindowsSettings nor any Windows policy can be seen")
+	case inherit:
+		d.p.PartialVisibility = true
+		d.p.PartialReasons = append(d.p.PartialReasons, "WSL inherits the Windows policy, but the Windows registry (HKLM, HKCU), which can hold lock keys, is not readable from WSL")
 	}
 	if !inherit {
 		return []*tier{lin}

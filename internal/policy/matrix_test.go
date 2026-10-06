@@ -54,8 +54,14 @@ func TestGolden(t *testing.T) {
 		p     *Policy
 		insts []claude.Plugin
 	}{
-		"strict":  {fixturePolicy(), installed},
-		"none":    {&Policy{}, nil},
+		"strict": {fixturePolicy(), installed},
+		"none":   {&Policy{}, nil},
+		"partial": {&Policy{
+			PartialVisibility: true,
+			PartialReasons:    []string{"WSL: the Windows policy folder (/mnt/c/Program Files/ClaudeCode) is absent or unreadable, so neither wslInheritsWindowsSettings nor any Windows policy can be seen"},
+			ManagedMCPFile:    true,
+			AllowedMcpServers: []ServerRule{{Kind: "serverName", Value: "x"}},
+		}, nil},
 		"unknown": {&Policy{Unreadable: true, Unknown: []string{"managed settings file /etc/claude-code/managed-settings.json: malformed: not valid JSON"}}, nil},
 	} {
 		t.Run(name, func(t *testing.T) {

@@ -286,8 +286,17 @@ func TestWrongTypes(t *testing.T) {
 	if p.DisableSideloadFlags == nil || !*p.DisableSideloadFlags || p.AllowManagedHooksOnly == nil || !*p.AllowManagedHooksOnly {
 		t.Fatal("lock keys with the wrong type must fail closed")
 	}
-	if p.DisableAllHooks != nil || p.DisableClaudeAiConnectors != nil || p.EnabledPlugins != nil || p.StrictKnownMarketplaces != nil {
+	if p.DisableAllHooks != nil || p.DisableClaudeAiConnectors != nil || p.EnabledPlugins != nil {
 		t.Fatalf("non-lock keys with the wrong type stay unset: %+v", p)
+	}
+	// Allowlists with the wrong type are enforced as EMPTY allowlists
+	// (managed-settings, "Invalid entries": strictKnownMarketplaces and
+	// allowedMcpServers), never dropped.
+	if p.StrictKnownMarketplaces == nil || len(p.StrictKnownMarketplaces) != 0 || p.AllowedMcpServers == nil || len(p.AllowedMcpServers) != 0 {
+		t.Fatalf("wrong-typed allowlists must restrict everything: %+v %+v", p.StrictKnownMarketplaces, p.AllowedMcpServers)
+	}
+	if !hasWarning(p, "strictKnownMarketplaces should be an array; enforcing it as an empty allowlist") || !hasWarning(p, "allowedMcpServers should be an array; enforcing it as an empty allowlist") {
+		t.Fatalf("warnings: %v", p.Warnings)
 	}
 	if len(p.BlockedMarketplaces) != 1 || len(p.PluginSuggestionMarketplaces) != 1 {
 		t.Fatalf("%+v", p)
@@ -312,8 +321,8 @@ func TestEmptyAllowlistsAreDistinguishable(t *testing.T) {
 	}
 	write(t, filepath.Join(dir, "managed-settings.json"), `{"allowedMarketplaces":[{"source":"github","repo":"a/b"}],"permissions":{"disableBypassPermissionsMode":"nope"}}`)
 	p = detect(t, linuxOpt(dir))
-	if len(p.StrictKnownMarketplaces) != 1 || p.DisableBypassPermissionsMode == nil || *p.DisableBypassPermissionsMode {
-		t.Fatalf("alias / bad value: %+v", p)
+	if len(p.StrictKnownMarketplaces) != 1 || p.DisableBypassPermissionsMode == nil || !*p.DisableBypassPermissionsMode {
+		t.Fatalf("alias / invalid lock reads as its restrictive value: %+v", p)
 	}
 }
 

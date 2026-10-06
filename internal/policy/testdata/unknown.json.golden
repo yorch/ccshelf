@@ -22,6 +22,11 @@
       "reason": "a managed source exists but could not be read, so disableSideloadFlags is not known"
     },
     {
+      "id": "strict-mcp-config",
+      "state": "unknown",
+      "reason": "a managed source exists but could not be read, so disableSideloadFlags is not known"
+    },
+    {
       "id": "plugin-dir",
       "state": "unknown",
       "reason": "a managed source exists but could not be read, so disableSideloadFlags is not known"
@@ -51,5 +56,8 @@
   "unknown": [
     "managed settings file /etc/claude-code/managed-settings.json: malformed: not valid JSON"
   ],
-  "warnings": []
+  "warnings": [],
+  "partial_visibility": false,
+  "partial_reasons": [],
+  "server_managed_readable": false
 }

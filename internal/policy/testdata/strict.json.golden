@@ -23,6 +23,12 @@
       "source": "disableSideloadFlags"
     },
     {
+      "id": "strict-mcp-config",
+      "state": "blocked",
+      "reason": "managed settings set disableSideloadFlags, which rejects --strict-mcp-config",
+      "source": "disableSideloadFlags"
+    },
+    {
       "id": "plugin-dir",
       "state": "blocked",
       "reason": "managed settings set disableSideloadFlags, which rejects --plugin-dir and CLAUDE_CODE_PLUGIN_DIRS",
@@ -64,5 +70,8 @@
   ],
   "warnings": [
     "managed key disableAllHooks should be a boolean; ignoring the value"
-  ]
+  ],
+  "partial_visibility": false,
+  "partial_reasons": [],
+  "server_managed_readable": false
 }

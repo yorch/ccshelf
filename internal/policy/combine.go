@@ -1,7 +1,5 @@
 package policy
 
-import "strings"
-
 // lockKeys are restrictive switches: under "merge" the strictest value of
 // any admin source applies. disableSideloadFlags is treated as a lock, the
 // safest reading for a launcher.
@@ -117,19 +115,10 @@ func mergeAcross(acc, hi map[string]any) {
 	}
 }
 
-// toBool accepts a JSON boolean or the strings "true" and "false", which
-// Claude Code also reads for some keys.
+// toBool accepts only a JSON boolean. Documents are normalized before they
+// reach this point (see normalizeDoc), so a string never counts as a boolean
+// here.
 func toBool(v any) (bool, bool) {
-	switch x := v.(type) {
-	case bool:
-		return x, true
-	case string:
-		switch strings.ToLower(x) {
-		case "true":
-			return true, true
-		case "false":
-			return false, true
-		}
-	}
-	return false, false
+	b, ok := v.(bool)
+	return b, ok
 }

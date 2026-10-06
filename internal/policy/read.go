@@ -44,22 +44,36 @@ func parseDoc(data []byte) (map[string]any, error) {
 	return m, nil
 }
 
-// readFile reads one regular file inside dir with the size limit. Symlinks
-// are followed only when they stay inside dir. The error satisfies
-// fs.ErrNotExist when the file is absent.
-func readFile(dir, path string) ([]byte, error) {
+// readFile reads one regular file with the size limit. A symbolic link is
+// followed when its target stays inside dir, or, on Unix, when the target is
+// a regular file owned by root that no group or other user can write (the
+// way configuration management tools usually link policy into place);
+// otherwise the source is reported as unreadable with the reason. The
+// resolved target must be a regular file (checked before opening, so a FIFO
+// or device can never block), the file is opened non-blocking, and the read
+// honors the context deadline. The error satisfies fs.ErrNotExist when the
+// file is absent.
+func (d *detector) readFile(dir, path string) ([]byte, error) {
 	fi, err := os.Lstat(path)
 	if err != nil {
 		return nil, err
 	}
 	if fi.Mode()&os.ModeSymlink != 0 {
-		if !isConfined(dir, path) {
-			return nil, errors.New("symbolic link leaves the managed directory")
+		target, err := os.Stat(path)
+		if err != nil {
+			// Not wrapped: a dangling link must not look like an absent file.
+			return nil, fmt.Errorf("symbolic link cannot be resolved: %s", err.Error())
+		}
+		if !target.Mode().IsRegular() {
+			return nil, errors.New("symbolic link does not point to a regular file")
+		}
+		if !isConfined(dir, path) && !d.rootOwned(target) {
+			return nil, errors.New("symbolic link leaves the managed directory and its target is not a regular file owned by root that only root can write")
 		}
 	} else if !fi.Mode().IsRegular() {
 		return nil, errors.New("not a regular file")
 	}
-	f, err := os.Open(path)
+	f, err := os.OpenFile(path, os.O_RDONLY|nonblock, 0) //nolint:gosec // managed policy path, fixed or caller-chosen root
 	if err != nil {
 		return nil, err
 	}
@@ -71,14 +85,38 @@ func readFile(dir, path string) ([]byte, error) {
 	if !st.Mode().IsRegular() {
 		return nil, errors.New("not a regular file")
 	}
-	data, err := io.ReadAll(io.LimitReader(f, maxDocSize+1))
-	if err != nil {
-		return nil, err
+	type result struct {
+		data []byte
+		err  error
 	}
-	if len(data) > maxDocSize {
-		return nil, fmt.Errorf("larger than the %d byte limit", maxDocSize)
+	ch := make(chan result, 1)
+	go func() {
+		data, err := io.ReadAll(io.LimitReader(f, maxDocSize+1))
+		ch <- result{data, err}
+	}()
+	select {
+	case <-d.ctx.Done():
+		return nil, d.ctx.Err() // the deferred Close unblocks the reader
+	case r := <-ch:
+		if r.err != nil {
+			return nil, r.err
+		}
+		if len(r.data) > maxDocSize {
+			return nil, fmt.Errorf("larger than the %d byte limit", maxDocSize)
+		}
+		return r.data, nil
 	}
-	return data, nil
+}
+
+// rootOwned reports whether fi is owned by root and not writable by group or
+// others. It is false where ownership is unknown (Windows).
+func (d *detector) rootOwned(fi fs.FileInfo) bool {
+	owner := d.opt.FileOwner
+	if owner == nil {
+		owner = fileOwner
+	}
+	uid, ok := owner(fi)
+	return ok && uid == 0 && fi.Mode().Perm()&0o022 == 0
 }
 
 func keysOf(m map[string]any) []string {
@@ -131,7 +169,7 @@ func (d *detector) files(dir, label string) *tier {
 }
 
 func (d *detector) fileInto(t *tier, dir, path string, kind SourceKind, what string) {
-	data, err := readFile(dir, path)
+	data, err := d.readFile(dir, path)
 	if err != nil {
 		if isNotExist(err) {
 			if kind == KindFile {
@@ -157,6 +195,7 @@ func (d *detector) fileInto(t *tier, dir, path string, kind SourceKind, what str
 	}
 	t.present = true
 	d.p.Sources[i].Keys = keysOf(m)
+	d.normalizeDoc(m, what+" "+path)
 	mergeInto(t.m, m, true)
 }
 
@@ -194,6 +233,7 @@ func (d *detector) plist() *tier {
 	}
 	t.present, t.m = true, m
 	d.p.Sources[i].Keys = keysOf(m)
+	d.normalizeDoc(m, "managed preferences "+plistDomain)
 	return t
 }
 
@@ -282,6 +322,7 @@ func (d *detector) registry(h Hive, admin bool) *tier {
 	}
 	t.present, t.m = true, m
 	d.p.Sources[i].Keys = keysOf(m)
+	d.normalizeDoc(m, loc)
 	return t
 }
 

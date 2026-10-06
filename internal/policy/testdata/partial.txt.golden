@@ -1,0 +1,22 @@
+Managed policy sources (highest rank first)
+  none checked
+
+Warnings
+  - managed-mcp.json is deployed: --mcp-config and --strict-mcp-config make Claude Code exit at startup, so a profile cannot add MCP servers with them
+
+Partial visibility (features that depend on a lock key are reported unknown)
+  - WSL: the Windows policy folder (/mnt/c/Program Files/ClaudeCode) is absent or unreadable, so neither wslInheritsWindowsSettings nor any Windows policy can be seen
+
+Capabilities
+  settings-masking           available the generated --settings file is not a sideload flag and cannot be disabled by policy; keys that managed settings lock (force-enabled plugins) still win
+  hide-connectors            available disableClaudeAiConnectors is valid in any settings file
+  deny-mcp-servers           available deniedMcpServers is valid in any settings file; entries need full server names such as plugin:context7:context7
+  add-mcp-config             blocked   a managed-mcp.json is deployed: MCP is under exclusive control and Claude Code exits at startup when --mcp-config is used
+  strict-mcp-config          blocked   a managed-mcp.json is deployed: Claude Code exits at startup when --strict-mcp-config, or any --mcp-config even an empty one, is used
+  plugin-dir                 unknown   managed policy is only partially visible from here (WSL: the Windows policy folder (/mnt/c/Program Files/ClaudeCode) is absent or unreadable, so neither wslInheritsWindowsSettings nor any Windows policy can be seen), so disableSideloadFlags is not known
+  agents                     unknown   managed policy is only partially visible from here (WSL: the Windows policy folder (/mnt/c/Program Files/ClaudeCode) is absent or unreadable, so neither wslInheritsWindowsSettings nor any Windows policy can be seen), so disableSideloadFlags is not known
+  setting-sources            unknown   managed policy is only partially visible from here (WSL: the Windows policy folder (/mnt/c/Program Files/ClaudeCode) is absent or unreadable, so neither wslInheritsWindowsSettings nor any Windows policy can be seen)
+  append-system-prompt-file  available not a sideload flag
+  forced-plugins             unknown   managed policy is only partially visible from here (WSL: the Windows policy folder (/mnt/c/Program Files/ClaudeCode) is absent or unreadable, so neither wslInheritsWindowsSettings nor any Windows policy can be seen), so plugins it force-enables may not be listed
+
+Server-managed settings (claude.ai admin console, Claude apps gateway) cannot be read locally and rank above every source listed here.
