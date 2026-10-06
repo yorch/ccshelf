@@ -54,7 +54,7 @@ The launcher never sets `CLAUDE_CONFIG_DIR`, so all profiles use the same `~/.cl
 | Plugin install cache | Yes | One copy of each plugin; profiles only change what's enabled. Avoids the duplication and "corrupted" warnings of config-dir-per-profile. |
 | claude.ai connector auth | Yes | Connected once; `strict` hides connectors for a session without affecting their auth. |
 
-Not hidden by a profile: a repo's own `.claude/skills/`, `.claude/agents/` and `.claude/settings.json` still apply, and so does its `.mcp.json` unless the profile uses `strict`, which drops project `.mcp.json` servers too. Plugin masking outranks project settings (`--settings` has higher precedence).
+Not hidden by a profile: a repo's own `.claude/skills/`, `.claude/agents/` and `.claude/settings.json` still apply, and so does its `.mcp.json` unless the profile uses `strict`, which drops project `.mcp.json` servers too. When `--strict-mcp-config` is blocked by managed policy, or the org protects an MCP server the profile does not provide, `strict` degrades to a `deniedMcpServers` list of the installed plugins' servers (never the profile's own or protected ones) with a warning that servers from the user's own settings or project files stay available. Plugin masking outranks project settings (`--settings` has higher precedence).
 
 A profile is a **loading filter, not a security or identity boundary**: profiles share credentials, history and memory.
 
