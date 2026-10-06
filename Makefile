@@ -28,7 +28,7 @@ ACTIONLINT_VERSION    := v1.7.12
 TARGETS := darwin/amd64 darwin/arm64 linux/amd64 linux/arm64 windows/amd64 windows/arm64
 
 .PHONY: help build test test-race cover lint fmt fmt-check vet vuln cross docs docs-check \
-        examples-check e2e action-test pins-check links-check eol-check snapshot tools clean ci
+        examples-check e2e action-test pins-check links-check eol-check site-check snapshot tools clean ci
 
 help: ## List the targets
 	@awk 'BEGIN { FS = ":.*## " } /^[a-zA-Z_-]+:.*## / { printf "  %-16s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
@@ -75,6 +75,10 @@ cross: ## Cross-compile all six targets into dist/
 docs: ## Rebuild docs/report.html from the Markdown
 	python3 docs/build_report.py
 
+site-check: ## Test the website validator, then validate site/ (python3 only)
+	python3 -I scripts/test_check_site.py
+	bash scripts/check-site.sh
+
 docs-check: ## Fail if docs/report.html is out of date
 	python3 docs/build_report.py --check
 
@@ -108,5 +112,5 @@ tools: ## Install the pinned development tools into $(GOPATH)/bin
 clean: ## Remove build output and coverage files
 	rm -rf $(DIST) coverage.out coverage.html
 
-ci: fmt-check vet lint test-race vuln pins-check action-test docs-check links-check eol-check examples-check ## What CI runs
+ci: fmt-check vet lint test-race vuln pins-check action-test docs-check links-check eol-check site-check examples-check ## What CI runs
 	@command -v actionlint >/dev/null 2>&1 && actionlint || echo "actionlint not installed; skipped (make tools)"

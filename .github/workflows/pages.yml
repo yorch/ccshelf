@@ -1,0 +1,65 @@
+# Publishes the project website (site/) to GitHub Pages. The site is static and makes no external
+# requests; scripts/check-site.sh validates it here and in ci.yml.
+#
+# MANUAL ONLY. The site is built and checked but deliberately not published automatically (see
+# decision D-34 in docs/DECISIONS.md and site/README.md). Before the first run:
+#   1. enable Pages for the repository with source "GitHub Actions" (Settings > Pages; a private
+#      repository needs a plan that includes Pages for private repositories);
+#   2. point the repository link in site/index.html (the href of id="repo") at the public home, or
+#      pass it through the repo_url input below;
+#   3. have the owner's open-source approval (O-11) and the public home (O-08) settled.
+# To publish on every change to the site later, add this trigger back under `on:`:
+#   push:
+#     branches: [main]
+#     paths: ['site/**', 'scripts/build-site.sh', '.github/workflows/pages.yml']
+name: pages
+
+on:
+  workflow_dispatch:
+    inputs:
+      repo_url:
+        description: 'Public repository URL to link from the site (empty: keep the one committed in site/index.html)'
+        required: false
+        default: ''
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: The site passes the static checks
+        run: bash scripts/check-site.sh
+      - id: pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - name: Fill in the site address and build the artifact
+        env:
+          SITE_URL: ${{ steps.pages.outputs.base_url }}
+          REPO_URL: ${{ inputs.repo_url }}
+        run: |
+          if [ -n "$REPO_URL" ]; then
+            bash scripts/build-site.sh _site "$SITE_URL" --repo-url "$REPO_URL"
+          else
+            bash scripts/build-site.sh _site "$SITE_URL"
+          fi
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

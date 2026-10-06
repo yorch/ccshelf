@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-label="ccshelf: one shelf of plugins, a different loadout for every terminal">
+  <rect width="1200" height="630" fill="#eef0ec"/>
+  <text x="72" y="150" font-family="Georgia, serif" font-size="76" font-weight="700" fill="#17201c">One shelf of plugins.</text>
+  <text x="72" y="238" font-family="Georgia, serif" font-size="76" font-weight="700" fill="#17201c">A loadout per terminal.</text>
+  <text x="72" y="300" font-family="Arial, sans-serif" font-size="30" fill="#4a5650">ccshelf: profiles and a plugin catalog for Claude Code</text>
+  <g font-family="Menlo, Consolas, monospace" font-size="26" font-weight="700">
+    <rect x="72" y="400" width="200" height="110" rx="8" fill="#17201c"/>
+    <text x="90" y="470" fill="#f9faf7">design-kit</text>
+    <rect x="292" y="400" width="200" height="110" rx="8" fill="#17201c"/>
+    <text x="310" y="470" fill="#f9faf7">docs-writer</text>
+    <rect x="512" y="420" width="200" height="90" rx="8" fill="none" stroke="#4a5650" stroke-width="3" stroke-dasharray="8 6"/>
+    <text x="530" y="474" fill="#4a5650">sre-kit</text>
+    <rect x="732" y="420" width="200" height="90" rx="8" fill="none" stroke="#4a5650" stroke-width="3" stroke-dasharray="8 6"/>
+    <text x="750" y="474" fill="#4a5650">seo-tools</text>
+  </g>
+  <rect x="48" y="510" width="1104" height="16" fill="#a99370"/>
+  <text x="72" y="590" font-family="Arial, sans-serif" font-size="24" fill="#4a5650">Open source, MIT. Unofficial: not affiliated with Anthropic.</text>
+</svg>

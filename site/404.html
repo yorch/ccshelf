@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!--SITE_BASE-->
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="color-scheme" content="light dark">
+<meta name="robots" content="noindex">
+<title>Page not found: ccshelf</title>
+<meta name="description" content="This page does not exist on the ccshelf website. Go to the ccshelf home page.">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/site.css">
+<script src="assets/site.js"></script>
+</head>
+<body>
+<!-- A missing page can be requested at any depth, so relative URLs would resolve against the bad path.
+     At deploy time scripts/build-site.sh replaces the SITE_BASE marker in <head> with
+     <base href="SITE_URL/">, which makes every relative URL here absolute. Opened from the repository
+     (file://) the page has no base and works from the site root. -->
+<main id="main" class="wrap lost">
+  <div class="lost-shelf" aria-hidden="true">
+    <svg class="mark-ico" width="28" height="28" viewBox="0 0 28 28" focusable="false"><rect class="m-a" x="3" y="9" width="5" height="11" rx="1"/><rect class="m-b" x="10" y="4" width="5" height="16" rx="1"/><rect class="m-a" x="17" y="9" width="5" height="11" rx="1"/><rect class="m-board" x="1" y="21.5" width="26" height="3" rx="1"/></svg>
+    <div class="plank"><div class="items"><div class="item is-off"><div class="spine"><span class="tape"></span><span class="tag">empty</span></div></div></div><div class="plank-board"></div></div>
+  </div>
+  <h1>No page here.</h1>
+  <p><a href="./">Go to the ccshelf home page.</a></p>
+</main>
+</body>
+</html>
