@@ -21,6 +21,7 @@ GOOD = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="{csp}">
+<meta name="referrer" content="no-referrer">
 <title>Test site</title><meta name="description" content="A test.">
 <link rel="canonical" href="__SITE_URL__/">
 <meta property="og:url" content="__SITE_URL__/">
@@ -248,6 +249,14 @@ class Metadata(Base):
         self.assertFails("placeholder", built=True)
 
 
+class Referrer(Base):
+    def test_referrer_policy_required_and_exact(self):
+        self.mutate('<meta name="referrer" content="no-referrer">', "")
+        self.assertFails('index.html: missing <meta name="referrer"')
+        self.mutate("<title>Test site", '<meta name="referrer" content="origin"><title>Test site')
+        self.assertFails('index.html: missing <meta name="referrer"')
+
+
 class Csp(Base):
     def assertCspFails(self, new_csp, needle):
         self.write("index.html", GOOD.format(csp=new_csp))
@@ -382,13 +391,14 @@ DOC_PAGE = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="{csp}">
+<meta name="referrer" content="no-referrer">
 <title>{name}</title><meta name="description" content="A docs page.">
 <link rel="canonical" href="__SITE_URL__/docs/{name}.html">
 <link rel="stylesheet" href="../assets/site.css"><script src="../assets/site.js"></script></head>
 <body><a class="skip" href="#main">Skip</a>
-<div class="dsearch" id="dsearch" data-root="" hidden></div>
+<div class="dsearch" id="dsearch" data-root="" hidden><input id="docs-q" aria-controls="docs-list"><ul id="docs-list"></ul></div>
 <nav id="docnav"><ul><li><a href="a.html">A</a></li><li><a href="b.html">B</a></li></ul></nav>
-<main id="main"><h1>{name}</h1><h2 id="sec">Sec</h2></main></body></html>"""
+<main id="main"><h1>{name}</h1><h2 id="sec">Sec</h2><ul><li>x<ul><li>y</li></ul></li></ul></main></body></html>"""
 SEARCH_INDEX_OK = 'window.CCSHELF_DOCS_INDEX = {"v":1,"pages":[{"u":"a.html","t":"A","g":"G","s":[["sec","Sec","text about fetch and eval"]]},{"u":"b.html","t":"B","g":"G","s":[]}]};\n'
 
 
@@ -437,7 +447,7 @@ class Docs(Base):
     def test_search_box_required_and_its_root_checked(self):
         self.mutate('data-root=""', 'data-root="../"', "docs/a.html")
         self.assertFails("search data-root")
-        self.mutate('<div class="dsearch" id="dsearch" data-root="../" hidden></div>', "", "docs/a.html")
+        self.mutate('<div class="dsearch" id="dsearch" data-root="../" hidden><input id="docs-q" aria-controls="docs-list"><ul id="docs-list"></ul></div>', "", "docs/a.html")
         self.assertFails('no search box (id="dsearch")')
 
     def test_search_index_missing(self):
@@ -481,6 +491,78 @@ class Docs(Base):
         self.mutate("</body>", '<a href="#zzz">x</a></body>', "docs/b.html")
         self.assertFails("missing fragment id #zzz")
 
+    def test_heading_levels_may_not_be_skipped(self):
+        self.mutate('<h2 id="sec">Sec</h2>', '<h2 id="sec">Sec</h2><h4>Deep</h4>', "docs/a.html")
+        self.assertFails("heading level skips from h2 to h4")
+
+    def test_first_heading_after_the_title_must_be_h2(self):
+        self.mutate('<h2 id="sec">Sec</h2>', '<h3 id="sec">Sec</h3>', "docs/a.html")
+        self.assertFails("heading level skips from h1 to h3")
+
+    def test_going_back_up_a_level_is_fine(self):
+        self.mutate('<h2 id="sec">Sec</h2>', '<h2 id="sec">Sec</h2><h3>S</h3><h2>T</h2>', "docs/a.html")
+        self.assertClean()
+
+    def test_list_directly_inside_list_is_invalid(self):
+        self.mutate("<ul><li>x<ul>", "<ul><li>x</li><ul>", "docs/a.html")
+        self.assertFails("invalid list nesting: <ul> directly inside <ul>")
+
+    def test_unclosed_and_stray_list_items(self):
+        self.mutate("<li>x<ul>", "<li>x<li>z<ul>", "docs/a.html")
+        self.assertFails("opened while the previous <li> is still open")
+
+    def test_stray_list_item(self):
+        self.mutate("<main id=\"main\">", '<main id="main"><li>stray</li>', "docs/b.html")
+        self.assertFails("<li> not inside a <ul> or <ol>")
+
+    def test_stray_list_close(self):
+        self.mutate("</main>", "</ul></main>", "docs/b.html")
+        self.assertFails("</ul> does not match the open list element")
+
+    def test_search_input_must_control_a_list_on_the_page(self):
+        self.mutate('aria-controls="docs-list"', 'aria-controls="nowhere"', "docs/a.html")
+        self.assertFails("search input's aria-controls")
+        self.mutate('aria-controls="nowhere"', "", "docs/a.html")
+        self.assertFails("search input's aria-controls")
+
+    def test_only_the_exact_search_index_is_exempt_from_the_js_word_checks(self):
+        for rel in ("assets/search-index.js", "docs/my-index.js", "assets/index.js"):
+            self.write(rel, "fetch('x');")
+            self.assertFails("%s: network or code-evaluation API" % rel)
+            os.remove(os.path.join(self.d, rel))
+
+    def test_search_index_must_end_exactly_with_a_semicolon_and_newline(self):
+        self.write("docs/search-index.js", SEARCH_INDEX_OK[:-2] + "ab")
+        self.assertFails("must be exactly")
+        self.write("docs/search-index.js", SEARCH_INDEX_OK[:-1])
+        self.assertFails("must be exactly")
+
+    def test_search_index_may_not_list_a_page_twice(self):
+        page = '{"u":"a.html","t":"A","g":"G","s":[["sec","Sec","text about fetch and eval"]]}'
+        self.write("docs/search-index.js", SEARCH_INDEX_OK.replace(page, page + "," + page))
+        self.assertFails("lists a.html twice")
+
+    def test_search_data_root_must_lead_to_the_one_index(self):
+        self.write("assets/search-index.js", "var x = 1;")
+        self.mutate('data-root=""', 'data-root="../assets/"', "docs/a.html")
+        self.assertFails('search data-root "../assets/" does not lead to docs/search-index.js')
+
+    def test_nav_links_count_inside_nested_elements_and_not_after_the_nav(self):
+        self.mutate('<nav id="docnav"><ul><li><a href="a.html">A</a></li><li><a href="b.html">B</a></li></ul></nav>',
+                    '<div id="docnav"><div><a href="a.html">A</a></div><div><a href="b.html">B</a></div></div>', "docs/a.html")
+        self.assertClean()
+        self.mutate('<div id="docnav"><div><a href="a.html">A</a></div><div><a href="b.html">B</a></div></div>',
+                    '<div id="docnav"><div><a href="a.html">A</a></div></div><a href="b.html">B</a>', "docs/a.html")
+        self.assertFails("the docs navigation does not link docs/b.html")
+
+    def test_exactly_one_main_landmark(self):
+        self.mutate("</main>", '</main><main id="main"></main>', "docs/a.html")
+        self.assertFails('needs exactly one <main id="main">')
+        self.mutate('</main><main id="main"></main>', '</main><main></main>', "docs/a.html")
+        self.assertFails('needs exactly one <main id="main">')
+        self.mutate('</main><main></main>', '</main><div id="main2"></div>', "docs/a.html")
+        self.assertClean()
+
     def test_js_words_are_still_refused_outside_the_index(self):
         self.write("assets/site.js", "fetch('x');")
         self.assertFails("network or code-evaluation API")
@@ -515,6 +597,19 @@ class Build(unittest.TestCase):
             text = f.read()
         self.assertIn('id="repo" href="https://github.com/example/public"', text)
         self.assertNotIn("github.com/yorch", text)
+        self.assertIn("git clone https://github.com/example/public\n", text)
+        # every page of the build, docs included, carries the swapped address and none the old one
+        for d, _, fs in os.walk(os.path.join(self.out, "o")):
+            for f in fs:
+                if f.endswith((".html", ".js")):
+                    with open(os.path.join(d, f), encoding="utf-8") as fh:
+                        body = fh.read()
+                    self.assertNotIn("github.com/yorch/ccshelf", body, f)
+                    self.assertNotIn("__SITE_URL__", body, f)
+        with open(os.path.join(self.out, "o", "docs", "index.html"), encoding="utf-8") as f:
+            self.assertIn('href="https://github.com/example/public/blob/main/', f.read())
+        with open(os.path.join(self.out, "o", "docs", "search-index.js"), encoding="utf-8") as f:
+            self.assertNotIn("github.com/yorch", f.read())
 
     def test_build_refuses_bad_url(self):
         self.assertNotEqual(self.build("http://example.test").returncode, 0)
