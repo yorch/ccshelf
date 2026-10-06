@@ -1,13 +1,22 @@
 # CI for the tool repo. Pull requests from forks run with a read-only token and
 # no secrets (this workflow uses `pull_request`, never `pull_request_target`).
 # Require only the `ci-ok` job as a status check in the branch ruleset.
+#
+# `edited` re-runs the pull request title check when a maintainer fixes a title (the
+# title becomes the changelog entry after the squash merge). `workflow_dispatch` lets
+# the release-please workflow start this workflow on the release pull request branch
+# and the `pins` job on its branch: pull requests opened with GITHUB_TOKEN do not
+# trigger `pull_request` workflows, and workflow_dispatch is the documented exception.
+# See docs/design/release.md.
 name: ci
 
 on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, edited]
   merge_group:
+  workflow_dispatch:
 
 permissions: {}
 
@@ -179,6 +188,30 @@ jobs:
           name: ccshelf-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/
           retention-days: 7
+
+  # Maintainers squash-merge, so the title becomes the commit subject on main and
+  # release-please turns it into the changelog entry and the version bump. The unit
+  # tests of the checker run on every event; the title is only checked on pull requests.
+  # The title reaches the script through `env:` only, never through `${{ }}` in `run:`.
+  pr-title:
+    name: pr-title
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Unit tests of the title checker
+        run: python3 -I -m unittest discover -s scripts -p 'test_*.py'
+      - name: Pull request title is a Conventional Commits subject
+        if: github.event_name == 'pull_request'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          # Dependabot group titles are generated and can be longer than 72 characters.
+          MAX_LEN: ${{ github.event.pull_request.user.login == 'dependabot[bot]' && '120' || '72' }}
+        run: python3 -I scripts/check_pr_title.py
 
   docs:
     name: docs
@@ -419,7 +452,7 @@ jobs:
   ci-ok:
     name: ci-ok
     if: always()
-    needs: [lint, test, vuln, build, docs, examples, smoke, action-test, action-e2e]
+    needs: [lint, test, vuln, build, pr-title, docs, examples, smoke, action-test, action-e2e]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}
