@@ -1,0 +1,76 @@
+# Pull request title check (D-37). Required status check `pr-title`, next to `ci-ok`.
+#
+# Maintainers squash-merge, so the pull request title becomes the commit subject on
+# main, and release-please turns it into the changelog entry and the version bump.
+# The pull request description is also an input of release-please (it reads
+# BEGIN_COMMIT_OVERRIDE, BEGIN_NESTED_COMMIT and `Release-As:` from it), so the same
+# script rejects those in a description. See docs/design/release.md.
+#
+# This is a separate workflow so that editing a title (event `edited`) runs only this
+# short job and never the ci.yml matrix, whose cancel-in-progress would cancel it.
+#
+# Title, description and author reach the script through `env:` only, never through
+# `${{ }}` in `run:`. Uses `pull_request`, never `pull_request_target`.
+#
+# `workflow_dispatch` exists for the release pull request: it is opened by the
+# release-please workflow with GITHUB_TOKEN, which does not trigger `pull_request`
+# workflows, so release-please.yml dispatches this workflow on its branch and the
+# job reads that branch's open pull request through the API. `merge_group` makes the
+# required check exist in a merge queue (the squashed message is the checked title).
+name: pr-title
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+  merge_group:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: pr-title-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pr-title:
+    name: pr-title
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read # workflow_dispatch only: read the pull request of the branch
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Unit tests of the title checker
+        run: python3 -I -m unittest discover -s scripts -p 'test_*.py'
+      - name: Pull request title and description (pull_request)
+        if: github.event_name == 'pull_request'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          # Dependabot group titles are generated and can be longer than 72 characters.
+          MAX_LEN: ${{ github.event.pull_request.user.login == 'dependabot[bot]' && '120' || '72' }}
+        run: python3 -I scripts/check_pr_title.py
+      # The release pull request: read the open pull request whose head is this branch.
+      - name: Pull request title and description (workflow_dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          OWNER: ${{ github.repository_owner }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          prs="$(gh api -X GET "repos/${REPO}/pulls" -f state=open -f "head=${OWNER}:${BRANCH}" -f per_page=2)"
+          if [ "$(jq 'length' <<<"$prs")" != "1" ]; then
+            echo "Expected exactly one open pull request from branch ${BRANCH}; found $(jq 'length' <<<"$prs")." >&2
+            exit 1
+          fi
+          PR_TITLE="$(jq -r '.[0].title' <<<"$prs")"
+          PR_BODY="$(jq -r '.[0].body // ""' <<<"$prs")"
+          PR_AUTHOR="$(jq -r '.[0].user.login' <<<"$prs")"
+          export PR_TITLE PR_BODY PR_AUTHOR
+          python3 -I scripts/check_pr_title.py

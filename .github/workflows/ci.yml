@@ -1,13 +1,23 @@
 # CI for the tool repo. Pull requests from forks run with a read-only token and
 # no secrets (this workflow uses `pull_request`, never `pull_request_target`).
-# Require only the `ci-ok` job as a status check in the branch ruleset.
+# Require the `ci-ok` job (and `pr-title` from pr-title.yml) as status checks in the
+# branch ruleset.
+#
+# The pull request title check is its own workflow (pr-title.yml, a second required
+# check) so that editing a title or description never re-runs this matrix.
+# `workflow_dispatch` lets the release-please workflow start this workflow on the
+# release pull request branch and the `pins` job on its branch: pull requests opened
+# with GITHUB_TOKEN do not trigger `pull_request` workflows, and workflow_dispatch is
+# the documented exception. See docs/design/release.md.
 name: ci
 
 on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened]
   merge_group:
+  workflow_dispatch:
 
 permissions: {}
 

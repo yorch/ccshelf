@@ -1,12 +1,17 @@
-# Release pipeline (SR5).
+# Release pipeline (SR5). See docs/design/release.md.
 #
-# Triggers: pushing a tag vX.Y.Z[-pre], or a manual run. A manual run defaults
-# to a dry run (goreleaser --snapshot, no signing, no publishing).
+# Trigger: workflow_dispatch only. There is no tag-push trigger: tags are created by
+# release-please (release-please.yml) with GITHUB_TOKEN, and such a tag does not
+# trigger workflows. release-please.yml therefore dispatches this workflow with the
+# new tag as its ref (`gh workflow run release.yml --ref vX.Y.Z -f dry-run=false`), so
+# github.ref is refs/tags/vX.Y.Z and the keyless signing identity is still exactly
+# .../release.yml@refs/tags/vX.Y.Z. The same command re-runs a release by hand. A
+# manual run defaults to a dry run (goreleaser --snapshot, no signing, no publishing).
 #
-# Jobs: `verify` (tag and CI checks), then either `snapshot` (dry runs only: no
-# environment, no signing, no publishing, read-only token) or `release` (real runs
-# only) and, after a successful release, `pins` (opens the pull request that adds
-# the new archive checksums to action/pins.txt).
+# Jobs: `verify` (read-only: tag, manifest and CI checks), then either `snapshot` (dry runs
+# only: no environment, no signing, no publishing, read-only token) or `release`
+# (real runs only) and, after a successful release, `pins` (opens the pull request
+# that adds the new archive checksums to action/pins.txt).
 #
 # The `release` job uses the protected `release` environment. Configure that
 # environment (Settings > Environments) with required reviewers (two
@@ -16,20 +21,18 @@
 # environment, never to the repository, so forks and branch builds never see
 # them. The tool repo also needs the rulesets listed in CONTRIBUTING.md,
 # "Required repository rulesets": the signing identity below is only as
-# trustworthy as who can create v* tags. See CONTRIBUTING.md, "Releasing".
+# trustworthy as what a v* tag can point at and who approves the `release`
+# environment. See CONTRIBUTING.md, "Releasing".
 #
 # This repository is public on github.com by definition, so the gh calls below
 # target the github.com instance of the workflow run.
 name: release
 
 on:
-  push:
-    tags:
-      - "v[0-9]+.[0-9]+.[0-9]+*"
   workflow_dispatch:
     inputs:
       dry-run:
-        description: "Dry run: build a snapshot, sign nothing, publish nothing"
+        description: "Dry run: build a snapshot, sign nothing, publish nothing. Set to false only with a version tag selected as the ref."
         type: boolean
         default: true
 
@@ -50,7 +53,7 @@ jobs:
   verify:
     name: verify
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 50 # includes waiting for ci.yml on the tagged commit (up to 40 minutes)
     permissions:
       contents: read
       actions: read # read the ci.yml run status for the tagged commit
@@ -78,11 +81,11 @@ jobs:
             dry=true
           fi
           if [ "$dry" = "false" ] && [ "$REF_TYPE" != "tag" ]; then
-            echo "A real release must run from a version tag, not from a branch." >&2
+            echo "A real release must run from a version tag, not from a branch: gh workflow run release.yml --ref vX.Y.Z -f dry-run=false" >&2
             exit 1
           fi
           echo "dry-run=$dry" >> "$GITHUB_OUTPUT"
-      - name: Tag is a semantic version on a commit reachable from main, and CI passed for it
+      - name: Tag is a release-please version on a commit reachable from main
         if: steps.mode.outputs.dry-run == 'false'
         env:
           TAG: ${{ github.ref_name }}
@@ -114,13 +117,58 @@ jobs:
               exit 1
               ;;
           esac
-          ok="$(gh api -X GET "repos/${REPO}/actions/workflows/ci.yml/runs" \
-            -f head_sha="$SHA" -f status=success --jq '.total_count')"
-          if [ "${ok:-0}" -lt 1 ]; then
-            echo "ci.yml has no successful run for commit $SHA." >&2
+          # The tag must name the version that the release pull request wrote into the
+          # manifest at that commit. A tag on any other commit, or a tag that was not
+          # produced by merging a release pull request, fails here.
+          manifest="$(jq -er '.["."]' .release-please-manifest.json)"
+          if [ "v${manifest}" != "$TAG" ]; then
+            echo "Tag $TAG does not match .release-please-manifest.json ('${manifest}') at $SHA; releases come from the release pull request only." >&2
             exit 1
           fi
-          echo "Tag $TAG verified: ancestor of main, CI green."
+          # A branch with the tag's name would make `--ref vX.Y.Z` ambiguous (the dispatch
+          # API takes a short name): the run would then not be the tag run it claims to be.
+          if out="$(gh api "repos/${REPO}/git/ref/heads/${TAG}" 2>&1)"; then
+            echo "A branch named $TAG exists; delete it (git push origin --delete $TAG) and re-run." >&2
+            exit 1
+          elif ! grep -q 'HTTP 404' <<<"$out"; then
+            echo "Could not check for a branch named $TAG: $out" >&2
+            exit 1
+          fi
+          echo "Tag $TAG verified: ancestor of main, matches the manifest, no branch of the same name."
+          # The draft release (exactly one, named like the tag, target equal to the tag's
+          # commit) is checked in the `release` job: the REST API lists drafts only to
+          # tokens with push access, and this job's token is read-only.
+      # The push to main that merged the release pull request starts ci.yml on the same
+      # commit, usually still running when this workflow is dispatched: wait for it.
+      - name: ci.yml succeeded for the tagged commit
+        if: steps.mode.outputs.dry-run == 'false'
+        env:
+          SHA: ${{ github.sha }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS + 2400))
+          while :; do
+            runs="$(gh api -X GET "repos/${REPO}/actions/workflows/ci.yml/runs" \
+              -f head_sha="$SHA" -f per_page=50 --jq '[.workflow_runs[] | {status, conclusion}]')"
+            ok="$(jq '[.[] | select(.status == "completed" and .conclusion == "success")] | length' <<<"$runs")"
+            open="$(jq '[.[] | select(.status != "completed")] | length' <<<"$runs")"
+            if [ "$ok" -ge 1 ]; then
+              echo "ci.yml succeeded for $SHA."
+              exit 0
+            fi
+            if [ "$open" -eq 0 ] && [ "$(jq 'length' <<<"$runs")" -gt 0 ]; then
+              echo "ci.yml has runs for $SHA but none succeeded." >&2
+              exit 1
+            fi
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "Timed out waiting for ci.yml on $SHA." >&2
+              exit 1
+            fi
+            echo "Waiting for ci.yml on $SHA (runs: $(jq 'length' <<<"$runs"), unfinished: $open)."
+            sleep 30
+          done
       - name: go.mod is tidy
         run: |
           go mod tidy
@@ -145,7 +193,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0 # goreleaser builds the changelog from history
+          fetch-depth: 0 # a full checkout; the changelog itself is written by release-please
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -195,7 +243,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0 # goreleaser builds the changelog from history
+          fetch-depth: 0 # a full checkout; the changelog itself is written by release-please
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -231,6 +279,65 @@ jobs:
           report "Homebrew tap" "$HAS_HOMEBREW_TAP_TOKEN"
           report "Scoop bucket" "$HAS_SCOOP_BUCKET_TOKEN"
           report "WinGet" "$HAS_WINGET_TOKEN"
+      # The draft release that release-please created for this tag. These checks live
+      # here, not in `verify`: the REST API lists draft releases only to tokens with push
+      # access, and `verify` runs with a read-only token (it would see no draft at all).
+      #  - exactly one draft has tag_name == TAG and exactly one has name == TAG (goreleaser
+      #    finds its draft by name, use_existing_draft), and they are the same release;
+      #  - no published release uses the tag;
+      #  - the draft's target_commitish resolves to the commit this run was started on, so
+      #    a tag that someone created first, at another commit, fails closed here.
+      # Then cut the notes back to what release-please wrote: goreleaser appends the
+      # verification footer (release.mode: append), and a re-run after a failure must not
+      # append it a second time.
+      - name: Draft release checks and idempotent notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          marker='<!-- ccshelf-release-footer -->'
+          all="$(gh api -X GET "repos/${REPO}/releases" --paginate -f per_page=100 | jq -cs '[.[][]]')"
+          by_tag="$(jq -c --arg t "$TAG" '[.[] | select(.tag_name == $t)]' <<<"$all")"
+          by_name="$(jq -c --arg t "$TAG" '[.[] | select(.name == $t)]' <<<"$all")"
+          if [ "$(jq '[.[] | select(.draft == false)] | length' <<<"$by_tag")" != "0" ]; then
+            echo "A published release already uses the tag $TAG; nothing to build. See docs/design/release.md, 'Failure and rollback'." >&2
+            exit 1
+          fi
+          if [ "$(jq 'length' <<<"$by_tag")" != "1" ] || [ "$(jq -r '.[0].draft' <<<"$by_tag")" != "true" ]; then
+            echo "Expected exactly one draft release with tag_name $TAG (the one release-please creates); found $(jq 'length' <<<"$by_tag") release(s) for the tag." >&2
+            exit 1
+          fi
+          if [ "$(jq 'length' <<<"$by_name")" != "1" ] || [ "$(jq -r '.[0].draft' <<<"$by_name")" != "true" ]; then
+            echo "Expected exactly one release named $TAG, and a draft (goreleaser picks its draft by name); found $(jq 'length' <<<"$by_name")." >&2
+            exit 1
+          fi
+          id="$(jq -r '.[0].id' <<<"$by_tag")"
+          if [ "$id" != "$(jq -r '.[0].id' <<<"$by_name")" ]; then
+            echo "The draft with tag_name $TAG and the release named $TAG are different releases." >&2
+            exit 1
+          fi
+          target="$(jq -r '.[0].target_commitish' <<<"$by_tag")"
+          if ! printf '%s' "$target" | grep -Eq '^[0-9a-f]{40}$'; then
+            # A branch name: resolve it. (release-please normally records the commit.)
+            target="$(gh api "repos/${REPO}/commits/${target}" --jq '.sha')"
+          fi
+          if [ "$target" != "$SHA" ]; then
+            echo "The draft release targets $target but the tag $TAG points at $SHA: the tag was probably created by someone else first. Delete the tag (ruleset bypass), re-run release-please and release again; see docs/design/release.md." >&2
+            exit 1
+          fi
+          body="$(jq -r '.[0].body // ""' <<<"$by_tag")"
+          case "$body" in
+            *"$marker"*)
+              body="${body%%"$marker"*}"
+              gh api --method PATCH "repos/${REPO}/releases/${id}" -f "body=${body}" >/dev/null
+              echo "Removed a footer left by an earlier attempt."
+              ;;
+            *) echo "Notes are as release-please wrote them." ;;
+          esac
+          echo "Draft release $id for $TAG verified (name, tag_name, target commit)."
       - name: goreleaser
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
@@ -275,11 +382,15 @@ jobs:
   # SHA pins the binary too. Minimal permissions; it only edits that one file through
   # the API on a new branch and never touches main directly.
   #
-  # Pull requests created with the default GITHUB_TOKEN do not trigger other workflows
-  # (so ci-ok will not run on this pull request). To get CI on it, add a repository
-  # secret PINS_PR_TOKEN (a GitHub App installation token or a fine-grained PAT with
-  # contents and pull requests write access on this repository only); it is used when
-  # present. Review the pull request against the signed checksums.txt before merging.
+  # Pull requests created with the default GITHUB_TOKEN do not trigger other workflows,
+  # so this job starts ci.yml and pr-title.yml on the branch itself with
+  # workflow_dispatch (the one exception to that rule) and the required checks `ci-ok`
+  # and `pr-title` report on the pull request. Re-running the job is safe: it reuses
+  # an existing branch or open pull request.
+  # If a repository secret PINS_PR_TOKEN exists (a GitHub App installation token or a
+  # fine-grained PAT with contents and pull requests write access on this repository
+  # only), it is used instead and the pull request triggers CI by itself. Review the
+  # pull request against the signed checksums.txt before merging.
   pins:
     name: pins pull request
     needs: [verify, release]
@@ -289,6 +400,7 @@ jobs:
     permissions:
       contents: write # create the branch and commit action/pins.txt
       pull-requests: write # open the pull request
+      actions: write # run ci.yml and pr-title.yml on the branch when no PINS_PR_TOKEN is configured
     steps:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -298,7 +410,10 @@ jobs:
         env:
           TAG: ${{ github.ref_name }}
           REPO: ${{ github.repository }}
+          OWNER: ${{ github.repository_owner }}
           GH_TOKEN: ${{ secrets.PINS_PR_TOKEN || github.token }}
+          HAS_PINS_PR_TOKEN: ${{ secrets.PINS_PR_TOKEN != '' }}
+          ACTIONS_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           if ! printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
@@ -328,14 +443,44 @@ jobs:
           printf '%s' "$lines" >> pins.txt
           branch="chore/pin-checksums-${TAG}"
           main_sha="$(gh api "repos/${REPO}/git/ref/heads/main" --jq '.object.sha')"
-          gh api --method POST "repos/${REPO}/git/refs" \
-            -f "ref=refs/heads/${branch}" -f "sha=${main_sha}" >/dev/null
-          gh api --method PUT "repos/${REPO}/contents/action/pins.txt" \
-            -f "message=chore: pin checksums for ${TAG}" \
-            -f "content=$(base64 -w0 pins.txt)" \
-            -f "sha=${file_sha}" \
-            -f "branch=${branch}" >/dev/null
-          gh api --method POST "repos/${REPO}/pulls" \
-            -f "title=chore: pin checksums for ${TAG}" \
-            -f "head=${branch}" -f "base=main" \
-            -f "body=Appends the SHA-256 of the six ${TAG} archives to action/pins.txt so that pinning the Action by commit SHA pins the binary. Compare the lines with the signed checksums.txt of the release before merging." >/dev/null
+          # Idempotent: a re-run after a partial failure finds the branch (and maybe the
+          # pull request) from the earlier attempt and carries on instead of failing.
+          branch_exists=false
+          if out="$(gh api "repos/${REPO}/git/ref/heads/${branch}" 2>&1)"; then
+            branch_exists=true
+          elif ! grep -q 'HTTP 404' <<<"$out"; then
+            echo "Could not look up branch ${branch}: ${out}" >&2
+            exit 1
+          fi
+          open_prs="$(gh api -X GET "repos/${REPO}/pulls" -f state=open -f "head=${OWNER}:${branch}" -f per_page=2 --jq 'length')"
+          if [ "$open_prs" != "0" ]; then
+            echo "A pull request from ${branch} is already open; nothing to create."
+          else
+            if [ "$branch_exists" = "true" ]; then
+              # Left over from an earlier attempt, without a pull request: restart it from main.
+              gh api --method PATCH "repos/${REPO}/git/refs/heads/${branch}" \
+                -f "sha=${main_sha}" -F force=true >/dev/null
+            else
+              gh api --method POST "repos/${REPO}/git/refs" \
+                -f "ref=refs/heads/${branch}" -f "sha=${main_sha}" >/dev/null
+            fi
+            gh api --method PUT "repos/${REPO}/contents/action/pins.txt" \
+              -f "message=chore: pin checksums for ${TAG}" \
+              -f "content=$(base64 -w0 pins.txt)" \
+              -f "sha=${file_sha}" \
+              -f "branch=${branch}" >/dev/null
+            gh api --method POST "repos/${REPO}/pulls" \
+              -f "title=chore: pin checksums for ${TAG}" \
+              -f "head=${branch}" -f "base=main" \
+              -f "body=Appends the SHA-256 of the six ${TAG} archives to action/pins.txt so that pinning the Action by commit SHA pins the binary. Compare the lines with the signed checksums.txt of the release before merging." >/dev/null
+          fi
+          # A pull request opened with GITHUB_TOKEN does not trigger ci.yml or pr-title.yml,
+          # so its required checks `ci-ok` and `pr-title` would never report.
+          # workflow_dispatch is exempt from that rule: run both on the branch (the checks
+          # attach to the branch head commit).
+          if [ "$HAS_PINS_PR_TOKEN" != "true" ]; then
+            for workflow in ci.yml pr-title.yml; do
+              GH_TOKEN="$ACTIONS_TOKEN" gh api --method POST "repos/${REPO}/actions/workflows/${workflow}/dispatches" \
+                -f "ref=${branch}" >/dev/null
+            done
+          fi

@@ -1,0 +1,32 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/v17.6.0/schemas/config.json",
+  "release-type": "go",
+  "packages": {
+    ".": {}
+  },
+  "initial-version": "0.1.0",
+  "bump-minor-pre-major": true,
+  "bump-patch-for-minor-pre-major": false,
+  "include-component-in-tag": false,
+  "include-v-in-tag": true,
+  "include-v-in-release-name": true,
+  "draft": true,
+  "force-tag-creation": true,
+  "prerelease": false,
+  "changelog-path": "CHANGELOG.md",
+  "changelog-type": "default",
+  "pull-request-title-pattern": "chore${scope}: release${component} ${version}",
+  "pull-request-footer": "Review every changelog entry and the version before merging: both are derived from pull request titles (and descriptions) that contributors wrote. Merging creates the tag and a draft GitHub release; the `release` workflow then waits for approval of the protected `release` environment, builds, signs and publishes the archives, and un-drafts the release. See docs/design/release.md.",
+  "changelog-sections": [
+    { "type": "feat", "section": "Features" },
+    { "type": "fix", "section": "Bug fixes" },
+    { "type": "perf", "section": "Performance" },
+    { "type": "revert", "section": "Reverts" },
+    { "type": "docs", "section": "Documentation", "hidden": true },
+    { "type": "test", "section": "Tests", "hidden": true },
+    { "type": "ci", "section": "CI", "hidden": true },
+    { "type": "build", "section": "Build", "hidden": true },
+    { "type": "refactor", "section": "Refactoring", "hidden": true },
+    { "type": "chore", "section": "Maintenance", "hidden": true }
+  ]
+}

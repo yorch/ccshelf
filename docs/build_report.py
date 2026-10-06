@@ -33,6 +33,7 @@ TABS = [
     ("catalog", "Design", "Catalog and org repo", "design/catalog-and-org-repo.md", {}),
     ("security", "Design", "Security", "design/security.md", {}),
     ("platform", "Design", "Platform", "design/platform.md", {}),
+    ("release", "Design", "Release", "design/release.md", {}),
     ("project", "Design", "Project", "design/project.md", {}),
     ("workflows", "Design", "Workflows", "design/workflows.md", {"chips": True}),
     ("context", "Research", "Context", "research/context.md", {}),

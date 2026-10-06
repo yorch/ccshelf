@@ -5,6 +5,7 @@
 ## Checklist
 
 - [ ] Tests added or updated; they are hermetic (temp `HOME`, no network, no real `claude`) and pass on Linux, macOS and Windows
+- [ ] The title is a Conventional Commits subject (`type(scope): description`); it becomes the changelog entry
 - [ ] `make ci` passes locally (or I explain below what I could not run)
 - [ ] Docs changed in Markdown and the report regenerated with `python3 docs/build_report.py` (never edited `docs/report.html` by hand)
 - [ ] Decision log (`docs/DECISIONS.md`) updated if this adds, changes or supersedes a decision

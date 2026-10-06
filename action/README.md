@@ -73,7 +73,7 @@ Why an exact identity: a regexp such as `.../release.yml@refs/tags/v.*` accepts 
 
 ### Embedded checksums and the release flow
 
-After each successful release, the `pins` job of `release.yml` appends the six lines for the new version to `action/pins.txt` and opens a pull request titled `chore: pin checksums for vX.Y.Z`. A maintainer reviews it (compare with the signed `checksums.txt`) and merges it. Pull requests created with the default `GITHUB_TOKEN` do not start other workflows, so CI will not run on that pull request unless the repository has a secret `PINS_PR_TOKEN` (a GitHub App token or a fine-grained PAT with contents and pull request write access), which the job uses when present.
+After each successful release, the `pins` job of `release.yml` appends the six lines for the new version to `action/pins.txt` and opens a pull request titled `chore: pin checksums for vX.Y.Z`. A maintainer reviews it (compare with the signed `checksums.txt`) and merges it. Pull requests created with the default `GITHUB_TOKEN` do not start other workflows, so the job starts `ci.yml` and `pr-title.yml` on the branch itself (`workflow_dispatch`) and the required checks `ci-ok` and `pr-title` report on the pull request. If the repository has a secret `PINS_PR_TOKEN` (a GitHub App token or a fine-grained PAT with contents and pull request write access), the job uses it and CI starts natively.
 
 Adopters: pick the commit of the action that contains the `pins.txt` line for the version you want (the pins pull-request merge commit or any later one), pin `uses:` to that full SHA, and set `version:` to that release. Older commits do not know newer versions and fall through to cosign.
 

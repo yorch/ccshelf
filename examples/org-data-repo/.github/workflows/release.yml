@@ -2,9 +2,11 @@ name: release
 
 # Creates a repository tag vYYYY.MM.N that consumers pin their profile source to.
 # Run it manually, or let the monthly schedule do it. Protect the v* tags with a ruleset
-# and add the identity that creates the tag to the ruleset's bypass list: this workflow
-# pushes the tag with the workflow token (actor "github-actions"), or with a GitHub App
-# token if you prefer; without that bypass the tag creation is rejected.
+# that blocks updates and deletion (a tag never moves). This workflow pushes the tag with
+# the workflow token (actor "github-actions"). Do not restrict tag creation in that
+# ruleset unless this workflow uses a GitHub App token and the App is on the ruleset's
+# bypass list: the built-in github-actions identity probably cannot be put on a bypass
+# list (unverified), and a restricted ruleset would then reject the tag.
 on:
   workflow_dispatch:
   schedule:

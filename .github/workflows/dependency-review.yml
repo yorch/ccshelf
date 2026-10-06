@@ -12,6 +12,9 @@ concurrency:
 jobs:
   review:
     name: dependency-review
+    # Dependency review needs the dependency graph and, on a private repository,
+    # GitHub Advanced Security; without it the action fails. Skip it there.
+    if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
