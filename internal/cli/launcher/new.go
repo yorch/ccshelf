@@ -26,6 +26,40 @@ type newFlags struct {
 	description, owner, model, effort      string
 }
 
+// given reports whether any content flag was set (name aside), so that the
+// wizard opens only when the command line said nothing about the profile.
+func (f *newFlags) given() bool {
+	return len(f.from) > 0 || len(f.plugins) > 0 || len(f.exclude) > 0 || len(f.skillsOff) > 0 || len(f.mcp) > 0 ||
+		f.description != "" || f.owner != "" || f.model != "" || f.effort != ""
+}
+
+// record adds every flag that is set to the equivalent command, in one place
+// so that no flag can be left out of it.
+func (f *newFlags) record(rec *ui.Recorder) {
+	for _, p := range f.from {
+		rec.Flag("--from", p)
+	}
+	for _, p := range f.plugins {
+		rec.Flag("--plugin", p)
+	}
+	for _, p := range f.exclude {
+		rec.Flag("--exclude-plugin", p)
+	}
+	for _, p := range f.skillsOff {
+		rec.Flag("--skill-off", p)
+	}
+	for _, p := range f.mcp {
+		rec.Flag("--mcp", p)
+	}
+	for _, kv := range []struct{ flag, val string }{
+		{"--description", f.description}, {"--owner", f.owner}, {"--model", f.model}, {"--effort", f.effort},
+	} {
+		if kv.val != "" {
+			rec.Flag(kv.flag, kv.val)
+		}
+	}
+}
+
 func (l *launcher) newCmd() *cobra.Command {
 	var f newFlags
 	c := &cobra.Command{
@@ -88,10 +122,9 @@ func (l *launcher) newProfile(ctx context.Context, cc *clicore.Context, name str
 	if err != nil {
 		return err
 	}
-	noFlags := len(f.from) == 0 && len(f.plugins) == 0 && len(f.skillsOff) == 0 && len(f.mcp) == 0 &&
-		len(f.exclude) == 0 && f.description == ""
+	noFlags := !f.given()
 	if interactive && noFlags {
-		if err := s.wizardNew(ctx, name, f); err != nil {
+		if err := s.wizardNew(ctx, f); err != nil {
 			return err
 		}
 		asked = true
@@ -124,24 +157,7 @@ func (l *launcher) newProfile(ctx context.Context, cc *clicore.Context, name str
 	okf(cc, "created %s", target)
 	if asked {
 		rec := ui.NewRecorder("new", name)
-		for _, p := range f.from {
-			rec.Flag("--from", p)
-		}
-		for _, p := range f.plugins {
-			rec.Flag("--plugin", p)
-		}
-		for _, p := range f.exclude {
-			rec.Flag("--exclude-plugin", p)
-		}
-		for _, p := range f.skillsOff {
-			rec.Flag("--skill-off", p)
-		}
-		for _, p := range f.mcp {
-			rec.Flag("--mcp", p)
-		}
-		if f.description != "" {
-			rec.Flag("--description", f.description)
-		}
+		f.record(rec)
 		printEquivalent(cc, rec)
 	}
 	return nil
@@ -149,7 +165,7 @@ func (l *launcher) newProfile(ctx context.Context, cc *clicore.Context, name str
 
 // wizardNew asks for what is missing: a description, a parent, plugins, skills
 // to hide and MCP servers.
-func (s *session) wizardNew(ctx context.Context, name string, f *newFlags) error {
+func (s *session) wizardNew(ctx context.Context, f *newFlags) error {
 	cc := s.cc
 	desc, err := cc.Prompt.Input(ctx, "Description (one line, may be empty)", "", func(v string) error {
 		if strings.ContainsAny(v, "\r\n") {

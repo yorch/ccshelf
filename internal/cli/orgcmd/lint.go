@@ -19,6 +19,13 @@ const (
 	formatGitHub = "github"
 )
 
+// lintJSON is the data of `lint --json` (kind "lint"); the envelope is
+// ui.WriteJSON's, like every other command.
+type lintJSON struct {
+	Summary  lintSummary    `json:"summary"`
+	Findings []lint.Finding `json:"findings"`
+}
+
 func newLint(get clicore.Provider) *cobra.Command {
 	var format string
 	var strict bool
@@ -30,7 +37,8 @@ ccshelf.toml: marketplace entries, catalog sidecars, taxonomy, review dates,
 CODEOWNERS coverage of hooks and MCP servers, profile manifests and their
 profile-* bundle entries.
 
-Formats: text (default), json (same as the global --json) and github (workflow
+Formats: text (default), json (same as the global --json: the common
+{"version","kind":"lint","data":{"summary","findings"}} envelope) and github (workflow
 annotations, one ::error/::warning/::notice line per finding). Exit code 1
 when there is any error finding (with --strict, any warning too).`,
 		Args: noArgs,
@@ -92,12 +100,12 @@ func lintRepo(c *clicore.Context, r *repo) (*lint.Report, error) {
 func writeLint(w io.Writer, rep *lint.Report, format string) error {
 	switch format {
 	case formatJSON:
-		b, err := lint.FormatJSON(rep)
-		if err != nil {
-			return err
+		n := rep.Counts()
+		data := lintJSON{Summary: lintSummary{Errors: n.Errors, Warnings: n.Warnings, Infos: n.Infos}, Findings: rep.Findings}
+		if data.Findings == nil {
+			data.Findings = []lint.Finding{}
 		}
-		_, err = w.Write(b)
-		return err
+		return ui.WriteJSON(w, "lint", data)
 	case formatGitHub:
 		_, err := io.WriteString(w, lint.FormatGitHub(rep))
 		return err

@@ -55,13 +55,23 @@ type harness struct {
 	spawnCode int
 	spawnHook func(args []string)
 	newGit    GitFactory
+	// spawnCtx is the context the last Spawn received; ctx, when set, is the
+	// context commands run under; lastErr is the error of the last run.
+	spawnCtx context.Context
+	ctx      context.Context
+	lastErr  error
+	// Test seams of the run pipeline.
+	validate   func([]byte) error
+	afterWrite func(string)
 }
 
 func newHarness(t *testing.T) *harness {
 	t.Helper()
 	d := testutil.IsolatedEnv(t)
-	h := &harness{t: t, dirs: d, out: &bytes.Buffer{}, errb: &bytes.Buffer{}, goos: "linux", cwd: d["WORK"],
-		managed: filepath.Join(t.TempDir(), "managed")}
+	h := &harness{
+		t: t, dirs: d, out: &bytes.Buffer{}, errb: &bytes.Buffer{}, goos: "linux", cwd: d["WORK"],
+		managed: filepath.Join(t.TempDir(), "managed"),
+	}
 	if err := os.MkdirAll(h.managed, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +127,8 @@ func (h *harness) build() *cobra.Command {
 			h.startBin, h.startArgs, h.startEnv = bin, args, e
 			return h.startCode, h.startErr
 		},
-		Spawn: func(_ context.Context, bin string, args, _ []string, _ io.Reader, _, _ io.Writer) (int, error) {
+		Spawn: func(ctx context.Context, bin string, args, _ []string, _ io.Reader, _, _ io.Writer) (int, error) {
+			h.spawnCtx = ctx
 			h.spawned = append(h.spawned, append([]string{bin}, args...))
 			if h.spawnHook != nil {
 				h.spawnHook(args)
@@ -132,6 +143,8 @@ func (h *harness) build() *cobra.Command {
 		},
 		Policy: policy.Options{GOOS: "linux", ManagedDir: h.managed, WSL: &no},
 		NewGit: h.newGit,
+
+		validateSettings: h.validate, afterSettingsWrite: h.afterWrite,
 	}
 	root.AddCommand(CommandsWith(get, opt)...)
 	root.SetOut(h.out)
@@ -147,7 +160,12 @@ func (h *harness) run(args ...string) int {
 	h.errb.Reset()
 	root := h.build()
 	root.SetArgs(args)
-	err := root.ExecuteContext(context.Background())
+	ctx := h.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	err := root.ExecuteContext(ctx)
+	h.lastErr = err
 	if err != nil {
 		var ee *ui.ExitError
 		if !(asExit(err, &ee) && ee.Err == nil) {
@@ -159,7 +177,7 @@ func (h *harness) run(args ...string) int {
 
 func asExit(err error, target **ui.ExitError) bool {
 	for err != nil {
-		if e, ok := err.(*ui.ExitError); ok {
+		if e, ok := err.(*ui.ExitError); ok { //nolint:errorlint // walks the chain by hand on purpose
 			*target = e
 			return true
 		}

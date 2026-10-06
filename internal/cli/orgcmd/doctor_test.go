@@ -104,11 +104,13 @@ func TestDoctorPolicy(t *testing.T) {
 			t.Errorf("json code %d", j.code)
 		}
 	})
-	t.Run("unreadable policy exits 3", func(t *testing.T) {
+	t.Run("unreadable policy exits 3 only with --strict", func(t *testing.T) {
 		fakePolicy(t, &policy.Policy{Unreadable: true, Unknown: []string{"managed-settings.json: permission denied"}}, nil)
 		h := newHarness(t, copyExample(t))
-		r := h.run("doctor", "--policy")
-		if r.code != 3 || !strings.Contains(r.out, "POL001") {
+		if r := h.run("doctor", "--policy"); r.code != 0 || !strings.Contains(r.out, "POL001") {
+			t.Errorf("%d\n%s", r.code, r.out)
+		}
+		if r := h.run("doctor", "--policy", "--strict"); r.code != 3 || !strings.Contains(r.out, "POL001") {
 			t.Errorf("%d\n%s", r.code, r.out)
 		}
 	})

@@ -100,6 +100,12 @@ The directory defaults to ~/.claude-<name>.`,
 		if asked {
 			rec := ui.NewRecorder("account", "add", name)
 			rec.Flag("--dir", dir)
+			for _, m := range marketplaces {
+				rec.Flag("--marketplace", m)
+			}
+			for _, p := range plugins {
+				rec.Flag("--plugin", p)
+			}
 			if makeDefault {
 				rec.Bool("--default")
 			}
@@ -114,8 +120,10 @@ The directory defaults to ~/.claude-<name>.`,
 				Default   bool     `json:"default"`
 				Steps     []string `json:"steps"`
 			}
-			return ui.WriteJSON(cc.Streams.Out, "account-add", out{Name: plan.Name, Dir: plan.Dir, Created: plan.Created,
-				Persisted: plan.Persisted, Default: makeDefault, Steps: lines})
+			return ui.WriteJSON(cc.Streams.Out, "account-add", out{
+				Name: plan.Name, Dir: plan.Dir, Created: plan.Created,
+				Persisted: plan.Persisted, Default: makeDefault, Steps: lines,
+			})
 		}
 		okf(cc, "account %s uses %s", name, plan.Dir)
 		fmt.Fprintln(cc.Streams.Out, "One-time steps (run them yourself; ccshelf never touches credentials):")

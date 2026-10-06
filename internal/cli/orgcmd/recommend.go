@@ -32,7 +32,10 @@ func newRecommend(get clicore.Provider) *cobra.Command {
 plugins and profiles of the org data repo (--root, default the current
 directory) whose relevance signals and when_to_use text match it. The rules
 are deterministic; there is no model call and no network access. Only file
-names and a few small manifest files of the project are read.`,
+names and a few small manifest files of the project are read.
+
+Outside an org data repo (the marketplace file of ccshelf.toml cannot be
+read) it fails with exit 1, like lint and compile.`,
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			c, err := get()
@@ -58,9 +61,12 @@ names and a few small manifest files of the project are read.`,
 			if err != nil {
 				return fmt.Errorf("reading the project directory: %w", err)
 			}
-			cat, _, err := catalog.BuildContext(cmd.Context(), r.root, r.cfg, catalog.Options{Now: c.Now})
+			cat, lrep, err := catalog.BuildContext(cmd.Context(), r.root, r.cfg, catalog.Options{Now: c.Now})
 			if err != nil {
 				return fmt.Errorf("building the catalog: %w", err)
+			}
+			if err := requireMarketplace(r, lrep); err != nil {
+				return err
 			}
 			var mkts []*marketplace.Marketplace
 			for _, rel := range r.cfg.Catalog.Marketplaces {

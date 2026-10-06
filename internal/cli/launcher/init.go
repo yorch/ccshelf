@@ -60,7 +60,7 @@ func (l *launcher) initConfig(ctx context.Context, cc *clicore.Context, f *initF
 		return ui.Failure(withHint(fmt.Errorf("%s already exists", path), "edit it, or replace it with: ccshelf init --force"))
 	}
 	asked := false
-	if canPrompt(cc) && f.gitURL == "" && f.dir == "" && f.accountName == "" {
+	if canPrompt(cc) && f.gitURL == "" && f.ref == "" && f.dir == "" && f.accountName == "" {
 		var err error
 		if asked, err = askInit(ctx, cc, f, pathGiven); err != nil {
 			return err
@@ -156,7 +156,7 @@ func askInit(ctx context.Context, cc *clicore.Context, f *initFlags, pathGiven b
 	}
 	if url = strings.TrimSpace(url); url != "" {
 		f.gitURL = url
-		ref, err := cc.Prompt.Input(ctx, "Tag or full commit id to pin it to", "", func(s string) error { return config.ValidatePin(s) })
+		ref, err := cc.Prompt.Input(ctx, "Tag or full commit id to pin it to", "", config.ValidatePin)
 		if err != nil {
 			return false, err
 		}

@@ -142,8 +142,10 @@ func (l *launcher) open(ctx context.Context, cc *clicore.Context, prepare, needC
 	if err != nil {
 		return nil, err
 	}
-	s := &session{l: l, cc: cc, cfg: cfg, cfgPath: path, choice: choice, cwd: cwd,
-		env: claude.Env(cc.Environ(), extra)}
+	s := &session{
+		l: l, cc: cc, cfg: cfg, cfgPath: path, choice: choice, cwd: cwd,
+		env: claude.Env(cc.Environ(), extra),
+	}
 	if needClaude {
 		if _, err := s.locate(); err != nil {
 			return nil, ui.Failure(err)
@@ -178,10 +180,10 @@ func (s *session) locate() (string, error) {
 
 // findProject walks up from dir to the nearest directory holding .ccshelf
 // (never the user's home directory, which is not a project).
-func findProject(dir string) string {
+func findProject(dir, goos string) string {
 	home, _ := os.UserHomeDir()
 	for {
-		if dir != home {
+		if !samePath(dir, home, goos) {
 			if fi, err := os.Lstat(filepath.Join(dir, trust.ProjectFolder)); err == nil && fi.IsDir() {
 				return dir
 			}
@@ -194,8 +196,8 @@ func findProject(dir string) string {
 	}
 }
 
-func detectProject(cfg *config.Config, cwd string) projectState {
-	root := findProject(cwd)
+func detectProject(cfg *config.Config, cwd, goos string) projectState {
+	root := findProject(cwd, goos)
 	if root == "" {
 		return projectState{}
 	}
@@ -229,9 +231,26 @@ func detectProject(cfg *config.Config, cwd string) projectState {
 	return st
 }
 
+// caseInsensitiveOS reports whether paths are compared without regard to case
+// on goos (the default file systems of Windows and macOS are case-insensitive).
+func caseInsensitiveOS(goos string) bool { return goos == "windows" || goos == "darwin" }
+
+// samePath compares two cleaned paths, ignoring case on Windows and macOS. An
+// empty path equals nothing.
+func samePath(a, b, goos string) bool {
+	if a == "" || b == "" {
+		return false
+	}
+	a, b = filepath.Clean(a), filepath.Clean(b)
+	if caseInsensitiveOS(goos) {
+		return strings.EqualFold(a, b)
+	}
+	return a == b
+}
+
 // sameDir reports whether two directories are the same place (best effort,
-// resolving symlinks that exist).
-func sameDir(a, b string) bool {
+// resolving symlinks that exist, and ignoring case on Windows and macOS).
+func sameDir(a, b, goos string) bool {
 	norm := func(p string) string {
 		p = filepath.Clean(p)
 		if r, err := filepath.EvalSymlinks(p); err == nil {
@@ -239,7 +258,7 @@ func sameDir(a, b string) bool {
 		}
 		return p
 	}
-	return norm(a) == norm(b)
+	return samePath(norm(a), norm(b), goos)
 }
 
 // buildSources assembles the source list: the personal directory first, then
@@ -261,7 +280,7 @@ func (s *session) buildSources(ctx context.Context, prepare bool) error {
 			if err != nil {
 				return fmt.Errorf("sources[%d]: %w", i, err)
 			}
-			if sameDir(p, personal) {
+			if sameDir(p, personal, s.cc.GOOS) {
 				continue
 			}
 			s.sources = append(s.sources, profile.DirSource(profile.KindOrg, p))
@@ -295,7 +314,7 @@ func (s *session) buildSources(ctx context.Context, prepare bool) error {
 			return fmt.Errorf("sources[%d]: unknown type %q", i, sc.Type)
 		}
 	}
-	s.proj = detectProject(s.cfg, s.cwd)
+	s.proj = detectProject(s.cfg, s.cwd, s.cc.GOOS)
 	if s.proj.Allowed {
 		s.sources = append(s.sources, profile.DirSource(profile.KindProject, filepath.Join(s.proj.Root, trust.ProjectFolder, "profiles")))
 	}
@@ -340,6 +359,44 @@ func (s *session) collectProtected() error {
 	return nil
 }
 
+// Closure item kinds for the protected controls (SR3). The protect lists live in
+// each org source's ccshelf.toml, outside the profile files, so they are pinned
+// here: an edit of a list (a plugin or MCP server dropped from protection)
+// changes the closure hash and needs a review like any other risky change.
+const (
+	itemProtectPlugin = "protect-plugin"
+	itemProtectMCP    = "protect-mcp"
+)
+
+// pinProtected adds the protected plugins and MCP labels to the closure of r
+// and recomputes its hash. The trust check, the accept command and the run
+// pipeline all resolve through session.resolve, so they agree on one hash.
+// A closure without any protected control is left as Resolve built it.
+func (s *session) pinProtected(r *profile.Resolved) {
+	if len(s.protectedPlugins) == 0 && len(s.protectedMCP) == 0 {
+		return
+	}
+	items := append([]profile.ClosureItem(nil), r.Closure.Items...)
+	add := func(kind string, names []string) {
+		for _, n := range names {
+			items = append(items, profile.ClosureItem{Kind: kind, Name: n, Digest: profile.DigestBytes([]byte(kind + "\x00" + n)), Risky: true})
+		}
+	}
+	add(itemProtectPlugin, s.protectedPlugins)
+	add(itemProtectMCP, s.protectedMCP)
+	sort.Slice(items, func(i, j int) bool {
+		a, b := items[i], items[j]
+		if a.Kind != b.Kind {
+			return a.Kind < b.Kind
+		}
+		if a.Name != b.Name {
+			return a.Name < b.Name
+		}
+		return a.Digest < b.Digest
+	})
+	r.Closure = profile.Closure{Hash: profile.HashItems(items), Items: items}
+}
+
 func uniqSorted(in []string) []string {
 	if len(in) == 0 {
 		return nil
@@ -362,6 +419,7 @@ func uniqSorted(in []string) []string {
 func (s *session) resolve(name string) (*profile.Resolved, error) {
 	r, err := profile.Resolve(name, s.sources, profile.ResolveOptions{AllowProject: s.proj.Allowed})
 	if err == nil {
+		s.pinProtected(r)
 		return r, nil
 	}
 	switch {

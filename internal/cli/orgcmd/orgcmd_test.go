@@ -82,11 +82,18 @@ func TestLintFormats(t *testing.T) {
 
 	j := h.run("lint", "--format", "json")
 	var doc struct {
-		Version  int `json:"version"`
-		Findings []struct{ Severity, Code string }
+		Version int    `json:"version"`
+		Kind    string `json:"kind"`
+		Data    struct {
+			Summary  struct{ Errors, Warnings, Infos int }
+			Findings []struct{ Severity, Code string }
+		} `json:"data"`
 	}
-	if err := json.Unmarshal([]byte(j.out), &doc); err != nil || doc.Version != 1 || len(doc.Findings) == 0 {
+	if err := json.Unmarshal([]byte(j.out), &doc); err != nil || doc.Version != 1 || doc.Kind != "lint" || len(doc.Data.Findings) == 0 {
 		t.Fatalf("json: %v %+v\n%s", err, doc, j.out)
+	}
+	if doc.Data.Summary.Errors+doc.Data.Summary.Warnings+doc.Data.Summary.Infos != len(doc.Data.Findings) {
+		t.Errorf("summary %+v does not match %d findings", doc.Data.Summary, len(doc.Data.Findings))
 	}
 	if g := h.run("--json", "lint"); g.out != j.out {
 		t.Errorf("--json and --format json differ")

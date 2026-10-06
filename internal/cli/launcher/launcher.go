@@ -15,6 +15,7 @@ import (
 	"github.com/ccshelf/ccshelf/internal/cli/clicore"
 	"github.com/ccshelf/ccshelf/internal/config"
 	"github.com/ccshelf/ccshelf/internal/policy"
+	"github.com/ccshelf/ccshelf/internal/settings"
 	"github.com/ccshelf/ccshelf/internal/ui"
 )
 
@@ -36,6 +37,12 @@ type Options struct {
 	Policy policy.Options
 	// NewGit builds a prepared-on-demand git source (default gitsource.New).
 	NewGit GitFactory
+
+	// Test seams (unexported: only tests in this package set them).
+	// validateSettings replaces settings.Validate; afterSettingsWrite runs
+	// between writing the settings file and reading it back.
+	validateSettings   func([]byte) error
+	afterSettingsWrite func(path string)
 }
 
 type launcher struct {
@@ -77,6 +84,15 @@ func CommandsWith(get clicore.Provider, opt Options) []*cobra.Command {
 	}
 }
 
+// validateSettings checks generated settings against the closed schema; the
+// run pipeline calls it before and after the file is written.
+func (l *launcher) validateSettings(raw []byte) error {
+	if l.opt.validateSettings != nil {
+		return l.opt.validateSettings(raw)
+	}
+	return settings.Validate(raw)
+}
+
 // do wraps a command body: it obtains the Context once, after flag parsing.
 func (l *launcher) do(f func(ctx context.Context, cc *clicore.Context, cmd *cobra.Command, args []string) error) func(*cobra.Command, []string) error {
 	return func(cmd *cobra.Command, args []string) error {
@@ -101,7 +117,9 @@ type hintError struct {
 
 func (e *hintError) Error() string { return e.err.Error() }
 func (e *hintError) Unwrap() error { return e.err }
-func (e *hintError) Hint() string  { return e.hint }
+
+// Hint returns the advice shown after the error.
+func (e *hintError) Hint() string { return e.hint }
 
 func withHint(err error, format string, a ...any) error {
 	return &hintError{err: err, hint: fmt.Sprintf(format, a...)}
@@ -123,7 +141,8 @@ func printStatus(cc *clicore.Context, level ui.Level, format string, a ...any) {
 }
 
 func warnf(cc *clicore.Context, format string, a ...any) { printStatus(cc, ui.LevelWarn, format, a...) }
-func okf(cc *clicore.Context, format string, a ...any)   { printStatus(cc, ui.LevelOK, format, a...) }
+
+func okf(cc *clicore.Context, format string, a ...any) { printStatus(cc, ui.LevelOK, format, a...) }
 
 // printEquivalent prints the equivalent flag command (R6 rule 4). A failure to
 // quote (control characters) is reported as a warning, never fatal.
@@ -202,6 +221,54 @@ func splitRunArgs(cmd *cobra.Command, args []string) (name string, pass []string
 // safeBase returns the base name of path for messages.
 func safeBase(p string) string { return filepath.Base(p) }
 
-// splitFields splits an editor command line on white space (no quoting rules:
-// the editor is never run through a shell).
-func splitFields(s string) []string { return strings.Fields(s) }
+// parseEditor splits an editor command line into the program and its
+// arguments. It is never run through a shell. When the whole value names an
+// existing file it is the program as it is (a Windows path such as
+// C:\Program Files\Notepad++\notepad++.exe has spaces and backslashes);
+// otherwise the value is split on white space, and single or double quotes
+// group words (no escape characters: a backslash is an ordinary character, so
+// "C:\Program Files\x.exe" -f works on Windows). An unterminated quote is an
+// error.
+func parseEditor(s string) ([]string, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil, nil
+	}
+	if fi, err := os.Stat(s); err == nil && !fi.IsDir() {
+		return []string{s}, nil
+	}
+	var (
+		out    []string
+		cur    strings.Builder
+		quote  rune
+		inWord bool
+	)
+	for _, r := range s {
+		switch {
+		case quote != 0:
+			if r == quote {
+				quote = 0
+			} else {
+				cur.WriteRune(r)
+			}
+		case r == '"' || r == '\'':
+			quote, inWord = r, true
+		case r == ' ' || r == '\t':
+			if inWord {
+				out = append(out, cur.String())
+				cur.Reset()
+				inWord = false
+			}
+		default:
+			cur.WriteRune(r)
+			inWord = true
+		}
+	}
+	if quote != 0 {
+		return nil, fmt.Errorf("unterminated %c quote in the editor command", quote)
+	}
+	if inWord {
+		out = append(out, cur.String())
+	}
+	return out, nil
+}

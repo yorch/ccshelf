@@ -20,14 +20,37 @@ import (
 // and every subcommand receives its Context from the provider once cobra has
 // parsed the flags.
 func NewRoot(env *clicore.Env) *cobra.Command {
+	root, _ := newRoot(env)
+	return root
+}
+
+// newRoot is NewRoot that also returns the globals the flags are bound to, so
+// that Execute can report an error in the mode the flags asked for.
+func newRoot(env *clicore.Env) (*cobra.Command, *clicore.Globals) {
 	g := &clicore.Globals{}
-	get := func() (*clicore.Context, error) { return env.Context(g, "", ""), nil }
+	get := func() (*clicore.Context, error) { //nolint:unparam // the Provider signature allows an error
+		color, interactive := clicore.UIPrefs(g)
+		return env.Context(g, color, interactive), nil
+	}
 
 	root := &cobra.Command{
 		Use:           "ccshelf",
 		Short:         "Run Claude Code with a named profile; lint and publish an org's plugin catalog",
 		SilenceUsage:  true,
 		SilenceErrors: true,
+	}
+	// Bare "ccshelf": the profile picker on a terminal, the help otherwise.
+	var run *cobra.Command
+	root.RunE = func(cmd *cobra.Command, _ []string) error {
+		cc, err := get()
+		if err != nil {
+			return err
+		}
+		if _, non := cc.Prompt.(ui.NonInteractive); non || cc.G.NoInteractive || cc.Mode.JSON || run == nil {
+			return cmd.Help()
+		}
+		run.SetContext(cmd.Context())
+		return run.RunE(run, nil)
 	}
 	root.SetOut(env.Streams.Out)
 	root.SetErr(env.Streams.Err)
@@ -43,30 +66,80 @@ func NewRoot(env *clicore.Env) *cobra.Command {
 	f.BoolVar(&g.Plain, "plain", false, "line-oriented output and prompts")
 	f.BoolVar(&g.JSON, "json", false, "machine-readable output where supported")
 
-	root.AddCommand(launcher.Commands(get)...)
+	lc := launcher.Commands(get)
+	for _, c := range lc {
+		if c.Name() == "run" {
+			run = c
+		}
+	}
+	root.AddCommand(lc...)
 	root.AddCommand(orgcmd.Commands(get)...)
-	return root
+	return root, g
 }
 
 // Execute runs the command tree with args and returns the process exit code.
 // Errors are reported on the error stream; a child's exit status (an ExitError
 // without a message) is returned silently.
 func Execute(ctx context.Context, env *clicore.Env, args []string) int {
-	root := NewRoot(env)
+	root, g := newRoot(env)
 	root.SetArgs(args)
 	err := root.ExecuteContext(ctx)
 	if err == nil {
 		return ui.ExitOK
 	}
+	code := exitCodeOf(err)
 	var ee *ui.ExitError
 	if !(errors.As(err, &ee) && ee.Err == nil) {
-		mode := env.Context(&clicore.Globals{}, "", "").Mode
-		reportTo(env.Streams.Err, err, mode)
+		color, interactive := clicore.UIPrefs(g)
+		mode := env.Context(g, color, interactive).Mode
+		if mode.JSON {
+			reportJSON(env.Streams.Err, err, code)
+		} else {
+			reportTo(env.Streams.Err, err, mode)
+		}
+	}
+	return code
+}
+
+// exitCodeOf maps err to the process exit code. A child's own status (an
+// ExitError without a message) is kept as it is; an interruption that arrives
+// wrapped in a failure ("listing installed plugins: context canceled") is 130,
+// not 1; cobra's own parse errors are usage errors.
+func exitCodeOf(err error) int {
+	var ee *ui.ExitError
+	if errors.As(err, &ee) && ee.Err == nil {
+		return ee.Code
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, ui.ErrAborted) {
+		return ui.ExitInterrupted
 	}
 	if isUsage(err) {
 		return ui.ExitUsage
 	}
 	return ui.CodeOf(err)
+}
+
+// reportJSON writes the error as one JSON object on the error stream, so a
+// script that asked for --json can parse failures as well as results.
+func reportJSON(w io.Writer, err error, code int) {
+	type out struct {
+		Message string `json:"message"`
+		Hint    string `json:"hint,omitempty"`
+		Code    int    `json:"code"`
+	}
+	o := out{Message: ui.SanitizeLine(err.Error()), Code: code}
+	var h interface{ Hint() string }
+	if errors.As(err, &h) {
+		o.Hint = ui.SanitizeLine(h.Hint())
+	}
+	var mf *ui.MissingFlagError
+	if o.Hint == "" && errors.As(err, &mf) && mf.Flag != "" {
+		o.Hint = "pass " + ui.SanitizeLine(mf.Flag) + ", or run in a terminal without --no-interactive to be asked"
+	}
+	if werr := ui.WriteJSON(w, "error", o); werr != nil {
+		// Fall back to the plain line; there is nothing else to report to.
+		ui.Report(w, err, ui.Mode{})
+	}
 }
 
 func reportTo(w io.Writer, err error, mode ui.Mode) { ui.Report(w, err, mode) }

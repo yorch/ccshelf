@@ -211,6 +211,20 @@ func (r *repo) hostingMarketplace() (string, error) {
 	return first, nil
 }
 
+// requireMarketplace fails with exit 1 when the repo is not an org data repo:
+// a marketplace file listed in ccshelf.toml (by default
+// .claude-plugin/marketplace.json) cannot be read. lint and compile fail in
+// that case; the commands that read the catalog do the same, so a wrong
+// --root or working directory is never mistaken for an empty catalog.
+func requireMarketplace(r *repo, rep *lint.Report) error {
+	for _, f := range rep.Findings {
+		if f.Code == "CAT001" {
+			return ui.Failure(fmt.Errorf("%s is not an org data repo: %s", ui.SanitizeLine(r.root), ui.SanitizeLine(f.Message)))
+		}
+	}
+	return nil
+}
+
 // out writes s to the command's stdout.
 func out(c *clicore.Context) io.Writer { return c.Streams.Out }
 

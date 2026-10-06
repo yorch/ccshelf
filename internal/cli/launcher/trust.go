@@ -134,7 +134,7 @@ func (l *launcher) trustProject(ctx context.Context, cc *clicore.Context, accept
 	if err != nil {
 		return fmt.Errorf("working directory: %w", err)
 	}
-	root := findProject(cwd)
+	root := findProject(cwd, cc.GOOS)
 	if root == "" {
 		return ui.Usage(errors.New("no .ccshelf folder in this directory or its parents"))
 	}

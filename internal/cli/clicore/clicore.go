@@ -20,6 +20,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/ccshelf/ccshelf/internal/config"
 	"github.com/ccshelf/ccshelf/internal/ui"
 )
 
@@ -90,6 +91,27 @@ type Context struct {
 	// Config holds the user's ui preferences read from config.toml, filled
 	// by the root command.
 	ConfigColor, ConfigInteractive string
+}
+
+// UIPrefs reads the [ui] section of the configuration file (--config or the
+// default location) for the color and interactive preferences. It is read-only
+// and tolerant: a missing file gives the defaults, and an unreadable or
+// invalid file gives empty values (the command that needs the configuration
+// reports the problem itself), so presentation never makes a command fail.
+func UIPrefs(g *Globals) (color, interactive string) {
+	path := g.ConfigPath
+	if path == "" {
+		p, err := config.Path()
+		if err != nil {
+			return "", ""
+		}
+		path = p
+	}
+	cfg, err := config.Load(path)
+	if err != nil {
+		return "", ""
+	}
+	return cfg.UI.Color, cfg.UI.Interactive
 }
 
 // Provider returns the Context for the current invocation. It is called from

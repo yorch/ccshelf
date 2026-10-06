@@ -22,8 +22,8 @@ func (l *launcher) editCmd() *cobra.Command {
 		Use:   "edit [profile]",
 		Short: "Open a personal profile in $VISUAL or $EDITOR",
 		Long: `Open one of your personal profiles in the editor named by $VISUAL or $EDITOR
-(the command is split on spaces and never run through a shell), then check the
-result. Profiles from shared sources are read-only here: copy one with
+(the command is split on spaces, quotes group words, and it is never run through
+a shell), then check the result. Profiles from shared sources are read-only here: copy one with
 "ccshelf new <name> --from <profile>" and edit the copy.
 
 --path prints the file name instead of opening it, for scripts and for editors
@@ -32,7 +32,7 @@ you start yourself.`,
 	}
 	c.Flags().BoolVar(&printPath, "path", false, "print the profile file path instead of opening it")
 	c.RunE = l.do(func(ctx context.Context, cc *clicore.Context, _ *cobra.Command, args []string) error {
-		name, picked, err := pickProfile(ctx, cc, first(args), "edit", func() ([]ui.Option, error) { return personalOptions() })
+		name, picked, err := pickProfile(ctx, cc, first(args), "edit", personalOptions)
 		if err != nil {
 			return err
 		}
@@ -69,19 +69,28 @@ you start yourself.`,
 			return ui.Usage(withHint(errors.New("no editor configured"),
 				"set $VISUAL or $EDITOR, or use: ccshelf edit %s --path", name))
 		}
-		fields := splitFields(editor)
+		fields, err := parseEditor(editor)
+		if err != nil {
+			return ui.Usage(fmt.Errorf("$VISUAL or $EDITOR: %w", err))
+		}
 		if len(fields) == 0 {
 			return ui.Usage(errors.New("$VISUAL and $EDITOR are blank"))
 		}
-		argv := append(fields[1:], path)
-		code, err := l.opt.Spawn(ctx, fields[0], argv, cc.Environ(), cc.Streams.In, cc.Streams.Out, cc.Streams.Err)
+		argv := append(append([]string(nil), fields[1:]...), path)
+		// The editor shares the terminal, so Ctrl+C reaches it as well as us:
+		// it must not cancel the editor (unsaved edits would be lost), so the
+		// editor runs on a context that cannot be canceled and an interrupt
+		// is swallowed here while it runs.
+		release := ignoreInterrupt()
+		code, err := l.opt.Spawn(context.WithoutCancel(ctx), fields[0], argv, cc.Environ(), cc.Streams.In, cc.Streams.Out, cc.Streams.Err)
+		release()
 		if err != nil {
 			return ui.Failure(fmt.Errorf("running the editor %q: %w", ui.Sanitize(fields[0]), err))
 		}
 		if code != 0 {
 			return ui.Failure(fmt.Errorf("the editor exited with status %d; the file may be unchanged", code))
 		}
-		raw, err := os.ReadFile(path)
+		raw, err := os.ReadFile(path) //nolint:gosec // path is built from the validated name in the personal profiles directory
 		if err != nil {
 			return ui.Failure(fmt.Errorf("reading %s back: %w", path, err))
 		}
@@ -89,9 +98,24 @@ you start yourself.`,
 			return ui.Failure(withHint(fmt.Errorf("the edited profile is invalid: %w", err), "fix it with: ccshelf edit %s", name))
 		}
 		okf(cc, "%s is valid", name)
+		l.warnUnresolved(ctx, cc, name)
 		return nil
 	})
 	return c
+}
+
+// warnUnresolved resolves the edited profile across all sources and warns when
+// it cannot be resolved (a missing parent, an unknown MCP server). The edit
+// itself is kept: this is a check, not a gate.
+func (l *launcher) warnUnresolved(ctx context.Context, cc *clicore.Context, name string) {
+	s, err := l.open(ctx, cc, true, false)
+	if err != nil {
+		warnf(cc, "could not check that %s resolves: %v", name, err)
+		return
+	}
+	if _, err := s.resolve(name); err != nil {
+		warnf(cc, "%s does not resolve yet: %v", name, err)
+	}
 }
 
 // personalOptions lists the personal profiles for the picker.

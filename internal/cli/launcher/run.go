@@ -132,6 +132,12 @@ func (l *launcher) runProfile(ctx context.Context, cc *clicore.Context, name str
 	if dry {
 		return printDryRun(cc, ln)
 	}
+	if err := ctx.Err(); err != nil {
+		// Ctrl+C while the pipeline ran: do not start claude.
+		return fmt.Errorf("interrupted before starting claude: %w", err)
+	}
+	// Give claude the signal dispositions plain claude would have had.
+	releaseSignals()
 	code, err := l.opt.Start(ln.Bin, ln.Args, ln.Env)
 	if err != nil {
 		return ui.Failure(fmt.Errorf("starting claude: %w", err))
@@ -231,6 +237,9 @@ func (s *session) buildLaunch(ctx context.Context, name string, pass []string, y
 	ic := &claude.InstalledCache{Dir: cdir, Now: cc.Now}
 	installed, _, err := ic.List(ctx, bin, s.cwd, s.env)
 	if err != nil {
+		if cerr := ctx.Err(); cerr != nil {
+			return nil, fmt.Errorf("listing installed plugins: %w", cerr)
+		}
 		return nil, ui.Failure(withHint(fmt.Errorf("listing installed plugins: %w", err),
 			"claude plugin list --json must work in this directory (and under the chosen account)"))
 	}
@@ -320,12 +329,15 @@ func (s *session) buildLaunch(ctx context.Context, name string, pass []string, y
 	if err != nil {
 		return nil, ui.Failure(fmt.Errorf("settings JSON: %w", err))
 	}
-	if err := settings.Validate(raw); err != nil {
+	if err := s.l.validateSettings(raw); err != nil {
 		return nil, ui.Failure(fmt.Errorf("generated settings are invalid: %w", err))
 	}
 	settingsPath, err := cache.Write(cdir, "settings", "json", raw)
 	if err != nil {
 		return nil, ui.Failure(fmt.Errorf("writing settings: %w", err))
+	}
+	if s.l.opt.afterSettingsWrite != nil {
+		s.l.opt.afterSettingsWrite(settingsPath)
 	}
 	back, err := cache.ReadFile(cdir, filepath.Base(settingsPath))
 	if err != nil {
@@ -334,7 +346,7 @@ func (s *session) buildLaunch(ctx context.Context, name string, pass []string, y
 	if string(back) != string(raw) {
 		return nil, ui.Failure(fmt.Errorf("settings file %s changed after it was written", safeBase(settingsPath)))
 	}
-	if err := settings.Validate(back); err != nil {
+	if err := s.l.validateSettings(back); err != nil {
 		return nil, ui.Failure(fmt.Errorf("settings file on disk is invalid: %w", err))
 	}
 
@@ -371,9 +383,15 @@ func (s *session) buildLaunch(ctx context.Context, name string, pass []string, y
 		ln.Args = append(ln.Args, "--effort", m.Session.Effort)
 	}
 	for _, a := range pass {
-		switch a {
+		// "--flag=value" is the same flag as "--flag value".
+		name, _, _ := strings.Cut(a, "=")
+		switch name {
 		case "--settings", "--setting-sources", "--mcp-config", "--strict-mcp-config", "--append-system-prompt-file":
-			warn("the argument %s after the profile name can override what the profile generated", a)
+			// Whether the later flag wins or is merged has not been verified
+			// against a real claude here {U}, so only the risk is stated.
+			warn("the argument %s after the profile name can override what the profile generated", name)
+		case "--resume", "-r", "--continue", "-c":
+			warn("%s resumes a session that may have been started under another profile; its recorded prompt and skill list are reused", name)
 		}
 	}
 	ln.Args = append(ln.Args, pass...)

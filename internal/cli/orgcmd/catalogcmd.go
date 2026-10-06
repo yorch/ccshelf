@@ -4,9 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 
@@ -26,8 +23,10 @@ const markdownName = "CATALOG.md"
 
 // buildJSON is the data of `catalog build --json` (kind "catalog-build").
 type buildJSON struct {
-	Out      string      `json:"out"`
-	Files    []string    `json:"files"`
+	Out   string   `json:"out"`
+	Files []string `json:"files"`
+	// Pruned lists the stale site files --no-site removed.
+	Pruned   []string    `json:"pruned,omitempty"`
 	Plugins  int         `json:"plugins"`
 	Profiles int         `json:"profiles"`
 	Lint     lintSummary `json:"lint"`
@@ -60,8 +59,15 @@ func newCatalogBuild(get clicore.Provider) *cobra.Command {
 		Short: "Write catalog.json, CATALOG.md and the static site",
 		Long: `Build the catalog from the org data repo and write it into --out (default
 ` + defaultOut + `, relative to the current directory): catalog.json, CATALOG.md and, unless
---no-site, the static site (index.html, app.js, style.css). Nothing is written
-outside --out.
+--no-site, the static site (index.html, app.js, style.css; with --no-site the
+files of an earlier site build are removed from --out). Nothing is written
+outside --out, and the output is published files: directories 0755, files 0644.
+
+--out must not be the repo root or contain it, must not lie inside the repo's
+source directories (profiles, bundles, catalog, plugins, .github and so on)
+and must not pass through a symbolic link below the working directory or the
+repo root. A directory that is not an org data repo (its marketplace file
+cannot be read or parsed) is an error, exit 1, and nothing is written.
 
 The catalog has no timestamp unless --timestamp is given, so the output is
 reproducible. Lint findings are printed to stderr; a repo with lint errors
@@ -76,7 +82,7 @@ still produces its catalog (for previews) but the command exits 1.`,
 			if err != nil {
 				return err
 			}
-			dest, err := resolveOut(c, r, outDir)
+			target, err := resolveOut(c, r, outDir)
 			if err != nil {
 				return err
 			}
@@ -92,6 +98,9 @@ still produces its catalog (for previews) but the command exits 1.`,
 			if err != nil {
 				return err
 			}
+			if err := requireMarketplace(r, rep); err != nil {
+				return err
+			}
 			dropAbstractBundles(rep, good)
 			rep.Findings = append(rep.Findings, r.profileFindings(bad, good)...)
 			rep.Sort()
@@ -102,7 +111,12 @@ still produces its catalog (for previews) but the command exits 1.`,
 			if err != nil {
 				return err
 			}
-			if err := writeFiles(dest, files); err != nil {
+			var prune []string
+			if noSite {
+				prune = staleSiteFiles
+			}
+			pruned, err := writeOutput(target, files, prune)
+			if err != nil {
 				return err
 			}
 			names := make([]string, 0, len(files))
@@ -111,16 +125,21 @@ still produces its catalog (for previews) but the command exits 1.`,
 			}
 			sort.Strings(names)
 			n := rep.Counts()
-			data := buildJSON{Out: dest, Files: names, Plugins: len(cat.Plugins), Profiles: len(cat.Profiles),
-				Lint: lintSummary{Errors: n.Errors, Warnings: n.Warnings, Infos: n.Infos}}
+			data := buildJSON{
+				Out: target.dest, Files: names, Pruned: pruned, Plugins: len(cat.Plugins), Profiles: len(cat.Profiles),
+				Lint: lintSummary{Errors: n.Errors, Warnings: n.Warnings, Infos: n.Infos},
+			}
 			if c.Mode.JSON {
 				if err := ui.WriteJSON(out(c), "catalog-build", data); err != nil {
 					return err
 				}
 			} else {
-				fmt.Fprintf(out(c), "catalog: %s, %s, written to %s\n", plural(data.Plugins, "plugin", "plugins"), plural(data.Profiles, "profile", "profiles"), ui.SanitizeLine(dest))
+				fmt.Fprintf(out(c), "catalog: %s, %s, written to %s\n", plural(data.Plugins, "plugin", "plugins"), plural(data.Profiles, "profile", "profiles"), ui.SanitizeLine(target.dest))
 				for _, nme := range names {
 					fmt.Fprintf(out(c), "  %s\n", nme)
+				}
+				for _, nme := range pruned {
+					fmt.Fprintf(out(c), "  removed the stale %s\n", nme)
 				}
 			}
 			if len(rep.Findings) > 0 {
@@ -137,38 +156,6 @@ still produces its catalog (for previews) but the command exits 1.`,
 	cmd.Flags().BoolVar(&gitData, "git-data", false, "add last-change and contributor data from git")
 	cmd.Flags().BoolVar(&stamp, "timestamp", false, "stamp generated_at into the output")
 	return cmd
-}
-
-// resolveOut makes the output directory absolute and refuses the repo root.
-func resolveOut(c *clicore.Context, r *repo, outDir string) (string, error) {
-	if outDir == "" {
-		outDir = defaultOut
-	}
-	dest := outDir
-	if !filepath.IsAbs(dest) {
-		wd, err := c.Getwd()
-		if err != nil {
-			return "", fmt.Errorf("finding the current directory: %w", err)
-		}
-		dest = filepath.Join(wd, dest)
-	}
-	dest = filepath.Clean(dest)
-	if same(dest, r.root) {
-		return "", ui.Usage(errors.New("--out must not be the repo root: pick a separate output directory"))
-	}
-	if fi, err := os.Lstat(dest); err == nil && fi.Mode()&os.ModeSymlink != 0 {
-		return "", fmt.Errorf("--out %s is a symbolic link; refusing to write through it", dest)
-	}
-	return dest, nil
-}
-
-func same(a, b string) bool {
-	if a == b {
-		return true
-	}
-	ea, errA := filepath.EvalSymlinks(a)
-	eb, errB := filepath.EvalSymlinks(b)
-	return errA == nil && errB == nil && ea == eb
 }
 
 type outFile struct {
@@ -197,57 +184,6 @@ func renderFiles(cat *catalog.Catalog, withSite bool) ([]outFile, error) {
 	return files, nil
 }
 
-// writeFiles writes each file atomically (temporary file, then rename) into
-// dir, creating dir with mode 0700. It refuses to replace anything that is not
-// a regular file.
-func writeFiles(dir string, files []outFile) error {
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return fmt.Errorf("creating %s: %w", dir, err)
-	}
-	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
-		return fmt.Errorf("%s is not a directory", dir)
-	}
-	for _, f := range files {
-		target := filepath.Join(dir, f.name)
-		if fi, err := os.Lstat(target); err == nil {
-			if !fi.Mode().IsRegular() {
-				return fmt.Errorf("refusing to overwrite %s: not a regular file", target)
-			}
-		} else if !errors.Is(err, fs.ErrNotExist) {
-			return fmt.Errorf("inspecting %s: %w", target, err)
-		}
-		if err := writeAtomic(dir, f.name, f.data); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func writeAtomic(dir, name string, data []byte) error {
-	tmp, err := os.CreateTemp(dir, "."+name+".tmp-*")
-	if err != nil {
-		return fmt.Errorf("creating a temporary file for %s: %w", name, err)
-	}
-	tmpName := tmp.Name()
-	fail := func(err error) error {
-		_ = tmp.Close()
-		_ = os.Remove(tmpName)
-		return err
-	}
-	if _, err := tmp.Write(data); err != nil {
-		return fail(fmt.Errorf("writing %s: %w", name, err))
-	}
-	if err := tmp.Close(); err != nil {
-		_ = os.Remove(tmpName)
-		return fmt.Errorf("closing %s: %w", name, err)
-	}
-	if err := os.Rename(tmpName, filepath.Join(dir, name)); err != nil {
-		_ = os.Remove(tmpName)
-		return fmt.Errorf("replacing %s: %w", name, err)
-	}
-	return nil
-}
-
 // searchJSON is the data of `search --json` (kind "search").
 type searchJSON struct {
 	Query   string      `json:"query"`
@@ -273,7 +209,11 @@ func newSearch(get clicore.Provider) *cobra.Command {
 		Long: `Search the catalog of the org data repo (--root, default the current
 directory) locally and offline. Every word of the query must match a field
 (name, display name, tags, category, when_to_use, description or owner);
-better matches come first, ties by name.`,
+better matches come first, ties by name.
+
+Outside an org data repo (the marketplace file of ccshelf.toml cannot be read)
+it fails with exit 1, like lint and compile, instead of reporting "no match".
+A query that matches nothing in a real repo is not an error.`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
 				return ui.Usage(errors.New("search needs a query, for example: ccshelf search figma"))
@@ -292,9 +232,12 @@ better matches come first, ties by name.`,
 			if err != nil {
 				return err
 			}
-			cat, _, err := catalog.BuildContext(cmd.Context(), r.root, r.cfg, catalog.Options{Now: c.Now})
+			cat, rep, err := catalog.BuildContext(cmd.Context(), r.root, r.cfg, catalog.Options{Now: c.Now})
 			if err != nil {
 				return fmt.Errorf("building the catalog: %w", err)
+			}
+			if err := requireMarketplace(r, rep); err != nil {
+				return err
 			}
 			query := strings.Join(args, " ")
 			ms := catalog.Search(cat, query, limit)

@@ -144,8 +144,10 @@ func showData(r *profile.Resolved, state string, labels map[string]string) showD
 		Include: nz(m.Plugins.Include), Exclude: nz(m.Plugins.Exclude),
 		SkillsOff: nz(m.Skills.Off), SkillsName: nz(m.Skills.NameOnly),
 		MCP: showMCP{Servers: nz(m.MCP.Servers), ClaudeAIConnectors: m.MCP.ClaudeAIConnectors, Strict: m.MCP.Strict != nil && *m.MCP.Strict},
-		Session: showSession{Model: m.Session.Model, Effort: m.Session.Effort, AppendSystemPromptFile: m.Session.AppendSystemPromptFile,
-			InheritUserSettings: m.InheritsUserSettings(), EnvNames: env},
+		Session: showSession{
+			Model: m.Session.Model, Effort: m.Session.Effort, AppendSystemPromptFile: m.Session.AppendSystemPromptFile,
+			InheritUserSettings: m.InheritsUserSettings(), EnvNames: env,
+		},
 		OnBlocked: m.Policy.OnBlocked, WhenToUse: nz(m.WhenToUse), AvoidWhen: nz(m.AvoidWhen),
 		Warnings: make([]string, 0, len(r.Warnings)), ClosureHash: r.Closure.Hash, Trust: state,
 	}
