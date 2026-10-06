@@ -47,7 +47,7 @@ Design to the lowest common denominator, so nothing assumes github.com or the ne
 Still to verify: how Claude Code's marketplace and plugin source types behave with GHE Cloud vs Server hosts (including data-residency domains), and the minimum GHE Server version the Actions workflows must support.
 
 ### Go stack choices (proposed)
-- Module layout: `core/`, `profiles/`, `catalog/` as Go packages in one module; one `cprof` binary with subcommands (project name `claude-profile`, command `cprof`; see "Name" below). Cobra or a small stdlib-based CLI parser; stdlib `os/exec`, `encoding/json`, `html/template`, `embed`.
+- Module layout: `core/`, `profiles/`, `catalog/` as Go packages in one module; one `ccprofiles` binary with subcommands (project and command name `ccprofiles`; see "Name" below). Cobra or a small stdlib-based CLI parser; stdlib `os/exec`, `encoding/json`, `html/template`, `embed`.
 - TOML: a maintained library (`pelletier/go-toml/v2` or `BurntSushi/toml`; pick one that preserves useful error positions).
 - JSON Schema validation for manifests: a Go validator library, with schemas in `schema/` shared with editors.
 - Git access for `git` sources: shell out to the user's `git` (inherits credential helper/SSH config, important for GHE) rather than embedding a git library.
@@ -75,8 +75,8 @@ Still to verify: how Claude Code's marketplace and plugin source types behave wi
 | Generated files | Per-process files under `$TMPDIR`, deleted on exit | With `exec` nobody can clean up afterwards. Use **content-addressed files** (name = hash of the resolved config) in the launcher's cache dir. Identical content is reused, so concurrent runs never collide. Write atomically (temp file + rename) and garbage-collect old files at launch. Also avoids Windows file-lock problems from overwriting an open file. |
 | Finding `claude` | `PATH` lookup | Use PATH lookup (handles `.exe`/`.cmd`), fall back to `~/.local/bin`, allow an override (config or env). npm installs on Windows give a `.cmd` shim, which needs care when spawning. |
 | Paths in profile files | `~/...` and `/` | Accept `~` and forward slashes; normalize backslashes on read; always write forward slashes into generated JSON. Never build paths by string concatenation. |
-| Launcher's own dirs | `~/.config/claude-profile/` | Config: `$XDG_CONFIG_HOME` or `~/.config/claude-profile` on macOS/Linux, `%APPDATA%\claude-profile` on Windows. Cache: `~/.cache/claude-profile` or `%LOCALAPPDATA%\claude-profile`. Docs examples show the Unix form. |
-| Shell aliases | `alias cf=...` | Aliases don't exist in PowerShell/cmd. `cprof shell-init` emits bash/zsh/fish functions and PowerShell functions; cmd gets `.cmd` shims. |
+| Launcher's own dirs | `~/.config/ccprofiles/` | Config: `$XDG_CONFIG_HOME` or `~/.config/ccprofiles` on macOS/Linux, `%APPDATA%\ccprofiles` on Windows. Cache: `~/.cache/ccprofiles` or `%LOCALAPPDATA%\ccprofiles`. Docs examples show the Unix form. |
+| Shell aliases | `alias cf=...` | Aliases don't exist in PowerShell/cmd. `ccprofiles shell-init` emits bash/zsh/fish functions and PowerShell functions; cmd gets `.cmd` shims. |
 | Symlinks | Not used | Keep it that way: never depend on symlinks (Windows needs Developer Mode). Copy or content-address instead. |
 | MCP `npx` servers | `command = "npx"` | The MCP registry should allow a per-OS command override (e.g. `windows = ["cmd", "/c", "npx", ...]`) until the question above is settled. |
 | Policy detection | Read managed-settings files | File paths are known per OS, but Windows registry/MDM and server-managed settings can't be read reliably. Make detection best-effort and also **detect by failure**: if `claude` exits 1 on a sideload flag, report "blocked by policy". |
@@ -119,11 +119,11 @@ Decided 2026-10-06. The user's org **does enforce managed settings** (exact keys
 | Force-enabled plugins (managed `enabledPlugins: true`) | masking | Can't be masked; list them in `show`/`doctor` as "always on by policy". |
 
 - Each profile feature maps to a required capability, and `[policy] on_blocked` (`warn` or `fail`) decides what happens.
-- **Detection:** read managed-settings files per OS (best-effort) and **detect by failure** at launch (exit 1 on a blocked flag becomes "blocked by policy: <flag>"). `cprof doctor --policy` prints the capability matrix (available / blocked / unknown). Server-managed settings and Windows registry/MDM can't be read reliably, so "unknown" is a valid state.
+- **Detection:** read managed-settings files per OS (best-effort) and **detect by failure** at launch (exit 1 on a blocked flag becomes "blocked by policy: <flag>"). `ccprofiles doctor --policy` prints the capability matrix (available / blocked / unknown). Server-managed settings and Windows registry/MDM can't be read reliably, so "unknown" is a valid state.
 - **Never bypass policy.** This holds in every mode, including open-source use.
 - **Cases to test:** no policy; permissive policy (e.g. only `strictKnownMarketplaces`); sideload blocked; force-enabled plugins; both. Each needs a fixture (a fake managed-settings file plus the fake `claude` that mimics the exit-1 behavior).
 
-**R4: open source.** No org-specific names, URLs or assumptions in code, schemas or defaults; everything org-specific lives in config and in the org's marketplace repo. Needs a license, contribution docs, a project and command name (decided: `claude-profile` / `cprof`, with the brand risk noted; see "Name"), and docs that don't depend on internal infrastructure. This reinforces R2 (GitHub.com, GHE Cloud and GHE Server all supported) and R1 (all three operating systems).
+**R4: open source.** No org-specific names, URLs or assumptions in code, schemas or defaults; everything org-specific lives in config and in the org's marketplace repo. Needs a license, contribution docs, a project and command name (decided: `ccprofiles`, with the caveats noted under "Name"), and docs that don't depend on internal infrastructure. This reinforces R2 (GitHub.com, GHE Cloud and GHE Server all supported) and R1 (all three operating systems).
 
 ## Tool repo vs data repo (R5)
 Decided 2026-10-06: the **tool is hosted in a public GitHub repo** (this one), and an adopting company stores its **profiles and catalog data in its own private GHE repo**. The tool never assumes the two live together.
@@ -136,10 +136,10 @@ Decided 2026-10-06: the **tool is hosted in a public GitHub repo** (this one), a
 | Changes by | Open-source contributors | The org's platform team |
 
 Consequences:
-- **Reusable CI:** the data repo's workflow calls the public tool, either `uses: <owner>/claude-profile/action@<pinned tag or SHA>` or a step that downloads a pinned release binary. GHE Cloud can use public actions directly; **GHE Server needs GitHub Connect or a mirror** (e.g. `actions-sync`), or the binary-download variant (also mirrorable to an internal registry). Both variants must be documented; the logic stays in the binary (R2).
+- **Reusable CI:** the data repo's workflow calls the public tool, either `uses: <owner>/ccprofiles/action@<pinned tag or SHA>` or a step that downloads a pinned release binary. GHE Cloud can use public actions directly; **GHE Server needs GitHub Connect or a mirror** (e.g. `actions-sync`), or the binary-download variant (also mirrorable to an internal registry). Both variants must be documented; the logic stays in the binary (R2).
 - **Pin everything.** The data repo pins the tool version and (where supported) verifies a checksum, since the tool runs in the org's CI and on developers' machines.
 - **Starter template** (layout in `08-org-data-repo-structure.md`): ship a template/example data repo (`examples/org-data-repo/`, possibly also a GitHub template repository) with a sample `marketplace.json`, `profiles/`, a CI workflow and a catalog publish recipe, so adopting takes minutes.
-- **Configuration lives with the adopter, not in the tool:** profile sources (`dir`/`git`, later `plugin`), the catalog metadata schema location and lint rules come from the org's `claude-profile.toml` in the data repo and the user's own `~/.config/claude-profile/config.toml`, with sane defaults. The tool repo never needs to know about a particular org.
+- **Configuration lives with the adopter, not in the tool:** profile sources (`dir`/`git`, later `plugin`), the catalog metadata schema location and lint rules come from the org's `ccprofiles.toml` in the data repo and the user's own `~/.config/ccprofiles/config.toml`, with sane defaults. The tool repo never needs to know about a particular org.
 - **Catalog hosting is the adopter's choice** (R2): the tool outputs a plain static directory; the starter template shows GitHub Pages and an internal static host. We don't pick one for the org.
 - **Telemetry:** none by default. An open-source tool that runs in corporate CI must not phone home.
 - **Security reporting, license and contribution docs** live in the public repo (R4).
@@ -161,8 +161,17 @@ Two choices: (1) **no built-in default profiles**: roles like "frontend" are org
 ### License (decided 2026-10-06)
 **MIT** for the tool repo (code and docs). Still to do: add a `LICENSE` file (needs the copyright holder name and year), and confirm that the user's employer allows open-sourcing this before the first public commit. The data repo (the org's profiles and catalog data) is the org's own and is not covered by this license.
 
-### Name (decided 2026-10-06)
-Project **`claude-profile`**, command **`cprof`**. The user accepted two known risks: "Claude" in the name of an open-source tool may conflict with Anthropic's brand guidelines if published widely, and a similarly named Go tool already exists (`claude-profile`, a Go binary that wraps `CLAUDE_CONFIG_DIR`; see 02). Revisit before the first public release; a rename is cheap now and costly later.
+### Name (decided 2026-10-06): `ccprofiles`
+The project and the command are both called **`ccprofiles`**. It replaces the earlier working name `claude-profile`, which collided with three existing GitHub tools and carried brand risk from "Claude" in the name.
+
+What was checked (2026-10-06, by command; nothing registered):
+- **Free:** npm, PyPI, crates.io, Homebrew (formula and cask) and Arch/Debian/Scoop searches returned nothing for `ccprofiles`; no local binary of that name; `ccprofiles.dev`, `.io`, `.sh`, `.com` and `.app` appear unregistered (RDAP or whois reported not found).
+- **Taken:** the GitHub user `ccprofiles` already exists (created 2023, three junk repos, last activity 2023). The GitHub org or user for the project will need a different name, for example `ccprofiles-dev`, or the project lives under the maintainer's account or the employer's org.
+- **Crowded neighborhood:** many tools with near-identical names exist and several do something similar (see 02 section C): `ccprofile` (for example [Azurioh/ccprofile](https://github.com/Azurioh/ccprofile), per-project plugins and skills profiles, and [bman95/ccprofile](https://github.com/bman95/ccprofile), toggle groups of skills, plugins and MCP servers), `cc-profiles` (an npm package, a PyPI package and several repos) and `ccprof` (an npm package and a crate that profile Claude Code sessions). Expect search confusion and the occasional wrong install.
+- **Brand:** `cc` is a common abbreviation in community tools, but it does not remove the affiliation question (Anthropic's trademark guidelines forbid implying sponsorship or affiliation). The tagline should say what the tool is and that it is unaffiliated. A proper trademark search (classes 9 and 42) and, if wanted, an email to marketing@anthropic.com are still advised.
+- **Not checked:** winget, pkg.go.dev, and any trademark databases.
+
+Consequences already applied across the notes: command `ccprofiles` (users can alias it, for example `ccp`), config in `~/.config/ccprofiles/`, cache in `~/.cache/ccprofiles/`, per-project directory `.ccprofiles/`, org config file `ccprofiles.toml`, Action path `<owner>/ccprofiles/action`, and env var `CCPROFILES_PROFILE`. The `ccprof` shortcut was rejected as a command name because it is an existing Claude Code tool on npm and crates.io. The local folder name `claude-profile` is only the current checkout directory.
 
 ### Do not build (yet)
 Registry server/DB, vector search, TUI, custom install path (bundles cover install), MCP gateway, config-dir-per-profile, a concierge search tool before there is usage data, anything that writes shared settings.
@@ -196,21 +205,21 @@ Claude Code has no native concept of a profile repo: marketplaces distribute plu
 | Source type | How it works | Notes |
 |---|---|---|
 | `plugin` (**planned after `dir` and `git`**; not in the first release) | The marketplace publishes a data-only plugin (e.g. `org-profiles@acme`) containing `profiles/*.toml`. The launcher locates it via `claude plugin list --json` (install path). | Reuses native auth, version pinning, `autoUpdate` and `strictKnownMarketplaces`; no second fetch path for IT to approve. The plugin must be installed, and the launcher must never mask it. Profile versions follow the plugin version. |
-| `git` | The launcher clones/pulls a repo into `~/.cache/claude-profile/<name>` at a pinned `ref`. | Works for a profiles-only repo. Adds an auth and fetch path of its own. |
-| `dir` | A local directory, e.g. `~/.config/claude-profile/profiles/` (personal) or `.claude-profile/profiles/` in a project repo (per-project defaults). | Always available. |
+| `git` | The launcher clones/pulls a repo into `~/.cache/ccprofiles/<name>` at a pinned `ref`. | Works for a profiles-only repo. Adds an auth and fetch path of its own. |
+| `dir` | A local directory, e.g. `~/.config/ccprofiles/profiles/` (personal) or `.ccprofiles/profiles/` in a project repo (per-project defaults). | Always available. |
 
-Config sketch (`~/.config/claude-profile/config.toml`):
+Config sketch (`~/.config/ccprofiles/config.toml`):
 ```toml
 # Sources are searched in order; the first match for a profile name wins,
 # so list the most specific source first (personal, then project, then org).
 
 [[sources]]
 type = "dir"
-path = "~/.config/claude-profile/profiles"      # personal profiles
+path = "~/.config/ccprofiles/profiles"      # personal profiles
 
 [[sources]]
 type = "dir"
-path = ".claude-profile/profiles"               # per-project defaults, relative to the repo root
+path = ".ccprofiles/profiles"               # per-project defaults, relative to the repo root
 
 [[sources]]
 type = "git"
@@ -232,8 +241,8 @@ on_change = "prompt"          # prompt | fail | allow. What to do when an accept
 
 **Trust model.** A shared profile can define MCP server commands, environment and system-prompt additions, so loading one is effectively running code from that source. The launcher therefore:
 1. loads org profiles only from sources already trusted by the org (an allowlisted marketplace, or a pinned git ref);
-2. records a hash of each accepted profile in a lockfile (`~/.config/claude-profile/lock.json`);
-3. when a profile changes in a risky way (new MCP command, new env, new system-prompt text), shows the diff and asks before accepting (`cprof trust <profile>`);
+2. records a hash of each accepted profile in a lockfile (`~/.config/ccprofiles/lock.json`);
+3. when a profile changes in a risky way (new MCP command, new env, new system-prompt text), shows the diff and asks before accepting (`ccprofiles trust <profile>`);
 4. never bypasses org policy (unchanged principle).
 
 Still undecided: whether the data-only plugin approach works smoothly when `strictKnownMarketplaces` or other policy applies (untested), and how a profile that lists a plugin the user hasn't installed should be reported (current design: report and print the install command, never install silently).
@@ -244,7 +253,7 @@ A design proposal; field names are not final. See `06-example-workflows.md` for 
 # One file per profile. The file name must match `name`.
 
 # ---- Identity (shown in `ls`, `search`, and the catalog page) ----
-name = "frontend"             # Unique id, kebab-case. What you type: `cprof run frontend`.
+name = "frontend"             # Unique id, kebab-case. What you type: `ccprofiles run frontend`.
                               # Also the name of the generated bundle plugin `profile-frontend`.
 description = "React, CSS and accessibility work"   # One line, shown in listings and the catalog.
 owner = "@web-platform"       # Team or person who maintains the profile. Required for org profiles
@@ -307,7 +316,7 @@ FIGMA_TOKEN_REF = "op://dev/figma/token"   # Environment for the session; prefer
 on_blocked = "warn"           # warn | fail. What to do when org policy blocks something the profile
                               # needs (e.g. disableSideloadFlags). The launcher never bypasses policy.
 ```
-Rule for `extends`: lists union in order; a later `off` or `exclude` beats an earlier include. Personal profiles in `~/.config/claude-profile/profiles/` may extend org profiles. `compile` also writes a bundle plugin `profile-<name>` (dependencies only) into the marketplace so the profile's plugins can be installed natively.
+Rule for `extends`: lists union in order; a later `off` or `exclude` beats an earlier include. Personal profiles in `~/.config/ccprofiles/profiles/` may extend org profiles. `compile` also writes a bundle plugin `profile-<name>` (dependencies only) into the marketplace so the profile's plugins can be installed natively.
 
 ## CLI sketch
 `run <profile> [-- claude args]` · `ls` · `show <p>` (resolved closure, overrides, token estimate) · `diff <a> <b>` · `dry-run <p>` (prints exact `claude` command) · `init` (create config, optionally from an org data repo URL) · `new <p> [--from <p2>]` · `edit <p>` · `trust <p>` · `account add <name>` · `shell-init <bash|zsh|fish|pwsh>` · `compile [--check]` · `lint` · `catalog build` · `search <q>` · `recommend` (rule-based, no LLM) · `doctor [--policy]` (overlap, unused, deprecated-in-use, stale owners, policy shadowing, capability matrix).
@@ -324,5 +333,5 @@ Org data repo: see `08-org-data-repo-structure.md` (marketplace, plugins, `profi
 5. ~~Profile distribution~~: **decided, `dir` + `git` sources first; `plugin` source later**, once tested under managed policy and `strictKnownMarketplaces`. This changes the earlier lean (plugin as default): the tool-repo / private-data-repo split (R5) makes a pinned git source the natural fit, since it works with any private repo and the user's git credentials and doesn't depend on marketplace policy.
 6. ~~Standalone skills~~: **decided, explicit off-list + guidance to package as plugins.** Profiles list standalone skills to hide via `skillOverrides` (tested, works under any policy). `doctor` warns about standalone skills that no profile mentions, and the docs explain how to package them into a marketplace plugin so profiles can control them as a unit. No generated `--plugin-dir` plugin (blocked by sideload policy) and no silent auto default-deny. For non-plugin MCP servers: `--strict-mcp-config` where allowed; to verify, `deniedMcpServers` inside the `--settings` file as a fallback where `--mcp-config` is blocked (docs say it works in any settings file; untested here). Original question: how `profiles` handles standalone `~/.claude/skills` and non-plugin MCP, which bundles cannot express (idea: library folder injected as a generated local plugin, subject to sideload policy).
 7. **Build, adopt or contribute (new, from the review round):** evaluate [fuzzyalej/claude-profile](https://github.com/fuzzyalej/claude-profile) (Rust, task profiles with sharing and a lockfile) and [edimuj/claude-rig](https://github.com/edimuj/claude-rig) (Go, rigs with per-project selection) before building the launcher. Questions: does either handle default-deny masking against one shared plugin store, concurrency, managed policy and the org data repo flow? Could the missing pieces be contributed upstream instead? The catalog track is not covered by any of them. See 02 sections C and I.
-8. **Name:** open again. The current working name `claude-profile` collides with three existing tools and carries brand risk; neutral candidates and a `cc`/`claude` check are in 02 section H. A decision is pending.
+8. ~~Name~~: **decided, `ccprofiles`** (see "Name"). Still to do: pick the GitHub home (the `ccprofiles` user is taken), run a proper trademark search, check winget and pkg.go.dev.
 

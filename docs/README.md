@@ -1,4 +1,4 @@
-# claude-profile: research & design notes
+# ccprofiles: research & design notes
 
 Status: research and Stage 0 experiments complete (2026-10-06). Masking via `--settings` confirmed, concurrency looked safe, token savings small on the test machine (see `05-stage0-results.md`). No code yet. `report.html` is the interactive version of these notes and must say the same thing (see "Keeping the report in sync" in `AGENTS.md`).
 
@@ -19,9 +19,9 @@ These terms are used the same way in every document and in the report.
 
 | Term | Meaning |
 |---|---|
-| **Profile** | A named recipe (`profiles/<name>.toml`) saying which plugins, standalone skills and MCP servers are active for one Claude Code session, plus session defaults. Started with `cprof run <name>`. It filters what is already installed; it is not an identity or security boundary. Part of the **launcher** (use case 1). |
+| **Profile** | A named recipe (`profiles/<name>.toml`) saying which plugins, standalone skills and MCP servers are active for one Claude Code session, plus session defaults. Started with `ccprofiles run <name>`. It filters what is already installed; it is not an identity or security boundary. Part of the **launcher** (use case 1). |
 | **Profile bundle** | A generated, dependency-only plugin named `profile-<name>`, kept in `bundles/`, so a profile's plugins can be installed natively with one `/plugin install`. It is not itself a profile. |
-| **Catalog** | A generated, browsable index of an org's plugins and profiles: a static site plus `catalog.json`, built in CI from `marketplace.json`, the sidecars and git data. Also queried locally with `cprof search` and `cprof doctor`. Not committed. Answers "what exists, which should I use, who owns it". Part of use case 2 (discoverability). |
+| **Catalog** | A generated, browsable index of an org's plugins and profiles: a static site plus `catalog.json`, built in CI from `marketplace.json`, the sidecars and git data. Also queried locally with `ccprofiles search` and `ccprofiles doctor`. Not committed. Answers "what exists, which should I use, who owns it". Part of use case 2 (discoverability). |
 | **Sidecar** | The per-plugin catalog metadata file `catalog/plugins/<name>.toml` (owner, status, when_to_use, overlaps, review date). |
 | **Marketplace** | The Claude Code concept: a git repo with `.claude-plugin/marketplace.json` and plugins that Claude Code installs from. Not the same as the catalog, which is a richer view built on top of it. |
 | **Tool repo** | This public repo: the Go source, schemas, docs, releases, the reusable Action and a starter template. Never holds org data. |
@@ -51,7 +51,7 @@ These terms are used the same way in every document and in the report.
 | Managed policy | The user's org enforces it; the tool works across none, partial and strict policy |
 | Build order | Both tracks in parallel, shared `core/` first |
 | Language | Go |
-| Name | Project `claude-profile`, command `cprof` was chosen, but it is **open again** (three existing tools share the name; see `02` section H and `04` open decisions) |
+| Name | `ccprofiles` for both the project and the command (replaces the working name `claude-profile`; the `ccprofiles` GitHub user is taken and the name is close to several existing tools, see `04` "Name") |
 | Catalog hosting | The adopter's choice; the tool outputs a static directory |
 | Profile sources | `dir` and `git` first, `plugin` later |
 | Standalone skills | Explicit off-list via `skillOverrides`, plus guidance to package skills as plugins |
