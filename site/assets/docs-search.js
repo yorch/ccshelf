@@ -130,8 +130,13 @@
     while (list.firstChild) list.removeChild(list.firstChild);
   }
 
+  function setOpen(open) {
+    panel.hidden = !open;
+    input.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+
   function close() {
-    panel.hidden = true;
+    setOpen(false);
   }
 
   function render(q) {
@@ -143,7 +148,7 @@
       li0.className = 'r-none';
       li0.textContent = 'Search is not available here. Use the menu to browse the pages.';
       list.appendChild(li0);
-      panel.hidden = false;
+      setOpen(true);
       status.textContent = 'Search is not available.';
       return;
     }
@@ -154,7 +159,7 @@
       li1.className = 'r-none';
       li1.textContent = 'No results for “' + q.trim() + '”.';
       list.appendChild(li1);
-      panel.hidden = false;
+      setOpen(true);
       status.textContent = 'No results.';
       return;
     }
@@ -182,7 +187,7 @@
       li.appendChild(a);
       list.appendChild(li);
     }
-    panel.hidden = false;
+    setOpen(true);
     status.textContent = hits.length + (hits.length === 1 ? ' result' : ' results') + (hits.length > MAX ? ', showing the first ' + MAX : '') + '.';
   }
 
@@ -241,7 +246,7 @@
       if (!box.contains(ev.target)) close();
     });
     input.addEventListener('click', function () {
-      if (input.value.trim() && lastQuery === input.value) panel.hidden = list.firstChild ? false : true;
+      if (input.value.trim() && lastQuery === input.value) setOpen(!!list.firstChild);
     });
     document.addEventListener('keydown', function (ev) {
       if (ev.key !== '/' || ev.ctrlKey || ev.metaKey || ev.altKey) return;

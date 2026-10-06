@@ -2,8 +2,8 @@
    the "On this page" list stay open and every link works. No dependencies, no network, no inline handlers.
    - On narrow screens the sidebar collapses behind a "Documentation menu" button and the table of
      contents of the page folds into its summary.
-   - Code blocks and table wrappers that scroll sideways become keyboard focusable, so they can be
-     scrolled with the arrow keys. */
+   - Code blocks that scroll sideways become keyboard focusable, named regions, so they can be
+     scrolled with the arrow keys and a screen reader says what they are. */
 (function () {
   'use strict';
 
@@ -66,7 +66,15 @@
     var mark = function () {
       for (var i = 0; i < regions.length; i++) {
         var r = regions[i];
-        if (r.scrollWidth > r.clientWidth + 1) r.setAttribute('tabindex', '0'); else r.removeAttribute('tabindex');
+        if (r.scrollWidth > r.clientWidth + 1) {
+          r.setAttribute('tabindex', '0');
+          r.setAttribute('role', 'region');
+          r.setAttribute('aria-label', 'Code');
+        } else {
+          r.removeAttribute('tabindex');
+          r.removeAttribute('role');
+          r.removeAttribute('aria-label');
+        }
       }
     };
     if (regions.length) {
