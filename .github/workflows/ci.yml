@@ -221,6 +221,8 @@ jobs:
         run: python3 -I scripts/test_check_site.py
       - name: The website has no external requests, broken links or missing metadata
         run: bash scripts/check-site.sh
+      - name: The deploy build fills in the site address and the result still passes
+        run: bash scripts/build-site.sh "$RUNNER_TEMP/site-built" https://pages.example.test/ccshelf
 
   examples:
     name: examples
