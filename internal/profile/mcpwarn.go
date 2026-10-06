@@ -53,32 +53,76 @@ func isVersionSuffix(s string) bool {
 
 // packageRunners are the launchers a Windows `cmd /c` wrapper may start: the
 // documented form is `cmd /c npx -y pkg@1.2.3`, because npx and its relatives
-// are .cmd scripts that Windows cannot run without a shell.
-var packageRunners = map[string]bool{"npx": true, "node": true, "uvx": true, "bunx": true}
+// are .cmd scripts that Windows cannot run without a shell. They must be given
+// as a bare name (optionally with ".cmd"), never as a path, so cmd resolves
+// them from PATH and not from a directory the registry chose. node is not a
+// package runner and is not accepted.
+var packageRunners = map[string]bool{"npx": true, "uvx": true, "bunx": true}
 
-// pinnedPackageRe is a package argument pinned to a version: name@1.2.3, with an
-// optional @scope/ and an optional leading v. A tag such as @latest is not a pin.
-var pinnedPackageRe = regexp.MustCompile(`^(@[A-Za-z0-9._~-]+/)?[A-Za-z0-9._~-]+@v?[0-9][0-9A-Za-z.+_-]*$`)
+// pinnedPackageRe is exactly one package pinned to an exact version:
+// name@1.2.3 or name@1.2.3-rc.1, with an optional @scope/ and an optional
+// leading v. A tag such as @latest, a range or a partial version is not a pin.
+var pinnedPackageRe = regexp.MustCompile(`^(@[A-Za-z0-9._~-]+/)?[A-Za-z0-9._~-]+@v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$`)
 
-// cmdMetaChars would let an argument of `cmd /c` run a second command.
-const cmdMetaChars = "&|<>^%\"\r\n\x00"
+// cmdMetaChars would let an argument of `cmd /c` run a second command, expand
+// a variable or quote its way out of the line.
+const cmdMetaChars = "&|<>^%()!\"'"
 
-// isDocumentedLauncher reports whether command and args are the documented
-// Windows launcher pattern: cmd /c, then npx, node, uvx or bunx, with a pinned
-// name@version package among the remaining arguments and nothing in them that
-// cmd would read as another command.
+// codeFlags make npx, uvx or bunx run an argument as code or add a second
+// package, which would defeat the pin.
+var codeFlags = []string{"-c", "-e", "-p", "--call", "--eval", "--package"}
+
+func isCodeFlag(a string) bool {
+	l := strings.ToLower(a)
+	for _, f := range codeFlags {
+		if l == f || strings.HasPrefix(l, f+"=") {
+			return true
+		}
+	}
+	return false
+}
+
+// isDocumentedLauncher reports whether command and args are exactly the
+// documented Windows launcher shape, and nothing looser:
+//
+//	command = "cmd"
+//	args    = ["/c", <runner>, "-y"|"--yes", "<name>@<x.y.z[-pre]>", rest...]   (npx)
+//	args    = ["/c", <runner>, "<name>@<x.y.z[-pre]>", rest...]                 (uvx, bunx)
+//
+// npx takes the -y flag before the package; uvx and bunx have no such flag, so
+// the pinned package follows the runner directly. The runner is the bare name
+// npx, uvx or bunx (optionally .cmd): no directory, drive or UNC part. No
+// argument may contain a cmd metacharacter or a control character, and none of
+// the rest may be a code or extra-package flag (-c, -e, -p, --call, --eval,
+// --package). Anything else is not documented and keeps its warning.
 func isDocumentedLauncher(command string, args []string) bool {
-	if commandBase(command) != "cmd" || len(args) < 3 || !strings.EqualFold(args[0], "/c") || !packageRunners[strings.TrimSuffix(commandBase(args[1]), ".cmd")] {
+	if command != "cmd" || len(args) < 3 || !strings.EqualFold(args[0], "/c") {
 		return false
 	}
-	pinned := false
-	for _, a := range args[1:] {
-		if strings.ContainsAny(a, cmdMetaChars) {
+	runner := strings.ToLower(args[1])
+	runner = strings.TrimSuffix(runner, ".cmd")
+	if !packageRunners[runner] {
+		return false
+	}
+	pkgAt := 2
+	if runner == "npx" {
+		if len(args) < 4 || (args[2] != "-y" && args[2] != "--yes") {
 			return false
 		}
-		pinned = pinned || pinnedPackageRe.MatchString(a)
+		pkgAt = 3
 	}
-	return pinned
+	if !pinnedPackageRe.MatchString(args[pkgAt]) {
+		return false
+	}
+	for i, a := range args[1:] {
+		if strings.ContainsAny(a, cmdMetaChars) || strings.IndexFunc(a, func(r rune) bool { return r < 0x20 || r == 0x7f }) >= 0 {
+			return false
+		}
+		if i+1 > pkgAt && isCodeFlag(a) {
+			return false
+		}
+	}
+	return true
 }
 
 // commandWarning describes why a stdio command deserves attention, or "".
@@ -133,7 +177,7 @@ func MCPWarnings(s MCPServer) []string {
 
 // MCPNotes returns informational notes about a stdio server: a command (or
 // per-OS override) that is the documented Windows launcher pattern, cmd /c
-// followed by npx, node, uvx or bunx and a pinned name@version package. It is
+// followed by npx, uvx or bunx and a pinned name@version package. It is
 // the one case MCPWarnings leaves out although the command is "cmd", so that
 // lint can still show it as info. Other servers, and servers of other types,
 // have none.

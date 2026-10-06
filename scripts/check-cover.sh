@@ -31,6 +31,26 @@ is_exception() { # pkg: true when the package (module-relative or full path) is 
   return 1
 }
 
+# Warn (never fail) about exceptions whose "until=YYYY-MM-DD" deadline has passed.
+warn_expired_exceptions() {
+  [ -f "$exceptions_file" ] || return 0
+  local today line date pkg
+  today="$(date -u +%Y-%m-%d)"
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in *until=[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*) ;; *) continue ;; esac
+    date="${line#*until=}"
+    date="${date:0:10}"
+    pkg="$(printf '%s' "${line%%#*}" | tr -d '[:space:]')"
+    if [[ "$today" > "$date" ]]; then
+      echo "check-cover: warning: the coverage exception for ${pkg:-?} expired on $date; add tests and remove it from $exceptions_file" >&2
+      if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+        echo "::warning title=Coverage exception expired::${pkg:-?} expired on $date"
+      fi
+    fi
+  done <"$exceptions_file"
+}
+warn_expired_exceptions
+
 [ -f "$profile" ] || { echo "check-cover: $profile not found" >&2; exit 1; }
 
 report="$(awk '

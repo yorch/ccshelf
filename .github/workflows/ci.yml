@@ -391,19 +391,27 @@ jobs:
             "ccshelf v0.0.0-ci "*) ;;
             *) echo "unexpected version output" >&2; exit 1 ;;
           esac
-      - name: A wrong sha256 pin is refused
-        id: wrong
-        continue-on-error: true
-        uses: ./action
-        with:
-          version: v0.0.0-ci
-          base-url: ${{ steps.release.outputs.base-url }}
-          sha256: "0000000000000000000000000000000000000000000000000000000000000000"
-      - name: The refusal really happened
+      - name: A wrong sha256 pin is refused with the checksum-mismatch message
+        # The Action does not expose its log, so run its install script directly with the
+        # wrong pin and check both the exit status and the exact refusal on stderr.
         env:
-          WRONG_OUTCOME: ${{ steps.wrong.outcome }}
+          INPUT_VERSION: v0.0.0-ci
+          INPUT_BASE_URL: ${{ steps.release.outputs.base-url }}
+          INPUT_SHA256: "0000000000000000000000000000000000000000000000000000000000000000"
+          INPUT_VERIFY_SIGNATURE: "true"
+          INPUT_WORKING_DIRECTORY: "."
+          ACTION_PATH: ${{ github.workspace }}/action
         run: |
-          [ "$WRONG_OUTCOME" = "failure" ] || { echo "wrong pin outcome was $WRONG_OUTCOME, expected failure" >&2; exit 1; }
+          set -uo pipefail
+          errlog="${RUNNER_TEMP}/wrong-pin.err"
+          status=0
+          bash "$ACTION_PATH/scripts/install.sh" >/dev/null 2>"$errlog" || status=$?
+          cat "$errlog"
+          [ "$status" -ne 0 ] || { echo "install with a wrong pin succeeded, expected a refusal" >&2; exit 1; }
+          grep -q "SHA-256 mismatch for .* but the pinned 'sha256' input is 0000000000000000000000000000000000000000000000000000000000000000" "$errlog" || {
+            echo "install failed, but not with the checksum-mismatch message" >&2
+            exit 1
+          }
 
   # Single required status check: fails if any needed job failed or was cancelled.
   ci-ok:

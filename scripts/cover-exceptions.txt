@@ -1,7 +1,9 @@
 # Packages exempt from the per-package coverage floor in scripts/check-cover.sh
 # (the total gate still applies). One module-relative import-path suffix per line;
 # every entry needs a reason, and an entry should be removed once it is no longer true.
+# Optional removal deadline as "until=YYYY-MM-DD" in the comment; check-cover.sh warns
+# (does not fail) once the date has passed. Format: <package>  # until=YYYY-MM-DD reason
 
 cmd/ccshelf  # thin main(); exercised end to end by internal/e2e, which the coverage profile does not attribute
 internal/catalog/catalogtest  # test helper package, only used by other packages' tests
-internal/catalog/site  # JS-driven behavior tests are not counted yet (68.8% when written)
+internal/catalog/site  # until=2026-12-31 JS-driven behavior tests are not counted yet (68.8% when written)
