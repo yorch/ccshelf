@@ -3,11 +3,11 @@ package profile
 import (
 	"bytes"
 	"encoding/json"
-
 	"fmt"
 	"net/url"
 	"sort"
 	"strings"
+	"unicode"
 
 	toml "github.com/pelletier/go-toml/v2"
 
@@ -54,8 +54,9 @@ type registryFile struct {
 }
 
 // LoadRegistry reads and validates an MCP registry file. The schema is closed.
+// The file itself must not be a symlink (B7).
 func LoadRegistry(path string) (map[string]MCPServer, error) {
-	raw, err := readFileLimited(path, MaxRegistrySize)
+	raw, err := readFileNoFollow(path, MaxRegistrySize)
 	if err != nil {
 		return nil, fmt.Errorf("reading MCP registry: %w", err)
 	}
@@ -70,6 +71,11 @@ func ParseRegistry(raw []byte, name string) (map[string]MCPServer, error) {
 		return nil, &ValidationError{File: name, Problems: decodeProblems(err)}
 	}
 	v := &validator{raw: raw}
+	spell, err := spellingProblems(raw, registryFile{}, "")
+	if err != nil {
+		return nil, &ValidationError{File: name, Problems: []Problem{{Message: err.Error()}}}
+	}
+	v.probs = append(v.probs, spell...)
 	names := make([]string, 0, len(rf.Servers))
 	for n := range rf.Servers {
 		names = append(names, n)
@@ -101,8 +107,8 @@ func validateServer(v *validator, name string, s *MCPServer) {
 		return
 	}
 	checkText := func(field, val string) {
-		if strings.ContainsAny(val, "\x00\r\n") {
-			v.add(field, "must not contain control characters")
+		if p := textProblem(val, false); p != "" {
+			v.add(field, "%s", p)
 		}
 		if strings.Contains(val, "${") {
 			v.add(field, "must not contain ${...}: pass secrets through env_refs, never through command, args or url (SR1)")
@@ -157,14 +163,53 @@ func validateServer(v *validator, name string, s *MCPServer) {
 			v.add(f+".env_refs", "only supported for stdio servers")
 		}
 		checkText(f+".url", s.URL)
-		u, err := url.Parse(s.URL)
-		switch {
-		case err != nil || u.Scheme != "https" || u.Host == "":
-			v.add(f+".url", "%q must be an https URL", s.URL)
-		case u.User != nil:
-			v.add(f+".url", "must not embed credentials")
+		validateURL(v, f+".url", s.URL)
+	}
+}
+
+// credentialQueryKeys are query keys that look like they carry a secret.
+var credentialQueryKeys = []string{"token", "key", "secret", "password", "passwd", "auth", "sig", "signature", "api_key", "apikey", "access_token", "credential"}
+
+func looksLikeCredentialKey(k string) bool {
+	k = strings.ToLower(k)
+	for _, c := range credentialQueryKeys {
+		if k == c || strings.Contains(k, c) {
+			return true
 		}
 	}
+	return false
+}
+
+// validateURL checks the url of an http or sse server: lowercase https:// (Go
+// would accept HTTPS:// but the schema does not, so both reject it), a host,
+// no userinfo, whitespace or fragment, and no query string at all (B6): secrets in a URL end up in
+// logs, process lists and the closure digest.
+func validateURL(v *validator, field, raw string) {
+	u, err := url.Parse(raw)
+	switch {
+	case err != nil || !strings.HasPrefix(raw, "https://") || u.Scheme != "https" || u.Host == "":
+		v.add(field, "%q must be an https:// URL (lowercase scheme)", raw)
+		return
+	case u.User != nil:
+		v.add(field, "must not embed credentials")
+		return
+	case strings.IndexFunc(raw, unicode.IsSpace) >= 0:
+		v.add(field, "must not contain whitespace")
+		return
+	case u.Fragment != "" || strings.Contains(raw, "#"):
+		v.add(field, "must not contain a fragment")
+		return
+	}
+	if u.RawQuery == "" && !u.ForceQuery {
+		return
+	}
+	for k := range u.Query() {
+		if looksLikeCredentialKey(k) {
+			v.add(field, "query key %q looks like a credential: never put secrets in a URL; use env_refs (SR1)", k)
+			return
+		}
+	}
+	v.add(field, "must not contain a query string; pass anything secret through env_refs, never through the URL (SR1)")
 }
 
 // ForOS returns the server with the per-OS override for goos ("windows",

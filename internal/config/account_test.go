@@ -30,7 +30,7 @@ func TestResolveAccount(t *testing.T) {
 		{"default", "", "", none, "work", "default", false, true, false, 0, ""},
 		{"env honored over default", "", "", setEnv, "", "env", true, false, false, 1, ""},
 		{"env honored over profile", "", "personal", setEnv, "", "env", true, false, false, 1, ""},
-		{"flag overrides env, flagged", "personal", "", setEnv, "personal", "flag", false, true, true, 0, ""},
+		{"flag overrides env, flagged", "personal", "", setEnv, "personal", "flag", false, true, true, 1, ""},
 		{"unknown flag", "nope", "", none, "", "", false, false, false, 0, "known: personal, work"},
 		{"unknown profile account", "", "nope", none, "", "", false, false, false, 0, "unknown account \"nope\" from profile"},
 		{"nil env uses os", "", "", nil, "work", "default", false, true, false, 0, ""},

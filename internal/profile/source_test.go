@@ -10,6 +10,9 @@ import (
 )
 
 func TestKindString(t *testing.T) {
+	if KindInvalid != 0 || KindInvalid.Valid() || KindInvalid.String() != "invalid" || !KindPersonal.Valid() || !KindProject.Valid() || !KindOrg.Valid() || Kind(4).Valid() || Kind(-1).Valid() {
+		t.Error("Kind zero value must be invalid (B8)")
+	}
 	if KindPersonal.String() != "personal" || KindProject.String() != "project" || KindOrg.String() != "org" || !strings.HasPrefix(Kind(9).String(), "kind(") {
 		t.Error("Kind.String")
 	}
@@ -100,9 +103,11 @@ func TestDirSourceSymlinks(t *testing.T) {
 	if !errors.Is(err, ErrPath) {
 		t.Errorf("escaping symlink: %v", err)
 	}
-	// an in-root symlink resolves but its content must still match its own name
+	// B7: symlinks are refused even when they point inside the source
 	_, err = s.Open("inside")
-	mustErrContain(t, err, "does not match")
+	if !errors.Is(err, ErrPath) {
+		t.Errorf("in-root symlink: %v", err)
+	}
 }
 
 func TestDirSourceNotRegular(t *testing.T) {
@@ -136,8 +141,5 @@ func TestReadConfined(t *testing.T) {
 				t.Errorf("symlink escape: %v", err)
 			}
 		}
-	}
-	if within("/a/b", "/a/bc") || !within("/a/b", "/a/b/c") || !within("/a/b", "/a/b") {
-		t.Error("within")
 	}
 }

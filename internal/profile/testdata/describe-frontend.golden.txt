@@ -18,19 +18,22 @@ MCP:
 Session:
   model: opus
   effort: high
-  prompt: prompts/frontend.md (56 bytes)
+  prompt: prompts/frontend.md (56 bytes, sha256:7a0fc7a74a50)
   inherit_user_settings: true
-  env CCSHELF_VAR_TEAM = platform
-  env FIGMA_TOKEN_REF = op://dev/figma/token
+  env CCSHELF_VAR_TEAM = <redacted>
+  env FIGMA_TOKEN_REF = <redacted>
 Policy:
   on_blocked: warn
 When to use: UI components; visual QA
 Avoid when: infra changes
-Closure: sha256:9f3a1307b4f372d9bbdce24eeff3b89060bc8e62f2c6269a3eae4a0f1feb4a8c
+Warning: MCP server "figma" runs "cmd", a shell or command launcher on windows
+Closure: sha256:2472d063749d8024763d5f6e09ce9ea3a926b68a4697c9f1fea2aa6f570e3fd1
   plugin core@acme 233f1f836bad risky
   plugin design-kit@acme ca0dcd784f5b risky
-  profile base 00c486f9fc6d risky
-  profile frontend 64d43bc57f65 risky
+  profile base 08ba643e090c
+  profile frontend d75dc1fe75d0
+  profile-controls base 08bcef5ac474 risky
+  profile-controls frontend da88cf4a0e7e risky
   prompt prompts/frontend.md 7a0fc7a74a50 risky
   registry docs b5ab98e4d805 risky
   registry figma 084a56a74d6d risky

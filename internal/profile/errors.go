@@ -28,6 +28,9 @@ var (
 	ErrSharedDropsUserLayer = errors.New("a shared profile may not set inherit_user_settings = false (SR3)")
 	// ErrUnknownMCPServer means a profile names a server missing from the registry.
 	ErrUnknownMCPServer = errors.New("unknown MCP server")
+	// ErrInvalidKind means a source reports a Kind that is not personal,
+	// project or org (for example the zero value).
+	ErrInvalidKind = errors.New("source has an invalid kind")
 	// ErrPath means a path escapes its root or is not a regular file.
 	ErrPath = errors.New("unsafe path")
 )

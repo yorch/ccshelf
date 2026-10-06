@@ -14,8 +14,11 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"unicode"
 
 	toml "github.com/pelletier/go-toml/v2"
+
+	"github.com/ccshelf/ccshelf/internal/config/tomlkeys"
 )
 
 // MaxFileSize is the largest config file Load accepts.
@@ -112,20 +115,45 @@ var (
 	accountNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
 	sourceNameRe  = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
 	pluginIDRe    = regexp.MustCompile(`^[A-Za-z0-9._-]+@[A-Za-z0-9._-]+$`)
-	shaRe         = regexp.MustCompile(`^([0-9a-f]{40}|[0-9a-f]{64})$`)
-	refCharsRe    = regexp.MustCompile(`^[A-Za-z0-9._/+-]+$`)
+	shaRe         = regexp.MustCompile(`^([0-9a-fA-F]{40}|[0-9a-fA-F]{64})$`)
+	hexRe         = regexp.MustCompile(`^[0-9a-fA-F]+$`)
+	// tagRe is the syntax of a pinned tag name. It has no "/", so a tag can
+	// never be written as a path such as refs/heads/main.
+	tagRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$`)
+	// refCharsRe is the syntax allowed for a ref when pins are not required.
+	refCharsRe = regexp.MustCompile(`^[A-Za-z0-9._/+-]+$`)
 )
 
 // ValidAccountName reports whether s is a legal account name.
 func ValidAccountName(s string) bool { return accountNameRe.MatchString(s) }
 
-var branchLike = map[string]bool{
-	"main": true, "master": true, "head": true, "develop": true,
-	"development": true, "trunk": true, "dev": true,
+// reservedRefs are names that denote a moving target (a branch, a symbolic
+// ref or a conventional "newest" label) and are never accepted as a pin.
+var reservedRefs = map[string]bool{
+	"head": true, "fetch_head": true, "orig_head": true, "merge_head": true,
+	"main": true, "master": true, "develop": true, "development": true, "dev": true, "trunk": true,
+	"release": true, "latest": true, "stable": true, "next": true, "origin": true,
 }
 
-// ValidatePin reports why ref is not an acceptable pin (a tag or a full
-// commit id), or nil.
+// reservedRefLeaders are leading words that make a ref look like a full ref
+// name (refs/heads/x, heads/x, remotes/origin/x) or a remote-tracking one.
+var reservedRefLeaders = map[string]bool{"refs": true, "heads": true, "remotes": true, "origin": true}
+
+// ValidatePin reports why ref is not an acceptable pin, or nil. A pin is a
+// full commit id (40 hex digits, or 64 for SHA-256 repositories) or a tag name
+// matching ^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$.
+//
+// Rejected: anything containing "/" (so refs/..., heads/..., origin/... can
+// never be spelled), a name whose first word (up to the first . _ + or -) is
+// refs, heads, remotes or origin, the names HEAD, FETCH_HEAD, ORIG_HEAD,
+// MERGE_HEAD, main, master, develop, dev, trunk, release, latest, stable and
+// next in any case, ".." and a trailing "." or ".lock", and hex strings of 7 to
+// 39 digits, which are ambiguous abbreviations of a commit id.
+//
+// This is a syntax gate, not the security boundary. The git source fetches
+// refs/tags/<ref> only, never a branch, and records the peeled commit SHA the
+// tag points to; the trust check compares that SHA, so a tag that moves is
+// detected whatever its name.
 func ValidatePin(ref string) error {
 	if ref == "" {
 		return errors.New("a pinned ref (tag or commit SHA) is required")
@@ -133,12 +161,24 @@ func ValidatePin(ref string) error {
 	if shaRe.MatchString(ref) {
 		return nil
 	}
-	if !refCharsRe.MatchString(ref) || strings.HasPrefix(ref, "-") || strings.Contains(ref, "..") {
-		return fmt.Errorf("ref %q contains characters that are not allowed", ref)
+	if strings.Contains(ref, "/") {
+		return fmt.Errorf("ref %q contains \"/\": a pin is a tag name or a full commit SHA, never a branch or a full ref path", ref)
 	}
-	l := strings.ToLower(ref)
-	if branchLike[l] || strings.HasPrefix(l, "origin/") || strings.HasPrefix(l, "refs/heads/") || strings.HasPrefix(l, "refs/remotes/") {
-		return fmt.Errorf("ref %q looks like a branch; pin a tag or a 40-hex commit SHA", ref)
+	if !tagRe.MatchString(ref) {
+		return fmt.Errorf("ref %q contains characters that are not allowed: a pin is a tag name (letters, digits and . _ + - only) or a full 40-hex commit SHA", ref)
+	}
+	lower := strings.ToLower(ref)
+	first := lower
+	if i := strings.IndexAny(lower, "._+-"); i >= 0 {
+		first = lower[:i]
+	}
+	switch {
+	case reservedRefs[lower] || reservedRefLeaders[first]:
+		return fmt.Errorf("ref %q looks like a branch or a moving reference; pin a tag or a full 40-hex commit SHA", ref)
+	case strings.Contains(ref, ".."), strings.HasSuffix(ref, "."), strings.HasSuffix(lower, ".lock"):
+		return fmt.Errorf("ref %q is not a valid git tag name", ref)
+	case hexRe.MatchString(ref) && len(ref) >= 7 && len(ref) < 40:
+		return fmt.Errorf("ref %q looks like an abbreviated commit id, which is ambiguous; use the full 40-hex SHA or a tag", ref)
 	}
 	return nil
 }
@@ -165,6 +205,19 @@ func Load(path string) (*Config, error) {
 	dec := toml.NewDecoder(bytes.NewReader(raw)).DisallowUnknownFields()
 	if err := dec.Decode(cfg); err != nil {
 		return nil, fmt.Errorf("config %s: %w", path, describeDecode(err))
+	}
+	// The decoder matches keys case-insensitively; only the documented
+	// spelling is accepted, so a reviewer never sees two spellings of one key.
+	issues, err := tomlkeys.Check(raw, Config{})
+	if err != nil {
+		return nil, fmt.Errorf("config %s: %w", path, err)
+	}
+	if len(issues) > 0 {
+		errs := make([]error, len(issues))
+		for i, is := range issues {
+			errs[i] = fmt.Errorf("%s: %s", is.Path, is)
+		}
+		return nil, fmt.Errorf("config %s: %w", path, errors.Join(errs...))
 	}
 	if err := cfg.expand(); err != nil {
 		return nil, fmt.Errorf("config %s: %w", path, err)
@@ -218,7 +271,14 @@ func (c *Config) expand() error {
 // sources the path is inside the repository and is returned unchanged.
 func (s SourceConfig) ResolvedPath() (string, error) {
 	if s.Type == SourceDir {
-		return ExpandPath(s.Path)
+		p, err := ExpandPath(s.Path)
+		if err != nil {
+			return "", err
+		}
+		if !filepath.IsAbs(p) {
+			return "", fmt.Errorf("source path %q expands to the relative path %q; it must be absolute", s.Path, p)
+		}
+		return p, nil
 	}
 	return s.Path, nil
 }
@@ -254,6 +314,8 @@ func (c *Config) Validate() error {
 		case SourceDir:
 			if s.Path == "" {
 				add("%s: dir sources need path", p)
+			} else if err := checkDirSourcePath(s.Path); err != nil {
+				add("%s.path: %v", p, err)
 			}
 			if s.URL != "" || s.Ref != "" || s.Plugin != "" {
 				add("%s: dir sources take only path", p)
@@ -283,6 +345,11 @@ func (c *Config) Validate() error {
 		names = append(names, n)
 	}
 	sort.Strings(names)
+	var defCanon string
+	if def != "" {
+		defCanon = canonicalPath(def)
+	}
+	canon := map[string]string{}
 	for _, n := range names {
 		a := c.Accounts[n]
 		if !accountNameRe.MatchString(n) {
@@ -293,8 +360,27 @@ func (c *Config) Validate() error {
 			add("accounts.%s.config_dir: required", n)
 		case !filepath.IsAbs(a.ConfigDir):
 			add("accounts.%s.config_dir: %q must be an absolute path", n, a.ConfigDir)
-		case def != "" && samePath(a.ConfigDir, def):
-			add("accounts.%s.config_dir: must not be Claude Code's default directory %s", n, def)
+		default:
+			cp := canonicalPath(a.ConfigDir)
+			canon[n] = cp
+			switch {
+			case def != "" && (samePath(a.ConfigDir, def) || samePath(cp, defCanon)):
+				add("accounts.%s.config_dir: must not be Claude Code's default directory %s", n, def)
+			case def != "" && nested(cp, defCanon):
+				add("accounts.%s.config_dir: %q must not contain or sit inside Claude Code's default directory %s", n, a.ConfigDir, def)
+			}
+		}
+	}
+	for i, n := range names {
+		for _, m := range names[i+1:] {
+			a, b := canon[n], canon[m]
+			switch {
+			case a == "" || b == "":
+			case samePath(a, b):
+				add("accounts.%s.config_dir: the same directory as account %q; accounts must not share a configuration directory", m, n)
+			case nested(a, b):
+				add("accounts.%s.config_dir: %q and account %q's directory are nested; accounts must not contain one another", m, c.Accounts[m].ConfigDir, n)
+			}
 		}
 	}
 	if c.DefaultAccount != "" {
@@ -306,20 +392,12 @@ func (c *Config) Validate() error {
 }
 
 func (c *Config) validateGit(p string, s SourceConfig, add func(string, ...any)) {
-	switch {
-	case s.URL == "":
-		add("%s.url: git sources need url", p)
-	case strings.HasPrefix(s.URL, "-"):
-		add("%s.url: must not start with '-'", p)
-	case strings.HasPrefix(strings.ToLower(s.URL), "ext::") || strings.HasPrefix(strings.ToLower(s.URL), "file:"):
-		add("%s.url: the %q transport is not allowed", p, strings.SplitN(s.URL, ":", 2)[0])
-	case strings.ContainsAny(s.URL, "\x00\n\r"):
-		add("%s.url: contains control characters", p)
-	default:
-		if u, err := url.Parse(s.URL); err == nil && u.User != nil {
-			if _, hasPw := u.User.Password(); hasPw {
-				add("%s.url: must not embed a password", p)
-			}
+	if err := ValidateGitURL(s.URL); err != nil {
+		add("%s.url: %v", p, err)
+	}
+	for field, v := range map[string]string{"url": s.URL, "ref": s.Ref, "path": s.Path, "name": s.Name} {
+		if k := credentialMarker(v); k != "" {
+			add("%s.%s: looks like it embeds a credential (%s...); never put tokens in the configuration", p, field, k)
 		}
 	}
 	if s.Plugin != "" {
@@ -330,7 +408,7 @@ func (c *Config) validateGit(p string, s SourceConfig, add func(string, ...any))
 			add("%s.ref: %v", p, err)
 		}
 	} else if s.Ref != "" {
-		if !refCharsRe.MatchString(s.Ref) || strings.HasPrefix(s.Ref, "-") {
+		if !refCharsRe.MatchString(s.Ref) || strings.HasPrefix(s.Ref, "-") || strings.Contains(s.Ref, "..") {
 			add("%s.ref: %q contains characters that are not allowed", p, s.Ref)
 		}
 	}
@@ -360,12 +438,156 @@ func relInside(p string) error {
 	return nil
 }
 
-func samePath(a, b string) bool {
+// credentialMarkers are prefixes of well-known access tokens.
+var credentialMarkers = []string{"ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_", "glpat-", "xoxb-", "xoxp-"}
+
+// credentialMarker returns the token prefix found anywhere in s, or "".
+func credentialMarker(s string) string {
+	l := strings.ToLower(s)
+	for _, m := range credentialMarkers {
+		if strings.Contains(l, m) {
+			return m
+		}
+	}
+	return ""
+}
+
+var (
+	// scpLikeRe is the scp-like git address user@host:path.
+	scpLikeRe = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9.-]*:[A-Za-z0-9._~/][A-Za-z0-9._~/+-]*$`)
+	// helperRe matches git's <helper>:: remote-helper transports (ext::, fd::).
+	helperRe = regexp.MustCompile(`^[A-Za-z0-9+.-]+::`)
+)
+
+// ValidateGitURL reports why url is not an acceptable git source address, or
+// nil. Exactly three forms are accepted: https://host/path (no userinfo of any
+// kind, no query or fragment), ssh://[user@]host/path (a user name only,
+// never a password) and the scp-like user@host:path. Everything else is
+// refused: file: and bare local paths, ext:: fd:: and any <helper>:: transport,
+// git://, http://, a leading "-" (an option for git), whitespace and control
+// characters.
+func ValidateGitURL(raw string) error {
+	switch {
+	case raw == "":
+		return errors.New("git sources need url")
+	case strings.HasPrefix(raw, "-"):
+		return errors.New("must not start with '-'")
+	case strings.IndexFunc(raw, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) || unicode.Is(unicode.Cf, r) }) >= 0:
+		return errors.New("must not contain whitespace, control or invisible formatting characters")
+	case helperRe.MatchString(raw):
+		return fmt.Errorf("the %q remote-helper transport is not allowed", raw[:strings.Index(raw, "::")+2])
+	case strings.HasPrefix(strings.ToLower(raw), "file:"):
+		return errors.New(`the "file:" transport is not allowed`)
+	case strings.HasPrefix(raw, "https://"):
+		u, err := url.Parse(raw)
+		switch {
+		case err != nil || u.Host == "" || u.Hostname() == "":
+			return fmt.Errorf("%q is not a valid https URL", raw)
+		case u.User != nil:
+			return errors.New("an https URL must not contain user information (no user name, password or token)")
+		case u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || strings.Contains(raw, "#"):
+			return errors.New("must not contain a query or a fragment")
+		case u.Path == "" || u.Path == "/":
+			return errors.New("needs a repository path: https://host/path")
+		}
+		return nil
+	case strings.HasPrefix(raw, "ssh://"):
+		u, err := url.Parse(raw)
+		switch {
+		case err != nil || u.Hostname() == "":
+			return fmt.Errorf("%q is not a valid ssh URL", raw)
+		case u.User != nil:
+			if _, hasPw := u.User.Password(); hasPw || strings.Contains(u.User.String(), ":") {
+				return errors.New("an ssh URL must not contain a password")
+			}
+		}
+		switch {
+		case u.RawQuery != "" || u.ForceQuery || strings.Contains(raw, "#"):
+			return errors.New("must not contain a query or a fragment")
+		case u.Path == "" || u.Path == "/":
+			return errors.New("needs a repository path: ssh://[user@]host/path")
+		}
+		return nil
+	case scpLikeRe.MatchString(raw):
+		return nil
+	}
+	return errors.New("must be https://host/path, ssh://[user@]host/path or user@host:path")
+}
+
+// checkDirSourcePath rejects a dir source path that could be satisfied by a
+// relative location. A relative path resolves against the working directory,
+// which for a cloned repository is attacker-controlled, and the source would
+// then be treated as the user's own (personal) directory.
+func checkDirSourcePath(p string) error {
+	switch {
+	case strings.ContainsRune(p, 0):
+		return errors.New("contains a NUL byte")
+	case p == "~" || strings.HasPrefix(p, "~/") || strings.HasPrefix(p, `~\`):
+		return nil
+	case strings.HasPrefix(p, "$"):
+		return nil // expanded later; ResolvedPath requires an absolute result
+	case filepath.IsAbs(p):
+		return nil
+	}
+	return fmt.Errorf("%q must be absolute or start with ~ (a relative path would depend on the working directory)", p)
+}
+
+// samePath reports whether a and b name the same path on the running OS.
+func samePath(a, b string) bool { return samePathFor(runtime.GOOS, a, b) }
+
+// foldsCase reports whether goos has case-insensitive file systems by default.
+func foldsCase(goos string) bool { return goos == "windows" || goos == "darwin" }
+
+func samePathFor(goos, a, b string) bool {
 	a, b = filepath.Clean(a), filepath.Clean(b)
-	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
+	if foldsCase(goos) {
 		return strings.EqualFold(a, b)
 	}
 	return a == b
+}
+
+// nested reports whether one of a and b is a proper ancestor of the other.
+func nested(a, b string) bool { return nestedFor(runtime.GOOS, a, b) }
+
+func nestedFor(goos, a, b string) bool {
+	return strictlyInside(goos, a, b) || strictlyInside(goos, b, a)
+}
+
+// strictlyInside reports whether child is below parent (and not equal to it).
+func strictlyInside(goos, parent, child string) bool {
+	parent, child = filepath.Clean(parent), filepath.Clean(child)
+	if foldsCase(goos) {
+		parent, child = strings.ToLower(parent), strings.ToLower(child)
+	}
+	if parent == child {
+		return false
+	}
+	rel, err := filepath.Rel(parent, child)
+	if err != nil {
+		return false
+	}
+	return rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
+}
+
+// canonicalPath resolves symlinks in p as far as p exists: the longest
+// existing ancestor is passed through EvalSymlinks and the rest is appended
+// unchanged. A directory that does not exist yet therefore still compares
+// correctly with one that does.
+func canonicalPath(p string) string {
+	p = filepath.Clean(p)
+	rest := ""
+	cur := p
+	for {
+		if eval, err := filepath.EvalSymlinks(cur); err == nil {
+			return filepath.Join(eval, rest)
+		}
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			return p
+		}
+		rest = filepath.Join(filepath.Base(cur), rest)
+		cur = parent
+	}
 }
 
 func contains(list []string, s string) bool {

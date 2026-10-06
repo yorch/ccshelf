@@ -4,17 +4,23 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"sort"
 )
 
 // Closure item kinds.
 const (
-	ItemProfile  = "profile"
-	ItemRegistry = "registry"
-	ItemPrompt   = "prompt"
-	ItemPlugin   = "plugin"
-	ItemSource   = "source"
+	// ItemProfile covers a profile's identity: name, description, owner,
+	// status, when_to_use, avoid_when, model and effort.
+	ItemProfile = "profile"
+	// ItemProfileControls covers everything in a profile that changes what a
+	// session can do. It is always Risky.
+	ItemProfileControls = "profile-controls"
+	ItemRegistry        = "registry"
+	ItemPrompt          = "prompt"
+	ItemPlugin          = "plugin"
+	ItemSource          = "source"
 )
 
 // ClosureItem is one thing the trust decision covers.
@@ -26,8 +32,8 @@ type ClosureItem struct {
 	Name string
 	// Digest is a hex SHA-256 of the item's canonical content.
 	Digest string
-	// Risky marks items whose change needs review: registry entries, prompts
-	// and plugin includes, and profiles that set session.env.
+	// Risky marks items whose change needs review: profile controls, registry
+	// entries, prompts and plugin includes.
 	Risky bool
 }
 
@@ -54,11 +60,85 @@ func PortableSourceID(s Source) string {
 	return id
 }
 
+// profileIdentity is the canonical form of the descriptive part of a manifest.
+type profileIdentity struct {
+	Name         string   `json:"name"`
+	Description  string   `json:"description"`
+	Owner        string   `json:"owner"`
+	Status       string   `json:"status"`
+	SupersededBy string   `json:"superseded_by"`
+	WhenToUse    []string `json:"when_to_use"`
+	AvoidWhen    []string `json:"avoid_when"`
+	Model        string   `json:"session.model"`
+	Effort       string   `json:"session.effort"`
+}
+
+// profileControls is the canonical form of everything in a manifest that
+// changes what a session can do. Set-like lists are sorted so that reordering
+// a list does not change the digest; extends keeps its order because it
+// decides the merge order.
+type profileControls struct {
+	Account                string            `json:"account"`
+	Extends                []string          `json:"extends"`
+	PluginMode             string            `json:"plugins.mode"`
+	PluginExclude          []string          `json:"plugins.exclude"`
+	PluginInclude          []string          `json:"plugins.include"`
+	SkillsOff              []string          `json:"skills.off"`
+	SkillsNameOnly         []string          `json:"skills.name_only"`
+	MCPServers             []string          `json:"mcp.servers"`
+	MCPStrict              *bool             `json:"mcp.strict"`
+	MCPClaudeAIConnectors  string            `json:"mcp.claudeai_connectors"`
+	InheritUserSettings    *bool             `json:"session.inherit_user_settings"`
+	Env                    map[string]string `json:"session.env"`
+	AppendSystemPromptFile string            `json:"session.append_system_prompt_file"`
+	OnBlocked              string            `json:"policy.on_blocked"`
+}
+
+func sortedCopy(s []string) []string {
+	out := append([]string{}, s...)
+	sort.Strings(out)
+	return out
+}
+
+// profileDigests returns the digests of the identity and controls items of m.
+func profileDigests(m *Manifest) (identity, controls string, err error) {
+	id, err := json.Marshal(profileIdentity{
+		Name: m.Name, Description: m.Description, Owner: m.Owner, Status: m.Status, SupersededBy: m.SupersededBy,
+		WhenToUse: append([]string{}, m.WhenToUse...), AvoidWhen: append([]string{}, m.AvoidWhen...),
+		Model: m.Session.Model, Effort: m.Session.Effort,
+	})
+	if err != nil {
+		return "", "", fmt.Errorf("encoding profile %q: %w", m.Name, err)
+	}
+	env := m.Session.Env
+	if env == nil {
+		env = map[string]string{}
+	}
+	ctl, err := json.Marshal(profileControls{
+		Account: m.Account, Extends: append([]string{}, m.Extends...),
+		PluginMode: m.Plugins.Mode, PluginExclude: sortedCopy(m.Plugins.Exclude), PluginInclude: sortedCopy(m.Plugins.Include),
+		SkillsOff: sortedCopy(m.Skills.Off), SkillsNameOnly: sortedCopy(m.Skills.NameOnly),
+		MCPServers: sortedCopy(m.MCP.Servers), MCPStrict: m.MCP.Strict, MCPClaudeAIConnectors: m.MCP.ClaudeAIConnectors,
+		InheritUserSettings: m.Session.InheritUserSettings, Env: env,
+		AppendSystemPromptFile: m.Session.AppendSystemPromptFile, OnBlocked: m.Policy.OnBlocked,
+	})
+	if err != nil {
+		return "", "", fmt.Errorf("encoding profile %q: %w", m.Name, err)
+	}
+	return digest(id), digest(ctl), nil
+}
+
 func buildClosure(res *Resolved) (Closure, error) {
 	var items []ClosureItem
 	seenSrc := map[string]bool{}
 	for _, f := range res.Chain {
-		items = append(items, ClosureItem{Kind: ItemProfile, Name: f.Name, Digest: digest(normalizeNewlines(f.Raw)), Risky: len(f.Manifest.Session.Env) > 0})
+		id, ctl, err := profileDigests(f.Manifest)
+		if err != nil {
+			return Closure{}, err
+		}
+		items = append(items,
+			ClosureItem{Kind: ItemProfile, Name: f.Name, Digest: id},
+			ClosureItem{Kind: ItemProfileControls, Name: f.Name, Digest: ctl, Risky: true})
 		if !seenSrc[f.Source.ID()] {
 			seenSrc[f.Source.ID()] = true
 			p := PortableSourceID(f.Source)
@@ -78,6 +158,14 @@ func buildClosure(res *Resolved) (Closure, error) {
 	for _, id := range res.Merged.Plugins.Include {
 		items = append(items, ClosureItem{Kind: ItemPlugin, Name: id, Digest: digest([]byte(id)), Risky: true})
 	}
+	sortItems(items)
+	return Closure{Hash: hashItems(items), Items: items}, nil
+}
+
+// sortItems puts closure items in canonical order: by kind, then name, then
+// digest, so that items sharing kind and name (two sources with the same
+// portable id and different commits) still have one fixed order.
+func sortItems(items []ClosureItem) {
 	sort.Slice(items, func(i, j int) bool {
 		a, b := items[i], items[j]
 		if a.Kind != b.Kind {
@@ -88,7 +176,6 @@ func buildClosure(res *Resolved) (Closure, error) {
 		}
 		return a.Digest < b.Digest
 	})
-	return Closure{Hash: hashItems(items), Items: items}, nil
 }
 
 func hashItems(items []ClosureItem) string {
@@ -98,7 +185,7 @@ func hashItems(items []ClosureItem) string {
 		h.Write(n[:binary.PutUvarint(n[:], uint64(len(s)))])
 		h.Write([]byte(s))
 	}
-	put("ccshelf-closure-v1")
+	put("ccshelf-closure-v2")
 	put(fmt.Sprint(len(items)))
 	for _, it := range items {
 		put(it.Kind)

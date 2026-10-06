@@ -49,6 +49,29 @@ func check(s node, root node, v any, path string) []string {
 			add("%v is not in enum %v", v, en)
 		}
 	}
+	if c, ok := s["const"]; ok && c != v {
+		add("%v is not the constant %v", v, c)
+	}
+	if all, ok := s["allOf"].([]any); ok {
+		for _, sub := range all {
+			errs = append(errs, check(sub.(node), root, v, path)...)
+		}
+	}
+	if anyOf, ok := s["anyOf"].([]any); ok {
+		matched := false
+		for _, sub := range anyOf {
+			if len(check(sub.(node), root, v, path)) == 0 {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			add("%v matches none of the anyOf alternatives", v)
+		}
+	}
+	if n, ok := s["not"].(node); ok && len(check(n, root, v, path)) == 0 {
+		add("%v matches a schema it must not match", v)
+	}
 	if t, ok := s["type"].(string); ok && !typeOK(t, v) {
 		add("want %s, got %T", t, v)
 		return errs
@@ -96,9 +119,7 @@ func check(s node, root node, v any, path string) []string {
 		}
 		for _, k := range keys {
 			if pn, ok := s["propertyNames"].(node); ok {
-				if p, ok := pn["pattern"].(string); ok && !regexp.MustCompile(p).MatchString(k) {
-					add("property name %q does not match %s", k, p)
-				}
+				errs = append(errs, check(pn, root, k, path+"{"+k+"}")...)
 			}
 			sub, known := props[k]
 			switch {

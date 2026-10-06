@@ -53,7 +53,7 @@ var invalidWant = map[string]string{
 	"top-env":              "not allowed in a profile: SR1",
 	"mcp-command":          "SR1",
 	"mcp-definition":       "MCP definitions are not allowed in a profile: SR1",
-	"unknown-key":          "colour",
+	"unknown-key":          "shade",
 	"unknown-nested":       "plugins.mod",
 	"syntax":               "line",
 	"no-name":              "name: required",

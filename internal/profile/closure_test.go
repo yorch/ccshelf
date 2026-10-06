@@ -64,7 +64,9 @@ func TestClosureChangesAndRisk(t *testing.T) {
 		"plugin": func(f map[string]string) {
 			f["profiles/a.toml"] = strings.Replace(f["profiles/a.toml"], "p@m", "q@m", 1)
 		},
-		"profile text": func(f map[string]string) { f["profiles/a.toml"] += "# comment\n" },
+		"profile description": func(f map[string]string) {
+			f["profiles/a.toml"] = strings.Replace(f["profiles/a.toml"], "name = \"a\"\n", "name = \"a\"\ndescription = \"changed\"\n", 1)
+		},
 	}
 	for name, fn := range mutate {
 		t.Run(name, func(t *testing.T) {
@@ -80,20 +82,13 @@ func TestClosureChangesAndRisk(t *testing.T) {
 	for _, it := range base.Items {
 		risky[it.Kind] = risky[it.Kind] || it.Risky
 	}
-	for _, k := range []string{ItemRegistry, ItemPrompt, ItemPlugin} {
+	for _, k := range []string{ItemRegistry, ItemPrompt, ItemPlugin, ItemProfileControls} {
 		if !risky[k] {
 			t.Errorf("%s items must be risky", k)
 		}
 	}
 	if risky[ItemProfile] || risky[ItemSource] {
-		t.Errorf("profile and source items are not risky unless env is set: %v", risky)
-	}
-	withEnv := baseFiles()
-	withEnv["profiles/a.toml"] += "[session.env]\nCCSHELF_VAR_A = \"1\"\n"
-	for _, it := range closureFor(t, withEnv, KindOrg, "a").Closure.Items {
-		if it.Kind == ItemProfile && !it.Risky {
-			t.Error("profile with env must be risky")
-		}
+		t.Errorf("profile identity and source items are not risky: %v", risky)
 	}
 }
 

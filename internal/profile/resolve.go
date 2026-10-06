@@ -51,6 +51,9 @@ type resolver struct {
 
 // Resolve finds the named profile, follows extends and merges the chain.
 func Resolve(name string, sources []Source, opt ResolveOptions) (*Resolved, error) {
+	if err := checkKinds(sources); err != nil {
+		return nil, err
+	}
 	r := &resolver{sources: sources, opt: opt, cache: map[string]*File{}, done: map[string]bool{}, regs: map[string]map[string]MCPServer{}}
 	req, err := r.lookup(name)
 	if err != nil {
@@ -59,7 +62,7 @@ func Resolve(name string, sources []Source, opt ResolveOptions) (*Resolved, erro
 	if err := r.visit(req, nil); err != nil {
 		return nil, err
 	}
-	if err := r.checkKinds(req); err != nil {
+	if err := r.checkOrigins(req); err != nil {
 		return nil, err
 	}
 	res := &Resolved{Name: name, Kind: req.Source.Kind(), Chain: r.chain}
@@ -73,6 +76,19 @@ func Resolve(name string, sources []Source, opt ResolveOptions) (*Resolved, erro
 	}
 	res.Closure = closure
 	return res, nil
+}
+
+// checkKinds rejects sources whose Kind is not one of the real kinds (B8).
+func checkKinds(sources []Source) error {
+	for _, s := range sources {
+		if s == nil {
+			return fmt.Errorf("%w: nil source", ErrInvalidKind)
+		}
+		if !s.Kind().Valid() {
+			return fmt.Errorf("%w: source %s reports %s", ErrInvalidKind, s.ID(), s.Kind())
+		}
+	}
+	return nil
 }
 
 func (r *resolver) warn(format string, a ...any) {
@@ -187,8 +203,8 @@ func (r *resolver) visit(f *File, stack []string) error {
 	return nil
 }
 
-// checkKinds enforces the SR2 and SR3 rules per origin.
-func (r *resolver) checkKinds(req *File) error {
+// checkOrigins enforces the SR2 and SR3 rules per origin.
+func (r *resolver) checkOrigins(req *File) error {
 	for _, f := range r.chain {
 		m := f.Manifest
 		switch f.Source.Kind() {
@@ -261,7 +277,10 @@ func (r *resolver) registry(s Source) (map[string]MCPServer, error) {
 		return reg, nil
 	}
 	reg := map[string]MCPServer{}
-	if root := s.Root(); root != "" {
+	if root := s.Root(); root != "" && auxAllowed(s) {
+		if err := checkRootDir(root); err != nil {
+			return nil, fmt.Errorf("MCP registry of %s: %w", s.ID(), err)
+		}
 		b, resolved, err := readConfined(root, registryRel, MaxRegistrySize)
 		switch {
 		case err == nil:
@@ -276,6 +295,15 @@ func (r *resolver) registry(s Source) (map[string]MCPServer, error) {
 	}
 	r.regs[s.ID()] = reg
 	return reg, nil
+}
+
+// auxAllowed reports whether prompts/ and mcp/registry.toml may be read from
+// the source's root. Sources that do not say are assumed to follow the layout.
+func auxAllowed(s Source) bool {
+	if a, ok := s.(interface{ auxAllowed() bool }); ok {
+		return a.auxAllowed()
+	}
+	return true
 }
 
 func (r *resolver) merge(res *Resolved, req *File) error {
@@ -298,27 +326,27 @@ func (r *resolver) merge(res *Resolved, req *File) error {
 			r.warn("profile %s is deprecated; use %s", f.Name, c.SupersededBy)
 		}
 		for _, id := range c.Plugins.Include {
-			if by, ok := excAt[id]; ok {
+			if by, ok := excAt[strings.ToLower(id)]; ok {
 				r.warn("profile %s includes %s but %s excludes it; exclusion wins", f.Name, id, by)
 			}
 			inc = appendUnique(inc, id)
 		}
 		for _, id := range c.Plugins.Exclude {
 			exc = appendUnique(exc, id)
-			if _, ok := excAt[id]; !ok {
-				excAt[id] = f.Name
+			if _, ok := excAt[strings.ToLower(id)]; !ok {
+				excAt[strings.ToLower(id)] = f.Name
 			}
 		}
 		for _, s := range c.Skills.NameOnly {
-			if by, ok := offAt[s]; ok {
+			if by, ok := offAt[strings.ToLower(s)]; ok {
 				r.warn("profile %s sets skill %s to name-only but %s turns it off; off wins", f.Name, s, by)
 			}
 			nameOnly = appendUnique(nameOnly, s)
 		}
 		for _, s := range c.Skills.Off {
 			off = appendUnique(off, s)
-			if _, ok := offAt[s]; !ok {
-				offAt[s] = f.Name
+			if _, ok := offAt[strings.ToLower(s)]; !ok {
+				offAt[strings.ToLower(s)] = f.Name
 			}
 		}
 		for _, s := range c.MCP.Servers {
@@ -359,10 +387,10 @@ func (r *resolver) merge(res *Resolved, req *File) error {
 			m.Account = c.Account
 		}
 	}
-	m.Plugins.Include = subtract(inc, exc)
+	m.Plugins.Include = r.subtractFold("plugin", inc, exc)
 	m.Plugins.Exclude = exc
 	m.Skills.Off = off
-	m.Skills.NameOnly = subtract(nameOnly, off)
+	m.Skills.NameOnly = r.subtractFold("skill", nameOnly, off)
 	m.MCP.Servers = servers
 	if len(env) > 0 {
 		m.Session.Env = env
@@ -372,6 +400,9 @@ func (r *resolver) merge(res *Resolved, req *File) error {
 
 	if req.Source.Kind() != KindPersonal && !m.InheritsUserSettings() {
 		return fmt.Errorf("%w: profile %q", ErrSharedDropsUserLayer, req.Name)
+	}
+	if !m.InheritsUserSettings() {
+		r.warn("profile %s sets inherit_user_settings = false: user settings, user plugins, user skills, user MCP, hooks and model are not loaded", req.Name)
 	}
 
 	res.MCP = map[string]MCPServer{}
@@ -397,14 +428,27 @@ func (r *resolver) merge(res *Resolved, req *File) error {
 			}
 		}
 		res.MCP[name] = found[0]
+		for _, w := range MCPWarnings(found[0]) {
+			r.warn("%s", w)
+		}
 	}
 
 	if promptFrom != nil {
+		p := m.Session.AppendSystemPromptFile
+		if err := CheckPromptPath(p); err != nil {
+			return fmt.Errorf("session.append_system_prompt_file of %s: %w: %w", promptFrom.Name, ErrPath, err)
+		}
 		root := promptFrom.Source.Root()
 		if root == "" {
-			return fmt.Errorf("%w: source %s has no root for %s", ErrPath, promptFrom.Source.ID(), m.Session.AppendSystemPromptFile)
+			return fmt.Errorf("%w: source %s has no root for %s", ErrPath, promptFrom.Source.ID(), p)
 		}
-		b, _, err := readConfined(root, m.Session.AppendSystemPromptFile, MaxPromptSize)
+		if !auxAllowed(promptFrom.Source) {
+			return fmt.Errorf("%w: source %s keeps its profiles directly in its root (the folder is not named \"profiles\"), so it has no %s/ folder for %s", ErrPath, promptFrom.Source.ID(), PromptDir, p)
+		}
+		if err := checkRootDir(root); err != nil {
+			return fmt.Errorf("session.append_system_prompt_file of %s: %w", promptFrom.Name, err)
+		}
+		b, _, err := readConfined(root, p, MaxPromptSize)
 		if err != nil {
 			return fmt.Errorf("session.append_system_prompt_file of %s: %w", promptFrom.Name, err)
 		}
@@ -432,10 +476,25 @@ func appendUnique(list []string, s string) []string {
 	return append(list, s)
 }
 
-func subtract(a, b []string) []string {
+// subtractFold returns the entries of a that are not in b, comparing ignoring
+// case, and warns when an entry was removed under a different spelling. Claude
+// Code's own matching of plugin and skill ids is unverified, so the removal is
+// deliberately conservative: an exclusion may never be defeated by changing
+// the case of an id (B12).
+func (r *resolver) subtractFold(what string, a, b []string) []string {
 	var out []string
 	for _, s := range a {
-		if !contains(b, s) {
+		removed := false
+		for _, x := range b {
+			if !strings.EqualFold(s, x) {
+				continue
+			}
+			removed = true
+			if s != x {
+				r.warn("%s %s is removed because %s is excluded: ids are compared ignoring case", what, s, x)
+			}
+		}
+		if !removed {
 			out = append(out, s)
 		}
 	}

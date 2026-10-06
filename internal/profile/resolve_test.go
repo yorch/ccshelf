@@ -413,10 +413,10 @@ func TestPromptRules(t *testing.T) {
 				t.Errorf("symlink escape: %v", err)
 			}
 		}
-		// symlink that stays inside the root is fine
+		// B7: a symlink is refused even when it stays inside the root
 		if err := os.Symlink(filepath.Join(root, "prompts", "ok.md"), filepath.Join(root, "prompts", "alias.md")); err == nil {
 			_ = os.WriteFile(filepath.Join(root, "profiles", "alias.toml"), []byte(strings.Replace(prof("prompts/alias.md"), `"a"`, `"alias"`, 1)), 0o600)
-			if _, err := Resolve("alias", []Source{s}, ResolveOptions{}); err != nil {
+			if _, err := Resolve("alias", []Source{s}, ResolveOptions{}); !errors.Is(err, ErrPath) {
 				t.Errorf("inside symlink: %v", err)
 			}
 		}
@@ -439,7 +439,7 @@ func (f fakeSource) Open(name string) (*File, error) {
 }
 
 func TestPromptNoRoot(t *testing.T) {
-	root := mk(t, map[string]string{"profiles/a.toml": "name = \"a\"\n[session]\nappend_system_prompt_file = \"p.md\"\n"})
+	root := mk(t, map[string]string{"profiles/a.toml": "name = \"a\"\n[session]\nappend_system_prompt_file = \"prompts/p.md\"\n"})
 	_, err := Resolve("a", []Source{fakeSource{src(KindPersonal, root)}}, ResolveOptions{})
 	if !errors.Is(err, ErrPath) {
 		t.Errorf("err = %v", err)
@@ -498,13 +498,13 @@ func TestDeprecatedWarning(t *testing.T) {
 }
 
 func TestEnvDenialsAtParse(t *testing.T) {
-	for _, name := range []string{"FOO", "MY_VAR", "ANTHROPIC_BASE_URL", "HTTPS_PROXY", "NODE_OPTIONS", "PATH"} {
+	for _, name := range []string{"CCSHELF_PROFILE", "FOO", "MY_VAR", "ANTHROPIC_BASE_URL", "HTTPS_PROXY", "NODE_OPTIONS", "PATH"} {
 		raw := fmt.Sprintf("name = \"x\"\n[session.env]\n%s = \"v\"\n", name)
 		if _, err := Parse([]byte(raw), ""); err == nil {
 			t.Errorf("%s accepted", name)
 		}
 	}
-	for _, name := range []string{"FIGMA_TOKEN_REF", "CCSHELF_VAR_X", "CCSHELF_PROFILE"} {
+	for _, name := range []string{"FIGMA_TOKEN_REF", "CCSHELF_VAR_X"} {
 		raw := fmt.Sprintf("name = \"x\"\n[session.env]\n%s = \"v\"\n", name)
 		if _, err := Parse([]byte(raw), ""); err != nil {
 			t.Errorf("%s rejected: %v", name, err)

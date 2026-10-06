@@ -193,26 +193,26 @@ func TestLoadInvalid(t *testing.T) {
 		{"bad color", "[ui]\ncolor = \"red\"\n", "ui.color"},
 		{"bad interactive", "[ui]\ninteractive = \"always\"\n", "ui.interactive"},
 		{"dir no path", "[[sources]]\ntype = \"dir\"\n", "need path"},
-		{"dir extra", "[[sources]]\ntype = \"dir\"\npath = \"x\"\nurl = \"u\"\n", "only path"},
+		{"dir extra", "[[sources]]\ntype = \"dir\"\npath = \"x\"\nurl = \"https://h.example/r.git\"\n", "only path"},
 		{"bad type", "[[sources]]\ntype = \"ftp\"\n", "sources[0].type"},
-		{"bad source name", "[[sources]]\ntype = \"dir\"\npath = \"x\"\nname = \"Bad Name\"\n", "name"},
-		{"git no ref", "[[sources]]\ntype = \"git\"\nurl = \"u\"\n", "pinned ref"},
-		{"git main", "[[sources]]\ntype = \"git\"\nurl = \"u\"\nref = \"main\"\n", "looks like a branch"},
-		{"git MASTER", "[[sources]]\ntype = \"git\"\nurl = \"u\"\nref = \"MASTER\"\n", "looks like a branch"},
-		{"git HEAD", "[[sources]]\ntype = \"git\"\nurl = \"u\"\nref = \"HEAD\"\n", "looks like a branch"},
-		{"git origin/x", "[[sources]]\ntype = \"git\"\nurl = \"u\"\nref = \"origin/x\"\n", "branch"},
-		{"git dash ref", "[[sources]]\ntype = \"git\"\nurl = \"u\"\nref = \"--upload-pack=x\"\n", "not allowed"},
-		{"git dotdot ref", "[[sources]]\ntype = \"git\"\nurl = \"u\"\nref = \"a..b\"\n", "not allowed"},
+		{"bad source name", "[[sources]]\ntype = \"dir\"\npath = \"/x\"\nname = \"Bad Name\"\n", "name"},
+		{"git no ref", "[[sources]]\ntype = \"git\"\nurl = \"https://h.example/r.git\"\n", "pinned ref"},
+		{"git main", "[[sources]]\ntype = \"git\"\nurl = \"https://h.example/r.git\"\nref = \"main\"\n", "looks like a branch"},
+		{"git MASTER", "[[sources]]\ntype = \"git\"\nurl = \"https://h.example/r.git\"\nref = \"MASTER\"\n", "looks like a branch"},
+		{"git HEAD", "[[sources]]\ntype = \"git\"\nurl = \"https://h.example/r.git\"\nref = \"HEAD\"\n", "looks like a branch"},
+		{"git origin/x", "[[sources]]\ntype = \"git\"\nurl = \"https://h.example/r.git\"\nref = \"origin/x\"\n", "branch"},
+		{"git dash ref", "[[sources]]\ntype = \"git\"\nurl = \"https://h.example/r.git\"\nref = \"--upload-pack=x\"\n", "not allowed"},
+		{"git dotdot ref", "[[sources]]\ntype = \"git\"\nurl = \"https://h.example/r.git\"\nref = \"a..b\"\n", "not a valid git tag name"},
 		{"git no url", "[[sources]]\ntype = \"git\"\nref = \"v1\"\n", "need url"},
 		{"git dash url", "[[sources]]\ntype = \"git\"\nurl = \"-oProxyCommand=x\"\nref = \"v1\"\n", "must not start"},
-		{"git ext url", "[[sources]]\ntype = \"git\"\nurl = \"ext::sh -c x\"\nref = \"v1\"\n", "transport"},
+		{"git ext url", "[[sources]]\ntype = \"git\"\nurl = \"ext::sh-c-x\"\nref = \"v1\"\n", "transport"},
 		{"git file url", "[[sources]]\ntype = \"git\"\nurl = \"file:///x\"\nref = \"v1\"\n", "transport"},
 		{"git password", "[[sources]]\ntype = \"git\"\nurl = \"https://u:p@h/x.git\"\nref = \"v1\"\n", "password"},
-		{"git abs path", "[[sources]]\ntype = \"git\"\nurl = \"u\"\nref = \"" + sha + "\"\npath = \"/etc\"\n", "relative"},
-		{"git dotdot path", "[[sources]]\ntype = \"git\"\nurl = \"u\"\nref = \"v1\"\npath = \"a/../../b\"\n", ".."},
-		{"git backslash path", "[[sources]]\ntype = \"git\"\nurl = \"u\"\nref = \"v1\"\npath = \"a\\\\b\"\n", "forward"},
-		{"git drive path", "[[sources]]\ntype = \"git\"\nurl = \"u\"\nref = \"v1\"\npath = \"C:x\"\n", "relative"},
-		{"git plugin field", "[[sources]]\ntype = \"git\"\nurl = \"u\"\nref = \"v1\"\nplugin = \"a@b\"\n", "do not take plugin"},
+		{"git abs path", "[[sources]]\ntype = \"git\"\nurl = \"https://h.example/r.git\"\nref = \"" + sha + "\"\npath = \"/etc\"\n", "relative"},
+		{"git dotdot path", "[[sources]]\ntype = \"git\"\nurl = \"https://h.example/r.git\"\nref = \"v1\"\npath = \"a/../../b\"\n", ".."},
+		{"git backslash path", "[[sources]]\ntype = \"git\"\nurl = \"https://h.example/r.git\"\nref = \"v1\"\npath = \"a\\\\b\"\n", "forward"},
+		{"git drive path", "[[sources]]\ntype = \"git\"\nurl = \"https://h.example/r.git\"\nref = \"v1\"\npath = \"C:x\"\n", "relative"},
+		{"git plugin field", "[[sources]]\ntype = \"git\"\nurl = \"https://h.example/r.git\"\nref = \"v1\"\nplugin = \"a@b\"\n", "do not take plugin"},
 		{"plugin bad", "[[sources]]\ntype = \"plugin\"\nplugin = \"nomarket\"\n", "name@marketplace"},
 		{"plugin extra", "[[sources]]\ntype = \"plugin\"\nplugin = \"a@b\"\nurl = \"x\"\n", "only plugin"},
 		{"plugin bad path", "[[sources]]\ntype = \"plugin\"\nplugin = \"a@b\"\npath = \"../x\"\n", ".."},
@@ -244,7 +244,7 @@ func TestLoadAccountDefaultDir(t *testing.T) {
 
 func TestLoadRelaxedPin(t *testing.T) {
 	isolate(t)
-	body := "[trust]\nrequire_pin = false\n[[sources]]\ntype = \"git\"\nurl = \"u\"\n"
+	body := "[trust]\nrequire_pin = false\n[[sources]]\ntype = \"git\"\nurl = \"https://h.example/r.git\"\n"
 	if _, err := Load(write(t, body)); err != nil {
 		t.Fatal(err)
 	}
@@ -277,7 +277,7 @@ func TestSaveRoundTrip(t *testing.T) {
 	cfg := Default()
 	cfg.DefaultAccount = "work"
 	cfg.Accounts = map[string]Account{"work": {ConfigDir: abs}}
-	cfg.Sources = []SourceConfig{{Type: "dir", Path: "p"}, {Type: "git", URL: "u", Ref: "v1", Path: "profiles"}}
+	cfg.Sources = []SourceConfig{{Type: "dir", Path: "~/p"}, {Type: "git", URL: "https://h.example/r.git", Ref: "v1", Path: "profiles"}}
 	cfg.Trust.TrustProjectProfiles = true
 	path := filepath.Join(t.TempDir(), "sub", "ccshelf", "config.toml")
 	if err := Save(path, cfg); err != nil {
@@ -350,7 +350,7 @@ func TestSaveRefusesSymlink(t *testing.T) {
 }
 
 func TestValidatePin(t *testing.T) {
-	for _, ok := range []string{"v1.2.3", "release/2026.10", strings.Repeat("0", 40), strings.Repeat("f", 64), "2026-10-01"} {
+	for _, ok := range []string{"v1.2.3", strings.Repeat("0", 40), strings.Repeat("f", 64), "2026-10-01"} {
 		if err := ValidatePin(ok); err != nil {
 			t.Errorf("%q rejected: %v", ok, err)
 		}

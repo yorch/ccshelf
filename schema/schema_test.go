@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -28,7 +29,7 @@ func tomlName(f reflect.StructField) string {
 }
 
 func elem(t reflect.Type) reflect.Type {
-	for t.Kind() == reflect.Ptr {
+	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 	return t
@@ -207,16 +208,47 @@ func TestProfileExamples(t *testing.T) {
 		}
 	}
 	// invalid fixtures that the schema is expected to reject
-	for _, n := range []string{"top-permissions", "top-hooks", "top-apikeyhelper", "top-allowedmcp", "top-deniedmcp", "top-disablehooks",
+	for _, n := range []string{
+		"top-permissions", "top-hooks", "top-apikeyhelper", "top-allowedmcp", "top-deniedmcp", "top-disablehooks",
 		"top-statusline", "top-env", "mcp-command", "mcp-definition", "unknown-key", "unknown-nested", "no-name", "bad-name", "bad-status",
 		"bad-plugin-id", "dup-plugin", "bad-mode", "bad-skill", "bad-effort", "bad-model", "env-denied", "env-anthropic",
-		"bad-connectors", "bad-server-name", "bad-onblocked", "empty-hint", "extends-bad", "wrong-type", "account-path", "account-tilde"} {
+		"bad-connectors", "bad-server-name", "bad-onblocked", "empty-hint", "extends-bad", "wrong-type", "account-path", "account-tilde",
+		"prompt-abs", "prompt-backslash", "prompt-drive", "prompt-dotdot",
+	} {
 		b, err := os.ReadFile("../internal/profile/testdata/invalid/" + n + ".toml")
 		if err != nil {
 			t.Fatal(err)
 		}
 		if errs := check(s, s, decode(t, string(b)), "$"); len(errs) == 0 {
 			t.Errorf("%s should be rejected by the schema", n)
+		}
+	}
+}
+
+func TestProfilePromptPathPattern(t *testing.T) {
+	s := parseSchema(Profile())
+	doc := func(p string) map[string]any {
+		return map[string]any{"name": "a", "session": map[string]any{"append_system_prompt_file": p}}
+	}
+	for _, ok := range []string{"prompts/a.md", "prompts/sub/a.md", "prompts/a.b.md"} {
+		if errs := check(s, s, doc(ok), "$"); len(errs) > 0 {
+			t.Errorf("%q: %v", ok, errs)
+		}
+	}
+	for _, bad := range []string{".ssh/id_ed25519", "../x", "prompts/../x", "prompts/.hidden", "prompts/.git/x", "other/a.md", "a.md", "/etc/passwd", "prompts", "prompts/", `prompts\a.md`} {
+		if errs := check(s, s, doc(bad), "$"); len(errs) == 0 {
+			t.Errorf("%q accepted by the schema", bad)
+		}
+	}
+}
+
+func TestSchemaAndGoAgreeOnPromptPaths(t *testing.T) {
+	s := parseSchema(Profile())
+	for _, p := range []string{"prompts/a.md", "prompts/sub/a.md", ".ssh/id_ed25519", "../x", "prompts/.hidden", "other/a.md", "a.md", "/etc/passwd", "prompts", `prompts\a.md`, "prompts//a.md"} {
+		schemaOK := len(check(s, s, map[string]any{"name": "a", "session": map[string]any{"append_system_prompt_file": p}}, "$")) == 0
+		_, err := profile.Parse([]byte("name = \"a\"\n[session]\nappend_system_prompt_file = "+strconv.Quote(p)+"\n"), "")
+		if schemaOK != (err == nil) {
+			t.Errorf("%q: schema accepts = %v, Go accepts = %v (%v)", p, schemaOK, err == nil, err)
 		}
 	}
 }
@@ -255,6 +287,15 @@ func TestConfigExamples(t *testing.T) {
 
 func TestRegistryExamples(t *testing.T) {
 	s := parseSchema(MCPRegistry())
+	validDocs := []string{
+		"[servers.a]\ncommand = \"x\"\nenv_refs = [\"CCSHELF_PROFILE\", \"FIGMA_TOKEN_REF\", \"CCSHELF_VAR_X\"]\n",
+		"[servers.a]\ntype = \"sse\"\nurl = \"https://x.example:8443/a/b\"\n",
+	}
+	for _, v := range validDocs {
+		if errs := check(s, s, decode(t, v), "$"); len(errs) > 0 {
+			t.Errorf("%q: %v", v, errs)
+		}
+	}
 	b, err := os.ReadFile("../internal/profile/testdata/tree/org/mcp/registry.toml")
 	if err != nil {
 		t.Fatal(err)
@@ -263,18 +304,40 @@ func TestRegistryExamples(t *testing.T) {
 		t.Errorf("fixture: %v", errs)
 	}
 	invalid := map[string]string{
-		"unknown field": "[servers.a]\ncommand = \"x\"\nenv = { A = \"1\" }\n",
-		"http url":      "[servers.a]\ntype = \"http\"\nurl = \"http://x\"\n",
-		"bad type":      "[servers.a]\ntype = \"ws\"\n",
-		"bad name":      "[servers.\"a b\"]\ncommand = \"x\"\n",
-		"override":      "[servers.a]\ncommand = \"x\"\n[servers.a.windows]\nargs = [\"x\"]\n",
-		"top":           "[other]\n",
-		"no servers":    "",
-		"env ref":       "[servers.a]\ncommand = \"x\"\nenv_refs = [\"lower\"]\n",
+		"unknown field":   "[servers.a]\ncommand = \"x\"\nenv = { A = \"1\" }\n",
+		"http url":        "[servers.a]\ntype = \"http\"\nurl = \"http://x\"\n",
+		"bad type":        "[servers.a]\ntype = \"ws\"\n",
+		"bad name":        "[servers.\"a b\"]\ncommand = \"x\"\n",
+		"override":        "[servers.a]\ncommand = \"x\"\n[servers.a.windows]\nargs = [\"x\"]\n",
+		"top":             "[other]\n",
+		"no servers":      "",
+		"env ref":         "[servers.a]\ncommand = \"x\"\nenv_refs = [\"lower\"]\n",
+		"env ref no _REF": "[servers.a]\ncommand = \"x\"\nenv_refs = [\"FIGMA_TOKEN\"]\n",
+		"env ref denied":  "[servers.a]\ncommand = \"x\"\nenv_refs = [\"ANTHROPIC_X_REF\"]\n",
+		"https uppercase": "[servers.a]\ntype = \"http\"\nurl = \"HTTPS://x.example\"\n",
+		"url query":       "[servers.a]\ntype = \"http\"\nurl = \"https://x.example/a?token=1\"\n",
+		"url fragment":    "[servers.a]\ntype = \"http\"\nurl = \"https://x.example/a#f\"\n",
+		"url whitespace":  "[servers.a]\ntype = \"http\"\nurl = \"https://x.example/a b\"\n",
 	}
 	for n, v := range invalid {
 		if errs := check(s, s, decode(t, v), "$"); len(errs) == 0 {
 			t.Errorf("%s should be rejected", n)
+		}
+	}
+}
+
+func TestCheckerCombinators(t *testing.T) {
+	s := parseSchema([]byte(`{"type":"object","propertyNames":{"allOf":[{"pattern":"^[A-Z]+$"},{"not":{"enum":["BAD"]}}]},"additionalProperties":{"anyOf":[{"const":"x"},{"type":"boolean"}]}}`))
+	if errs := check(s, s, map[string]any{"OK": "x", "ALSO": true}, "$"); len(errs) != 0 {
+		t.Errorf("unexpected: %v", errs)
+	}
+	for name, v := range map[string]map[string]any{
+		"pattern": {"low": true},
+		"not":     {"BAD": true},
+		"anyOf":   {"OK": "y"},
+	} {
+		if errs := check(s, s, v, "$"); len(errs) == 0 {
+			t.Errorf("%s accepted", name)
 		}
 	}
 }

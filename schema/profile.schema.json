@@ -10,7 +10,75 @@
     "pluginId": { "type": "string", "pattern": "^[A-Za-z0-9._-]+@[A-Za-z0-9._-]+$" },
     "skillName": { "type": "string", "pattern": "^[A-Za-z0-9._:-]+$" },
     "profileName": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,62}$" },
-    "phrase": { "type": "string", "minLength": 1 }
+    "phrase": { "type": "string", "minLength": 1 },
+    "envName": {
+      "allOf": [
+        {
+          "pattern": "^[A-Z][A-Z0-9_]{0,63}$"
+        },
+        {
+          "pattern": "^(CCSHELF_VAR_[A-Z0-9_]{1,40}|[A-Z][A-Z0-9_]{0,55}_REF)$"
+        },
+        {
+          "not": {
+            "pattern": "^(ANTHROPIC_|CLAUDE_CODE_|CLAUDE_|NODE_|OTEL_|DYLD_|LD_|GIT_|SSH_|AWS_|AZURE_|GOOGLE_|NPM_|PYTHON|PERL|RUBY|JAVA_|_JAVA|JDK_|BUN_|DENO_|ELECTRON_|DOCKER_|KUBE|PIP_|CARGO_|YARN_|GEM_|BASH|ZSH|GITHUB_|RUNNER_|ACTIONS_)"
+          }
+        },
+        {
+          "not": {
+            "pattern": "(_OPTIONS|_OPTS)$"
+          }
+        },
+        {
+          "not": {
+            "pattern": "_PROXY"
+          }
+        },
+        {
+          "not": {
+            "enum": [
+              "ALL_PROXY",
+              "BASHOPTS",
+              "BASH_ENV",
+              "BROWSER",
+              "CI",
+              "CURL_CA_BUNDLE",
+              "EDITOR",
+              "ENV",
+              "GCONV_PATH",
+              "HOME",
+              "HTTPS_PROXY",
+              "HTTP_PROXY",
+              "IFS",
+              "KUBECONFIG",
+              "LESSCLOSE",
+              "LESSOPEN",
+              "NO_PROXY",
+              "PAGER",
+              "PATH",
+              "PERL5OPT",
+              "PROMPT_COMMAND",
+              "PS4",
+              "PYTHONPATH",
+              "PYTHONSTARTUP",
+              "REQUESTS_CA_BUNDLE",
+              "RUBYOPT",
+              "SHELL",
+              "SHELLOPTS",
+              "SSLKEYLOGFILE",
+              "SSL_CERT_DIR",
+              "SSL_CERT_FILE",
+              "TEMP",
+              "TMP",
+              "TMPDIR",
+              "USER",
+              "VISUAL",
+              "ZDOTDIR"
+            ]
+          }
+        }
+      ]
+    }
   },
   "properties": {
     "name": { "$ref": "#/$defs/profileName" },
@@ -54,11 +122,11 @@
       "properties": {
         "model": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:\\[\\]-]{0,127}$" },
         "effort": { "enum": ["low", "medium", "high", "xhigh", "max"] },
-        "append_system_prompt_file": { "type": "string", "minLength": 1 },
+        "append_system_prompt_file": { "type": "string", "pattern": "^prompts/([^/\\\\.][^/\\\\]*/)*[^/\\\\.][^/\\\\]*$" },
         "inherit_user_settings": { "type": "boolean" },
         "env": {
           "type": "object",
-          "propertyNames": { "pattern": "^(CCSHELF_VAR_[A-Z0-9_]{1,40}|[A-Z][A-Z0-9_]{0,55}_REF)$" },
+          "propertyNames": { "$ref": "#/$defs/envName" },
           "additionalProperties": { "type": "string", "maxLength": 4096 }
         }
       }

@@ -7,6 +7,74 @@
   "additionalProperties": false,
   "required": ["servers"],
   "$defs": {
+    "envName": {
+      "allOf": [
+        {
+          "pattern": "^[A-Z][A-Z0-9_]{0,63}$"
+        },
+        {
+          "pattern": "^(CCSHELF_VAR_[A-Z0-9_]{1,40}|[A-Z][A-Z0-9_]{0,55}_REF)$"
+        },
+        {
+          "not": {
+            "pattern": "^(ANTHROPIC_|CLAUDE_CODE_|CLAUDE_|NODE_|OTEL_|DYLD_|LD_|GIT_|SSH_|AWS_|AZURE_|GOOGLE_|NPM_|PYTHON|PERL|RUBY|JAVA_|_JAVA|JDK_|BUN_|DENO_|ELECTRON_|DOCKER_|KUBE|PIP_|CARGO_|YARN_|GEM_|BASH|ZSH|GITHUB_|RUNNER_|ACTIONS_)"
+          }
+        },
+        {
+          "not": {
+            "pattern": "(_OPTIONS|_OPTS)$"
+          }
+        },
+        {
+          "not": {
+            "pattern": "_PROXY"
+          }
+        },
+        {
+          "not": {
+            "enum": [
+              "ALL_PROXY",
+              "BASHOPTS",
+              "BASH_ENV",
+              "BROWSER",
+              "CI",
+              "CURL_CA_BUNDLE",
+              "EDITOR",
+              "ENV",
+              "GCONV_PATH",
+              "HOME",
+              "HTTPS_PROXY",
+              "HTTP_PROXY",
+              "IFS",
+              "KUBECONFIG",
+              "LESSCLOSE",
+              "LESSOPEN",
+              "NO_PROXY",
+              "PAGER",
+              "PATH",
+              "PERL5OPT",
+              "PROMPT_COMMAND",
+              "PS4",
+              "PYTHONPATH",
+              "PYTHONSTARTUP",
+              "REQUESTS_CA_BUNDLE",
+              "RUBYOPT",
+              "SHELL",
+              "SHELLOPTS",
+              "SSLKEYLOGFILE",
+              "SSL_CERT_DIR",
+              "SSL_CERT_FILE",
+              "TEMP",
+              "TMP",
+              "TMPDIR",
+              "USER",
+              "VISUAL",
+              "ZDOTDIR"
+            ]
+          }
+        }
+      ]
+    },
     "override": {
       "type": "object",
       "additionalProperties": false,
@@ -23,8 +91,8 @@
         "type": { "enum": ["stdio", "http", "sse"] },
         "command": { "type": "string" },
         "args": { "type": "array", "items": { "type": "string" } },
-        "url": { "type": "string", "pattern": "^https://" },
-        "env_refs": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{0,63}$" } },
+        "url": { "type": "string", "pattern": "^https://[^?#\\s]+$" },
+        "env_refs": { "type": "array", "uniqueItems": true, "items": { "anyOf": [{ "const": "CCSHELF_PROFILE" }, { "$ref": "#/$defs/envName" }] } },
         "windows": { "$ref": "#/$defs/override" },
         "macos": { "$ref": "#/$defs/override" },
         "linux": { "$ref": "#/$defs/override" }

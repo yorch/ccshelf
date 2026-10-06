@@ -22,9 +22,12 @@ type AccountChoice struct {
 	// Account.ConfigDir for the child. It is never true with FromEnv.
 	SetEnv bool
 	// OverridesEnv is true when an explicit --account replaces an existing
-	// CLAUDE_CONFIG_DIR; callers should warn.
+	// CLAUDE_CONFIG_DIR. The explicit flag wins because it is the user's
+	// stated intent for this run; a Note says so and callers should show it.
 	OverridesEnv bool
-	// Notes lists implicit choices that were ignored because of the environment.
+	// Notes lists what the caller should tell the user: an implicit choice
+	// that was ignored because CLAUDE_CONFIG_DIR is set, or an explicit
+	// --account that replaced it (then OverridesEnv is also set).
 	Notes []string
 }
 
@@ -52,7 +55,10 @@ func ResolveAccount(flag, profileAccount string, cfg *Config, env func(string) s
 		if err != nil {
 			return c, err
 		}
-		c.OverridesEnv = envDir != ""
+		if envDir != "" {
+			c.OverridesEnv = true
+			c.Notes = append(c.Notes, fmt.Sprintf("--account %s overrides %s from the environment (an explicit flag wins over the environment)", flag, EnvConfigDir))
+		}
 		return c, nil
 	}
 	implicit, from := profileAccount, "profile"

@@ -2,6 +2,7 @@ package profile
 
 import (
 	"fmt"
+	"net/url"
 	"sort"
 	"strings"
 )
@@ -33,6 +34,9 @@ func List(sources []Source) ([]Summary, error) {
 		src  Source
 		file *File
 		err  error
+	}
+	if err := checkKinds(sources); err != nil {
+		return nil, err
 	}
 	by := map[string][]entry{}
 	seen := map[string]bool{}
@@ -91,9 +95,21 @@ func List(sources []Source) ([]Summary, error) {
 	return out, nil
 }
 
+// redactURL returns scheme://host/path of raw with userinfo, query and
+// fragment removed, so that nothing secret reaches the screen or a log.
+func redactURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return "<invalid url>"
+	}
+	return u.Scheme + "://" + u.Host + u.EscapedPath()
+}
+
 // Describe renders a resolved profile as stable, human-readable text for
 // `ccshelf show`. It contains no absolute paths and no timestamps, so it is
-// safe to compare in golden files.
+// safe to compare in golden files. It never prints secrets: environment values
+// are shown as <redacted>, MCP URLs lose their query and fragment, and a
+// prompt is shown as its size and a short digest, never its text (B6).
 func Describe(r *Resolved) string {
 	var b strings.Builder
 	m := r.Merged
@@ -136,7 +152,7 @@ func Describe(r *Resolved) string {
 		s := r.MCP[n]
 		target := s.Command
 		if s.Type != MCPStdio {
-			target = s.URL
+			target = redactURL(s.URL)
 		}
 		fmt.Fprintf(&b, "  server %s: %s %s\n", n, s.Type, target)
 	}
@@ -154,12 +170,12 @@ func Describe(r *Resolved) string {
 		fmt.Fprintf(&b, "  effort: %s\n", m.Session.Effort)
 	}
 	if m.Session.AppendSystemPromptFile != "" {
-		fmt.Fprintf(&b, "  prompt: %s (%d bytes)\n", m.Session.AppendSystemPromptFile, len(r.Prompt))
+		fmt.Fprintf(&b, "  prompt: %s (%d bytes, sha256:%s)\n", m.Session.AppendSystemPromptFile, len(r.Prompt), digest(r.Prompt)[:12])
 	}
 	fmt.Fprintf(&b, "  inherit_user_settings: %t\n", m.InheritsUserSettings())
 	envNames := sortedKeys(m.Session.Env)
 	for _, k := range envNames {
-		fmt.Fprintf(&b, "  env %s = %s\n", k, m.Session.Env[k])
+		fmt.Fprintf(&b, "  env %s = <redacted>\n", k)
 	}
 	fmt.Fprintf(&b, "Policy:\n  on_blocked: %s\n", m.Policy.OnBlocked)
 	if len(m.WhenToUse) > 0 {
