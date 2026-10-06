@@ -1,0 +1,26 @@
+name = "sre"
+description = "On-call and infrastructure work: incidents, postmortems and production changes"
+owner = "@acme/sre"
+status = "active"
+superseded_by = ""
+account = ""
+extends = ["base"]
+when_to_use = ["incident response", "postmortems", "infrastructure changes", "on-call handover"]
+avoid_when = ["UI work", "content writing"]
+
+[plugins]
+mode = "allow-only"
+include = ["sre-kit@acme", "partner-linter@acme"]
+exclude = []
+
+[mcp]
+servers = ["pagerduty-ro"]
+claudeai_connectors = "none"
+strict = true
+
+[session]
+effort = "high"
+inherit_user_settings = true
+
+[policy]
+on_blocked = "fail"

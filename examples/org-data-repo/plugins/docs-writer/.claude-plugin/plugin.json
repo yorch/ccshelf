@@ -1,0 +1,14 @@
+{
+  "name": "docs-writer",
+  "version": "1.0.0",
+  "description": "Structures technical documentation, API references and release notes in the Acme house style.",
+  "author": {
+    "name": "Acme Platform Team"
+  },
+  "license": "MIT",
+  "keywords": [
+    "documentation",
+    "api reference",
+    "release notes"
+  ]
+}

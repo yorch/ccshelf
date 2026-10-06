@@ -1,0 +1,9 @@
+owner = "@acme/platform"
+status = "active"
+when_to_use = ["compliance audit trail"]
+avoid_when = ["local debugging logs"]
+overlaps_with = []
+superseded_by = ""
+review_by = "2027-06-01"
+support = "#platform-help"
+docs = "https://wiki.acme.example/audit-logger"

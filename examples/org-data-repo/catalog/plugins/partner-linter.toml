@@ -1,0 +1,9 @@
+owner = "@acme/platform"
+status = "experimental"
+when_to_use = ["style and policy linting"]
+avoid_when = ["performance profiling"]
+overlaps_with = ["sre-kit"]
+superseded_by = ""
+review_by = "2027-02-01"
+support = "#platform-help"
+docs = "https://partner.example/linter/docs"

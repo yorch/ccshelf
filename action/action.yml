@@ -1,0 +1,84 @@
+name: ccshelf
+description: Install a verified ccshelf release and run one ccshelf command (lint, compile --check, catalog build).
+author: ccshelf contributors
+branding:
+  icon: check-circle
+  color: blue
+
+inputs:
+  version:
+    description: Release tag of ccshelf to install, a strict semver tag such as v0.1.0.
+    required: true
+  args:
+    description: The ccshelf subcommand and flags to run, split on spaces (no quoting), for example "lint" or "catalog build --out dist/catalog". Leave empty to install only.
+    required: false
+    default: ""
+  working-directory:
+    description: Directory, relative to the workspace, in which the command runs.
+    required: false
+    default: "."
+  sha256:
+    description: SHA-256 of the release archive for this runner's OS and architecture, pinned by you. The strongest option; when set, the signature is not needed.
+    required: false
+    default: ""
+  base-url:
+    description: Directory that holds <version>/ release assets. Change it for a GHE Server or offline mirror. https:// or file:// only.
+    required: false
+    default: https://github.com/ccshelf/ccshelf/releases/download
+  verify-signature:
+    description: Verify the cosign signature of checksums.txt (needs cosign on PATH) when no sha256 is pinned. "false" is an explicit, loudly warned opt-out.
+    required: false
+    default: "true"
+  cosign-identity:
+    description: Regular expression the signing certificate identity must match.
+    required: false
+    default: ^https://github\.com/ccshelf/ccshelf/\.github/workflows/release\.yml@refs/tags/v.*$
+  cosign-oidc-issuer:
+    description: OIDC issuer the signing certificate must name.
+    required: false
+    default: https://token.actions.githubusercontent.com
+
+outputs:
+  path:
+    description: Absolute path of the installed ccshelf binary.
+    value: ${{ steps.install.outputs.path }}
+  version:
+    description: The installed release tag.
+    value: ${{ steps.install.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install ccshelf
+      id: install
+      shell: bash
+      env:
+        INPUT_VERSION: ${{ inputs.version }}
+        INPUT_SHA256: ${{ inputs.sha256 }}
+        INPUT_BASE_URL: ${{ inputs.base-url }}
+        INPUT_VERIFY_SIGNATURE: ${{ inputs.verify-signature }}
+        INPUT_COSIGN_IDENTITY: ${{ inputs.cosign-identity }}
+        INPUT_COSIGN_OIDC_ISSUER: ${{ inputs.cosign-oidc-issuer }}
+        INPUT_WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: bash "$ACTION_PATH/scripts/install.sh"
+
+    - name: Run ccshelf
+      shell: bash
+      env:
+        INPUT_ARGS: ${{ inputs.args }}
+        INPUT_WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        CCSHELF_BIN: ${{ steps.install.outputs.path }}
+      run: |
+        set -euo pipefail
+        if [ -z "$INPUT_ARGS" ]; then
+          echo "No args given: ccshelf installed at $CCSHELF_BIN"
+          exit 0
+        fi
+        case "$INPUT_ARGS" in
+          *$'\n'*) echo "error: 'args' must be a single line" >&2; exit 1 ;;
+        esac
+        # Split on whitespace without eval or globbing.
+        read -r -a ccshelf_args <<<"$INPUT_ARGS"
+        cd -- "$INPUT_WORKING_DIRECTORY"
+        "$CCSHELF_BIN" "${ccshelf_args[@]}"

@@ -1,0 +1,9 @@
+owner = "@acme/seo"
+status = "experimental"
+when_to_use = ["on-page SEO audits", "sitemap review"]
+avoid_when = ["paid search"]
+overlaps_with = []
+superseded_by = ""
+review_by = "2027-01-31"
+support = "#seo-tools"
+docs = "https://wiki.acme.example/seo-tools"

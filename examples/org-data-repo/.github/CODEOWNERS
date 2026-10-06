@@ -1,0 +1,27 @@
+# GitHub applies the LAST matching pattern, so the broad team rules come first
+# and the platform team's narrower rules for code that runs on developer machines
+# come after them and win.
+
+# Each team owns its plugin source.
+/plugins/design-kit/               @acme/web
+/plugins/sre-kit/                  @acme/sre
+/plugins/seo-tools/                @acme/seo
+/plugins/release-notes/            @acme/platform
+/plugins/docs-writer/              @acme/platform
+/plugins/audit-logger/             @acme/platform
+
+# The platform team reviews everything that shapes what people see and what runs on their machines.
+/.claude-plugin/marketplace.json   @acme/platform
+/bundles/                          @acme/platform
+/catalog/                          @acme/platform
+/profiles/                         @acme/platform
+/mcp/                              @acme/platform
+/prompts/                          @acme/platform
+/ccshelf.toml                      @acme/platform
+/docs/                             @acme/platform
+# Workflows and CODEOWNERS themselves: without this a plugin team could edit them.
+/.github/                          @acme/platform
+
+# Hooks and MCP servers in plugins are code on developer machines (these come last on purpose).
+/plugins/*/hooks/                  @acme/platform
+/plugins/*/.mcp.json               @acme/platform

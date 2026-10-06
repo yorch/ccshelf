@@ -1,0 +1,7 @@
+# Allowed categories and tags. Curated by the platform team.
+categories = ["design", "operations", "marketing", "documentation", "security", "quality", "profile"]
+tags = [
+  "accessibility", "audit", "changelog", "components", "compliance", "content", "css",
+  "docs", "frontend", "incident-response", "lint", "postmortem", "profile", "quality",
+  "react", "runbooks", "search", "seo", "sre", "writing",
+]

@@ -1,0 +1,9 @@
+owner = "@acme/platform"
+status = "active"
+when_to_use = ["writing technical documentation", "API references", "release notes"]
+avoid_when = ["marketing copy"]
+overlaps_with = ["release-notes"]
+superseded_by = ""
+review_by = "2027-04-01"
+support = "#platform-help"
+docs = "https://wiki.acme.example/docs-writer"

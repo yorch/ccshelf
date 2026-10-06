@@ -1,0 +1,39 @@
+name: release
+
+# Creates a repository tag vYYYY.MM.N that consumers pin their profile source to.
+# Run it manually, or let the monthly schedule do it. Protect the v* tags with a ruleset.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 9 1 * *"
+
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    # Scheduled runs always use the default branch; refuse manual runs from other branches.
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Create the next tag for this month
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          prefix="v$(date -u +%Y.%m)"
+          existing="$(gh api --paginate "repos/${REPO}/git/matching-refs/tags/${prefix}." --jq '.[].ref' | wc -l | tr -d ' ')"
+          next=$((existing + 1))
+          tag="${prefix}.${next}"
+          printf '%s' "$tag" | grep -Eq '^v[0-9]{4}\.[0-9]{2}\.[0-9]+$'
+          gh api --method POST "repos/${REPO}/git/refs" \
+            --field "ref=refs/tags/${tag}" --field "sha=${COMMIT}" >/dev/null
+          echo "Created tag ${tag} at ${COMMIT}"

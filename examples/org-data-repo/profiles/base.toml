@@ -1,0 +1,27 @@
+# Shared defaults that other profiles extend. It selects no plugins.
+name = "base"
+description = "Shared defaults: no claude.ai connectors, only the MCP servers a profile names"
+owner = "@acme/platform"
+status = "active"
+superseded_by = ""
+account = ""
+extends = []
+when_to_use = ["a parent for other profiles"]
+avoid_when = ["running directly; it has no plugins"]
+
+[plugins]
+mode = "allow-only"
+include = []
+exclude = []
+
+[mcp]
+servers = []
+claudeai_connectors = "none"
+strict = true
+
+[session]
+effort = "medium"
+inherit_user_settings = true
+
+[policy]
+on_blocked = "warn"

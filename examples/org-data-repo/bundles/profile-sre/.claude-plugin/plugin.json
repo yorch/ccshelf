@@ -1,0 +1,7 @@
+{
+  "dependencies": [
+    "partner-linter",
+    "sre-kit"
+  ],
+  "name": "profile-sre"
+}

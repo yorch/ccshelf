@@ -1,0 +1,7 @@
+{
+  "dependencies": [
+    "design-kit",
+    "docs-writer"
+  ],
+  "name": "profile-frontend"
+}

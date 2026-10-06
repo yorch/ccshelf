@@ -1,0 +1,56 @@
+name: validate
+
+# Runs on pull requests, including from forks, with a read-only token and no secrets.
+# The preview artifact is built from untrusted content: it is never published.
+on:
+  pull_request:
+
+permissions: {}
+
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the pull request
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # TODO replace the all-zero SHA with the released commit SHA of ccshelf, and set the
+      # repository variables CCSHELF_SHA256_LINUX_AMD64 (archive hash from the release checksums.txt).
+      # Without that variable the action verifies the cosign signature, which needs cosign on PATH.
+      - name: Lint metadata, profiles and ownership
+        uses: ccshelf/ccshelf/action@0000000000000000000000000000000000000000 # TODO replace with the released commit SHA of ccshelf
+        with:
+          version: v0.1.0
+          sha256: ${{ vars.CCSHELF_SHA256_LINUX_AMD64 }}
+          args: lint
+
+      - name: Check that committed bundles match the profiles
+        uses: ccshelf/ccshelf/action@0000000000000000000000000000000000000000 # TODO replace with the released commit SHA of ccshelf
+        with:
+          version: v0.1.0
+          sha256: ${{ vars.CCSHELF_SHA256_LINUX_AMD64 }}
+          args: compile --check
+
+      - name: Build the catalog preview
+        uses: ccshelf/ccshelf/action@0000000000000000000000000000000000000000 # TODO replace with the released commit SHA of ccshelf
+        with:
+          version: v0.1.0
+          sha256: ${{ vars.CCSHELF_SHA256_LINUX_AMD64 }}
+          args: catalog build --out dist/catalog
+
+      - name: Upload the preview (not published)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: catalog-preview
+          path: dist/catalog
+          retention-days: 7
+          if-no-files-found: error

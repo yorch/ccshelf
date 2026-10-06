@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "search-console": {
+      "type": "http",
+      "url": "https://searchconsole-mcp.acme.example/v1"
+    }
+  }
+}

@@ -1,0 +1,9 @@
+owner = "@acme/platform"
+status = "deprecated"
+when_to_use = ["drafting release notes"]
+avoid_when = ["new projects"]
+overlaps_with = ["docs-writer"]
+superseded_by = "docs-writer"
+review_by = "2027-01-15"
+support = "#platform-help"
+docs = "https://wiki.acme.example/release-notes"

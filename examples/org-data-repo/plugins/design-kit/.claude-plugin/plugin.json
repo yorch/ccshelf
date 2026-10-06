@@ -1,0 +1,14 @@
+{
+  "name": "design-kit",
+  "version": "1.2.0",
+  "description": "Component review and accessibility checks for the Acme web design system.",
+  "author": {
+    "name": "Acme Web Team"
+  },
+  "license": "MIT",
+  "keywords": [
+    "design system",
+    "components",
+    "wcag"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "sre-kit",
+  "version": "2.0.1",
+  "description": "Incident timelines, postmortem drafts and a production-context guard for on-call engineers.",
+  "author": {
+    "name": "Acme SRE Team"
+  },
+  "license": "MIT",
+  "keywords": [
+    "incident",
+    "on-call",
+    "kubernetes"
+  ]
+}

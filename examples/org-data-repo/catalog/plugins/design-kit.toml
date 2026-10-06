@@ -1,0 +1,9 @@
+owner = "@acme/web"
+status = "active"
+when_to_use = ["building UI components", "design system reviews"]
+avoid_when = ["backend services"]
+overlaps_with = []
+superseded_by = ""
+review_by = "2027-03-01"
+support = "#web-platform"
+docs = "https://wiki.acme.example/design-kit"

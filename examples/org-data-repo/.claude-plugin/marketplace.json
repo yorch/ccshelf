@@ -1,0 +1,125 @@
+{
+  "name": "acme",
+  "owner": {
+    "name": "Acme Platform Team"
+  },
+  "description": "Acme's internal Claude Code plugins. Fictional example data for the ccshelf starter template.",
+  "plugins": [
+    {
+      "name": "design-kit",
+      "source": "./plugins/design-kit",
+      "displayName": "Design Kit",
+      "description": "Component review and accessibility checks for the Acme web design system.",
+      "category": "design",
+      "tags": ["frontend", "react", "css", "accessibility", "components"],
+      "author": { "name": "Acme Web Team" },
+      "homepage": "https://wiki.acme.example/design-kit",
+      "license": "MIT",
+      "keywords": ["design system", "components", "wcag"]
+    },
+    {
+      "name": "sre-kit",
+      "source": "./plugins/sre-kit",
+      "displayName": "SRE Kit",
+      "description": "Incident timelines, postmortem drafts and a production-context guard for on-call engineers.",
+      "category": "operations",
+      "tags": ["sre", "incident-response", "runbooks", "postmortem"],
+      "author": { "name": "Acme SRE Team" },
+      "homepage": "https://wiki.acme.example/sre-kit",
+      "license": "MIT",
+      "keywords": ["incident", "on-call", "kubernetes"],
+      "relevance": {
+        "topic": "Infrastructure and incident work",
+        "signals": {
+          "cwd": ["infra", "terraform", "k8s"],
+          "cli": ["kubectl", "terraform"],
+          "filesRead": ["main.tf", "kustomization.yaml"]
+        }
+      }
+    },
+    {
+      "name": "seo-tools",
+      "source": "./plugins/seo-tools",
+      "displayName": "SEO Tools",
+      "description": "Search audit skill and a read-only Search Console MCP server for the SEO team.",
+      "category": "marketing",
+      "tags": ["seo", "search", "content"],
+      "author": { "name": "Acme SEO Team" },
+      "homepage": "https://wiki.acme.example/seo-tools",
+      "license": "MIT",
+      "keywords": ["search console", "sitemap", "metadata"],
+      "relevance": {
+        "topic": "Search engine optimization of web content",
+        "signals": {
+          "filesRead": ["sitemap.xml", "robots.txt"]
+        }
+      }
+    },
+    {
+      "name": "release-notes",
+      "source": "./plugins/release-notes",
+      "displayName": "Release Notes",
+      "description": "Deprecated: drafts release notes from merged pull requests. Use docs-writer instead.",
+      "category": "documentation",
+      "tags": ["changelog", "docs", "writing"],
+      "author": { "name": "Acme Platform Team" },
+      "license": "MIT",
+      "keywords": ["changelog", "release"]
+    },
+    {
+      "name": "docs-writer",
+      "source": "./plugins/docs-writer",
+      "displayName": "Docs Writer",
+      "description": "Structures technical documentation, API references and release notes in the Acme house style.",
+      "category": "documentation",
+      "tags": ["docs", "writing", "changelog"],
+      "author": { "name": "Acme Platform Team" },
+      "homepage": "https://wiki.acme.example/docs-writer",
+      "license": "MIT",
+      "keywords": ["documentation", "api reference", "release notes"]
+    },
+    {
+      "name": "audit-logger",
+      "source": "./plugins/audit-logger",
+      "displayName": "Audit Logger",
+      "description": "Records tool use for compliance review. Protected: profiles may not mask it.",
+      "category": "security",
+      "tags": ["audit", "compliance"],
+      "author": { "name": "Acme Platform Team" },
+      "license": "MIT",
+      "keywords": ["audit", "compliance", "hooks"]
+    },
+    {
+      "name": "partner-linter",
+      "source": {
+        "source": "url",
+        "url": "https://git.partner.example/linters/partner-linter.git",
+        "ref": "v1.4.0"
+      },
+      "displayName": "Partner Linter",
+      "description": "Style and policy linter maintained by a partner in an external repository.",
+      "category": "quality",
+      "tags": ["lint", "quality"],
+      "author": { "name": "Partner Example Ltd" },
+      "homepage": "https://partner.example/linter",
+      "license": "Apache-2.0",
+      "keywords": ["lint", "style"]
+    },
+    {
+      "name": "profile-frontend",
+      "source": "./bundles/profile-frontend",
+      "description": "Generated bundle: installs the plugins of the frontend profile in one step.",
+      "category": "profile",
+      "tags": ["profile", "frontend"],
+      "author": { "name": "Acme Platform Team" }
+    },
+    {
+      "name": "profile-sre",
+      "source": "./bundles/profile-sre",
+      "description": "Generated bundle: installs the plugins of the sre profile in one step.",
+      "category": "profile",
+      "tags": ["profile", "sre"],
+      "author": { "name": "Acme Platform Team" }
+    }
+  ]
+}

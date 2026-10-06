@@ -1,0 +1,26 @@
+name = "seo"
+description = "Search optimization of web content and templates"
+owner = "@acme/seo"
+status = "experimental"
+superseded_by = ""
+account = ""
+extends = ["base"]
+when_to_use = ["on-page SEO", "sitemap and robots review", "metadata audits"]
+avoid_when = ["backend changes", "infrastructure changes"]
+
+[plugins]
+mode = "allow-only"
+include = ["seo-tools@acme", "docs-writer@acme"]
+exclude = []
+
+[mcp]
+servers = []
+claudeai_connectors = "none"
+strict = true
+
+[session]
+effort = "medium"
+inherit_user_settings = true
+
+[policy]
+on_blocked = "warn"
