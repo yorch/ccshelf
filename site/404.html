@@ -2,8 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<!--SITE_BASE-->
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'none'">
 <meta name="color-scheme" content="light dark">
 <meta name="robots" content="noindex">
 <title>Page not found: ccshelf</title>
@@ -13,8 +14,10 @@
 <script src="assets/site.js"></script>
 </head>
 <body>
-<!-- Relative links resolve against the missing URL, so on a deeply nested bad path the stylesheet
-     may not load. The page stays readable unstyled, and a top-level miss (the common case) is styled. -->
+<!-- A missing page can be requested at any depth, so relative URLs would resolve against the bad path.
+     At deploy time scripts/build-site.sh replaces the SITE_BASE marker in <head> with
+     <base href="SITE_URL/">, which makes every relative URL here absolute. Opened from the repository
+     (file://) the page has no base and works from the site root. -->
 <main id="main" class="wrap lost">
   <h1>That page is not on the shelf</h1>
   <p>The address does not match anything on this site. Try the <a href="./">home page</a>, which has the install steps and the command reference.</p>

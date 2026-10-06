@@ -29,104 +29,101 @@
   ready(function () {
     var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    /* ---- Repository links: the one REPO_URL is the href of #repo in the footer. ---- */
-    var repoLink = document.getElementById('repo');
-    if (repoLink) {
-      var base = repoLink.getAttribute('href').replace(/\/+$/, '');
-      var links = document.querySelectorAll('a[data-repo-path]');
-      for (var i = 0; i < links.length; i++) {
-        links[i].setAttribute('href', base + '/' + links[i].getAttribute('data-repo-path'));
-      }
-    }
-
-    /* ---- Theme toggle ---- */
+    /* ---- Theme toggle: the label states the current theme, and says what a press does. ---- */
     var toggle = document.getElementById('theme-toggle');
     if (toggle) {
+      var paint = function () {
+        var dark = currentIsDark();
+        toggle.textContent = 'Theme: ' + (dark ? 'dark' : 'light');
+        toggle.setAttribute('aria-label', 'Theme: ' + (dark ? 'dark' : 'light') + '. Switch to ' + (dark ? 'light' : 'dark') + '.');
+      };
       toggle.hidden = false;
-      toggle.setAttribute('aria-pressed', currentIsDark() ? 'true' : 'false');
+      paint();
       toggle.addEventListener('click', function () {
         var next = currentIsDark() ? 'light' : 'dark';
         root.setAttribute('data-theme', next);
         writeTheme(next);
-        toggle.setAttribute('aria-pressed', next === 'dark' ? 'true' : 'false');
+        paint();
       });
+      if (window.matchMedia) {
+        var mq = window.matchMedia('(prefers-color-scheme: dark)');
+        var onChange = function () { if (!root.getAttribute('data-theme')) paint(); };
+        if (mq.addEventListener) mq.addEventListener('change', onChange);
+      }
     }
 
-    /* ---- Loadout demo ---- */
-    var PLUGINS = ['audit-logger', 'design-kit', 'docs-writer', 'partner-linter', 'release-notes', 'seo-tools', 'sre-kit'];
-    var PROTECTED = { 'audit-logger': true };
-    var MCP = ['figma', 'pagerduty-ro'];
-    /* frontend, sre and seo mirror examples/org-data-repo/profiles; "writing" is invented for this demo. */
-    var PROFILES = {
-      frontend: { plugins: ['design-kit', 'docs-writer'], mcp: ['figma'], model: 'opus', effort: 'high', prompt: 'prompts/frontend.md' },
-      sre: { plugins: ['sre-kit', 'partner-linter'], mcp: ['pagerduty-ro'], model: '', effort: 'high', prompt: '' },
-      seo: { plugins: ['seo-tools', 'docs-writer'], mcp: [], model: '', effort: 'medium', prompt: '' },
-      writing: { plugins: ['docs-writer'], mcp: [], model: '', effort: 'medium', prompt: '' }
-    };
-
+    /* ---- Loadout demo. The data is real ccshelf output captured by scripts/regen-site-demo.sh
+            (assets/demo-data.js). Without it, or without JS, the page keeps its static frontend example. ---- */
+    var DEMO = window.CCSHELF_DEMO;
     var picker = document.getElementById('picker');
     var typedEl = document.getElementById('typed');
     var caret = document.getElementById('caret');
     var outEl = document.getElementById('term-out');
+    var warnEl = document.getElementById('term-warn');
+    var lineEl = document.getElementById('term-line');
     var jsonEl = document.getElementById('term-json');
-    var subEl = document.getElementById('term-sub');
+    var fileEl = document.getElementById('term-file');
+    var srcEl = document.getElementById('term-source');
     var summaryEl = document.getElementById('demo-summary');
     var timer = null;
 
+    function stateOf(li) {
+      return li.classList.contains('is-on') ? 'is-on' : li.classList.contains('is-protected') ? 'is-protected' : 'is-off';
+    }
     function setItem(li, state, tagText) {
-      li.classList.remove('is-on', 'is-off', 'is-protected');
+      var before = stateOf(li);
+      li.classList.remove('is-on', 'is-off', 'is-protected', 'just-masked');
       li.classList.add(state);
       var tag = li.querySelector('.tag');
       if (tag) tag.textContent = tagText;
+      if (state === 'is-off' && before !== 'is-off' && !reduce) {
+        void li.offsetWidth; /* restart the animation */
+        li.classList.add('just-masked');
+        window.setTimeout(function () { li.classList.remove('just-masked'); }, 700);
+      }
     }
+    function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
 
-    function renderOut(p) {
-      var parts = ['claude --settings <cache>/settings-<hash>.json \\', '       --mcp-config <cache>/mcp-<hash>.json \\'];
-      if (p.prompt) parts.push('       --append-system-prompt-file ' + p.prompt + ' \\');
-      parts.push('       ' + (p.model ? '--model ' + p.model + ' ' : '') + '--effort ' + p.effort);
-      var c = document.createElement('span');
-      c.className = 'c';
-      c.textContent = '# claude is started with:';
-      outEl.textContent = '';
-      outEl.appendChild(c);
-      outEl.appendChild(document.createTextNode('\n' + parts.join('\n')));
-    }
-
-    function settingsJSON(name, p) {
-      var enabled = {};
-      PLUGINS.forEach(function (id) { enabled[id + '@acme'] = !!PROTECTED[id] || p.plugins.indexOf(id) !== -1; });
-      var o = { disableClaudeAiConnectors: true, enabledPlugins: enabled, env: { CCSHELF_PROFILE: name } };
-      if (p.model) o.model = p.model;
-      return JSON.stringify(o, null, 2).replace('"env": {\n    "CCSHELF_PROFILE": "' + name + '"\n  }', '"env": { "CCSHELF_PROFILE": "' + name + '" }');
+    function showOutput(d) {
+      warnEl.textContent = d.warnings.join('\n');
+      warnEl.hidden = d.warnings.length === 0;
+      lineEl.textContent = d.command;
+      outEl.hidden = false;
     }
 
     function applyProfile(name, animate) {
-      var p = PROFILES[name];
-      if (!p) return;
+      var d = DEMO.profiles[name];
+      if (!d) return;
+      var enabled = d.settings.enabledPlugins || {};
       var on = 0, masked = 0, prot = 0;
-      PLUGINS.forEach(function (id) {
-        var li = document.querySelector('#plugin-items [data-id="' + id + '"]');
-        if (!li) return;
-        if (PROTECTED[id]) { setItem(li, 'is-protected', 'always on'); prot++; }
-        else if (p.plugins.indexOf(id) !== -1) { setItem(li, 'is-on', 'on'); on++; }
-        else { setItem(li, 'is-off', 'masked'); masked++; }
-      });
-      MCP.forEach(function (id) {
-        var li = document.querySelector('#mcp-items [data-id="' + id + '"]');
-        if (!li) return;
-        if (p.mcp.indexOf(id) !== -1) setItem(li, 'is-on', 'on'); else setItem(li, 'is-off', 'not named');
-      });
-      summaryEl.textContent = name + ': ' + on + (on === 1 ? ' plugin' : ' plugins') + ' on, ' + prot + ' protected ' + (prot === 1 ? 'plugin' : 'plugins') +
-        ' kept on, ' + masked + ' masked. ' + p.mcp.length + (p.mcp.length === 1 ? ' MCP server.' : ' MCP servers.');
-      subEl.textContent = 'ccshelf dry-run ' + name + ' prints the exact command';
-      jsonEl.textContent = settingsJSON(name, p);
+      var items = document.querySelectorAll('#plugin-items .item');
+      for (var i = 0; i < items.length; i++) {
+        var li = items[i];
+        var key = li.getAttribute('data-id') + '@acme';
+        if (enabled[key] === true) { setItem(li, 'is-on', 'on'); on++; }
+        else if (enabled[key] === false) { setItem(li, 'is-off', 'masked'); masked++; }
+        else { setItem(li, 'is-protected', 'always on'); prot++; } /* left out of enabledPlugins: protected */
+      }
+      var mcp = document.querySelectorAll('#mcp-items .item');
+      for (var k = 0; k < mcp.length; k++) {
+        var id = mcp[k].getAttribute('data-id');
+        if (id === 'connectors') {
+          if (d.settings.disableClaudeAiConnectors) setItem(mcp[k], 'is-off', 'hidden'); else setItem(mcp[k], 'is-on', 'on');
+        } else if (d.mcpServers.indexOf(id) !== -1) setItem(mcp[k], 'is-on', 'on');
+        else setItem(mcp[k], 'is-off', 'not named');
+      }
+      summaryEl.textContent = name + ': ' + plural(on, 'plugin', 'plugins') + ' on, ' + plural(prot, 'protected plugin', 'protected plugins') +
+        ' kept on, ' + masked + ' masked. ' + plural(d.mcpServers.length, 'MCP server', 'MCP servers') + '.';
+      srcEl.textContent = d.source.indexOf('ccshelf ') === 0 ? 'created with: ' + d.source : 'profile: ' + d.source;
+      jsonEl.textContent = JSON.stringify(d.settings, null, 2);
+      var m = /settings-([0-9a-f]{8})/.exec(d.command);
+      fileEl.textContent = m ? 'settings-' + m[1] + '\u2026json' : 'settings file';
 
-      var full = 'ccshelf run ' + name;
+      var full = 'ccshelf dry-run ' + name;
       if (timer) { window.clearInterval(timer); timer = null; }
       if (!animate || reduce) {
         typedEl.textContent = full;
-        renderOut(p);
-        outEl.hidden = false;
+        showOutput(d);
         caret.classList.add('done');
         return;
       }
@@ -139,28 +136,34 @@
         typedEl.textContent = full.slice(0, n);
         if (n >= full.length) {
           window.clearInterval(timer); timer = null;
-          renderOut(p);
-          outEl.hidden = false;
+          showOutput(d);
           caret.classList.add('done');
         }
-      }, 28);
+      }, 24);
     }
 
-    if (picker && typedEl && outEl && jsonEl && summaryEl && subEl && caret) {
+    if (DEMO && DEMO.profiles && picker && typedEl && outEl && warnEl && lineEl && jsonEl && fileEl && srcEl && summaryEl && caret) {
+      var cap = DEMO.captured || {};
+      var capCommit = document.getElementById('cap-commit');
+      var capDate = document.getElementById('cap-date');
+      if (capCommit && cap.commit) capCommit.textContent = cap.commit;
+      if (capDate && cap.date) capDate.textContent = cap.date;
       picker.addEventListener('change', function (ev) {
         var t = ev.target;
         if (t && t.name === 'profile') applyProfile(t.value, true);
       });
-      applyProfile('frontend', false);
+      var checked = picker.querySelector('input[name="profile"]:checked');
+      applyProfile(checked ? checked.value : 'frontend', false);
     }
 
-    /* ---- Catalog filter ---- */
+    /* ---- Catalog filter, with a polite live count ("3 of 7 plugins"). ---- */
     var tools = document.getElementById('cat-tools');
     var q = document.getElementById('cat-q');
     var entries = document.querySelectorAll('#entries .entry');
-    var empty = document.getElementById('cat-empty');
-    if (tools && q && entries.length && empty) {
+    var countEl = document.getElementById('cat-count');
+    if (tools && q && entries.length && countEl) {
       tools.hidden = false;
+      countEl.hidden = false;
       var statusInputs = tools.querySelectorAll('input[name="status"]');
       var filter = function () {
         var needle = q.value.trim().toLowerCase();
@@ -174,10 +177,13 @@
           e.hidden = !ok;
           if (ok) shown++;
         }
-        empty.hidden = shown !== 0;
+        countEl.textContent = shown + ' of ' + entries.length + ' plugins' +
+          (shown === 0 ? '. No plugin matches: clear the filter or choose "all".' : '');
+        countEl.classList.toggle('zero', shown === 0);
       };
       q.addEventListener('input', filter);
       tools.addEventListener('change', filter);
+      filter();
     }
 
     /* ---- Copy buttons ---- */

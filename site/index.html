@@ -9,17 +9,23 @@
 <meta name="theme-color" content="#111513" media="(prefers-color-scheme: dark)">
 <title>ccshelf: Profiles for Claude Code</title>
 <meta name="description" content="ccshelf starts Claude Code with a named profile of plugins, skills and MCP servers, one set per terminal, and lints and publishes your organization's plugin catalog. Open source, unofficial, not released yet.">
+<link rel="canonical" href="__SITE_URL__/">
 <meta property="og:type" content="website">
+<meta property="og:site_name" content="ccshelf">
+<meta property="og:url" content="__SITE_URL__/">
 <meta property="og:title" content="ccshelf: Profiles for Claude Code">
 <meta property="og:description" content="Start Claude Code with only the plugins, skills and MCP servers a named profile asks for. Plus a lint and a generated catalog for an organization's plugin marketplace.">
-<meta property="og:image" content="assets/og.svg">
-<meta property="og:image:alt" content="A shelf of labelled plugin items with three of them lifted into a loadout.">
+<meta property="og:image" content="__SITE_URL__/assets/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="A shelf of labelled plugin items with two of them lifted into a loadout.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="ccshelf: Profiles for Claude Code">
 <meta name="twitter:description" content="One shelf of plugins, a different loadout for every terminal. Unofficial, open source, not released yet.">
-<meta name="twitter:image" content="assets/og.svg">
+<meta name="twitter:image" content="__SITE_URL__/assets/og.png">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="assets/site.css">
+<script src="assets/demo-data.js"></script>
 <script src="assets/site.js"></script>
 </head>
 <body>
@@ -41,9 +47,7 @@
         <li><a href="#faq">FAQ</a></li>
       </ul>
     </nav>
-    <button class="theme" type="button" id="theme-toggle" aria-pressed="false" hidden>
-      <span class="theme-label">Dark theme</span>
-    </button>
+    <button class="theme" type="button" id="theme-toggle" hidden>Theme: light</button>
   </div>
 </header>
 
@@ -54,13 +58,13 @@
   <div class="hero-copy">
     <h1 id="h-hero">One shelf of plugins. A different loadout for every terminal.</h1>
     <p class="lede">ccshelf starts Claude Code with only the plugins, skills and MCP servers that a named profile asks for. Run <code>ccshelf run sre</code> in one terminal and <code>ccshelf run frontend</code> in another, at the same time.</p>
-    <p class="status"><strong>Status:</strong> implemented and under review, not released yet. Install from source for now. Open source (MIT). Unofficial: not affiliated with Anthropic.</p>
-    <p class="hero-links"><a class="btn" href="#install">Install from source</a> <a href="#how">See how masking works</a></p>
+    <p class="status"><strong>Status:</strong> implemented and under review, not released yet. Tested on macOS and Linux; Windows runs in CI and is best-effort until proven. Install from source for now. Open source (MIT). Unofficial: not affiliated with Anthropic.</p>
+    <p class="hero-links"><a class="btn" href="#install">Build from source</a> <a href="#how">See how masking works</a></p>
   </div>
 
   <div class="demo" id="demo" aria-labelledby="h-demo">
     <h2 id="h-demo" class="demo-title">Pick a loadout</h2>
-    <p class="demo-note">Mockup with fictional plugins from the example org <code>acme</code>. Nothing here runs ccshelf.</p>
+    <p class="demo-note">Captured output, not a promise: the command and settings below were printed by <code>ccshelf dry-run</code> at commit <span id="cap-commit">c2a679d</span> (<span id="cap-date">2026-10-06</span>), using the fictional <code>acme</code> example org and the repository's fake <code>claude</code>, never the real one. Cache paths are shortened. Regenerate with <code>scripts/regen-site-demo.sh</code>.</p>
 
     <fieldset class="picker" id="picker">
       <legend>Profile for this terminal</legend>
@@ -95,19 +99,17 @@
         <p class="summary" id="demo-summary" role="status" aria-live="polite">frontend: 2 plugins on, 1 protected plugin kept on, 4 masked. 1 MCP server.</p>
       </div>
 
-      <div class="term" aria-label="Terminal preview">
-        <div class="term-bar"><span>terminal</span><span class="term-sub" id="term-sub">ccshelf dry-run frontend prints the exact command</span></div>
-        <pre class="term-body" id="term-cmd" aria-hidden="true"><span class="p">$ </span><span id="typed">ccshelf run frontend</span><span class="caret" id="caret"></span></pre>
-        <pre class="term-body term-out" id="term-out"><span class="c"># claude is started with:</span>
-claude --settings &lt;cache&gt;/settings-&lt;hash&gt;.json \
-       --mcp-config &lt;cache&gt;/mcp-&lt;hash&gt;.json \
-       --append-system-prompt-file prompts/frontend.md \
-       --model opus --effort high</pre>
-        <div class="term-bar term-bar2"><span>settings-&lt;hash&gt;.json</span><span class="term-sub">trimmed mockup of the generated file</span></div>
-        <pre class="term-body term-json" id="term-json">{
+      <div class="term" role="group" aria-label="Terminal output for the selected profile">
+        <div class="term-bar"><span>terminal</span><span class="term-sub" id="term-source">profile: examples/org-data-repo/profiles/frontend.toml</span></div>
+        <pre class="term-body term-type" id="term-cmd" aria-hidden="true"><span class="p">$ </span><span id="typed">ccshelf dry-run frontend</span><span class="caret" id="caret"></span></pre>
+        <div id="term-out">
+          <pre class="term-body term-warn" id="term-warn">warn: plugin audit-logger@acme is protected and stays enabled</pre>
+          <pre class="term-body term-line" id="term-line" tabindex="0" aria-label="The claude command, scrolls sideways">claude --settings ~/.cache/ccshelf/settings-1e4f76655e7b7ee774f743a24c52b834.json --mcp-config ~/.cache/ccshelf/mcp-1d38416511d8512691a7aabca160edfa.json --strict-mcp-config --append-system-prompt-file ~/.cache/ccshelf/prompt-23ddf2648cfd6ce7e3640f22b7c15c04.md --effort high</pre>
+        </div>
+        <div class="term-bar term-bar2"><span>the settings file it names</span><span class="term-sub" id="term-file">settings-1e4f7665…json</span></div>
+        <pre class="term-body term-json" id="term-json" tabindex="0" aria-label="The generated settings file, scrolls sideways">{
   "disableClaudeAiConnectors": true,
   "enabledPlugins": {
-    "audit-logger@acme": true,
     "design-kit@acme": true,
     "docs-writer@acme": true,
     "partner-linter@acme": false,
@@ -115,7 +117,10 @@ claude --settings &lt;cache&gt;/settings-&lt;hash&gt;.json \
     "seo-tools@acme": false,
     "sre-kit@acme": false
   },
-  "env": { "CCSHELF_PROFILE": "frontend" },
+  "env": {
+    "CCSHELF_PROFILE": "frontend",
+    "FIGMA_TOKEN_REF": "op://dev/figma/token"
+  },
   "model": "opus"
 }</pre>
       </div>
@@ -129,7 +134,7 @@ claude --settings &lt;cache&gt;/settings-&lt;hash&gt;.json \
   <div class="sec-body prose">
     <p>An organization with around fifty internal plugins ends up with a crowded session: skills for incident response sit next to skills for CSS, and nobody can say which plugin a task should use. Claude Code enables plugins through settings, so the set you choose is usually the set every session starts with.</p>
     <p>ccshelf adds two things. A <strong>launcher</strong> that chooses the set per terminal, and a <strong>catalog</strong> that answers "what exists, which should I use, who owns it" from metadata the organization already keeps in git.</p>
-    <p class="evidence">What has been measured so far: in one run on one real setup, hiding MCP servers and claude.ai connectors through the generated settings cut about 5.7k input tokens (19%, from 29.7k to 24.0k). That is a single run, not a benchmark. Whether a smaller set also improves how often the right skill fires is the open Phase 0 routing evaluation. Details in <a data-repo-path="blob/main/docs/research/stage0.md" href="#source">docs/research/stage0.md</a>.</p>
+    <p class="evidence">What has been measured so far: in one run on one real setup, hiding MCP servers and claude.ai connectors through the generated settings cut about 5.7k input tokens (19%, from 29.7k to 24.0k). That is a single run, not a benchmark. Whether a smaller set also improves how often the right skill fires is the open Phase 0 routing evaluation. Details in <a href="https://github.com/yorch/ccshelf/blob/main/docs/research/stage0.md">docs/research/stage0.md</a>.</p>
   </div>
 </section>
 
@@ -177,7 +182,7 @@ claude --settings &lt;cache&gt;/settings-&lt;hash&gt;.json \
     <div class="two">
       <div class="prose">
         <h3>Shared by every profile</h3>
-        <p>Login, session history, auto memory, <code>CLAUDE.md</code> and the plugin cache. There is one copy of each plugin; profiles only change what is enabled. Resuming a session under a different profile loads it with that profile's plugins.</p>
+        <p>Login, session history, auto memory, <code>CLAUDE.md</code> and the plugin cache. There is one copy of each plugin; profiles only change what is enabled. Sessions are not tagged by profile, so <code>/resume</code> lists sessions from every profile. Resuming one under a different profile is untested: its recorded prompt and transcript can still describe the other profile's skills.</p>
       </div>
       <div class="prose">
         <h3>Not hidden by a profile</h3>
@@ -208,6 +213,7 @@ claude --settings &lt;cache&gt;/settings-&lt;hash&gt;.json \
           <label><input type="radio" name="status" value="deprecated"><span>deprecated</span></label>
         </fieldset>
       </div>
+      <p class="cat-count" id="cat-count" role="status" aria-live="polite" hidden></p>
       <ul class="entries" id="entries">
         <li class="entry" data-status="active">
           <div class="e-head"><h3>audit-logger@acme</h3><span class="stamp s-active">active</span></div>
@@ -278,7 +284,6 @@ claude --settings &lt;cache&gt;/settings-&lt;hash&gt;.json \
           </dl>
         </li>
       </ul>
-      <p class="empty" id="cat-empty" hidden>No plugin matches. Clear the filter or choose "all".</p>
     </figure>
 
     <div class="prose">
@@ -293,18 +298,18 @@ claude --settings &lt;cache&gt;/settings-&lt;hash&gt;.json \
     <p>A profile is a loading filter, not a security boundary. These five rules keep a shared profile from becoming a way to run code.</p></div>
   <div class="sec-body">
     <dl class="rules">
-      <div id="sr1"><dt>SR1: closed profile schema</dt>
+      <div id="sr1"><dt>SR1: closed profile schema <span class="chip c-ok">implemented</span></dt>
         <dd>The generator writes only an allowlist of settings keys. A profile can never write <code>permissions</code>, <code>hooks</code>, <code>apiKeyHelper</code> or endpoint settings, and its environment names pass an allowlist. <span class="protects">Protects against a profile that redirects your prompts to another endpoint or runs code at start.</span></dd></div>
-      <div id="sr2"><dt>SR2: trust the resolved closure, pinned by commit SHA</dt>
+      <div id="sr2"><dt>SR2: trust the resolved closure, pinned by commit SHA <span class="chip c-ok">implemented</span></dt>
         <dd>Shared profiles need explicit trust. The trust hash covers the profile, its parents, the MCP registry entries it uses, its prompt file and the source commit. <code>--yes</code> never accepts trust, and CI fails closed. Project profiles are off by default. <span class="protects">Protects against a changed tag or registry entry slipping in after you approved.</span></dd></div>
-      <div id="sr3"><dt>SR3: no shadowing, protected plugins</dt>
+      <div id="sr3"><dt>SR3: no shadowing, protected plugins <span class="chip c-ok">implemented</span></dt>
         <dd>A project profile can never shadow another source's profile. The org config can list plugins and MCP servers (audit, secret scanning) that no profile may mask. <span class="protects">Protects against a repository or a profile switching off a control the organization requires.</span></dd></div>
-      <div id="sr4"><dt>SR4: private, verified cache</dt>
+      <div id="sr4"><dt>SR4: private, verified cache <span class="chip c-ok">implemented</span></dt>
         <dd>Cache directories are owner-only (mode 0700, files 0600), created without following symlinks, and each content-addressed file is re-hashed before reuse. Secrets are never written to disk or to argv, and output is redacted. <span class="protects">Protects against another local user, or a stale file, changing what <code>claude</code> receives.</span></dd></div>
-      <div id="sr5"><dt>SR5: hardened CI and releases</dt>
+      <div id="sr5"><dt>SR5: hardened CI and releases <span class="chip c-warn">workflows written, no release yet</span></dt>
         <dd>The Action is pinned by full commit SHA and embeds the expected checksum of the binary it downloads. Releases are planned with signatures, provenance and an SBOM. Workflows use <code>permissions: {}</code> and least privilege. <span class="protects">Protects against a tampered binary or a compromised action in your pipeline.</span></dd></div>
     </dl>
-    <p class="more"><a data-repo-path="blob/main/docs/design/security.md" href="#source">Read the full security design</a> and the <a data-repo-path="blob/main/SECURITY.md" href="#source">security policy</a>.</p>
+    <p class="more"><a href="https://github.com/yorch/ccshelf/blob/main/docs/design/security.md">Read the full security design</a> and the <a href="https://github.com/yorch/ccshelf/blob/main/SECURITY.md">security policy</a>.</p>
   </div>
 </section>
 
@@ -312,13 +317,16 @@ claude --settings &lt;cache&gt;/settings-&lt;hash&gt;.json \
 <section class="sec wrap" id="platforms" aria-labelledby="h-plat">
   <div class="sec-head"><h2 id="h-plat">Platforms, GitHub and managed policy</h2></div>
   <div class="sec-body">
-    <div class="targets" role="table" aria-label="Six build targets">
-      <div class="t-row t-head" role="row"><span role="columnheader">System</span><span role="columnheader">amd64</span><span role="columnheader">arm64</span></div>
-      <div class="t-row" role="row"><span role="rowheader">macOS</span><span role="cell">yes</span><span role="cell">yes</span></div>
-      <div class="t-row" role="row"><span role="rowheader">Linux (WSL counts)</span><span role="cell">yes</span><span role="cell">yes</span></div>
-      <div class="t-row" role="row"><span role="rowheader">Windows (native)</span><span role="cell">yes</span><span role="cell">yes</span></div>
-    </div>
-    <p class="fine">Honest status: the code builds and its tests pass on all six targets with a fake <code>claude</code>. Only macOS has driven the real <code>claude</code>. Windows has not run it, and Windows arm64 and GHE Server are best-effort until tested.</p>
+    <table class="targets">
+      <caption>Six build targets and how far each is exercised</caption>
+      <thead><tr><th scope="col">System</th><th scope="col">amd64</th><th scope="col">arm64</th></tr></thead>
+      <tbody>
+        <tr><th scope="row">macOS</th><td><span class="chip c-ok">tested</span></td><td><span class="chip c-ok">tested</span></td></tr>
+        <tr><th scope="row">Linux (WSL counts)</th><td><span class="chip c-ok">tested</span></td><td><span class="chip c-ok">tested</span></td></tr>
+        <tr><th scope="row">Windows (native)</th><td><span class="chip c-warn">CI, best-effort</span></td><td><span class="chip c-warn">CI, best-effort</span></td></tr>
+      </tbody>
+    </table>
+    <p class="fine">Implemented and tested on macOS and Linux with a fake <code>claude</code> test double; only macOS has driven the real <code>claude</code>. Windows runs in CI: treat it as best-effort until proven on real machines. GHE Server is designed for but untested.</p>
 
     <div class="two">
       <div class="prose">
@@ -336,14 +344,16 @@ claude --settings &lt;cache&gt;/settings-&lt;hash&gt;.json \
 <!-- INSTALL -->
 <section class="sec wrap" id="install" aria-labelledby="h-install">
   <div class="sec-head"><h2 id="h-install">Install and quick start</h2>
-    <p>Not released yet, so no binaries and no version numbers. Build from source with Go 1.27 or newer.</p></div>
+    <p>No public release and no public module path yet, so no binaries and no version numbers. Build from a checkout with Go 1.27 or newer.</p></div>
   <div class="sec-body">
     <div class="cmd">
-      <pre id="c-install"><code>go install github.com/ccshelf/ccshelf/cmd/ccshelf@latest
-ccshelf --version</code></pre>
+      <pre id="c-install"><code>git clone https://github.com/yorch/ccshelf
+cd ccshelf
+go build -o ccshelf ./cmd/ccshelf
+./ccshelf version</code></pre>
       <button class="copy" type="button" data-copy="c-install" hidden>Copy</button>
     </div>
-    <p class="fine">The module path is provisional and may change before the first release.</p>
+    <p class="fine">Put the binary on your <code>PATH</code>, or run <code>go install ./cmd/ccshelf</code> from the checkout. <code>go install github.com/...@latest</code> will work only after a public home and module path are chosen. The address above is the working repository and is not final.</p>
 
     <h3 class="sub">Try it</h3>
     <div class="cmd">
@@ -365,7 +375,7 @@ ccshelf compile --check
 ccshelf catalog build</code></pre>
       <button class="copy" type="button" data-copy="c-org" hidden>Copy</button>
     </div>
-    <p>Run these in your org data repository, or through the reusable GitHub Action, which installs a checksum-verified release and runs one command. Start from the fictional template in <a data-repo-path="tree/main/examples/org-data-repo" href="#source">examples/org-data-repo</a> and read <a data-repo-path="blob/main/action/README.md" href="#source">the Action guide</a>.</p>
+    <p>Run these in your org data repository, or through the reusable GitHub Action, which installs a checksum-verified release and runs one command. Start from the fictional template in <a href="https://github.com/yorch/ccshelf/tree/main/examples/org-data-repo">examples/org-data-repo</a> and read <a href="https://github.com/yorch/ccshelf/blob/main/action/README.md">the Action guide</a>.</p>
   </div>
 </section>
 
@@ -450,12 +460,14 @@ ccshelf catalog build</code></pre>
 
 <footer class="foot" id="source">
   <div class="wrap foot-in">
-    <p><strong>ccshelf</strong> is open source under the <a data-repo-path="blob/main/LICENSE" href="#source">MIT License</a>. Unofficial: not affiliated with Anthropic.</p>
+    <p><strong>ccshelf</strong> is open source under the <a href="https://github.com/yorch/ccshelf/blob/main/LICENSE">MIT License</a>. Unofficial: not affiliated with Anthropic.</p>
     <p>Source, issues and design notes:
-      <!-- REPO_URL: the one place the repository address lives. site.js reads this href and builds every
-           link marked data-repo-path from it. Provisional, as the Go module path is; change it here only. -->
-      <a id="repo" href="https://github.com/ccshelf/ccshelf">the ccshelf repository</a>.
-      See <a data-repo-path="blob/main/docs/README.md" href="#source">the documentation overview</a>, <a data-repo-path="blob/main/docs/DECISIONS.md" href="#source">the decision log</a> and <a data-repo-path="blob/main/CONTRIBUTING.md" href="#source">how to contribute</a>.</p>
+      <!-- REPO_URL: the repository address is the href of this element and the prefix of every other
+           repository link on the page (scripts/check_site.py enforces that). It is the private working
+           repo today: change it to the public home before publishing, in one command:
+           scripts/build-site.sh --repo-url <new> (see site/README.md). -->
+      <a id="repo" href="https://github.com/yorch/ccshelf">the ccshelf repository</a>.
+      See <a href="https://github.com/yorch/ccshelf/blob/main/docs/README.md">the documentation overview</a>, <a href="https://github.com/yorch/ccshelf/blob/main/docs/DECISIONS.md">the decision log</a> and <a href="https://github.com/yorch/ccshelf/blob/main/CONTRIBUTING.md">how to contribute</a>.</p>
     <p class="fine">Plugin names, teams and the <code>acme</code> organization on this page are fictional examples.</p>
   </div>
 </footer>
