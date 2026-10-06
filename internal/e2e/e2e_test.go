@@ -148,6 +148,11 @@ func (s *sandbox) Setenv(k, v string) { s.extra[k] = v }
 // env builds the child environment from scratch, so nothing of the caller's
 // (CLAUDE_CONFIG_DIR, CI, ANTHROPIC_*) leaks in.
 func (s *sandbox) env() []string {
+	// An empty file, not os.DevNull: git for Windows on arm64 cannot open NUL.
+	gitcfg := filepath.Join(s.root, "empty.gitconfig")
+	if err := os.WriteFile(gitcfg, nil, 0o600); err != nil {
+		s.t.Fatal(err)
+	}
 	e := map[string]string{
 		"PATH":                binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
 		"HOME":                s.Home,
@@ -156,8 +161,8 @@ func (s *sandbox) env() []string {
 		"XDG_CACHE_HOME":      s.Cache,
 		"APPDATA":             s.Config, // Windows: the config and cache bases
 		"LOCALAPPDATA":        s.Cache,
-		"GIT_CONFIG_GLOBAL":   os.DevNull,
-		"GIT_CONFIG_SYSTEM":   os.DevNull,
+		"GIT_CONFIG_GLOBAL":   gitcfg,
+		"GIT_CONFIG_SYSTEM":   gitcfg,
 		"GIT_CONFIG_NOSYSTEM": "1",
 		"GIT_TERMINAL_PROMPT": "0",
 		"FAKE_CLAUDE_LOG":     s.Log,

@@ -832,7 +832,11 @@ func TestPickerEquivalentKeepsGlobalFlags(t *testing.T) {
 	h.prompt = ui.NewScripted(0)
 	h.mustRun("run", "--account", "work")
 	eq := h.errb.String()
-	for _, want := range []string{"--config " + cfgFile, "--claude " + h.claude, "--account work", " mine"} {
+	q := func(s string) string { return s }
+	if runtime.GOOS == "windows" {
+		q = func(s string) string { return "'" + s + "'" } // POSIX quoting of a backslash path
+	}
+	for _, want := range []string{"--config " + q(cfgFile), "--claude " + q(h.claude), "--account work", " mine"} {
 		if !strings.Contains(eq, want) {
 			t.Errorf("equivalent line lacks %q: %s", want, eq)
 		}

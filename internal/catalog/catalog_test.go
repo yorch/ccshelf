@@ -525,12 +525,8 @@ func TestGitData(t *testing.T) {
 	}
 }
 
-func devNull() string {
-	if os.PathSeparator == '\\' {
-		return "NUL"
-	}
-	return "/dev/null"
-}
+// devNull is git's spelling of the null device on every OS (git for Windows maps it).
+func devNull() string { return "/dev/null" }
 
 func TestMarkdownTextBreaksWWWAutolinks(t *testing.T) {
 	for _, in := range []string{"www.evil.example", "see WWW.Evil.example now", "(www.x.example)", "awww.x.example"} {

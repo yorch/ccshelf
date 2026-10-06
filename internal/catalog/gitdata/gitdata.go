@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -37,12 +36,10 @@ func ValidTag(s string) bool {
 	return tagRe.MatchString(s) && !strings.Contains(s, "..") && !strings.HasSuffix(s, "/") && !strings.HasSuffix(s, ".lock")
 }
 
-func nullDevice() string {
-	if runtime.GOOS == "windows" {
-		return "NUL"
-	}
-	return "/dev/null"
-}
+// nullDevice names an empty git configuration file. git for Windows maps
+// "/dev/null" to the NUL device itself; passing "NUL" made git for Windows on
+// arm64 fail with "unable to access 'NUL'".
+func nullDevice() string { return "/dev/null" }
 
 // env builds the environment for git: the parent environment without any
 // GIT_* variable, plus a neutral configuration.

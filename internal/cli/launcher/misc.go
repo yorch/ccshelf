@@ -125,7 +125,7 @@ touches the network; add others with --profile. For cmd.exe, --write-cmd-shims
 		if err != nil {
 			return ui.Failure(fmt.Errorf("locating the ccshelf executable: %w", err))
 		}
-		if !filepath.IsAbs(exe) && !(len(exe) > 2 && exe[1] == ':') {
+		if !filepath.IsAbs(exe) && !(len(exe) > 2 && exe[1] == ':') && !strings.HasPrefix(exe, "/") {
 			if exe, err = filepath.Abs(exe); err != nil {
 				return ui.Failure(fmt.Errorf("locating the ccshelf executable: %w", err))
 			}

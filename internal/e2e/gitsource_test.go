@@ -45,7 +45,7 @@ func newGitRemote(t *testing.T, s *sandbox, src string) *gitRemote {
 	root := t.TempDir()
 	r := &gitRemote{t: t, work: src, bare: filepath.Join(root, "org.git")}
 	r.env = []string{
-		"GIT_CONFIG_GLOBAL=" + os.DevNull, "GIT_CONFIG_SYSTEM=" + os.DevNull, "GIT_CONFIG_NOSYSTEM=1",
+		"GIT_CONFIG_GLOBAL=" + emptyGitConfig(t, root), "GIT_CONFIG_SYSTEM=" + emptyGitConfig(t, root), "GIT_CONFIG_NOSYSTEM=1",
 		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.com", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.com",
 		"HOME=" + root, "PATH=" + os.Getenv("PATH"),
 	}
@@ -69,12 +69,21 @@ func newGitRemote(t *testing.T, s *sandbox, src string) *gitRemote {
 	r.URL = srv.URL + "/org.git"
 	pemFile := filepath.Join(root, "ca.pem")
 	write(t, pemFile, string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw})))
-	write(t, filepath.Join(s.Home, ".gitconfig"), "[http]\n\tsslCAInfo = "+filepath.ToSlash(pemFile)+"\n")
+	write(t, filepath.Join(s.Home, ".gitconfig"), "[http]\n\tsslCAInfo = "+filepath.ToSlash(pemFile)+"\n\tschannelUseSSLCAInfo = true\n") // the last line makes git for Windows honor sslCAInfo
 	return r
 }
 
 // stop shuts the server down.
 func (r *gitRemote) stop() { r.srv.Close() }
+
+// emptyGitConfig returns an empty file to stand in for git's global and system
+// configuration: git for Windows on arm64 cannot open the NUL device as one.
+func emptyGitConfig(t *testing.T, dir string) string {
+	t.Helper()
+	p := filepath.Join(dir, "empty.gitconfig")
+	write(t, p, "")
+	return p
+}
 
 func runtimeIsWindows() bool { return os.PathSeparator == '\\' }
 

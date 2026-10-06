@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -37,6 +38,10 @@ func (s *sandbox) normalize(out string) string {
 	out = strings.ReplaceAll(out, filepath.Join(binDir, exe("claude")), "<CLAUDE>")
 	out = strings.ReplaceAll(out, s.root, "<ROOT>")
 	out = strings.ReplaceAll(out, string(filepath.Separator), "/")
+	if runtime.GOOS == "windows" {
+		// dry-run prints the PowerShell form there: `& 'cmd' 'arg'`. Compare it with the POSIX golden.
+		out = strings.ReplaceAll(strings.TrimPrefix(out, "& "), "'", "")
+	}
 	return hexRun.ReplaceAllString(out, "<HASH>")
 }
 
