@@ -602,7 +602,15 @@ func (s *Source) verifyRepo(ctx context.Context, dir, sha string) error {
 		})
 		gp, _ := s.git(ctx, dir, dir, "rev-parse", "--git-path", "objects/pack")
 		vp, verr := s.git(ctx, dir, dir, "cat-file", "--batch-check", "--batch-all-objects")
-		return fmt.Errorf("%w: %s: %w [DEBUG count=%q files=%v gitpath=%q batch=%q err=%v]", ErrTampered, dir, err, co, facts, gp, vp, verr)
+		var sib []string
+		if ents, e2 := os.ReadDir(filepath.Dir(dir)); e2 == nil {
+			for _, e := range ents {
+				fi, _ := e.Info()
+				sib = append(sib, fmt.Sprintf("%s@%d", e.Name(), fi.ModTime().UnixMilli()))
+			}
+		}
+		vpk, vperr := s.git(ctx, dir, dir, "-c", "core.fsyncObjectFiles=false", "count-objects", "-v", "-H")
+		return fmt.Errorf("%w: %s: %w [DEBUG count=%q files=%v gitpath=%q batch=%q err=%v siblings=%v now=%d vpk=%q %v]", ErrTampered, dir, err, co, facts, gp, vp, verr, sib, time.Now().UnixMilli(), vpk, vperr)
 	}
 	if strings.TrimSpace(head) != sha {
 		return fmt.Errorf("%w: %s is at %s, expected %s", ErrTampered, dir, strings.TrimSpace(head), sha)
