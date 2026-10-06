@@ -350,6 +350,16 @@ ul, ol, dl { margin: 0; padding: 0; }
   .e-use { grid-template-columns: 1fr; }
   .items { padding-inline: 10px; }
 }
+@media (max-width: 399px) {
+  .nav .opt2 { display: none; }
+  .nav { order: 0; width: auto; flex: 1 1 auto; }
+  .nav a { padding-inline: 6px; }
+  .nav ul { justify-content: flex-end; }
+  .theme { font-size: 0.8rem; padding: 6px 8px; }
+}
+@media (max-width: 359px) {
+  .nav .opt3 { display: none; }
+}
 
 /* Motion is opt-in: nothing moves when the visitor asks for reduced motion. One orchestrated
    moment: picked spines rise off the plank and their tape lights up; masked spines settle down. */
