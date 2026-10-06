@@ -1,6 +1,4 @@
 {
-  "version": 1,
-  "kind": "doctor",
   "summary": {
     "errors": 0,
     "warnings": 8,
@@ -97,7 +95,7 @@
       "check": "platform-review",
       "message": "hooky@acme ships hooks but CODEOWNERS does not route it to the platform owners (CAT042)",
       "plugin": "hooky@acme",
-      "hint": "give the platform team ownership of the plugin's hooks and .mcp.json in CODEOWNERS and set lint.platform_owners"
+      "hint": "give the platform team ownership of the plugin's hooks, .mcp.json and .lsp.json in CODEOWNERS and set lint.platform_owners"
     },
     {
       "severity": "info",
@@ -105,11 +103,5 @@
       "message": "no managed policy detected on this machine"
     }
   ],
-  "skipped": [
-    {
-      "code": "DOC011",
-      "check": "protected-masked",
-      "reason": "no org config was supplied"
-    }
-  ]
+  "skipped": []
 }

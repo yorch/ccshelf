@@ -290,9 +290,11 @@ func TestPlatformReview(t *testing.T) {
 	}
 	c := cat(entry("hooky", review(true, false)), entry("both", review(true, true)), entry("mcp", review(false, true)), entry("plain", nil))
 	rep := &lint.Report{Findings: []lint.Finding{
-		{Code: "CAT042", Plugin: "hooky"}, {Code: "CAT044", Plugin: "both"}, {Code: "CAT042", Plugin: "plain"}, {Code: "CAT019", Plugin: "mcp"},
+		{Code: "CAT042", Plugin: "hooky"}, {Code: "CAT044", Plugin: "both"}, {Code: "CAT019", Plugin: "mcp"}, {Code: "CAT042"},
 	}}
-	fs, skip := run1(t, "DOC010", Input{Catalog: c, Lint: rep})
+	org := orgconfig.Default()
+	org.Lint.PlatformOwners = []string{"@acme/platform"}
+	fs, skip := run1(t, "DOC010", Input{Catalog: c, Lint: rep, Org: org})
 	if skip != "" || !reflect.DeepEqual(plugins(fs), []string{"hooky@acme", "both@acme"}) {
 		t.Fatalf("findings = %+v", fs)
 	}
@@ -301,16 +303,57 @@ func TestPlatformReview(t *testing.T) {
 	}
 
 	rep.Findings = []lint.Finding{{Code: "CAT043"}}
-	fs, _ = run1(t, "DOC010", Input{Catalog: c, Lint: rep})
+	fs, _ = run1(t, "DOC010", Input{Catalog: c, Lint: rep, Org: org})
 	if !reflect.DeepEqual(plugins(fs), []string{"hooky@acme", "both@acme", "mcp@acme"}) || !strings.Contains(fs[0].Message, "no CODEOWNERS") ||
 		!strings.Contains(fs[2].Message, "ships MCP servers") {
 		t.Errorf("no CODEOWNERS: %+v", fs)
 	}
-	if fs, _ := run1(t, "DOC010", Input{Catalog: c, Lint: &lint.Report{}}); len(fs) != 0 {
+	if fs, _ := run1(t, "DOC010", Input{Catalog: c, Lint: &lint.Report{}, Org: org}); len(fs) != 0 {
 		t.Errorf("clean lint: %v", fs)
 	}
-	if _, skip := run1(t, "DOC010", Input{Catalog: c}); skip == "" {
+	if _, skip := run1(t, "DOC010", Input{Catalog: c, Org: org}); skip == "" {
 		t.Error("no lint: want skip")
+	}
+}
+
+func TestPlatformReviewSkipsWithoutPlatformOwners(t *testing.T) {
+	c := cat(entry("hooky", func(e *catalog.Entry) { e.HasHooks, e.NeedsPlatformReview = true, true }))
+	rep := &lint.Report{Findings: []lint.Finding{{Code: "CAT042", Plugin: "hooky"}}}
+	empty := orgconfig.Default()
+	empty.Lint.PlatformOwners = nil
+	fs, skip := run1(t, "DOC010", Input{Catalog: c, Lint: rep, Org: empty})
+	if len(fs) != 0 || !strings.Contains(skip, "lint.platform_owners is empty") {
+		t.Errorf("empty platform_owners: %v %q", fs, skip)
+	}
+	if _, skip := run1(t, "DOC010", Input{Catalog: c, Lint: rep}); !strings.Contains(skip, "org config") {
+		t.Errorf("no org config: skip = %q", skip)
+	}
+	// The skip reaches the report, so it is never silent.
+	r := Run(Input{Now: now, Catalog: c, Lint: rep, Org: empty})
+	found := false
+	for _, s := range r.Skipped {
+		if s.Code == "DOC010" && strings.Contains(s.Reason, "platform_owners") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("skipped = %+v", r.Skipped)
+	}
+}
+
+func TestPlatformReviewIncludesLSPPlugins(t *testing.T) {
+	// The catalog entry has neither HasHooks nor HasMCP (LSP is not tracked
+	// there), but lint reports it by CAT042.
+	c := cat(entry("lsp-only", nil), entry("plain", nil))
+	org := orgconfig.Default()
+	org.Lint.PlatformOwners = []string{"@acme/platform"}
+	rep := &lint.Report{Findings: []lint.Finding{{Code: "CAT042", Plugin: "lsp-only"}}}
+	fs, skip := run1(t, "DOC010", Input{Catalog: c, Lint: rep, Org: org})
+	if skip != "" || !reflect.DeepEqual(plugins(fs), []string{"lsp-only@acme"}) {
+		t.Fatalf("findings = %+v", fs)
+	}
+	if !strings.Contains(fs[0].Message, "hooks, MCP or LSP servers") {
+		t.Errorf("message = %q", fs[0].Message)
 	}
 }
 
@@ -318,25 +361,132 @@ func TestProtectedMasked(t *testing.T) {
 	org := orgconfig.Default()
 	org.Protect.Plugins = []string{"audit@acme"}
 	profiles := []ProfileView{
-		{Name: "strict"},
+		{Name: "strict"}, // omission in allow-only is normal: not reported
 		{Name: "good", Plugins: []string{"audit@acme"}},
 		{Name: "add", Mode: "additive"},
 		{Name: "excl", Mode: "additive", Exclude: []string{"audit@acme"}},
-		{Name: "bad name!"},
+		{Name: "bad name!", Exclude: []string{"audit@acme"}},
+		{Name: "base", Abstract: true, Exclude: []string{"audit@acme"}},
 	}
 	fs, skip := run1(t, "DOC011", Input{Catalog: cat(), Org: org, Profiles: profiles})
 	var names []string
 	for _, f := range fs {
 		names = append(names, f.Profile)
 	}
-	if skip != "" || !reflect.DeepEqual(names, []string{"strict", "excl", "bad name!"}) {
+	if skip != "" || !reflect.DeepEqual(names, []string{"excl", "bad name!"}) {
 		t.Fatalf("profiles = %v", names)
 	}
-	if !strings.Contains(fs[0].Hint, `add "audit@acme" to plugins.include of profile strict`) || fs[2].Hint != "" {
-		t.Errorf("hints = %q / %q", fs[0].Hint, fs[2].Hint)
+	if !strings.Contains(fs[0].Message, "the launcher keeps it enabled") || strings.Contains(fs[0].Message, "would mask") {
+		t.Errorf("message = %q", fs[0].Message)
+	}
+	if !strings.Contains(fs[0].Hint, `remove "audit@acme" from plugins.exclude of profile excl`) || fs[1].Hint != "" {
+		t.Errorf("hints = %q / %q", fs[0].Hint, fs[1].Hint)
+	}
+	if fs[0].Severity != "" && fs[0].Severity != Info {
+		t.Errorf("severity = %q", fs[0].Severity)
 	}
 	if _, skip := run1(t, "DOC011", Input{Catalog: cat()}); skip == "" {
 		t.Error("no org: want skip")
+	}
+}
+
+func TestProtectedMCP(t *testing.T) {
+	org := orgconfig.Default()
+	org.Protect.MCP = []string{"claude.ai Shopify", "plugin:audit:audit"}
+	profiles := []ProfileView{
+		{Name: "hides", HideConnectors: true, Plugins: []string{"a@acme"}},
+		{Name: "strict", StrictMCP: true, Plugins: []string{"a@acme"}},
+		{Name: "fine", Plugins: []string{"a@acme"}},
+		{Name: "base", Abstract: true, HideConnectors: true, StrictMCP: true},
+	}
+	fs, skip := run1(t, "DOC012", Input{Catalog: cat(), Org: org, Profiles: profiles})
+	if skip != "" || len(fs) != 2 {
+		t.Fatalf("findings = %+v (skip %q)", fs, skip)
+	}
+	if fs[0].Profile != "hides" || !strings.Contains(fs[0].Message, "claude.ai Shopify") || !strings.Contains(fs[0].Message, "refuses to start") {
+		t.Errorf("hides = %+v", fs[0])
+	}
+	if fs[1].Profile != "strict" || !strings.Contains(fs[1].Message, "mcp.strict") {
+		t.Errorf("strict = %+v", fs[1])
+	}
+	r := Run(Input{Now: now, Catalog: cat(), Org: org, Profiles: profiles})
+	if !r.HasErrors() {
+		t.Error("a profile the launcher refuses is an error")
+	}
+
+	// Only a plugin-provided protected server: hiding connectors is fine.
+	org.Protect.MCP = []string{"plugin:audit:audit"}
+	fs, _ = run1(t, "DOC012", Input{Catalog: cat(), Org: org, Profiles: profiles[:1]})
+	if len(fs) != 0 {
+		t.Errorf("no protected connector: %+v", fs)
+	}
+	org.Protect.MCP = nil
+	fs, _ = run1(t, "DOC012", Input{Catalog: cat(), Org: org, Profiles: profiles})
+	if len(fs) != 0 {
+		t.Errorf("no protected MCP: %+v", fs)
+	}
+	if _, skip := run1(t, "DOC012", Input{Catalog: cat()}); skip == "" {
+		t.Error("no org: want skip")
+	}
+}
+
+func TestUnusedHonorsProtectedAndRedaction(t *testing.T) {
+	org := orgconfig.Default()
+	org.Protect.Plugins = []string{"audit@acme"}
+	c := cat(entry("audit", nil), entry("idle", nil))
+	profiles := []ProfileView{{Name: "p", Plugins: []string{"other@acme"}}}
+
+	fs, _ := run1(t, "DOC002", Input{Catalog: c, Profiles: profiles, Org: org})
+	if !reflect.DeepEqual(plugins(fs), []string{"idle@acme"}) {
+		t.Errorf("a protected plugin is not unused: %v", plugins(fs))
+	}
+
+	usage := &analytics.Usage{PerPlugin: map[string]analytics.Counts{}, From: "2026-09-06", To: "2026-10-06", Redacted: 7}
+	fs, _ = run1(t, "DOC002", Input{Catalog: c, Profiles: profiles, Org: org, Usage: usage})
+	if len(fs) != 1 {
+		t.Fatalf("findings = %+v", fs)
+	}
+	if strings.Contains(fs[0].Message, "has 0 skill_activated events") || !strings.Contains(fs[0].Message, "7 usage event(s)") ||
+		!strings.Contains(fs[0].Message, "cannot be confirmed unused") {
+		t.Errorf("redacted usage must not claim zero events: %q", fs[0].Message)
+	}
+
+	// An id with recorded invocations is never reported, redacted or not.
+	usage.PerPlugin["idle@acme"] = analytics.Counts{Invocations: 1}
+	if fs, _ = run1(t, "DOC002", Input{Catalog: c, Profiles: profiles, Org: org, Usage: usage}); len(fs) != 0 {
+		t.Errorf("used plugin reported: %+v", fs)
+	}
+}
+
+func TestMasksTable(t *testing.T) {
+	tests := []struct {
+		name string
+		p    ProfileView
+		want bool
+	}{
+		{"default mode, not included", ProfileView{}, true},
+		{"explicit allow-only, not included", ProfileView{Mode: "allow-only"}, true},
+		{"explicit allow-only, included", ProfileView{Mode: "allow-only", Plugins: []string{"x@m"}}, false},
+		{"default mode, included", ProfileView{Plugins: []string{"x@m"}}, false},
+		{"additive, not included", ProfileView{Mode: "additive"}, false},
+		{"additive, excluded", ProfileView{Mode: "additive", Exclude: []string{"x@m"}}, true},
+		{"allow-only, included and excluded", ProfileView{Mode: "allow-only", Plugins: []string{"x@m"}, Exclude: []string{"x@m"}}, true},
+		{"abstract masks nothing", ProfileView{Abstract: true}, false},
+		{"abstract with exclude masks nothing", ProfileView{Abstract: true, Exclude: []string{"x@m"}}, false},
+	}
+	for _, tc := range tests {
+		if got := masks(tc.p, "x@m"); got != tc.want {
+			t.Errorf("%s: masks = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestForcedByPolicyIgnoresAbstractProfiles(t *testing.T) {
+	installed := []claude.Plugin{{ID: "audit@acme", RequiredByOrg: true}}
+	profiles := []ProfileView{{Name: "base", Abstract: true}, {Name: "real"}}
+	fs, _ := run1(t, "DOC009", Input{Catalog: cat(), Installed: installed, Profiles: profiles})
+	if len(fs) != 1 || !strings.HasSuffix(fs[0].Message, ": real") {
+		t.Errorf("findings = %+v", fs)
 	}
 }
 
@@ -384,6 +534,13 @@ func TestRules(t *testing.T) {
 	}
 }
 
+func goldenOrg() *orgconfig.Config {
+	org := orgconfig.Default()
+	org.Lint.PlatformOwners = []string{"@acme/platform"}
+	org.Protect.Plugins = []string{"audit-log@acme"}
+	return org
+}
+
 func goldenInput() Input {
 	tags := func(ts ...string) func(*catalog.Entry) { return func(e *catalog.Entry) { e.Tags = ts } }
 	return Input{
@@ -402,6 +559,7 @@ func goldenInput() Input {
 			{ID: "audit-log@acme", Marketplace: "acme", RequiredByOrg: true},
 		},
 		StandaloneSkills: []string{"pdf"},
+		Org:              goldenOrg(),
 		Usage:            &analytics.Usage{PerPlugin: map[string]analytics.Counts{}, From: "2026-09-06", To: "2026-10-06"},
 		Policy:           []Finding{{Code: "POL001", Severity: Info, Message: "no managed policy detected on this machine"}},
 	}

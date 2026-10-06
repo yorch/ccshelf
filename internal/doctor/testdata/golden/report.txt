@@ -18,7 +18,6 @@ DOC008 warning not-installed: profile sre includes postmortem-lite@acme, which i
        hint: claude plugin install postmortem-lite@acme
 DOC009 info    forced-by-policy: audit-log@acme is forced on by managed policy and cannot be masked; profiles that leave it out still run with it: sre
 DOC010 warning platform-review: hooky@acme ships hooks but CODEOWNERS does not route it to the platform owners (CAT042)
-       hint: give the platform team ownership of the plugin's hooks and .mcp.json in CODEOWNERS and set lint.platform_owners
+       hint: give the platform team ownership of the plugin's hooks, .mcp.json and .lsp.json in CODEOWNERS and set lint.platform_owners
 POL001 info    policy: no managed policy detected on this machine
-skipped DOC011 protected-masked: no org config was supplied
 doctor: 0 error(s), 8 warning(s), 5 info

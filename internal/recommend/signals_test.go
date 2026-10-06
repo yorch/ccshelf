@@ -258,3 +258,59 @@ func TestSafeName(t *testing.T) {
 		}
 	}
 }
+
+func TestCollectManyEmptyDirsIsBounded(t *testing.T) {
+	root := t.TempDir()
+	for i := 0; i < MaxDirs+200; i++ {
+		if err := os.Mkdir(filepath.Join(root, "e"+itoa(i)), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sig, err := Collect(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sig.Truncated {
+		t.Error("a tree with more than MaxDirs directories must report Truncated")
+	}
+}
+
+func TestCollectStopsWalkingAtFileCap(t *testing.T) {
+	root := t.TempDir()
+	for i := 0; i < MaxFiles; i++ {
+		write(t, root, "f"+itoa(i)+".txt", "")
+	}
+	write(t, root, "sub/go.mod", "module x\n")
+	sig, err := Collect(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sig.Files) != MaxFiles || !sig.Truncated {
+		t.Errorf("files=%d truncated=%v", len(sig.Files), sig.Truncated)
+	}
+	if _, ok := sig.ManifestFiles["sub/go.mod"]; ok {
+		t.Error("the walk continued past the file cap")
+	}
+}
+
+func TestCollectManifestDepthLimit(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, "a/b/go.mod", "module deep2\n")     // depth 2: read
+	write(t, root, "a/b/c/go.mod", "module deep3\n")   // depth 3: not read
+	write(t, root, "a/b/c/d/go.mod", "module deep4\n") // depth 4: not read
+	sig, err := Collect(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := sig.ManifestFiles["a/b/go.mod"]; !ok {
+		t.Errorf("a manifest two levels down must be read: %v", sig.ManifestFiles)
+	}
+	for _, rel := range []string{"a/b/c/go.mod", "a/b/c/d/go.mod"} {
+		if _, ok := sig.ManifestFiles[rel]; ok {
+			t.Errorf("manifest %s is deeper than the limit and must not be read", rel)
+		}
+	}
+	if len(sig.Files) != 3 {
+		t.Errorf("files = %v", sig.Files)
+	}
+}

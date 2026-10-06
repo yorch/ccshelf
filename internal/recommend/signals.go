@@ -24,6 +24,9 @@ const (
 	// MaxDepth is how many directory levels below the start directory the
 	// walk enters.
 	MaxDepth = 6
+	// MaxDirs caps the number of directories read, so a tree of many empty
+	// directories cannot keep the walk busy.
+	MaxDirs = 10000
 
 	maxEntriesPerDir = 5000
 	maxNameLen       = 255
@@ -87,7 +90,7 @@ var cliByExt = map[string][]string{
 // Collect inspects dir with a bounded, breadth-first walk. It never follows
 // symlinks, skips .git, node_modules, vendor and similar directories, skips
 // entries it cannot read, ignores names with control characters or invalid
-// UTF-8, and stops at MaxFiles files and MaxDepth levels. It reads no file
+// UTF-8, and stops at MaxFiles files, MaxDirs directories and MaxDepth levels. It reads no file
 // outside dir and only manifest files at all.
 func Collect(ctx context.Context, dir string) (*Signals, error) {
 	abs, err := filepath.Abs(dir)
@@ -109,13 +112,18 @@ func Collect(ctx context.Context, dir string) (*Signals, error) {
 	}
 	cliSet := map[string]bool{}
 	queue := []item{{"", 0}}
-	manifests := 0
+	manifests, dirs := 0, 0
 	for len(queue) > 0 {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
+		if len(sig.Files) >= MaxFiles || dirs >= MaxDirs {
+			sig.Truncated = true
+			break
+		}
 		cur := queue[0]
 		queue = queue[1:]
+		dirs++
 		entries, err := os.ReadDir(filepath.Join(abs, filepath.FromSlash(cur.rel)))
 		if err != nil {
 			continue // permission errors and races are skipped

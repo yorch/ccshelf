@@ -22,7 +22,7 @@ type check struct {
 
 var checks = []check{
 	{"DOC001", "overlap", Warning, "Plugins that share at least 60% of their tags, or list each other in overlaps_with.", checkOverlap},
-	{"DOC002", "unused", Info, "Plugins in no profile and, with usage data, with no skill_activated events in the window.", checkUnused},
+	{"DOC002", "unused", Info, "Plugins in no profile (protected plugins excepted) and, with usage data, with no skill_activated events in the window; unconfirmed when usage names are redacted.", checkUnused},
 	{"DOC003", "deprecated-in-use", Warning, "A profile includes a deprecated plugin.", checkDeprecatedInUse},
 	{"DOC004", "review", Warning, "A plugin's review_by is missing or in the past.", checkReview},
 	{"DOC005", "owner", Warning, "A plugin has no owner.", checkOwner},
@@ -30,8 +30,9 @@ var checks = []check{
 	{"DOC007", "missing-upstream", Warning, "An installed plugin is no longer listed by its marketplace.", checkMissingUpstream},
 	{"DOC008", "not-installed", Warning, "A profile includes a plugin that is not installed.", checkNotInstalled},
 	{"DOC009", "forced-by-policy", Info, "A plugin is forced on by managed policy and no profile can mask it.", checkForced},
-	{"DOC010", "platform-review", Warning, "A plugin with hooks or MCP servers is not covered by platform review.", checkPlatformReview},
-	{"DOC011", "protected-masked", Warning, "A profile would mask a plugin the org config protects.", checkProtectedMasked},
+	{"DOC010", "platform-review", Warning, "A plugin with hooks, MCP or LSP servers is not covered by platform review (needs lint.platform_owners).", checkPlatformReview},
+	{"DOC011", "protected-masked", Info, "A profile excludes a plugin the org config protects; the launcher keeps protected plugins on, so the exclude has no effect.", checkProtectedMasked},
+	{"DOC012", "protected-mcp", Error, "A profile hides claude.ai connectors or sets mcp.strict while the org config protects an MCP server it would remove; the launcher refuses to start it.", checkProtectedMCP},
 }
 
 // Safe-value patterns: only values that match are put into shell commands and
@@ -223,22 +224,37 @@ func checkUnused(in *Input) ([]Finding, string) {
 	var out []Finding
 	for _, e := range in.Catalog.Plugins {
 		id := entryID(e)
-		if used[id] || e.Status == "deprecated" {
+		// A protected plugin is on in every profile whether it lists it or not.
+		if used[id] || e.Status == "deprecated" || protectedPlugin(in, e) {
 			continue
 		}
 		msg := fmt.Sprintf("%s is in no profile", txt(id))
-		if in.Usage != nil {
+		if in.Usage == nil {
+			msg += " (no usage data to confirm it is unused)"
+		} else {
 			c, _ := in.Usage.Lookup(id)
 			if c.Used() {
 				continue
 			}
-			msg += fmt.Sprintf(" and has 0 skill_activated events%s", window(in))
-		} else {
-			msg += " (no usage data to confirm it is unused)"
+			if in.Usage.Redacted > 0 {
+				// Redacted events may belong to this plugin: do not claim zero.
+				msg += fmt.Sprintf(" (%d usage event(s)%s have redacted plugin names, so it cannot be confirmed unused)", in.Usage.Redacted, window(in))
+			} else {
+				msg += fmt.Sprintf(" and has 0 skill_activated events%s", window(in))
+			}
 		}
 		out = append(out, Finding{Plugin: id, Message: msg})
 	}
 	return out, ""
+}
+
+// protectedPlugin reports whether the org config protects the plugin, by id
+// or by plain name.
+func protectedPlugin(in *Input, e catalog.Entry) bool {
+	if in.Org == nil {
+		return false
+	}
+	return in.Org.IsProtectedPlugin(entryID(e)) || in.Org.IsProtectedPlugin(e.Name)
 }
 
 func window(in *Input) string {
@@ -288,22 +304,28 @@ func checkReview(in *Input) ([]Finding, string) {
 		}
 		id := entryID(e)
 		if e.ReviewBy == "" {
-			out = append(out, Finding{Plugin: id, Message: fmt.Sprintf("%s has no review_by date", txt(id)),
-				Hint: `add review_by = "YYYY-MM-DD" to its sidecar`})
+			out = append(out, Finding{
+				Plugin: id, Message: fmt.Sprintf("%s has no review_by date", txt(id)),
+				Hint: `add review_by = "YYYY-MM-DD" to its sidecar`,
+			})
 			continue
 		}
 		d, err := time.Parse("2006-01-02", e.ReviewBy)
 		if err != nil {
-			out = append(out, Finding{Plugin: id, Message: fmt.Sprintf("%s has a review_by that is not a date (%s)", txt(id), txt(e.ReviewBy)),
-				Hint: `use the form review_by = "YYYY-MM-DD"`})
+			out = append(out, Finding{
+				Plugin: id, Message: fmt.Sprintf("%s has a review_by that is not a date (%s)", txt(id), txt(e.ReviewBy)),
+				Hint: `use the form review_by = "YYYY-MM-DD"`,
+			})
 			continue
 		}
 		if !now.After(d) {
 			continue
 		}
 		days := int(now.Sub(d).Hours() / 24)
-		f := Finding{Plugin: id, Message: fmt.Sprintf("%s was due for review on %s (%d days ago)", txt(id), e.ReviewBy, days),
-			Hint: "review the plugin and move review_by forward"}
+		f := Finding{
+			Plugin: id, Message: fmt.Sprintf("%s was due for review on %s (%d days ago)", txt(id), e.ReviewBy, days),
+			Hint: "review the plugin and move review_by forward",
+		}
 		if now.Sub(d) <= maxAge {
 			f.Severity = Info
 		}
@@ -317,8 +339,10 @@ func checkOwner(in *Input) ([]Finding, string) {
 	for _, e := range in.Catalog.Plugins {
 		if strings.TrimSpace(e.Owner) == "" {
 			id := entryID(e)
-			out = append(out, Finding{Plugin: id, Message: fmt.Sprintf("%s has no owner", txt(id)),
-				Hint: `add owner = "team-or-person" to its sidecar`})
+			out = append(out, Finding{
+				Plugin: id, Message: fmt.Sprintf("%s has no owner", txt(id)),
+				Hint: `add owner = "team-or-person" to its sidecar`,
+			})
 		}
 	}
 	return out, ""
@@ -460,8 +484,13 @@ func checkForced(in *Input) ([]Finding, string) {
 }
 
 // masks reports whether a profile would mask a plugin: it excludes it, or it
-// runs in allow-only mode (the default) and does not include it.
+// runs in allow-only mode (the default) and does not include it. An abstract
+// profile (one that resolves to no plugins) is only a base for others and
+// masks nothing.
 func masks(p ProfileView, id string) bool {
+	if p.Abstract {
+		return false
+	}
 	for _, x := range p.Exclude {
 		if x == id {
 			return true
@@ -488,6 +517,12 @@ func checkPlatformReview(in *Input) ([]Finding, string) {
 	if in.Lint == nil {
 		return nil, "no lint report was supplied"
 	}
+	if in.Org == nil {
+		return nil, "no org config was supplied, so lint.platform_owners is not known"
+	}
+	if len(in.Org.Lint.PlatformOwners) == 0 {
+		return nil, "lint.platform_owners is empty, so CODEOWNERS routing of hooks, MCP and LSP servers is not checked (set it in ccshelf.toml to enable CAT042 and this check)"
+	}
 	noCodeowners := false
 	uncovered := map[string]string{}
 	for _, f := range in.Lint.Findings {
@@ -502,11 +537,10 @@ func checkPlatformReview(in *Input) ([]Finding, string) {
 	}
 	var out []Finding
 	for _, e := range in.Catalog.Plugins {
-		if !e.NeedsPlatformReview {
-			continue
-		}
 		code, bad := uncovered[e.Name]
-		if !bad && !noCodeowners {
+		// A plugin that ships LSP servers is not flagged NeedsPlatformReview
+		// by the catalog, but lint reports it by CAT042.
+		if !bad && !(e.NeedsPlatformReview && noCodeowners) {
 			continue
 		}
 		what := what(e)
@@ -515,9 +549,11 @@ func checkPlatformReview(in *Input) ([]Finding, string) {
 			why = "the repository has no CODEOWNERS file"
 		}
 		id := entryID(e)
-		out = append(out, Finding{Plugin: id,
+		out = append(out, Finding{
+			Plugin:  id,
 			Message: fmt.Sprintf("%s ships %s but %s (%s)", txt(id), what, why, codeOrDash(code, bad)),
-			Hint:    "give the platform team ownership of the plugin's hooks and .mcp.json in CODEOWNERS and set lint.platform_owners"})
+			Hint:    "give the platform team ownership of the plugin's hooks, .mcp.json and .lsp.json in CODEOWNERS and set lint.platform_owners",
+		})
 	}
 	return out, ""
 }
@@ -535,13 +571,19 @@ func what(e catalog.Entry) string {
 		return "hooks and MCP servers"
 	case e.HasHooks:
 		return "hooks"
-	default:
+	case e.HasMCP:
 		return "MCP servers"
+	default:
+		return "hooks, MCP or LSP servers"
 	}
 }
 
-// --- DOC011 protected plugins masked by a profile ---
+// --- DOC011 protected plugins excluded by a profile ---
 
+// checkProtectedMasked reports an explicit exclude of a protected plugin. The
+// launcher keeps protected plugins enabled whatever a profile says (SR3), so
+// the exclude does nothing; leaving a protected plugin out of an allow-only
+// profile is normal and is not reported.
 func checkProtectedMasked(in *Input) ([]Finding, string) {
 	if in.Org == nil {
 		return nil, "no org config was supplied"
@@ -549,15 +591,70 @@ func checkProtectedMasked(in *Input) ([]Finding, string) {
 	var out []Finding
 	for _, id := range in.Org.Protect.Plugins {
 		for _, p := range in.Profiles {
-			if !masks(p, id) {
+			if p.Abstract || !contains(p.Exclude, id) {
 				continue
 			}
-			f := Finding{Plugin: id, Profile: p.Name,
-				Message: fmt.Sprintf("profile %s would mask %s, which the org config protects", txt(p.Name), txt(id))}
+			f := Finding{
+				Plugin: id, Profile: p.Name,
+				Message: fmt.Sprintf("profile %s excludes %s, which the org config protects; the launcher keeps it enabled, so the exclude has no effect", txt(p.Name), txt(id)),
+			}
 			if profileRe.MatchString(p.Name) && pluginIDRe.MatchString(id) {
-				f.Hint = fmt.Sprintf("add %q to plugins.include of profile %s", id, p.Name)
+				f.Hint = fmt.Sprintf("remove %q from plugins.exclude of profile %s", id, p.Name)
 			}
 			out = append(out, f)
+		}
+	}
+	return out, ""
+}
+
+func contains(list []string, s string) bool {
+	for _, x := range list {
+		if x == s {
+			return true
+		}
+	}
+	return false
+}
+
+// --- DOC012 profiles that conflict with protected MCP servers ---
+
+// connectorPrefix starts the label of a claude.ai connector in the org's
+// protect.mcp list ("claude.ai Shopify").
+const connectorPrefix = "claude.ai "
+
+// checkProtectedMCP finds profiles the launcher would refuse to start: one
+// that hides claude.ai connectors while a protected label is a connector (the
+// settings builder fails with ErrProtectedConnector), and one that sets
+// mcp.strict while any MCP server is protected.
+func checkProtectedMCP(in *Input) ([]Finding, string) {
+	if in.Org == nil {
+		return nil, "no org config was supplied"
+	}
+	var connectors []string
+	for _, l := range in.Org.Protect.MCP {
+		if strings.HasPrefix(l, connectorPrefix) {
+			connectors = append(connectors, l)
+		}
+	}
+	var out []Finding
+	for _, p := range in.Profiles {
+		if p.Abstract {
+			continue
+		}
+		if p.HideConnectors && len(connectors) > 0 {
+			f := Finding{
+				Profile: p.Name,
+				Message: fmt.Sprintf("profile %s sets claudeai_connectors = \"none\", which would hide the protected connector(s) %s; the launcher refuses to start it", txt(p.Name), txt(strings.Join(connectors, ", "))),
+			}
+			f.Hint = "set claudeai_connectors = \"keep\" in the profile, or remove the connector from protect.mcp"
+			out = append(out, f)
+		}
+		if p.StrictMCP && len(in.Org.Protect.MCP) > 0 {
+			out = append(out, Finding{
+				Profile: p.Name,
+				Message: fmt.Sprintf("profile %s sets mcp.strict, which would also remove the protected MCP servers (%s); the launcher refuses to start it", txt(p.Name), txt(strings.Join(in.Org.Protect.MCP, ", "))),
+				Hint:    "remove mcp.strict from the profile",
+			})
 		}
 	}
 	return out, ""

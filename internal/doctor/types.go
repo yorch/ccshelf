@@ -54,6 +54,15 @@ type ProfileView struct {
 	Mode          string
 	StandaloneOff []string
 	NameOnly      []string
+	// Abstract is true for a profile that resolves to no plugins: only a
+	// base for others, never launched, so it is left out of the checks about
+	// what a launched profile does.
+	Abstract bool
+	// HideConnectors is true when the profile sets claudeai_connectors to
+	// "none".
+	HideConnectors bool
+	// StrictMCP is true when the profile sets mcp.strict.
+	StrictMCP bool
 }
 
 // Input is everything the checks look at. Only Catalog is required; a check

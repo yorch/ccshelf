@@ -8,9 +8,6 @@ import (
 	"strings"
 )
 
-// JSONVersion is the version of the JSON report format.
-const JSONVersion = 1
-
 // WriteText renders the report for a terminal: one line per finding
 // ("DOC001 warning overlap: ..."), hints indented below, then skipped checks
 // and a summary line.
@@ -50,38 +47,52 @@ func (r *Report) Text() string {
 	return b.String()
 }
 
-// oneLine removes control characters other than tab from output, so a hostile
-// string cannot move the cursor or recolor the terminal.
+// oneLine makes a value safe for one terminal line. Control characters (C0,
+// DEL, C1, including tab and newline) and the Unicode line and paragraph
+// separators become a space, so a hostile string cannot move the cursor or
+// recolor the terminal; invisible formatting characters (zero-width characters,
+// bidirectional overrides and isolates, the byte order mark, the soft hyphen)
+// are removed, so text cannot be reordered or hidden.
 func oneLine(s string) string {
 	return strings.Map(func(r rune) rune {
-		if r < 0x20 || r == 0x7f || (r >= 0x80 && r < 0xa0) {
+		switch {
+		case r < 0x20, r == 0x7f, r >= 0x80 && r < 0xa0, r == 0x2028, r == 0x2029:
 			return ' '
+		case r == 0xad, r >= 0x200b && r <= 0x200f, r >= 0x202a && r <= 0x202e,
+			r >= 0x2060 && r <= 0x2064, r >= 0x2066 && r <= 0x2069, r == 0xfeff:
+			return -1
 		}
 		return r
 	}, s)
 }
 
-type jsonReport struct {
-	Version  int       `json:"version"`
-	Kind     string    `json:"kind"`
+// JSON returns the report as the data payload of the doctor JSON envelope:
+// {"summary":{...},"findings":[...],"skipped":[...]} with two-space indent.
+// The command wraps it in the common {"version","kind":"doctor","data"}
+// envelope itself.
+func (r *Report) JSON() ([]byte, error) {
+	b, err := json.MarshalIndent(r.Payload(), "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("encoding the doctor report: %w", err)
+	}
+	return append(b, '\n'), nil
+}
+
+// Payload is the data of the doctor JSON output.
+type Payload struct {
 	Summary  Counts    `json:"summary"`
 	Findings []Finding `json:"findings"`
 	Skipped  []Skip    `json:"skipped"`
 }
 
-// JSON returns the report as indented JSON:
-// {"version":1,"kind":"doctor","summary":{...},"findings":[...],"skipped":[...]}.
-func (r *Report) JSON() ([]byte, error) {
-	out := jsonReport{Version: JSONVersion, Kind: "doctor", Summary: r.Counts(), Findings: r.Findings, Skipped: r.Skipped}
-	if out.Findings == nil {
-		out.Findings = []Finding{}
+// Payload returns the report as a Payload with no nil slices.
+func (r *Report) Payload() Payload {
+	p := Payload{Summary: r.Counts(), Findings: r.Findings, Skipped: r.Skipped}
+	if p.Findings == nil {
+		p.Findings = []Finding{}
 	}
-	if out.Skipped == nil {
-		out.Skipped = []Skip{}
+	if p.Skipped == nil {
+		p.Skipped = []Skip{}
 	}
-	b, err := json.MarshalIndent(out, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("encoding the doctor report: %w", err)
-	}
-	return append(b, '\n'), nil
+	return p
 }

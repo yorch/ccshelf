@@ -124,10 +124,12 @@ func TestFetchKeyNeverLeaks(t *testing.T) {
 	}
 
 	// A transport error whose text carries the key is redacted.
-	o := Options{BaseURL: "https://example.invalid", Getenv: env(map[string]string{DefaultKeyEnv: testKey}), Now: fixedNow,
+	o := Options{
+		BaseURL: "https://example.invalid", Getenv: env(map[string]string{DefaultKeyEnv: testKey}), Now: fixedNow,
 		HTTPClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 			return nil, errors.New("boom " + testKey)
-		})}}
+		})},
+	}
 	_, err := Fetch(context.Background(), o)
 	if err == nil || strings.Contains(err.Error(), "SECRET") || !strings.Contains(err.Error(), "[redacted]") {
 		t.Errorf("transport error = %v", err)

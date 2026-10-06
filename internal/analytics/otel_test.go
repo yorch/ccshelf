@@ -1,9 +1,12 @@
 package analytics
 
 import (
+	"bufio"
+	"errors"
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestParseOTelJSONLFixture(t *testing.T) {
@@ -48,8 +51,101 @@ func TestParseOTelJSONLErrors(t *testing.T) {
 		t.Errorf("empty input: %v %v", u, err)
 	}
 	long := `{"x":"` + strings.Repeat("a", maxLineSize) + `"}`
-	if _, err := ParseOTelJSONL(strings.NewReader(long)); err == nil {
-		t.Error("long line: want error")
+	_, err := ParseOTelJSONL(strings.NewReader(long))
+	if err == nil || !errors.Is(err, bufio.ErrTooLong) || !strings.Contains(err.Error(), "a line is longer than") {
+		t.Errorf("long line: want the line-length error, got %v", err)
+	}
+}
+
+func TestParseOTelInputCapIsAnErrorNotATruncation(t *testing.T) {
+	ev := `{"event.name":"claude_code.skill_activated","plugin.name":"p@m"}` + "\n"
+	// Exactly at the cap is fine.
+	if u, err := parseOTel(strings.NewReader(ev), OTelOptions{}, int64(len(ev))); err != nil || u.PerPlugin["p@m"].Invocations != 1 {
+		t.Fatalf("at the cap: %v %v", u, err)
+	}
+	// One byte over is an error, and no partial usage is returned.
+	u, err := parseOTel(strings.NewReader(ev+ev), OTelOptions{}, int64(len(ev))+1)
+	if !errors.Is(err, ErrInputTooLarge) || u != nil {
+		t.Errorf("over the cap: %v %v", u, err)
+	}
+}
+
+func TestCapReaderReportsTheOverflow(t *testing.T) {
+	c := &capReader{r: strings.NewReader(strings.Repeat("x", 100)), max: 10}
+	buf := make([]byte, 64)
+	var total int
+	var err error
+	for err == nil {
+		var n int
+		n, err = c.Read(buf)
+		total += n
+	}
+	if !errors.Is(err, ErrInputTooLarge) || total != 11 {
+		t.Errorf("read %d bytes, err %v", total, err)
+	}
+	if n, err := c.Read(nil); n != 0 || err != nil {
+		t.Errorf("empty read: %d %v", n, err)
+	}
+}
+
+func TestParseOTelWindow(t *testing.T) {
+	in := strings.Join([]string{
+		`{"event.name":"claude_code.skill_activated","plugin.name":"old@m","timestamp":"2026-06-01T10:00:00Z"}`,
+		`{"event.name":"claude_code.skill_activated","plugin.name":"in@m","timestamp":"2026-09-10T10:00:00Z"}`,
+		`{"event.name":"claude_code.skill_activated","plugin.name":"edge@m","timestamp":"2026-10-06T00:00:00Z"}`,
+		`{"event.name":"claude_code.skill_activated","plugin.name":"undated@m"}`,
+		`{"event.name":"claude_code.skill_activated","plugin.name":"<redacted>","timestamp":"2026-05-01T10:00:00Z"}`,
+		`{"event.name":"claude_code.skill_activated","plugin.name":"<redacted>","timestamp":"2026-09-11T10:00:00Z"}`,
+	}, "\n")
+	from := time.Date(2026, 9, 6, 0, 0, 0, 0, time.UTC)
+	to := time.Date(2026, 10, 6, 0, 0, 0, 0, time.UTC)
+	u, err := ParseOTelJSONLWindow(strings.NewReader(in), OTelOptions{From: from, To: to})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := u.PerPlugin["old@m"]; ok {
+		t.Error("an event before the window was counted")
+	}
+	if _, ok := u.PerPlugin["edge@m"]; ok {
+		t.Error("To is exclusive")
+	}
+	if u.PerPlugin["in@m"].Invocations != 1 || u.PerPlugin["undated@m"].Invocations != 1 {
+		t.Errorf("per plugin = %+v", u.PerPlugin)
+	}
+	if u.Redacted != 1 {
+		t.Errorf("only the in-window redacted event counts, got %d", u.Redacted)
+	}
+	if u.From != "2026-09-06" || u.To != "2026-10-05" {
+		t.Errorf("window echo = %s..%s", u.From, u.To)
+	}
+}
+
+func TestEventTimeRejectsImplausible(t *testing.T) {
+	for _, in := range []string{
+		"1e30", "1e300", "9999999999999999999999", "1788000000000000000000", "0.5", "-5", "NaN", "Inf", "+Inf",
+		"0001-01-01T00:00:00Z", "9999-12-31T23:59:59Z", "1999-12-31T23:59:59Z", "2101-01-01T00:00:00Z",
+		"4102444801", "946684799",
+	} {
+		if got, ok := eventTime(map[string]string{"time": in}); ok {
+			t.Errorf("eventTime(%q) = %v, want it rejected", in, got)
+		}
+	}
+	for _, in := range []string{"946684800", "4102444800", "2000-01-01T00:00:00Z"} {
+		if _, ok := eventTime(map[string]string{"time": in}); !ok {
+			t.Errorf("eventTime(%q) must be accepted", in)
+		}
+	}
+}
+
+func TestImplausibleTimestampDoesNotStretchTheWindow(t *testing.T) {
+	in := `{"event.name":"claude_code.skill_activated","plugin.name":"a@m","timestamp":"1e30"}` + "\n" +
+		`{"event.name":"claude_code.skill_activated","plugin.name":"a@m","timestamp":"2026-09-01T10:00:00Z"}` + "\n"
+	u, err := ParseOTelJSONL(strings.NewReader(in))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.From != "2026-09-01" || u.To != "2026-09-01" || u.PerPlugin["a@m"].Invocations != 2 {
+		t.Errorf("%+v", u)
 	}
 }
 

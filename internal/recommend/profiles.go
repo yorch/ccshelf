@@ -165,8 +165,10 @@ func profileRecs(sig *Signals, profiles []ProfileInfo) []Recommendation {
 			if !ok || r.Status == "deprecated" || r.Name == p.Name {
 				continue
 			}
-			rec = Recommendation{Kind: KindProfile, Name: r.Name, Score: score, Status: r.Status, Replaces: p.Name,
-				Why: append([]string{fmt.Sprintf("replaces deprecated profile %s, which matched this directory", p.Name)}, why...)}
+			rec = Recommendation{
+				Kind: KindProfile, Name: r.Name, Score: score, Status: r.Status, Replaces: p.Name,
+				Why: append([]string{fmt.Sprintf("replaces deprecated profile %s, which matched this directory", p.Name)}, why...),
+			}
 		}
 		if cur, ok := byID[rec.Name]; ok && cur.Score >= rec.Score {
 			continue

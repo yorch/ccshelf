@@ -13,8 +13,10 @@
 //	                          (Jaccard: shared tags over all tags of the two,
 //	                          with at least two shared) or that list each other
 //	                          in overlaps_with
-//	DOC002 unused             plugins in no profile and, with usage data,
-//	                          with no skill_activated events in the window
+//	DOC002 unused             plugins in no profile (protected plugins
+//	                          excepted) and, with usage data, with no
+//	                          skill_activated events in the window; reported
+//	                          as unconfirmed when usage names are redacted
 //	DOC003 deprecated-in-use  profiles that include a deprecated plugin, with
 //	                          the replacement
 //	DOC004 review             review_by in the past or missing
@@ -27,11 +29,15 @@
 //	                          with the install command
 //	DOC009 forced-by-policy   plugins that managed policy forces on (cannot be
 //	                          masked by any profile)
-//	DOC010 platform-review    plugins with hooks or MCP servers that the
+//	DOC010 platform-review    plugins with hooks, MCP or LSP servers that the
 //	                          CODEOWNERS rules do not route to platform review
-//	                          (read from the lint report)
-//	DOC011 protected-masked   a profile that would mask a protected plugin of
-//	                          the org config
+//	                          (read from the lint report; skipped, with the
+//	                          reason, when lint.platform_owners is empty)
+//	DOC011 protected-masked   a profile that excludes a protected plugin; the
+//	                          launcher keeps it on, so the exclude is moot
+//	DOC012 protected-mcp      a profile that hides claude.ai connectors or sets
+//	                          mcp.strict while the org protects an MCP server
+//	                          that would go with them (the launcher refuses it)
 //
 // Policy findings supplied in Input.Policy are copied into the report
 // unchanged. Token cost hints are out of scope: no estimates are made.
@@ -41,9 +47,9 @@
 //
 // # Output
 //
-// Report.Text renders findings grouped by check; Report.JSON renders
-// {"version":1,"kind":"doctor","summary":...,"findings":[...],"skipped":[...]}
-// with the same finding fields as the lint report (severity, code, message,
+// Report.Text renders findings grouped by check; Report.JSON renders the data
+// payload {"summary":...,"findings":[...],"skipped":[...]} (the CLI wraps it
+// in the common {"version","kind","data"} envelope) with the same finding fields as the lint report (severity, code, message,
 // plugin, hint) plus check and profile. Text taken from untrusted files is
 // sanitized (control characters become spaces) before it enters a message, and
 // shell commands and TOML snippets in hints are produced only from values that
