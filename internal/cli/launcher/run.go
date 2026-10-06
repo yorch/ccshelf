@@ -202,7 +202,10 @@ func (s *session) buildLaunch(ctx context.Context, name string, pass []string, y
 	s.env = claude.Env(cc.Environ(), extra)
 	printAccountNotes(cc, choice)
 
-	warnings := []string{}
+	// What was raised while the sources were prepared (an unavailable source,
+	// a cached checkout used offline) is part of the structured warnings; it was
+	// already printed once.
+	warnings := append([]string{}, s.warnings...)
 	warn := func(format string, a ...any) {
 		msg := fmt.Sprintf(format, a...)
 		for _, w := range warnings {
@@ -601,6 +604,16 @@ func deniableMCP(installed []claude.Plugin, include, protectedPlugins, locked, p
 	keep := map[string]bool{}
 	for _, l := range protectedMCP {
 		keep[l] = true
+	}
+	// Labels carry no marketplace, so a label owned by a plugin that is kept
+	// (included, protected, locked or required by org) may also belong to a
+	// same-named plugin of another marketplace: never deny it.
+	for _, p := range installed {
+		if p.Name != "" && (skip[p.ID] || p.RequiredByOrg) {
+			for server := range p.MCPServers {
+				keep["plugin:"+p.Name+":"+server] = true
+			}
+		}
 	}
 	seen := map[string]bool{}
 	var out []string

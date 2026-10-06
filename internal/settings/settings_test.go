@@ -623,3 +623,55 @@ func TestUserLayerDropped(t *testing.T) {
 		t.Error("protected plugin written without UserLayerDropped")
 	}
 }
+
+func TestProtectedMCPProtectsOwningPlugin(t *testing.T) {
+	for _, dropped := range []bool{false, true} {
+		res, err := Build(Spec{
+			Installed:        []claude.Plugin{plug("context7@official"), plug("other@official")},
+			ProtectedMCP:     []string{"plugin:context7:context7"},
+			UserLayerDropped: dropped,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		v, ok := res.Doc.EnabledPlugins["context7@official"]
+		if dropped && (!ok || !v) {
+			t.Errorf("dropped: owning plugin not enabled: %v", res.Doc.EnabledPlugins)
+		}
+		if !dropped && ok {
+			t.Errorf("owning plugin written: %v", res.Doc.EnabledPlugins)
+		}
+		if v, ok := res.Doc.EnabledPlugins["other@official"]; dropped == ok && !dropped && (!ok || v) {
+			t.Errorf("other plugin not masked: %v", res.Doc.EnabledPlugins)
+		}
+		eq(t, res.Protected, []string{"context7@official"})
+		found := false
+		for _, w := range res.Warnings {
+			found = found || strings.Contains(w, "protected MCP server plugin:context7:context7")
+		}
+		if !found {
+			t.Errorf("no warning: %v", res.Warnings)
+		}
+	}
+}
+
+func TestProtectedMCPOwnerAmbiguityAndExclude(t *testing.T) {
+	res, err := Build(Spec{
+		Installed:    []claude.Plugin{plug("audit@acme"), plug("audit@community"), plug("solo@acme"), plug("zzz@acme")},
+		ProtectedMCP: []string{"plugin:audit:audit", "plugin:solo:s"},
+		Exclude:      []string{"solo@acme"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	eq(t, res.Protected, []string{"audit@acme", "audit@community", "solo@acme"})
+	if v, ok := res.Doc.EnabledPlugins["zzz@acme"]; !ok || v {
+		t.Errorf("unrelated plugin not masked: %v", res.Doc.EnabledPlugins)
+	}
+	all := strings.Join(res.Warnings, "\n")
+	for _, want := range []string{"is ambiguous", "plugin audit@community is protected as a possible owner", "name@marketplace", "solo@acme is excluded but provides the protected MCP server plugin:solo:s; protection wins"} {
+		if !strings.Contains(all, want) {
+			t.Errorf("missing warning %q in:\n%s", want, all)
+		}
+	}
+}

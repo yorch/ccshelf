@@ -339,6 +339,41 @@ func buildPlugins(spec Spec, mode string, include, exclude, protected map[string
 	if len(spec.Installed) == 0 && mode == ModeAllowOnly {
 		res.Warnings = append(res.Warnings, "no installed plugins were found; nothing will be masked")
 	}
+	// A plugin that owns a protected MCP label (plugin:<name>:<server>) is
+	// itself protected: masking it would silently remove the server (SR3).
+	mcpOwner := map[string]string{}
+	for _, id := range ids {
+		p := installed[id]
+		if p.Name == "" {
+			continue
+		}
+		for _, l := range spec.ProtectedMCP {
+			if strings.HasPrefix(l, "plugin:"+p.Name+":") {
+				mcpOwner[id] = l
+				break
+			}
+		}
+	}
+	byName := map[string]int{}
+	for _, id := range ids {
+		byName[installed[id].Name]++
+	}
+	for _, id := range ids {
+		l, ok := mcpOwner[id]
+		if !ok {
+			continue
+		}
+		protected[id] = true
+		switch {
+		case byName[installed[id].Name] > 1:
+			res.Warnings = append(res.Warnings, fmt.Sprintf("protected MCP server %s is ambiguous: several installed plugins are named %q, so plugin %s is protected as a possible owner; protect the full name@marketplace under [protect] plugins to be precise", l, installed[id].Name, id))
+		default:
+			res.Warnings = append(res.Warnings, fmt.Sprintf("plugin %s provides the protected MCP server %s and is protected", id, l))
+		}
+		if exclude[id] {
+			res.Warnings = append(res.Warnings, fmt.Sprintf("plugin %s is excluded but provides the protected MCP server %s; protection wins", id, l))
+		}
+	}
 	plugins := map[string]bool{}
 	var spared []string
 	for _, id := range ids {
@@ -368,7 +403,7 @@ func buildPlugins(spec Spec, mode string, include, exclude, protected map[string
 		}
 		if protected[id] {
 			spared = append(spared, id)
-			if exclude[id] {
+			if _, viaMCP := mcpOwner[id]; exclude[id] && !viaMCP {
 				res.Warnings = append(res.Warnings, fmt.Sprintf("plugin %s is both excluded and protected; protection wins", id))
 			}
 			continue
