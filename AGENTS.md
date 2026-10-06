@@ -3,7 +3,7 @@
 Guidance for AI coding agents (and humans) working in this repo, the public **tool repo**. The org's private repo that holds its profiles and catalog data is the **org data repo**; definitions of these and other terms are in the glossary in `docs/README.md`.
 
 ## What this project is
-`ccprofiles` (the command has the same name; the name is decided, with caveats noted in `docs/04`) is an open-source tool for Claude Code with two parts that live in one repo:
+`ccshelf` (the command has the same name; the name is decided, with caveats noted in `docs/04`) is an open-source tool for Claude Code with two parts that live in one repo:
 1. **Launcher (profiles):** starts `claude` with a named profile (a set of plugins, standalone skills and MCP servers), so different terminals can run different sets at once.
 2. **Catalog (discoverability):** metadata lint plus a generated static catalog for an organization's git-based plugin marketplace.
 

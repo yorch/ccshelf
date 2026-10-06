@@ -1,8 +1,8 @@
 # 07. How the launcher invokes Claude Code, what is shared, and combining with accounts
 
-Design description. Stage 0 (macOS only) tested masking via `--settings`, `--setting-sources`, `--strict-mcp-config`, auth under those flags, and parallel runs. Everything else here is design intent or inference from the docs, marked as such. `ccprofiles` is the chosen command name.
+Design description. Stage 0 (macOS only) tested masking via `--settings`, `--setting-sources`, `--strict-mcp-config`, auth under those flags, and parallel runs. Everything else here is design intent or inference from the docs, marked as such. `ccshelf` is the chosen command name.
 
-## 1. Invocation flow: `ccprofiles run sre -- --resume`
+## 1. Invocation flow: `ccshelf run sre -- --resume`
 The launcher is a compiler plus a process starter. It is never in the data path: it doesn't proxy or intercept the conversation.
 
 1. **Resolve the profile** (pure file work): read config and the source list, find `sre`, follow `extends`, produce one resolved profile (plugins, skill overrides, MCP servers, session defaults).
@@ -22,7 +22,7 @@ The launcher is a compiler plus a process starter. It is never in the data path:
        "seo-tools@acme": false, "frontend-design@claude-plugins-official": false
      },
      "skillOverrides": { "legacy-helper": "off" },
-     "env": { "CCPROFILES_PROFILE": "sre" }
+     "env": { "CCSHELF_PROFILE": "sre" }
    }
    ```
 4. **Build the command line**:
@@ -33,7 +33,7 @@ The launcher is a compiler plus a process starter. It is never in the data path:
           --resume                                                    # passthrough args
    ```
    With `inherit_user_settings = false` it adds `--setting-sources project,local` (drops the user layer; the launcher re-adds only what the profile sets). If policy blocks a flag, behavior follows `[policy] on_blocked` (`warn` drops that part, `fail` refuses). The system-prompt addition is passed as text via `--append-system-prompt` (a file-based flag was not verified).
-5. **Start `claude` and step aside**: spawn with inherited stdin/stdout/stderr (a normal TTY), ignore Ctrl+C in the launcher (the child handles it), forward termination, wait, exit with Claude's exit code. Passthrough works for non-interactive use: `ccprofiles run sre -- -p "summarize this repo"`.
+5. **Start `claude` and step aside**: spawn with inherited stdin/stdout/stderr (a normal TTY), ignore Ctrl+C in the launcher (the child handles it), forward termination, wait, exit with Claude's exit code. Passthrough works for non-interactive use: `ccshelf run sre -- -p "summarize this repo"`.
 6. **Write nothing shared**: it never touches `~/.claude/settings.json`, `~/.claude.json` or the plugin cache (Claude Code rewrites its own state as usual).
 
 Concurrency: two terminals produce two command lines pointing at two immutable files, so neither reads anything the other wrote (tested on macOS with three parallel sessions).
@@ -65,10 +65,10 @@ Two independent axes:
 An account switch isolates credentials, user settings, installed plugins and marketplaces, history, memory and plugin cache. A profile then filters within that account.
 
 ### Three ways to combine, from least to most built-in
-1. **Honor the environment (works from day one).** The launcher inherits the environment, and its own `claude plugin list --json` call must run under the same environment. So `CLAUDE_CONFIG_DIR=~/.claude-work ccprofiles run sre` just works, and so does any existing account switcher (e.g. quinnjr/claude-code-profiles, shell aliases) that sets that variable first. **Requirement:** the launcher must never unset or override an existing `CLAUDE_CONFIG_DIR`.
+1. **Honor the environment (works from day one).** The launcher inherits the environment, and its own `claude plugin list --json` call must run under the same environment. So `CLAUDE_CONFIG_DIR=~/.claude-work ccshelf run sre` just works, and so does any existing account switcher (e.g. quinnjr/claude-code-profiles, shell aliases) that sets that variable first. **Requirement:** the launcher must never unset or override an existing `CLAUDE_CONFIG_DIR`.
 2. **Built-in accounts (nicer UX).** Config names accounts and the launcher sets the variable for the child:
    ```toml
-   # ~/.config/ccprofiles/config.toml
+   # ~/.config/ccshelf/config.toml
    default_account = "work"            # top-level key; omit to use Claude Code's default dir
 
    [accounts.work]
@@ -76,9 +76,9 @@ An account switch isolates credentials, user settings, installed plugins and mar
    [accounts.personal]
    config_dir = "~/.claude-personal"
    ```
-   Usage: `ccprofiles run sre --account personal`. A profile may pin a default with the top-level `account = "work"` field; precedence is CLI flag, then profile field, then `default_account`, then Claude Code's default directory.
-   `ccprofiles account add work` creates the dir and prints the one-time steps (run `claude` with the variable set and `/login` inside it). The launcher never copies, reads or moves credentials.
-3. **Delegate to an existing tool.** Keep using a config-dir switcher and run `ccprofiles` inside it (way 1).
+   Usage: `ccshelf run sre --account personal`. A profile may pin a default with the top-level `account = "work"` field; precedence is CLI flag, then profile field, then `default_account`, then Claude Code's default directory.
+   `ccshelf account add work` creates the dir and prints the one-time steps (run `claude` with the variable set and `/login` inside it). The launcher never copies, reads or moves credentials.
+3. **Delegate to an existing tool.** Keep using a config-dir switcher and run `ccshelf` inside it (way 1).
 
 ### What changes per account
 - **Installed plugins and marketplaces are per config dir**, so each account must install its plugins (`/plugin marketplace add ...` and installs) separately, and the launcher's installed-plugin list is per account. A profile can list plugins that exist in one account but not another; the launcher reports "not installed in this account".

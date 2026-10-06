@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ccprofiles research</title>
+<title>ccshelf research</title>
 <style>
 :root{
   --bg:#ECEFF2;--panel:#F7F9FA;--ink:#111B26;--muted:#566474;--rule:#CBD3DB;--accent:#2548D6;--accent-ink:#fff;
@@ -120,7 +120,7 @@ ul,ol{padding-left:22px}
 <body>
 <div class="shell">
 <aside class="rail">
-<div class="brand"><h1>ccprofiles</h1><p>Research and design notes, 2026-10-06. Claude Code 2.1.290.</p></div>
+<div class="brand"><h1>ccshelf</h1><p>Research and design notes, 2026-10-06. Claude Code 2.1.290.</p></div>
 <nav aria-label="Sections"><div id="tabs" role="tablist" aria-orientation="vertical"></div></nav>
 <div class="legend" aria-label="Confidence markers"><b>How sure we are</b><br><span class="lg gv" aria-hidden="true">&#9679;</span>verified in docs, gh or the CLI<br><span class="lg gr" aria-hidden="true">&#9680;</span>reported by a research agent<br><span class="lg gu" aria-hidden="true">&#9675;</span>unverified or inferred</div>
 <button class="themebtn" id="themebtn" type="button">Switch theme</button>
@@ -149,7 +149,7 @@ ul,ol{padding-left:22px}
 <li><code>disableSideloadFlags</code> can kill <code>--plugin-dir</code>, <code>--agents</code>, <code>--mcp-config</code>; managed force-enabled plugins can't be masked. The launcher must detect policy, not bypass it. <span class="V">V</span></li>
 <li>Bundles (a plugin with only <code>dependencies</code>) are native; <code>metadata</code> in marketplace.json is not read by Claude Code, so nothing renders it and the catalog must. <span class="V">V</span></li>
 <li>Keychain auth is per <code>CLAUDE_CONFIG_DIR</code> on macOS (a credentials file inside the config dir on Linux and Windows), so config-dir-per-profile means a login per profile. <span class="V">V</span></li>
-<li>The project is now called <code>ccprofiles</code> (the earlier working name <code>claude-profile</code> collided with three existing tools). The name is free on npm, PyPI, crates.io and Homebrew, but the GitHub user <code>ccprofiles</code> is taken and several existing tools have near-identical names (see Decisions).</li>
+<li>The project is now called <code>ccshelf</code> (kits on a shelf: profiles and the catalog). It replaced the working names <code>claude-profile</code> (three existing tools share it) and <code>ccprofiles</code> (GitHub user taken, near-identical names exist). <code>ccshelf</code> is free on GitHub, npm, PyPI, crates.io, Homebrew and the domains checked (see Decisions).</li>
 </ul>
 </section>
 
@@ -228,7 +228,7 @@ ul,ol{padding-left:22px}
 <li><code>claude plugin validate</code> errors on plugin names starting with <code>claude-</code>, <code>anthropic-</code> or <code>cc-plugin-</code> and warns on "claude" as a whole word elsewhere (<a href="https://code.claude.com/docs/en/plugins/manifest-reference">manifest reference</a>). <span class="R">R</span></li>
 <li>Precedent (press reports, not an Anthropic statement): in January 2026 the "Clawdbot" project renamed after a request from Anthropic (<a href="https://laravel-news.com/index.php/clawdbot-rebrands-to-moltbot-after-trademark-request-from-anthropic">Laravel News</a>). <span class="R">R</span></li>
 <li>At least three tools use the name <code>claude-profile</code> on GitHub (<a href="https://github.com/diranged/claude-profile">diranged</a>, <a href="https://github.com/fuzzyalej/claude-profile">fuzzyalej</a>, <a href="https://github.com/yarikleto/claude-profile">yarikleto</a>). The name is free on npm, PyPI and Homebrew. <span class="R">R</span></li>
-<li><b>Decision (2026-10-06): the project is named <code>ccprofiles</code>.</b> Checked by command: free on npm, PyPI, crates.io, Homebrew and the domains; the GitHub user <code>ccprofiles</code> exists (dormant, three junk repos); close names exist, such as <a href="https://github.com/Azurioh/ccprofile">Azurioh/ccprofile</a> and <a href="https://github.com/bman95/ccprofile">bman95/ccprofile</a> (both profile plugins and skills), an npm <code>cc-profiles</code> package, and <code>ccprof</code> on npm and crates.io.</li>
+<li><b>Decision (2026-10-06): the project is named <code>ccshelf</code>.</b> Checked by command: no GitHub user, org or repo of that name, and free on npm, PyPI, crates.io, Homebrew, the Go proxy and the domains. It replaced <code>ccshelf</code> (GitHub user taken; close names such as <a href="https://github.com/Azurioh/ccprofile">Azurioh/ccprofile</a> and <a href="https://github.com/bman95/ccprofile">bman95/ccprofile</a>, an npm <code>cc-profiles</code> package and <code>ccprof</code> on npm and crates.io, several doing similar things).</li>
 <li>Second check of <code>cc</code>- and <code>claude</code>-prefixed names: free everywhere checked are <code>ccshelf</code>, <code>ccstow</code>, <code>ccpreset</code>, <code>ccbundle</code>, <code>ccwardrobe</code>, <code>ccshed</code>, <code>ccharbor</code> (and, with higher trademark exposure, <code>claudeshelf</code>, <code>claudecatalog</code>, <code>claudeprofiles</code>). <code>ccloadout</code> and <code>claudeloadout</code> are free on registries but a "Claude Loadout" tool on PyPI already does the same job. For <code>ccprofiles</code> the check found the GitHub user taken and ranked it below <code>ccshelf</code>, <code>ccstow</code> and <code>ccpreset</code> because "profile" names are crowded. <span class="R">R</span></li>
 <li>Earlier neutral candidates found free on GitHub, npm, PyPI, crates.io, Homebrew and Scoop: <code>kitshelf</code> (<code>kshelf</code>), <code>kitstow</code> (<code>kstow</code>), <code>loadmux</code> (<code>lmux</code>). A check of <code>cc</code>- and <code>claude</code>-prefixed names is in progress. Not checked: winget and a real trademark search. <span class="U">U</span></li>
 </ul>
@@ -314,22 +314,22 @@ catalog/   metadata lint + static site, run in CI (depends on core)</pre>
 <h3>What profiles share, and combining with accounts</h3>
 <p>No <code>CLAUDE_CONFIG_DIR</code> is set, so all profiles share auth (tested), projects and trust, session history (mixed in <code>/resume</code>), auto memory and CLAUDE.md (decided: fine), user settings by default, the plugin cache, and claude.ai connector auth. A profile is a loading filter, not a security or identity boundary. A repo's own <code>.claude/</code> skills, agents and settings still apply, and so does its <code>.mcp.json</code> unless the profile uses <code>strict</code>.</p>
 <div class="callout"><b>Profiles and accounts are two axes.</b> A profile chooses what is active; an account (a separate <code>CLAUDE_CONFIG_DIR</code>) chooses the identity and data dir. Ways to combine:
-<ol><li><b>Honor the environment:</b> <code>CLAUDE_CONFIG_DIR=~/.claude-work ccprofiles run sre</code> works from day one; the launcher must never override that variable, and its plugin-list call runs under it.</li>
-<li><b>Built-in accounts:</b> <code>[accounts.work] config_dir = "~/.claude-work"</code> in config; <code>ccprofiles run sre --account personal</code>; a profile may pin <code>account</code>; <code>ccprofiles account add</code> prints the one-time <code>/login</code> steps and never touches credentials.</li>
-<li><b>Delegate</b> to an existing config-dir switcher and run ccprofiles inside it.</li></ol>
+<ol><li><b>Honor the environment:</b> <code>CLAUDE_CONFIG_DIR=~/.claude-work ccshelf run sre</code> works from day one; the launcher must never override that variable, and its plugin-list call runs under it.</li>
+<li><b>Built-in accounts:</b> <code>[accounts.work] config_dir = "~/.claude-work"</code> in config; <code>ccshelf run sre --account personal</code>; a profile may pin <code>account</code>; <code>ccshelf account add</code> prints the one-time <code>/login</code> steps and never touches credentials.</li>
+<li><b>Delegate</b> to an existing config-dir switcher and run ccshelf inside it.</li></ol>
 Per account: plugins and marketplaces are installed separately, the plugin cache is duplicated (don't symlink <code>plugins/</code>; <code>CLAUDE_CODE_PLUGIN_SEED_DIR</code> untested), each account has its own login, managed settings still apply, and org profiles are shared via the profile sources. To test under a second config dir, a human must do the interactive login first. Details in <code>07-how-it-invokes-claude.md</code>.</div>
 <h3>Profile sources and sharing</h3>
 <p>Claude Code has no native profile repo: marketplaces distribute plugins, and a bundle distributes "which plugins go together" but not masking, MCP definitions or session defaults. Profiles need their own path.</p>
 <table><thead><tr><th>Source</th><th>How</th><th>Notes</th></tr></thead><tbody>
 <tr><td><code>plugin</code> (planned after dir and git)</td><td>Data-only plugin (e.g. <code>org-profiles@acme</code>) holding <code>profiles/*.toml</code>; found via <code>claude plugin list --json</code>.</td><td>Reuses native auth, pinning, autoUpdate, strictKnownMarketplaces. Must be installed and never masked. Untested under policy.</td></tr>
 <tr><td><code>git</code></td><td>Launcher clones a repo at a pinned ref into a cache.</td><td>Works for a profiles-only repo; adds its own fetch/auth path.</td></tr>
-<tr><td><code>dir</code></td><td>Personal dir or <code>.ccprofiles/</code> in a project repo.</td><td>Always available.</td></tr>
+<tr><td><code>dir</code></td><td>Personal dir or <code>.ccshelf/</code> in a project repo.</td><td>Always available.</td></tr>
 </tbody></table>
 <p><b>Precedence:</b> personal, then project, then org; <code>extends</code> can still pull in org profiles.</p>
-<pre># ~/.config/ccprofiles/config.toml (first match wins; list the most specific first)
+<pre># ~/.config/ccshelf/config.toml (first match wins; list the most specific first)
 [[sources]]
 type = "dir"
-path = "~/.config/ccprofiles/profiles"      # personal
+path = "~/.config/ccshelf/profiles"      # personal
 
 [[sources]]
 type = "git"
@@ -345,12 +345,12 @@ path = "profiles"
 [trust]
 require_pin = true     # refuse git sources without a pinned ref
 on_change = "prompt"   # prompt | fail | allow, when a profile adds MCP commands, env or prompt text</pre>
-<div class="callout"><b>Trust.</b> A shared profile can define MCP commands, env and system-prompt text, so loading one is effectively running code from that source. The launcher loads org profiles only from sources the org already trusts, records hashes in a lockfile, shows a diff and asks before accepting risky changes (<code>ccprofiles trust</code>), and never bypasses org policy.</div>
+<div class="callout"><b>Trust.</b> A shared profile can define MCP commands, env and system-prompt text, so loading one is effectively running code from that source. The launcher loads org profiles only from sources the org already trusts, records hashes in a lockfile, shows a diff and asks before accepting risky changes (<code>ccshelf trust</code>), and never bypasses org policy.</div>
 <p class="small">Still undecided: whether the data-only plugin approach works smoothly under <code>strictKnownMarketplaces</code> or other policy (untested), and how a profile that lists an uninstalled plugin is reported (current design: report it and print the install command; never install silently).</p>
 <h3>Manifest sketch (annotated)</h3>
 <p class="small">Design proposal; field names are not final. One file per profile; the file name must match <code>name</code>.</p>
 <pre># ---- Identity (shown in ls, search, and the catalog page) ----
-name = "frontend"             # Unique id, kebab-case. What you type: `ccprofiles run frontend`.
+name = "frontend"             # Unique id, kebab-case. What you type: `ccshelf run frontend`.
                               # Also the name of the generated bundle plugin profile-frontend.
 description = "React, CSS and accessibility work"   # One line, shown in listings and the catalog.
 owner = "@web-platform"       # Team or person who maintains it. Required for org profiles
@@ -430,10 +430,10 @@ search &lt;q&gt;   recommend   doctor [--policy]</pre>
 <tr><td>Changed by</td><td>Open-source contributors</td><td>The org's platform team</td></tr>
 </tbody></table>
 <ul>
-<li>The data repo's workflow calls the public tool via <code>uses: owner/ccprofiles/action@&lt;pin&gt;</code> or by downloading a pinned release binary. GHE Server needs GitHub Connect or a mirror (e.g. actions-sync) for the first; the binary variant can be mirrored to an internal registry.</li>
+<li>The data repo's workflow calls the public tool via <code>uses: owner/ccshelf/action@&lt;pin&gt;</code> or by downloading a pinned release binary. GHE Server needs GitHub Connect or a mirror (e.g. actions-sync) for the first; the binary variant can be mirrored to an internal registry.</li>
 <li>Pin the tool version (and verify a checksum where possible): it runs in the org's CI and on developers' machines.</li>
 <li>Ship a starter template data repo (sample marketplace, profiles, CI workflow, publish recipes for Pages and a static host).</li>
-<li>Configuration lives with the adopter, not in the tool: profile sources, the catalog schema location and lint rules come from the org's <code>ccprofiles.toml</code> and the user's own <code>config.toml</code>, with sane defaults.</li>
+<li>Configuration lives with the adopter, not in the tool: profile sources, the catalog schema location and lint rules come from the org's <code>ccshelf.toml</code> and the user's own <code>config.toml</code>, with sane defaults.</li>
 <li>No telemetry by default. Security reporting, license and contribution docs live in the public repo.</li>
 </ul>
 <p><b>What the tool repo contains.</b> No real org definitions, but fictional examples:</p>
@@ -462,13 +462,13 @@ search &lt;q&gt;   recommend   doctor [--policy]</pre>
 │   ├── plugins/                      one sidecar per plugin (owner, status, when_to_use ...)
 │   ├── taxonomy.toml                 allowed categories and tags
 │   └── site/                         optional title, logo, template overrides
-├── ccprofiles.toml               org config: required fields, lint, catalog settings
+├── ccshelf.toml               org config: required fields, lint, catalog settings
 ├── .github/  CODEOWNERS  workflows/{validate,tag-plugins,catalog,release}.yml
 └── docs/  README.md</pre>
 <p class="small">Not committed: the built catalog site and <code>catalog.json</code> (built in CI from the files above).</p>
 <table><thead><tr><th>Path</th><th>Written by</th><th>Committed</th></tr></thead><tbody>
-<tr><td><code>marketplace.json</code>, <code>plugins/</code>, <code>profiles/</code>, <code>mcp/</code>, <code>catalog/</code>, <code>ccprofiles.toml</code></td><td>Humans</td><td>Yes</td></tr>
-<tr><td><code>bundles/profile-*</code></td><td><code>ccprofiles compile</code>; CI fails if they drift</td><td>Yes</td></tr>
+<tr><td><code>marketplace.json</code>, <code>plugins/</code>, <code>profiles/</code>, <code>mcp/</code>, <code>catalog/</code>, <code>ccshelf.toml</code></td><td>Humans</td><td>Yes</td></tr>
+<tr><td><code>bundles/profile-*</code></td><td><code>ccshelf compile</code>; CI fails if they drift</td><td>Yes</td></tr>
 <tr><td>catalog site, <code>catalog.json</code></td><td>CI</td><td>No</td></tr>
 </tbody></table>
 <div class="callout"><b>Decided: a metadata sidecar per plugin.</b> With ~50 plugins in one <code>marketplace.json</code>, CODEOWNERS can't route review per JSON entry, so "authors write, platform team reviews" can't be enforced by file ownership. One file per plugin in <code>catalog/plugins/&lt;name&gt;.toml</code> fixes that: a PR touching <code>catalog/</code> needs platform review while plugin source stays with the author's team. The catalog is then derived from <code>marketplace.json</code> + sidecars + git data. Small registries can opt into single-file mode (metadata inside each entry). Decided 2026-10-06.</div>
@@ -487,7 +487,7 @@ support = "#sre-help"</pre>
 <tr><td><code>catalog.yml</code></td><td>merge to main</td><td>build and publish the catalog (Pages or any static host)</td></tr>
 <tr><td><code>release.yml</code></td><td>manual or scheduled</td><td>tag the repo (e.g. <code>v2026.10.1</code>) so consumers pin profile sources</td></tr>
 </tbody></table>
-<p><b>Org config</b> (<code>ccprofiles.toml</code>):</p>
+<p><b>Org config</b> (<code>ccshelf.toml</code>):</p>
 <pre>[lint]
 require = ["owner", "status"]        # sidecar fields every plugin needs
 require_when_deprecated = ["superseded_by"]
@@ -507,7 +507,7 @@ mcp_registry = "mcp/registry.toml"</pre>
 /catalog/                          @acme/platform
 /profiles/                         @acme/platform
 /mcp/                              @acme/platform
-/ccprofiles.toml               @acme/platform
+/ccshelf.toml               @acme/platform
 /bundles/                          @acme/platform
 /plugins/design-kit/               @acme/web
 /plugins/sre-kit/                  @acme/sre</pre>
@@ -538,7 +538,7 @@ mcp_registry = "mcp/registry.toml"</pre>
 <tr><td><code>--setting-sources</code></td><td>dropping the user layer</td><td>Fall back to per-key masking.</td></tr>
 <tr><td>Force-enabled plugins</td><td>masking</td><td>Can't be masked; listed as "always on by policy".</td></tr>
 </tbody></table>
-<p class="small">Detection: managed-settings files per OS (best effort) plus detection by failure (exit 1 on a blocked flag); <code>doctor --policy</code> prints available / blocked / unknown. Never bypass policy in any mode. Test fixtures: no policy, permissive, sideload blocked, force-enabled, both. Open source: no org-specific names, URLs or defaults in code; project and command name decided (<code>ccprofiles</code>), license MIT, contribution docs still to write. Each profile feature maps to a required capability; <code>[policy] on_blocked</code> (<code>warn</code> or <code>fail</code>) decides what happens.</p>
+<p class="small">Detection: managed-settings files per OS (best effort) plus detection by failure (exit 1 on a blocked flag); <code>doctor --policy</code> prints available / blocked / unknown. Never bypass policy in any mode. Test fixtures: no policy, permissive, sideload blocked, force-enabled, both. Open source: no org-specific names, URLs or defaults in code; project and command name decided (<code>ccshelf</code>), license MIT, contribution docs still to write. Each profile feature maps to a required capability; <code>[policy] on_blocked</code> (<code>warn</code> or <code>fail</code>) decides what happens.</p>
 <h3>Stack decisions</h3>
 <p><b>Decided:</b> Go; GitHub / GitHub Enterprise and GitHub Actions. Implications (assessment, untested against your GHE):</p>
 <table><thead><tr><th>Area</th><th>Implication</th></tr></thead><tbody>
@@ -595,7 +595,7 @@ mcp_registry = "mcp/registry.toml"</pre>
 
 <section id="workflows">
 <h2>Example workflows</h2>
-<p class="small">Illustrative mockups. Nothing is built; the command is <code>ccprofiles</code> and plugin names are fictional (<code>@official</code> stands for the official marketplace). Masking and parallel runs were tested in Stage 0 (macOS only); everything else is design intent. Full text in <code>06-example-workflows.md</code>.</p>
+<p class="small">Illustrative mockups. Nothing is built; the command is <code>ccshelf</code> and plugin names are fictional (<code>@official</code> stands for the official marketplace). Masking and parallel runs were tested in Stage 0 (macOS only); everything else is design intent. Full text in <code>06-example-workflows.md</code>.</p>
 <div class="chips" id="wfchips"></div>
 <div class="card" id="wfbody"></div>
 <p class="small">Not covered by any workflow yet: installing missing plugins automatically (deliberately not done); switching profiles inside a running session (a profile is fixed at launch); teams that want a different profile per repo (the direnv approach can set a default per directory).</p>
@@ -639,7 +639,7 @@ mcp_registry = "mcp/registry.toml"</pre>
 <tr><td>Build order</td><td>Both tracks in parallel, shared <code>core/</code> first</td></tr>
 <tr><td>Language</td><td>Go</td></tr>
 <tr><td>Hosting and CI</td><td>GitHub.com, GHE Cloud and GHE Server, with GitHub Actions (R2)</td></tr>
-<tr><td>Name</td><td><code>ccprofiles</code> for both the project and the command (replaces the working name <code>claude-profile</code>). Free on npm, PyPI, crates.io, Homebrew and the checked domains; the GitHub user <code>ccprofiles</code> is taken; near-identical names exist (<code>ccprofile</code>, <code>cc-profiles</code>, <code>ccprof</code>), some doing similar things. A proper trademark search is still advised.</td></tr>
+<tr><td>Name</td><td><code>ccshelf</code> for both the project and the command. History: <code>claude-profile</code> (three existing tools share it), then <code>ccprofiles</code> (GitHub user taken, near-identical names exist, names only the launcher half). Free for <code>ccshelf</code> on GitHub, npm, PyPI, crates.io, Homebrew, the Go proxy and the domains checked. Unofficial and unaffiliated tagline needed; a proper trademark search is still advised.</td></tr>
 <tr><td>Repos</td><td>Public tool repo plus each adopter's private org data repo (R5)</td></tr>
 <tr><td>Catalog hosting</td><td>The adopter's choice; the tool outputs a static directory</td></tr>
 <tr><td>Profile sources</td><td><code>dir</code> and <code>git</code> first, <code>plugin</code> later (changed from the earlier plugin-default lean)</td></tr>
@@ -655,7 +655,7 @@ mcp_registry = "mcp/registry.toml"</pre>
 <h3>Still open</h3>
 <ul>
 <li><b>Build, adopt or contribute:</b> evaluate <a href="https://github.com/fuzzyalej/claude-profile">fuzzyalej/claude-profile</a> and <a href="https://github.com/edimuj/claude-rig">edimuj/claude-rig</a> before building the launcher (do they handle default-deny masking against one shared plugin store, concurrency, managed policy and the org data repo flow? could the gaps be contributed upstream?). The catalog track is not covered by any of them.</li>
-<li><b>Name follow-ups:</b> pick the GitHub home (the <code>ccprofiles</code> user is taken), run a proper trademark search (classes 9 and 42), and check winget and pkg.go.dev.</li>
+<li><b>Name follow-ups:</b> register the GitHub org <code>ccshelf</code> early (the name is free), run a proper trademark search (classes 9 and 42), check winget and pkg.go.dev, and write the "unofficial, not affiliated with Anthropic" tagline.</li>
 <li>Which managed keys your org actually sets (answerable by running <code>doctor --policy</code> on a managed machine once built).</li>
 <li>The minimum GHE Server version the workflows must support.</li>
 <li>Whether <code>core/</code> is a public Go library or internal packages (leaning internal, no API promise).</li>
@@ -669,7 +669,7 @@ mcp_registry = "mcp/registry.toml"</pre>
 <h2>Glossary</h2>
 <p class="small">These terms mean the same thing in every note and in this report.</p>
 <table><thead><tr><th>Term</th><th>Meaning</th></tr></thead><tbody>
-<tr><td><b>Profile</b></td><td>A named recipe (<code>profiles/&lt;name&gt;.toml</code>) saying which plugins, standalone skills and MCP servers are active for one Claude Code session, plus session defaults. Started with <code>ccprofiles run &lt;name&gt;</code>. It filters what is already installed; it is not an identity or security boundary. Part of the launcher (use case 1).</td></tr>
+<tr><td><b>Profile</b></td><td>A named recipe (<code>profiles/&lt;name&gt;.toml</code>) saying which plugins, standalone skills and MCP servers are active for one Claude Code session, plus session defaults. Started with <code>ccshelf run &lt;name&gt;</code>. It filters what is already installed; it is not an identity or security boundary. Part of the launcher (use case 1).</td></tr>
 <tr><td><b>Profile bundle</b></td><td>A generated, dependency-only plugin named <code>profile-&lt;name&gt;</code>, kept in <code>bundles/</code>, so a profile's plugins install natively with one <code>/plugin install</code>. It is not itself a profile.</td></tr>
 <tr><td><b>Catalog</b></td><td>A generated, browsable index of an org's plugins and profiles: a static site plus <code>catalog.json</code>, built in CI from <code>marketplace.json</code>, the sidecars and git data, and queryable locally with <code>search</code> and <code>doctor</code>. Not committed. Answers what exists, which to use and who owns it (use case 2).</td></tr>
 <tr><td><b>Sidecar</b></td><td>The per-plugin catalog metadata file <code>catalog/plugins/&lt;name&gt;.toml</code> (owner, status, when_to_use, overlaps, review date).</td></tr>
@@ -792,18 +792,18 @@ $("#nrange").oninput=nmsg;nmsg();
 const wf=[
 ["Daily use","Two terminals, two profiles, at the same time.",
 `# terminal 1
-$ ccprofiles run frontend
+$ ccshelf run frontend
 profile: frontend (extends base)  plugins: 6 on / 10 masked  mcp: figma  connectors: none
 
 # terminal 2, same time
-$ ccprofiles run sre
+$ ccshelf run sre
 profile: sre (extends base)       plugins: 6 on / 10 masked  mcp: pagerduty, grafana`,
-["Each run writes a generated settings file (content-addressed, in the launcher's own cache dir) and starts claude --settings, passing back its exit code; same on macOS, Linux and Windows. Nothing shared is modified, so terminals can't affect each other (tested on macOS only).","Plugins not in the profile are masked with enabledPlugins:false, regenerated from claude plugin list --json on every launch so new installs don't leak (masking tested on macOS).","Extra args pass through: ccprofiles run sre -- --model opus"]],
+["Each run writes a generated settings file (content-addressed, in the launcher's own cache dir) and starts claude --settings, passing back its exit code; same on macOS, Linux and Windows. Nothing shared is modified, so terminals can't affect each other (tested on macOS only).","Plugins not in the profile are masked with enabledPlugins:false, regenerated from claude plugin list --json on every launch so new installs don't leak (masking tested on macOS).","Extra args pass through: ccshelf run sre -- --model opus"]],
 ["Dry run / show","See exactly what will happen before running.",
-`$ ccprofiles dry-run frontend
-claude --settings ~/.cache/ccprofiles/settings-9f3a1c27.json --strict-mcp-config --mcp-config ~/.cache/ccprofiles/mcp-5be02d41.json
+`$ ccshelf dry-run frontend
+claude --settings ~/.cache/ccshelf/settings-9f3a1c27.json --strict-mcp-config --mcp-config ~/.cache/ccshelf/mcp-5be02d41.json
 
-$ ccprofiles show frontend
+$ ccshelf show frontend
 resolved from: base -> frontend
 plugins on  (6): design-kit@acme, playwright@acme, ...
 plugins off (10): sre-kit@acme, seo-tools@acme, ...
@@ -812,45 +812,45 @@ mcp: figma    claude.ai connectors: none
 est. saved vs. no profile: ~2.1k tokens, 41 fewer tools   # illustrative`,
 ["dry-run prints the exact command so you can trust, debug or alias it.","Token estimates are illustrative. Stage 0 measured about 2.4k tokens (~9%) for dropping the whole user layer and about 0.5k for masking 14 skills, so the pitch is clutter and routing."]],
 ["Personal profile","Build on an org profile.",
-`$ ccprofiles new my-frontend --from frontend
-created ~/.config/ccprofiles/profiles/my-frontend.toml
-$ ccprofiles edit my-frontend
-$ ccprofiles diff frontend my-frontend
+`$ ccshelf new my-frontend --from frontend
+created ~/.config/ccshelf/profiles/my-frontend.toml
+$ ccshelf edit my-frontend
+$ ccshelf diff frontend my-frontend
 + plugins.include: my-experiments@me
 - plugins.include: playwright@acme
-$ ccprofiles run my-frontend`,
+$ ccshelf run my-frontend`,
 ["Personal profiles live outside the repo and can extend org profiles.","A later off/exclude beats an earlier include."]],
 ["Onboarding","New hire gets a vetted set.",
 `1. Open the internal catalog page, pick "Backend engineer".
 2. See profile "backend": plugins with owner + status + when_to_use.
 3. Install the role bundle once via native /plugin (profile-backend pulls its dependencies).
-4. $ ccprofiles run backend
+4. $ ccshelf run backend
    missing: audit-kit@acme  ->  /plugin install audit-kit@acme`,
 ["The launcher says what's missing and prints the install command; it never installs silently."]],
 ["Search / recommend","What should I use for X?",
-`$ ccprofiles search "incident postmortem"
+`$ ccshelf search "incident postmortem"
 sre-kit@acme          active      owner @sre   "Runbooks, incident timeline, postmortems"
 postmortem-lite@acme  deprecated  -> sre-kit
-$ ccprofiles recommend
+$ ccshelf recommend
 In ./infra (terraform files found): sre, platform`,
 ["recommend is rule-based (cwd, files, relevance signals); no LLM.","The same data renders on the catalog page as facets, an overlap view and a 'new since last tag' list."]],
 ["Publish a plugin","Platform owner flow through CI.",
 `1. Add the plugin to marketplace.json: author, category, tags,
    catalog/plugins/<name>.toml: owner, status, when_to_use, (overlaps_with)
-2. PR -> CI: ccprofiles lint + claude plugin validate
+2. PR -> CI: ccshelf lint + claude plugin validate
    FAIL  catalog/plugins/x.toml: owner missing
-3. Merge -> CI: ccprofiles compile (profile-* bundles)
-              ccprofiles catalog build (site + catalog.json)
+3. Merge -> CI: ccshelf compile (profile-* bundles)
+              ccshelf catalog build (site + catalog.json)
 4. Optional: add a relevance block so Claude Code suggests it in the right dirs`,
 ["CI gates are what stop metadata from rotting.","The sidecar lets CODEOWNERS require platform review without touching plugin source."]],
 ["Retire a plugin","Deprecation without breaking people.",
 `1. In the plugin's sidecar: status = "deprecated", superseded_by = "new-plugin"
-2. ccprofiles doctor lists profiles still including it
+2. ccshelf doctor lists profiles still including it
 3. Catalog shows a deprecated badge + replacement; runs warn
 4. After the grace period: remove from marketplace.json (use renames)`,
 ["Claude Code has no native deprecation field, so this is a sidecar convention enforced in CI."]],
 ["Doctor","Housekeeping report.",
-`$ ccprofiles doctor
+`$ ccshelf doctor
 overlap:      sre-kit@acme and ops-helper@acme share 9 of 12 tags
 unused:       seo-tools@acme in no profile, 0 skill_activated events in 30 days
 deprecated:   postmortem-lite@acme still in profiles: sre
@@ -858,7 +858,7 @@ stale owners: 3 plugins have no review_by in 180 days
 policy:       none detected on this machine`,
 ["Usage counts need OTel (OTEL_LOG_TOOL_DETAILS=1) or the Enterprise Analytics API; otherwise that line is skipped."]],
 ["Under org policy","The launcher reports limits, never bypasses.",
-`$ ccprofiles run frontend
+`$ ccshelf run frontend
 policy: disableSideloadFlags is set (managed). --mcp-config is blocked.
   - plugin masking via --settings: allowed
   - claude.ai connectors: cannot be masked (needs --strict-mcp-config)
@@ -866,34 +866,34 @@ policy: disableSideloadFlags is set (managed). --mcp-config is blocked.
 applied with limits (on_blocked = "warn"). Use "fail" to refuse instead.`,
 ["Design intent: policy detection is untested, and Stage 0 found no managed policy on the test machine."]],
 ["Sharing","Central profiles, with a trust check.",
-`$ ccprofiles ls
+`$ ccshelf ls
 frontend   org       active   React, CSS and accessibility work
 sre        org       active   Incident response and observability
 my-sre     personal  active   (extends sre)
 
-$ ccprofiles run sre
+$ ccshelf run sre
 sre changed since you last accepted it:
   + mcp.servers: pagerduty-ro (command: npx -y @acme/pagerduty-mcp)
 accept? [y/N]`,
-["The platform team tags a release of the org data repo (e.g. v2026.10.1); users (or ccprofiles init with the repo URL, proposed) add it as a git source pinned to that tag. A plugin source is planned for later.","Accepted hashes live in a lockfile; risky changes (MCP command, env, prompt text) need explicit acceptance.","Org profiles load only from trusted sources: an allowlisted marketplace or a pinned git ref."]],
+["The platform team tags a release of the org data repo (e.g. v2026.10.1); users (or ccshelf init with the repo URL, proposed) add it as a git source pinned to that tag. A plugin source is planned for later.","Accepted hashes live in a lockfile; risky changes (MCP command, env, prompt text) need explicit acceptance.","Org profiles load only from trusted sources: an allowlisted marketplace or a pinned git ref."]],
 ["Interactive and scripted","The same command, two ways.",
-`$ ccprofiles
+`$ ccshelf
 ? Run which profile?  (type to filter)
 > frontend   React, CSS and accessibility work
   sre        Incident response and observability
-Equivalent: ccprofiles run frontend
+Equivalent: ccshelf run frontend
 
 # in a script or CI: no prompts, errors name what is missing
-$ ccprofiles new sre-night --from sre --no-interactive
+$ ccshelf new sre-night --from sre --no-interactive
 error: nothing to add; give --plugin or --skill-off (exit 2)`,
-["Flags are the contract; interactive mode only asks for what is missing and prints the equivalent command.","Trust is never auto-accepted: use ccprofiles trust <p> --accept <hash>; --yes does not apply."]],
+["Flags are the contract; interactive mode only asks for what is missing and prints the equivalent command.","Trust is never auto-accepted: use ccshelf trust <p> --accept <hash>; --yes does not apply."]],
 ["Shortcuts","Speed, per shell.",
 `# bash / zsh
-alias cf='ccprofiles run frontend --'
+alias cf='ccshelf run frontend --'
 
 # PowerShell
-function cf { ccprofiles run frontend -- @args }`,
-["ccprofiles shell-init <bash|zsh|fish|pwsh> could print these (cmd would get .cmd shims). A statusline hook can show the active profile from $CCPROFILES_PROFILE."]]];
+function cf { ccshelf run frontend -- @args }`,
+["ccshelf shell-init <bash|zsh|fish|pwsh> could print these (cmd would get .cmd shims). A statusline hook can show the active profile from $CCSHELF_PROFILE."]]];
 (function(){const c=document.getElementById("wfchips"),b=document.getElementById("wfbody");
 function draw(i){c.querySelectorAll("button").forEach((x,j)=>x.classList.toggle("on",j===i));const [t,d,code,notes]=wf[i];b.textContent="";
 const h=document.createElement("h3");h.style.marginTop="0";h.textContent=t;const p=document.createElement("p");p.textContent=d;const pre=document.createElement("pre");pre.textContent=code;const ul=document.createElement("ul");notes.forEach(n=>{const li=document.createElement("li");li.textContent=n;ul.appendChild(li)});b.append(h,p,pre,ul)}
@@ -933,7 +933,7 @@ if(initial&&!reduce){requestAnimationFrame(()=>requestAnimationFrame(apply))}els
 const on=st.filter(x=>x.on).length,off=st.length-on,forced=st.some(x=>x.lock);
 $("#lcount").innerHTML="<b>"+on+"</b> on, <b>"+off+"</b> masked"+(forced?". Policy keeps audit-logger on even though the launcher writes <code>false</code> for it.":".");
 if(S[cur]===null){$("#lcmd").textContent="$ claude\n# no profile: nothing is generated and every installed plugin stays enabled"}
-else{const j={enabledPlugins:Object.fromEntries(st.map(x=>[x.p,x.written]))};const txt=JSON.stringify(j,null,2);$("#lcmd").textContent="$ ccprofiles run "+cur+"\n# starts: claude --settings ~/.cache/ccprofiles/settings-"+hash(txt)+".json\n\n"+txt}}
+else{const j={enabledPlugins:Object.fromEntries(st.map(x=>[x.p,x.written]))};const txt=JSON.stringify(j,null,2);$("#lcmd").textContent="$ ccshelf run "+cur+"\n# starts: claude --settings ~/.cache/ccshelf/settings-"+hash(txt)+".json\n\n"+txt}}
 heroPlay=()=>{if(played)return;played=true;draw(true)};
 draw(false);
 })();
