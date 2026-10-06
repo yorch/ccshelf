@@ -17,7 +17,7 @@ profile: sre (extends base)       plugins: 6 on / 10 masked  mcp: pagerduty, gra
 claude> ...
 ```
 - Each run writes a generated settings file (content-addressed, in the launcher's own cache dir, so concurrent runs never collide) and starts `claude --settings <file>`, passing back its exit code. The same on macOS, Linux and Windows by design (only macOS has been tested). Nothing shared (`~/.claude/settings.json`, `~/.claude.json`, plugin cache) is modified, so the two terminals can't affect each other. *(masking and parallel runs tested)*
-- Plugins not in the profile are masked with `enabledPlugins:false`. The list is regenerated from `claude plugin list --json` on every launch, so a plugin you installed yesterday doesn't leak into the profile. *(masking tested on macOS)*
+- Plugins not in the profile are masked with `enabledPlugins:false`. The list comes from `claude plugin list --json` (cached for up to five minutes and re-read when installed plugins or managed settings change), so a plugin you installed yesterday doesn't leak into the profile. *(masking tested on macOS)*
 - Extra arguments pass through: `ccshelf run sre -- --model opus`.
 
 ## 2. See exactly what will happen before running
@@ -79,7 +79,7 @@ The same data renders on the catalog page: facets by category/tag/team/status, a
 ## 7. Retiring a plugin
 1. In the plugin's sidecar, set `status = "deprecated"` and `superseded_by = "new-plugin"`.
 2. CI flags every profile that still includes it (`ccshelf doctor`) so owners can migrate.
-3. The catalog shows a deprecated badge and the replacement. Runs of an affected profile print a warning.
+3. The catalog shows a deprecated badge and the replacement. Runs of an affected profile print a warning (planned; `doctor` reports it today, `run` does not yet).
 4. After the grace period, remove it from `marketplace.json`, using the native `renames` mapping where applicable.
 
 ## 8. Housekeeping with `doctor`

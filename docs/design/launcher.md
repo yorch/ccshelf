@@ -77,7 +77,7 @@ An account switch isolates credentials, user settings, installed plugins and mar
    [accounts.personal]
    config_dir = "~/.claude-personal"
    ```
-   Usage: `ccshelf run sre --account personal`. A profile may pin a default with the top-level `account = "work"` field; precedence is CLI flag, then profile field, then `default_account`, then Claude Code's default directory.
+   Usage: `ccshelf run --account personal sre` (ccshelf flags go before the profile name; everything after it is passed to `claude`, and a known ccshelf flag there is rejected). A profile may pin a default with the top-level `account = "work"` field; precedence is CLI flag, then profile field, then `default_account`, then Claude Code's default directory.
    `ccshelf account add work` creates the dir and prints the one-time steps (run `claude` with the variable set and `/login` inside it). The launcher never copies, reads or moves credentials.
 3. **Delegate to an existing tool.** Keep using a config-dir switcher and run `ccshelf` inside it (way 1).
 

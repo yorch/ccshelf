@@ -38,7 +38,7 @@ path = "profiles"                               # folder inside the repo
 [trust]
 require_pin = true            # refuse git sources without a pinned ref (the tag is resolved to a commit SHA)
 trust_project_profiles = false # project .ccshelf/ folders are ignored unless trusted per repo
-on_change = "prompt"          # prompt | fail | allow. What to do when an accepted profile changes
+on_change = "prompt"          # prompt | fail. What to do when an accepted profile changes (there is no auto-accept: `allow` is rejected)
                               # in a way that adds MCP commands, env values or system-prompt text.
 ```
 **Precedence:** personal, then org. A personal profile with the same name overrides the org one, and `extends` can still pull in org profiles. **Project profiles (a `.ccshelf/` folder in a repository) are off by default** (SR2): when explicitly trusted per repo they can never shadow a name from another source and can never define MCP commands, env or prompt text.

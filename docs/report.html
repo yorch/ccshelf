@@ -138,7 +138,7 @@ section>input[type=search]{display:block}
 <body>
 <div class="shell">
 <aside class="rail">
-<div class="brand"><h1>ccshelf</h1><p>Research and design notes. Claude Code 2.1.290. Generated from the Markdown in docs/ (source hash 91914658).</p></div>
+<div class="brand"><h1>ccshelf</h1><p>Research and design notes. Claude Code 2.1.290. Generated from the Markdown in docs/ (source hash 9258c734).</p></div>
 <nav aria-label="Sections"><div id="tabs" role="tablist" aria-orientation="vertical"></div></nav>
 <div class="legend" aria-label="Confidence markers"><b>How sure we are</b><br><span class="lg gv" aria-hidden="true">&#9679;</span>verified in docs, gh or the CLI<br><span class="lg gr" aria-hidden="true">&#9680;</span>reported by a research agent<br><span class="lg gu" aria-hidden="true">&#9675;</span>unverified or inferred</div>
 <button class="themebtn" id="themebtn" type="button">Switch theme</button>
@@ -449,7 +449,7 @@ default_account = "work"            # top-level key; omit to use Claude Code's d
 config_dir = "~/.claude-work"       # sets CLAUDE_CONFIG_DIR for the child
 [accounts.personal]
 config_dir = "~/.claude-personal"</code></pre>
-<p>Usage: <code>ccshelf run sre --account personal</code>. A profile may pin a default with the top-level <code>account = "work"</code> field; precedence is CLI flag, then profile field, then <code>default_account</code>, then Claude Code's default directory. <code>ccshelf account add work</code> creates the dir and prints the one-time steps (run <code>claude</code> with the variable set and <code>/login</code> inside it). The launcher never copies, reads or moves credentials.</p></li>
+<p>Usage: <code>ccshelf run --account personal sre</code> (ccshelf flags go before the profile name; everything after it is passed to <code>claude</code>, and a known ccshelf flag there is rejected). A profile may pin a default with the top-level <code>account = "work"</code> field; precedence is CLI flag, then profile field, then <code>default_account</code>, then Claude Code's default directory. <code>ccshelf account add work</code> creates the dir and prints the one-time steps (run <code>claude</code> with the variable set and <code>/login</code> inside it). The launcher never copies, reads or moves credentials.</p></li>
 <li><strong>Delegate to an existing tool.</strong> Keep using a config-dir switcher and run <code>ccshelf</code> inside it (way 1).</li>
 </ol>
 <h4 id="launcher-what-changes-per-account">What changes per account</h4>
@@ -514,7 +514,7 @@ path = "profiles"                               # folder inside the repo
 [trust]
 require_pin = true            # refuse git sources without a pinned ref (the tag is resolved to a commit SHA)
 trust_project_profiles = false # project .ccshelf/ folders are ignored unless trusted per repo
-on_change = "prompt"          # prompt | fail | allow. What to do when an accepted profile changes
+on_change = "prompt"          # prompt | fail. What to do when an accepted profile changes (there is no auto-accept: `allow` is rejected)
                               # in a way that adds MCP commands, env values or system-prompt text.</code></pre>
 <p><strong>Precedence:</strong> personal, then org. A personal profile with the same name overrides the org one, and <code>extends</code> can still pull in org profiles. <strong>Project profiles (a <code>.ccshelf/</code> folder in a repository) are off by default</strong> (SR2): when explicitly trusted per repo they can never shadow a name from another source and can never define MCP commands, env or prompt text.</p>
 <p><strong>Trust model (SR1 and SR2).</strong> A shared profile is a closed schema (it cannot carry permissions, hooks, auth or endpoint settings, and MCP definitions live in a reviewed registry), but it still selects plugins and MCP servers that run code, so loading one is effectively running code from that source. The launcher therefore:</p>
@@ -822,7 +822,7 @@ mcp_registry = "mcp/registry.toml"</code></pre>
 <li>Compile from the same in-memory bytes that were hashed (no re-read), to close the gap between accepting and running.</li>
 <li>Non-interactive and CI runs fail closed; <code>--yes</code> never accepts trust (R6).</li>
 </ul>
-<p><strong>SR3: no shadowing, protected controls.</strong> Profile names cannot collide across sources. The org config can declare <code>protected_plugins</code> and <code>protected_mcp</code> (audit, secret-scanning or required servers) that are never masked. Shared profiles cannot set <code>inherit_user_settings = false</code>, because that drops the user's deny rules, hooks and MCP; personal profiles can, with a warning that lists what is dropped. Only managed settings with <code>allowManagedHooksOnly</code>, <code>allowManagedPermissionRulesOnly</code> and <code>disableBypassPermissionsMode</code> are real enforcement; the docs must say so.</p>
+<p><strong>SR3: no shadowing, protected controls.</strong> A project profile can never shadow a profile from another source, and two org sources cannot define the same name; a personal profile may shadow an org profile of the same name (the listing marks it "shadows") because the user owns it. The org config can declare <code>protected_plugins</code> and <code>protected_mcp</code> (audit, secret-scanning or required servers) that are never masked. Shared profiles cannot set <code>inherit_user_settings = false</code>, because that drops the user's deny rules, hooks and MCP; personal profiles can, with a warning that lists what is dropped. Only managed settings with <code>allowManagedHooksOnly</code>, <code>allowManagedPermissionRulesOnly</code> and <code>disableBypassPermissionsMode</code> are real enforcement; the docs must say so.</p>
 <p><strong>SR4: private, verified local artifacts.</strong> Cache directory mode 0700 (owner-only ACL on Windows) and files 0600, created with exclusive-create and no-follow; re-hash a content-addressed file before reuse; refuse a cache directory owned by another user or reached through a symlink; never write resolved secrets to disk or argv (prefer <code>--append-system-prompt-file</code>, which keeps prompt text off the process list); redact values (key names only) in <code>dry-run</code>, <code>show</code> and <code>doctor</code> output, which people paste into issues; confine every path a profile names (prompt files, parents) to its source root, with no <code>..</code> and no symlinks.</p>
 <p><strong>SR5: hardened CI and releases.</strong> The reusable Action is pinned by <strong>full commit SHA</strong>, and the Action embeds the expected SHA-256 of the binary it downloads. Releases carry keyless signatures (cosign) and SLSA provenance on github.com, with offline-verifiable bundles for GHE Server mirrors; plus an SBOM, <code>-trimpath</code> builds, <code>govulncheck</code>, Dependabot, minimal dependencies (standard library plus one TOML library), branch protection and two-maintainer release approval on the public repo, and an OpenSSF Scorecard. Data repo workflows use <code>permissions: {}</code> at the top level and grant per job (<code>contents: write</code> only for tagging; <code>pages</code> and <code>id-token</code> only for the catalog), keep secrets in a protected environment deployable only from <code>main</code>, pass values through <code>env:</code> and validate them (for example against semver) instead of interpolating <code>${{ }}</code> into shell, and do not send secrets to fork pull requests. The catalog site uses <code>textContent</code> and a strict CSP, renders Markdown with raw HTML off and only <code>http</code> and <code>https</code> links, and the publish step fails unless Pages visibility is private or internal. Add <code>/.github/</code> to <code>CODEOWNERS</code>.</p>
 <p><strong>Smaller items to track:</strong> trust fatigue (show a risk-only summary); <code>ccshelf init --org &lt;url&gt;</code> must only write source entries and never trust anything; an account must be a name, never a path; employer approval and <code>SECURITY.md</code> before the repo goes public; outside contributors' code running in corporate CI is why SHA pinning is mandatory.</p>
@@ -962,7 +962,7 @@ profile: sre (extends base)       plugins: 6 on / 10 masked  mcp: pagerduty, gra
 claude&gt; ...</code></pre>
 <ul>
 <li>Each run writes a generated settings file (content-addressed, in the launcher's own cache dir, so concurrent runs never collide) and starts <code>claude --settings &lt;file&gt;</code>, passing back its exit code. The same on macOS, Linux and Windows by design (only macOS has been tested). Nothing shared (<code>~/.claude/settings.json</code>, <code>~/.claude.json</code>, plugin cache) is modified, so the two terminals can't affect each other. <em>(masking and parallel runs tested)</em></li>
-<li>Plugins not in the profile are masked with <code>enabledPlugins:false</code>. The list is regenerated from <code>claude plugin list --json</code> on every launch, so a plugin you installed yesterday doesn't leak into the profile. <em>(masking tested on macOS)</em></li>
+<li>Plugins not in the profile are masked with <code>enabledPlugins:false</code>. The list comes from <code>claude plugin list --json</code> (cached for up to five minutes and re-read when installed plugins or managed settings change), so a plugin you installed yesterday doesn't leak into the profile. <em>(masking tested on macOS)</em></li>
 <li>Extra arguments pass through: <code>ccshelf run sre -- --model opus</code>.</li>
 </ul></div>
 <div class="pane" id="workflows-pane-2"><h3 id="workflows-h-2">2. See exactly what will happen before running</h3>
@@ -1014,7 +1014,7 @@ In ./infra (terraform files found): sre, platform</code></pre>
 <ol>
 <li>In the plugin's sidecar, set <code>status = "deprecated"</code> and <code>superseded_by = "new-plugin"</code>.</li>
 <li>CI flags every profile that still includes it (<code>ccshelf doctor</code>) so owners can migrate.</li>
-<li>The catalog shows a deprecated badge and the replacement. Runs of an affected profile print a warning.</li>
+<li>The catalog shows a deprecated badge and the replacement. Runs of an affected profile print a warning (planned; <code>doctor</code> reports it today, <code>run</code> does not yet).</li>
 <li>After the grace period, remove it from <code>marketplace.json</code>, using the native <code>renames</code> mapping where applicable.</li>
 </ol></div>
 <div class="pane" id="workflows-pane-8"><h3 id="workflows-h-8">8. Housekeeping with <code>doctor</code></h3>
