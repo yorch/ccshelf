@@ -51,7 +51,7 @@ These terms are used the same way in every document and in the report.
 | Managed policy | The user's org enforces it; the tool works across none, partial and strict policy |
 | Build order | Both tracks in parallel, shared `core/` first |
 | Language | Go |
-| Name | Project `claude-profile`, command `cprof` (brand risk and an existing similarly named tool accepted; revisit before a public release) |
+| Name | Project `claude-profile`, command `cprof` was chosen, but it is **open again** (three existing tools share the name; see `02` section H and `04` open decisions) |
 | Catalog hosting | The adopter's choice; the tool outputs a static directory |
 | Profile sources | `dir` and `git` first, `plugin` later |
 | Standalone skills | Explicit off-list via `skillOverrides`, plus guidance to package skills as plugins |

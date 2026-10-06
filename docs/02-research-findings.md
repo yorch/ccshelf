@@ -36,16 +36,29 @@ Labels: **V** verified in docs/gh/CLI, **R** reported by subagent, **U** unverif
 - Concurrent sessions are an expected case (`~/.claude/sessions/` has one file per running session). Atomicity of `~/.claude.json` writes not verified. (V/U)
 - Native gaps: no named profiles, no per-session toggle by plugin name, no default-deny ("only these plugins"), no allowlist mode for `~/.claude/skills`, no inheritance, no active-profile indicator.
 
-## C. Existing profile tools (gh stars/push dates verified)
-| Tool | Approach | Notes |
-|---|---|---|
-| quinnjr/claude-code-profiles (96★) | Full config dir per profile | Account-oriented; duplicates plugins/skills |
-| spences10/mcpick (94★) | TUI toggling MCP servers + plugins, saved profiles | Likely edits shared config, so probably not concurrent-safe (U) |
-| henkisdabro MCP selector (8★), guibes/claude-profile-switch (6★, stale), ukogan/claude-account-switcher (2★), claude-profile (Go; **same name as this project**, see 04 "Name"), Claude Switch | Config-dir/symlink model | Account-oriented |
-| MetaMCP (2.7k★) | MCP gateway | MCP only. MCP Router discontinued 2026-09-18 |
-| Hand-rolled gists/blogs | `CLAUDE_CONFIG_DIR` aliases + symlinks | Same plugin-store sharing problems |
+## C. Existing profile tools
+Stars, language, license and last push are from `gh` on 2026-10-06 (verified). The "Approach" text comes from each project's README or description; anything I did not check is marked unverified.
 
-**Nothing found** that defines task profiles spanning plugins+skills+MCP and launches per terminal.
+| Tool | Lang, license | Stars | Last push | Approach | Notes and limits |
+|---|---|---|---|---|---|
+| [fuzzyalej/claude-profile](https://github.com/fuzzyalej/claude-profile) | Rust, MIT | 10 | 2026-09-28 | Task profiles: a small JSON file lists exactly the plugins, skills, marketplaces and MCP servers a session loads; `claude-profile <name>`; profiles can be combined; shared profile repos installed with `install` and pinned by a lockfile; plugins and skills are vendored into the profile's own directory; never writes to the real `~/.claude` | **Closest to our launcher**: same goal (focused sessions, many terminals at once, shareable profiles, macOS/Linux/Windows, Homebrew/Cargo/shell/PowerShell installers). Different mechanism (vendoring, not masking). Not checked: how it handles auth, `CLAUDE_CONFIG_DIR`, managed policy, or the catalog problem. Same name as our current working name. |
+| [edimuj/claude-rig](https://github.com/edimuj/claude-rig) | Go (stdlib only), MIT | 9 | 2026-06-08 | Isolated "rigs" via `CLAUDE_CONFIG_DIR` and `--add-dir`: separate settings, skills, plugins, agents, hooks, MCP and instructions; choose per rig what is isolated, inherited or shared; auth shared or separate; per-project auto-selection; status, diff, export and import | Overlaps on isolation and concurrency; also covers multiple accounts. Config-dir model, so separate plugin caches. Last push is four months old. |
+| [agh/cwtch](https://github.com/agh/cwtch) | Shell, MIT | 15 | 2026-09-14 | Named credentials (setup-token or API-key profiles) plus syncing selected user configuration from Git repos (a `Cwtchfile`) | macOS only; needs `jq` and `yq`; account-oriented. Relevant for the "sync config from git" idea. |
+| [diranged/claude-profile](https://github.com/diranged/claude-profile) | Go, Apache-2.0 | 9 | 2026-10-05 | Wrapper that sets `CLAUDE_CONFIG_DIR` per profile, one keychain entry per profile; binaries for Linux, macOS and Windows (amd64, arm64) | Account-oriented. **Same name as our working name** (`claude-profile`). See the blog post [Managing multiple Claude Code profiles](https://blog.wiredgeek.net/tools/claude-code/2026/04/06/managing-multiple-claude-code-profiles.html). |
+| [JakubKontra/claude-profile-manager](https://github.com/JakubKontra/claude-profile-manager) | Go, MIT | 22 | 2026-09-25 | Multiple Claude Code accounts side by side with isolated credentials | Account-oriented. |
+| [quinnjr/claude-code-profiles](https://github.com/quinnjr/claude-code-profiles) | Shell, MIT | 96 | 2026-09-18 | Full config dir per profile (work, personal, MCP setups) | Account-oriented; duplicates plugins and skills. |
+| [spences10/mcpick](https://github.com/spences10/mcpick) ([post](https://scottspence.com/posts/mcpick-manage-mcp-servers-and-plugins-in-claude-code)) | TypeScript, MIT | 94 | 2026-10-06 | Now described as a vendor-neutral MCP configuration manager: add, toggle and audit MCP servers and skills across clients; saved profiles | Probably edits shared config, so likely not concurrent-safe (unverified). |
+| [yarikleto/claude-profile](https://github.com/yarikleto/claude-profile) | Shell, MIT | 11 | 2026-09-25 | Global config profiles | Same name as our working name. |
+| [julianleopold/claude-profiles](https://github.com/julianleopold/claude-profiles) | TypeScript, MIT | 8 | 2026-06-30 | Swap settings, hooks, MCP servers and commands between configurations | Switching, not concurrent. |
+| [henkisdabro/Claude-Code-MCP-Server-Selector](https://github.com/henkisdabro/Claude-Code-MCP-Server-Selector) | TypeScript, MIT | 8 | 2026-09-19 | TUI that enables only the MCP servers you need | MCP only. |
+| [guibes/claude-profile-switch](https://github.com/guibes/claude-profile-switch) | Shell, MIT | 6 | 2026-04-21 | Isolated profiles via `CLAUDE_CONFIG_DIR` | Small, stale. |
+| [ukogan/claude-account-switcher](https://github.com/ukogan/claude-account-switcher) | Shell, MIT | 2 | 2026-09-15 | Isolated dir per account with symlinked settings | Account-oriented. |
+| [Claude Switch](https://claudeswitch.dev/) | Not checked | n/a | n/a | Shared skills, settings and CLAUDE.md via symlinks, isolated auth | Account-oriented (unverified details). |
+| [MetaMCP](https://github.com/metatool-ai/metamcp) | TypeScript, MIT | 2,693 | 2026-06-22 | MCP aggregator and gateway in Docker | MCP only. |
+| [MCP Router](https://github.com/mcp-router/mcp-router) | TypeScript | 2,145 | 2026-09-18 | MCP gateway | **Archived**: development and support ended 2026-09-18. |
+| Hand-rolled guides: [gist](https://gist.github.com/jamesfishwick/abb5c1203c7ba6140eaf5bcfbdd98c1c), [wmedia.es](https://wmedia.es/en/tips/claude-code-multiple-profiles-config-dir), [leek.io](https://leek.io/articles/multiple-claude-code-profiles-one-shared-setup) | n/a | n/a | n/a | `CLAUDE_CONFIG_DIR` aliases plus symlinks | Same plugin-store sharing problems (#92645). |
+
+**What changed since the first pass:** the first research said nothing defined task profiles across plugins, skills and MCP and launched them per terminal. That was wrong: `fuzzyalej/claude-profile` does, with a different mechanism, and `edimuj/claude-rig` covers per-project isolation. What none of them appear to cover (not fully verified; I read READMEs only): default-deny masking against a single shared plugin store, capability-driven behavior under managed policy (`disableSideloadFlags`, force-enabled plugins), an org catalog built from a git marketplace, or the data-repo and CODEOWNERS structure. See the open decision in 04 about evaluating these tools before building the launcher.
 
 ## D. Discoverability evidence
 - **#35319** (43 thumbs, closed): an org went from 67 to 183 skills in under a month, citing bloat/redundancy. Anthropic closed it pointing to OTel `claude_code.skill_activated` (needs `OTEL_LOG_TOOL_DETAILS=1`): telemetry, not a catalog.
@@ -66,11 +79,15 @@ Labels: **V** verified in docs/gh/CLI, **R** reported by subagent, **U** unverif
 - **Managed-policy constraints that bite a launcher**: `disableSideloadFlags` rejects `--plugin-dir`, `--plugin-url`, `--agents`, non-SDK `--mcp-config` and `CLAUDE_CODE_PLUGIN_DIRS` (Claude Code exits 1). Managed `enabledPlugins: true` can't be overridden; `false` blocks and hides at every scope. `strictKnownMarketplaces` also stops `skills-dir` plugins unless `{ "source": "skills-dir" }` is allowed.
 
 ## F. Existing discoverability tools
-- Public: skills.sh / `npx skills` (vercel-labs/skills, 33k★), claudemarketplaces.com and other aggregators, official community mirror (4.5k★), awesome lists. Public only; unaware of a private marketplace.
-- Closest to an org catalog: **iflytek/skillhub** (5.1k★), self-hosted registry with RBAC/versioning/audit; separate server, not git-marketplace-native.
-- Skill routers: sorcerai/skill-router (7★), K-Dense claude-skills-mcp (407★). Search skills, not plugins; no governance/profiles.
-- Backstage (34k★): no Claude plugin catalog exists (possible later integration).
-- **Nothing found** combining catalog + search + recommendation + bundles for a git-based `marketplace.json` (search not exhaustive).
+Stars and last push from `gh` on 2026-10-06 (verified) unless marked.
+- Public directories and registries: [skills.sh / `npx skills`](https://github.com/vercel-labs/skills) (33,243★, MIT, pushed 2026-10-05); the official read-only [community plugin mirror](https://github.com/anthropics/claude-plugins-community) (4,502★); [anthropics/skills](https://github.com/anthropics/skills) (179,862★, public skills); [claudemarketplaces.com](https://claudemarketplaces.com) and other web aggregators (unverified, snippet only). Public only; unaware of a private marketplace.
+- Awesome lists: [travisvn/awesome-claude-skills](https://github.com/travisvn/awesome-claude-skills) (15,287★, last push 2026-04-28) and [VoltAgent/awesome-claude-code-subagents](https://github.com/VoltAgent/awesome-claude-code-subagents) (25,527★): manual, no search.
+- [davila7/claude-code-templates](https://github.com/davila7/claude-code-templates) (32,417★, MIT, pushed 2026-10-06): a CLI that configures and monitors Claude Code, with a public template catalog.
+- Closest to an org catalog: [iflytek/skillhub](https://github.com/iflytek/skillhub) (5,150★, Apache-2.0, Java, pushed 2026-10-01): self-hosted registry with RBAC, versioning and audit; a separate server, not git-marketplace-native. Smaller: [oujingzhou/skillbase](https://github.com/oujingzhou/skillbase) (16★, Go, no license) and [ComeOnOliver/skillshub](https://github.com/ComeOnOliver/skillshub) (65★).
+- Skill routers: [sorcerai/skill-router](https://github.com/sorcerai/skill-router) (7★) and [K-Dense-AI/claude-skills-mcp](https://github.com/K-Dense-AI/claude-skills-mcp) (407★). Search skills, not plugins; no governance or profiles.
+- [Backstage](https://github.com/backstage/backstage) (34,570★): no Claude plugin catalog exists (possible later integration).
+- Practitioner posts: [Thoughtworks Radar, Claude Code plugin marketplace (Trial)](https://www.thoughtworks.com/en-us/radar/tools/claude-code-plugin-marketplace); [Building an enterprise Claude Code marketplace (DEV.to)](https://dev.to/flavio_sacca_b0ab52158604/building-an-enterprise-claude-code-marketplace-5d3j); [Your Claude plugin marketplace needs more than a git repo](https://www.mpt.solutions/your-claude-plugin-marketplace-needs-more-than-a-git-repo/); [LiteLLM, Claude Code plugin marketplace](https://docs.litellm.ai/docs/tutorials/claude_code_plugin_marketplace) (snippet only).
+- **Nothing found** combining catalog + search + recommendation + bundles for a git-based `marketplace.json` (search not exhaustive). The review round also noted that claude.ai has an organization setting (Organization settings > Plugins & skills) that syncs an org marketplace from GitHub, GitLab or GHES; this is reported, not yet checked against the docs.
 
 ## G. Corrections made along the way
 - Keychain: per-config-dir, not shared. (V)
@@ -78,3 +95,17 @@ Labels: **V** verified in docs/gh/CLI, **R** reported by subagent, **U** unverif
 - `/skill-doctor` does have text output with `-p`; "7-day usage" not in docs. (V)
 - "No ownership fields" is overstated (`author`, `repository`, etc. exist); only deprecation/status is missing. (V)
 - `disableSideloadFlags` is broader than first reported. (V)
+
+## H. Naming and brand findings (2026-10-06)
+- **Anthropic's guidance** (verified by an agent against the pages): the [trademark guidelines](https://www.anthropic.com/legal/trademark-guidelines) say its marks may only be used as permitted and not in a way that implies sponsorship or affiliation (questions: marketing@anthropic.com). The [Agent SDK docs](https://code.claude.com/docs/en/agent-sdk/overview) say a product may use "Claude Agent" or "{YourAgentName} Powered by Claude", must not use "Claude Code" or "Claude Code Agent" as its branding, and should not appear to be Claude Code or an Anthropic product. No rule specific to open-source tool names was found.
+- **Plugin names:** `claude plugin validate` errors on names that start with `claude-`, `anthropic-` or `cc-plugin-` and warns on "claude" as a whole word elsewhere ([manifest reference](https://code.claude.com/docs/en/plugins/manifest-reference)); marketplace names that impersonate official ones are refused ([marketplace reference](https://code.claude.com/docs/en/plugins/marketplace-reference)). This matters for anything the tool generates.
+- **Precedent** (press reports, not an Anthropic statement): in January 2026 Anthropic asked the "Clawdbot" project to rename over similarity to "Claude" ([Laravel News](https://laravel-news.com/index.php/clawdbot-rebrands-to-moltbot-after-trademark-request-from-anthropic)).
+- **Collision on GitHub:** at least three tools use the name `claude-profile`: [diranged](https://github.com/diranged/claude-profile) (Go), [fuzzyalej](https://github.com/fuzzyalej/claude-profile) (Rust, same purpose as our launcher) and [yarikleto](https://github.com/yarikleto/claude-profile) (shell), plus many close variants. The name is free on npm, PyPI and Homebrew.
+- **Candidate names** that avoid "claude" and were free on GitHub, npm, PyPI, crates.io, Homebrew and Scoop when checked: `kitshelf` (command `kshelf`), `kitstow` (`kstow`), `loadmux` (`lmux`). A second check of `cc`- and `claude`-prefixed names is in progress. Not checked: winget, a real trademark search. A name decision is still open (see 04).
+
+## I. Review round findings relevant to the tools landscape (2026-10-06)
+From the product, scope and strategy adversary review (not yet independently checked unless noted):
+- The routing-quality benefit that carries the pitch has not been measured; Stage 0 measured tokens only.
+- The exit trigger named in 04 (#91770) is about account profiles for one user (1 thumb), not task-scoped plugin sets, so it is a weak signal. Other more likely obsolescence paths: a native allowlist or default-deny `enabledPlugins` mode, smarter skill loading, or a faceted `/plugin` Discover.
+- Competing tools exist that the first pass missed (see section C). Their low star counts also suggest modest demand in this category.
+

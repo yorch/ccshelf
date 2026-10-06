@@ -218,8 +218,24 @@ ul,ol{padding-left:22px}
 <section id="tools">
 <h2>Existing tools</h2>
 <div class="chips" id="toolchips"></div>
-<table id="tooltable"><thead><tr><th>Tool</th><th>Area</th><th>Approach</th><th>Stars</th><th>Limits</th></tr></thead><tbody></tbody></table>
-<div class="callout">Nothing found that combines task profiles (plugins+skills+MCP) with per-terminal launch, nor catalog + search + recommendation + bundles for a git-based marketplace.json. Search was not exhaustive.</div>
+<p class="small">Stars and last push from <code>gh</code> on 2026-10-06; approach text is from each README or description. Names link to the repos.</p>
+<table id="tooltable"><thead><tr><th>Tool</th><th>Area</th><th>Approach</th><th>Stars</th><th>Last push</th><th>Notes and limits</th></tr></thead><tbody></tbody></table>
+<div class="callout"><b>What changed since the first pass.</b> The first research said nothing defined task profiles across plugins, skills and MCP and launched them per terminal. That was wrong: <a href="https://github.com/fuzzyalej/claude-profile">fuzzyalej/claude-profile</a> does, with a different mechanism, and <a href="https://github.com/edimuj/claude-rig">edimuj/claude-rig</a> covers per-project isolation. What none of them appear to cover (READMEs only, not fully verified): default-deny masking against a single shared plugin store, capability-driven behavior under managed policy, an org catalog built from a git marketplace, and the data-repo and CODEOWNERS structure. Open decision: evaluate these tools before building the launcher.</div>
+<p class="small">Nothing found that combines catalog, search, recommendation and bundles for a git-based <code>marketplace.json</code>; the search was not exhaustive. claude.ai also has an organization setting (Plugins &amp; skills) that syncs an org marketplace from GitHub, GitLab or GHES; reported, not yet checked against the docs.</p>
+<h3>Naming and brand findings (2026-10-06)</h3>
+<ul>
+<li>Anthropic's <a href="https://www.anthropic.com/legal/trademark-guidelines">trademark guidelines</a>: marks may only be used as permitted and not in a way that implies sponsorship or affiliation (questions: marketing@anthropic.com). The <a href="https://code.claude.com/docs/en/agent-sdk/overview">Agent SDK docs</a> say not to use "Claude Code" as product branding and not to appear to be an Anthropic product. No rule specific to open-source tool names was found. <span class="R">R</span></li>
+<li><code>claude plugin validate</code> errors on plugin names starting with <code>claude-</code>, <code>anthropic-</code> or <code>cc-plugin-</code> and warns on "claude" as a whole word elsewhere (<a href="https://code.claude.com/docs/en/plugins/manifest-reference">manifest reference</a>). <span class="R">R</span></li>
+<li>Precedent (press reports, not an Anthropic statement): in January 2026 the "Clawdbot" project renamed after a request from Anthropic (<a href="https://laravel-news.com/index.php/clawdbot-rebrands-to-moltbot-after-trademark-request-from-anthropic">Laravel News</a>). <span class="R">R</span></li>
+<li>At least three tools use the name <code>claude-profile</code> on GitHub (<a href="https://github.com/diranged/claude-profile">diranged</a>, <a href="https://github.com/fuzzyalej/claude-profile">fuzzyalej</a>, <a href="https://github.com/yarikleto/claude-profile">yarikleto</a>). The name is free on npm, PyPI and Homebrew. <span class="R">R</span></li>
+<li>Neutral candidates found free on GitHub, npm, PyPI, crates.io, Homebrew and Scoop: <code>kitshelf</code> (<code>kshelf</code>), <code>kitstow</code> (<code>kstow</code>), <code>loadmux</code> (<code>lmux</code>). A check of <code>cc</code>- and <code>claude</code>-prefixed names is in progress. Not checked: winget and a real trademark search. <span class="U">U</span></li>
+</ul>
+<h3>Review-round findings about the landscape</h3>
+<ul>
+<li>The routing-quality benefit that carries the pitch has not been measured; Stage 0 measured tokens only. <span class="R">R</span></li>
+<li>The exit trigger named earlier (#91770) is about account profiles for one user (1 thumb), not task-scoped plugin sets. Likelier obsolescence paths: a native allowlist or default-deny <code>enabledPlugins</code> mode, smarter skill loading, a faceted <code>/plugin</code> Discover. <span class="R">R</span></li>
+<li>Low star counts across this category suggest modest demand. <span class="R">R</span></li>
+</ul>
 </section>
 
 <section id="options">
@@ -623,6 +639,8 @@ mcp_registry = "mcp/registry.toml"</pre>
 </tbody></table>
 <h3>Still open</h3>
 <ul>
+<li><b>Build, adopt or contribute:</b> evaluate <a href="https://github.com/fuzzyalej/claude-profile">fuzzyalej/claude-profile</a> and <a href="https://github.com/edimuj/claude-rig">edimuj/claude-rig</a> before building the launcher (do they handle default-deny masking against one shared plugin store, concurrency, managed policy and the org data repo flow? could the gaps be contributed upstream?). The catalog track is not covered by any of them.</li>
+<li><b>Name:</b> open again. <code>claude-profile</code> collides with three existing tools and carries brand risk; neutral candidates and a <code>cc</code>/<code>claude</code> check are on the Tools tab and in 02 section H.</li>
 <li>Which managed keys your org actually sets (answerable by running <code>doctor --policy</code> on a managed machine once built).</li>
 <li>The minimum GHE Server version the workflows must support.</li>
 <li>Whether <code>core/</code> is a public Go library or internal packages (leaning internal, no API promise).</li>
@@ -691,25 +709,36 @@ function drawBud(){const c=+$("#ctx").value,b=c*0.01;$("#bud").textContent=b.toL
 $("#ctx").onchange=drawBud;drawBud();
 
 const tools=[
-["quinnjr/claude-code-profiles","profiles","Config dir per profile","96","Account-oriented; duplicates plugins and skills"],
-["spences10/mcpick","profiles","TUI toggles MCP servers and plugins, saved profiles","94","Likely edits shared config (unverified)"],
-["henkisdabro MCP server selector","profiles","TUI enabling only the MCP servers you need","8","MCP only"],
-["guibes/claude-profile-switch","profiles","Per-profile CLAUDE_CONFIG_DIR","6","Small, stale"],
-["ukogan/claude-account-switcher","profiles","Isolated dir per account, symlinked settings","2","Account-oriented"],
-["claude-profile (Go binary)","profiles","CLAUDE_CONFIG_DIR wrapper (blog post)","n/a","Same name as this project; account-oriented"],
-["Claude Switch","profiles","Shared skills and settings via symlinks, isolated auth","n/a","Account-oriented"],
-["Hand-rolled gists and blog posts","profiles","CLAUDE_CONFIG_DIR aliases and symlinks","n/a","Plugin-store sharing problems"],
-["MetaMCP","profiles","MCP gateway with namespaces","2.7k","MCP only"],
-["MCP Router","profiles","MCP gateway","2.1k","Discontinued 2026-09-18"],
-["skills.sh / npx skills","catalog","Public skill search and install","33k","Public; not org-private"],
-["Official community mirror","catalog","Read-only mirror of community plugins","4.5k","Public only"],
-["claudemarketplaces.com and other aggregators","catalog","Web directories that scrape GitHub","n/a","Public only"],
-["Awesome lists","catalog","Manually curated lists","15k to 25k","No search"],
-["iflytek/skillhub","catalog","Self-hosted registry with RBAC and audit","5.1k","Separate server; not git-marketplace-native"],
-["claude-skills-mcp / skill-router","catalog","MCP search over skills","7 to 407","Skills only; no governance"],
-["Backstage","catalog","General software catalog","34k","No Claude plugin support yet"]];
+["fuzzyalej/claude-profile", "https://github.com/fuzzyalej/claude-profile", "profiles", "Task profiles in JSON; combine profiles; shared profile repos with a lockfile; plugins vendored into the profile's own directory (Rust, MIT)", "10", "2026-09-28", "Closest to our launcher, with a different mechanism (vendoring, not masking). Auth, policy and catalog handling not checked. Same name as our working name."],
+["edimuj/claude-rig", "https://github.com/edimuj/claude-rig", "profiles", "Isolated rigs via CLAUDE_CONFIG_DIR and --add-dir; choose isolated, inherited or shared per rig; per-project auto-select (Go, MIT)", "9", "2026-06-08", "Config-dir model; also multiple accounts; last push four months ago"],
+["agh/cwtch", "https://github.com/agh/cwtch", "profiles", "Named credentials plus configuration synced from Git (Shell, MIT)", "15", "2026-09-14", "macOS only; needs jq and yq; account-oriented"],
+["diranged/claude-profile", "https://github.com/diranged/claude-profile", "profiles", "CLAUDE_CONFIG_DIR wrapper, one keychain entry per profile (Go, Apache-2.0)", "9", "2026-10-05", "Account-oriented; same name as our working name"],
+["JakubKontra/claude-profile-manager", "https://github.com/JakubKontra/claude-profile-manager", "profiles", "Multiple accounts side by side with isolated credentials (Go, MIT)", "22", "2026-09-25", "Account-oriented"],
+["quinnjr/claude-code-profiles", "https://github.com/quinnjr/claude-code-profiles", "profiles", "Config dir per profile (Shell, MIT)", "96", "2026-09-18", "Account-oriented; duplicates plugins and skills"],
+["spences10/mcpick", "https://github.com/spences10/mcpick", "profiles", "Vendor-neutral MCP configuration manager across clients; saved profiles (TypeScript, MIT)", "94", "2026-10-06", "Probably edits shared config (unverified)"],
+["yarikleto/claude-profile", "https://github.com/yarikleto/claude-profile", "profiles", "Global config profiles (Shell, MIT)", "11", "2026-09-25", "Same name as our working name"],
+["julianleopold/claude-profiles", "https://github.com/julianleopold/claude-profiles", "profiles", "Swap settings, hooks, MCP servers and commands between configurations (TypeScript, MIT)", "8", "2026-06-30", "Switching, not concurrent"],
+["henkisdabro/Claude-Code-MCP-Server-Selector", "https://github.com/henkisdabro/Claude-Code-MCP-Server-Selector", "profiles", "TUI enabling only the MCP servers you need (TypeScript, MIT)", "8", "2026-09-19", "MCP only"],
+["guibes/claude-profile-switch", "https://github.com/guibes/claude-profile-switch", "profiles", "Isolated profiles via CLAUDE_CONFIG_DIR (Shell, MIT)", "6", "2026-04-21", "Small, stale"],
+["ukogan/claude-account-switcher", "https://github.com/ukogan/claude-account-switcher", "profiles", "Isolated dir per account, symlinked settings (Shell, MIT)", "2", "2026-09-15", "Account-oriented"],
+["Claude Switch", "https://claudeswitch.dev/", "profiles", "Shared skills and settings via symlinks, isolated auth", "n/a", "n/a", "Account-oriented (details unverified)"],
+["MetaMCP", "https://github.com/metatool-ai/metamcp", "profiles", "MCP gateway with namespaces (TypeScript, MIT)", "2.7k", "2026-06-22", "MCP only"],
+["MCP Router", "https://github.com/mcp-router/mcp-router", "profiles", "MCP gateway (TypeScript)", "2.1k", "2026-09-18", "Archived: development ended 2026-09-18"],
+["Hand-rolled guides (gist, wmedia.es, leek.io)", "https://gist.github.com/jamesfishwick/abb5c1203c7ba6140eaf5bcfbdd98c1c", "profiles", "CLAUDE_CONFIG_DIR aliases and symlinks", "n/a", "n/a", "Plugin-store sharing problems (#92645)"],
+["skills.sh / npx skills", "https://github.com/vercel-labs/skills", "catalog", "Public skill search and install (TypeScript, MIT)", "33k", "2026-10-05", "Public; not org-private"],
+["Official community mirror", "https://github.com/anthropics/claude-plugins-community", "catalog", "Read-only mirror of community plugins (Apache-2.0)", "4.5k", "2026-10-05", "Public only"],
+["anthropics/skills", "https://github.com/anthropics/skills", "catalog", "Public skills repository", "180k", "2026-10-05", "Public skills, not a catalog tool"],
+["claudemarketplaces.com and other aggregators", "https://claudemarketplaces.com", "catalog", "Web directories that scrape GitHub", "n/a", "n/a", "Public only (unverified)"],
+["Awesome lists (VoltAgent, travisvn)", "https://github.com/VoltAgent/awesome-claude-code-subagents", "catalog", "Manually curated lists (15k and 26k stars)", "15k to 26k", "2026-04-28 to 2026-10-05", "No search"],
+["davila7/claude-code-templates", "https://github.com/davila7/claude-code-templates", "catalog", "CLI to configure and monitor Claude Code; public template catalog (Python, MIT)", "32k", "2026-10-06", "Public templates, not org-private"],
+["iflytek/skillhub", "https://github.com/iflytek/skillhub", "catalog", "Self-hosted registry with RBAC, versioning and audit (Java, Apache-2.0)", "5.1k", "2026-10-01", "Separate server; not git-marketplace-native"],
+["oujingzhou/skillbase", "https://github.com/oujingzhou/skillbase", "catalog", "Self-hosted skill registry (Go, no license)", "16", "2026-03-22", "Small; no license"],
+["ComeOnOliver/skillshub", "https://github.com/ComeOnOliver/skillshub", "catalog", "Skill registry with token-efficient resolution (Python, MIT)", "65", "2026-06-24", "Skills only"],
+["claude-skills-mcp", "https://github.com/K-Dense-AI/claude-skills-mcp", "catalog", "MCP vector search over skills (Python, Apache-2.0)", "407", "2026-07-20", "Skills only; no governance"],
+["skill-router", "https://github.com/sorcerai/skill-router", "catalog", "MCP lazy-loader for skills (JavaScript, MIT)", "7", "2026-08-06", "Skills only; no governance"],
+["Backstage", "https://github.com/backstage/backstage", "catalog", "Developer portal framework (TypeScript, Apache-2.0)", "34.6k", "2026-10-06", "No Claude plugin support yet"]];
 let tf="all";
-function drawTools(){const b=$("#tooltable tbody");b.innerHTML="";tools.filter(r=>tf==="all"||r[1]===tf).forEach(r=>{const tr=document.createElement("tr");r.forEach(c=>{const td=document.createElement("td");td.textContent=c;tr.appendChild(td)});b.appendChild(tr)})}
+function drawTools(){const b=$("#tooltable tbody");b.innerHTML="";tools.filter(r=>tf==="all"||r[2]===tf).forEach(r=>{const tr=document.createElement("tr");const t0=document.createElement("td");if(r[1]){const a=document.createElement("a");a.href=r[1];a.textContent=r[0];a.rel="noopener";t0.appendChild(a)}else t0.textContent=r[0];tr.appendChild(t0);[r[2],r[3],r[4],r[5],r[6]].forEach(c=>{const td=document.createElement("td");td.textContent=c;tr.appendChild(td)});b.appendChild(tr)})}
 function chips(id,vals,get,set,draw){const el=$(id);vals.forEach(v=>{const b=document.createElement("button");b.textContent=v;b.onclick=()=>{set(v);el.querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===b));draw()};if(v==="all")b.classList.add("on");el.appendChild(b)})}
 chips("#toolchips",["all","profiles","catalog"],()=>tf,v=>tf=v,drawTools);drawTools();
 
