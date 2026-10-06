@@ -19,6 +19,10 @@
 //     memoized plugin list) under the same rules, with replace-by-rename.
 //   - [GC] removes only files whose names match what this package creates,
 //     older than a maximum age and not reported as in use.
+//   - [Prune] and [PruneDir] do the same and also remove git checkouts
+//     (git/<url key>/<commit>) that have not been used for the maximum age,
+//     except the ones the caller reports as pinned.
+//   - Errors about a file that cannot be trusted name the file to delete.
 //
 // # Windows (untested on real Windows)
 //

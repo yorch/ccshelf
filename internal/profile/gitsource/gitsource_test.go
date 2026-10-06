@@ -474,18 +474,18 @@ func TestSubmoduleRejected(t *testing.T) {
 
 func TestCheckTreeUnsafeComponents(t *testing.T) {
 	for _, p := range []string{"a/../b", ".git/config", "x/.GIT/y", `profiles/a\b.toml`, "a//b", "profiles/\x01"} {
-		err := checkTree([]treeEntry{{mode: "100644", path: p}}, "")
+		err := checkTree([]treeEntry{{mode: "100644", path: p}}, "", newWatch(nil))
 		if !errors.Is(err, ErrHygiene) {
 			t.Errorf("%q: %v", p, err)
 		}
 	}
-	if err := checkTree([]treeEntry{{mode: "100644", path: "profiles/ok.toml"}, {mode: "120000", path: "other/link"}}, ""); err != nil {
+	if err := checkTree([]treeEntry{{mode: "100644", path: "profiles/ok.toml"}, {mode: "120000", path: "other/link"}}, "", newWatch(nil)); err != nil {
 		t.Errorf("unexpected: %v", err)
 	}
-	if err := checkTree([]treeEntry{{mode: "120000", path: "org/profiles/x"}}, "org"); err == nil {
+	if err := checkTree([]treeEntry{{mode: "120000", path: "org/profiles/x"}}, "org", newWatch(nil)); err == nil {
 		t.Error("symlink under base must fail")
 	}
-	if err := checkTree([]treeEntry{{mode: "120000", path: "orgs/profiles/x"}}, "org"); err != nil {
+	if err := checkTree([]treeEntry{{mode: "120000", path: "orgs/profiles/x"}}, "org", newWatch(nil)); err != nil {
 		t.Errorf("sibling folder is out of scope: %v", err)
 	}
 }

@@ -142,6 +142,26 @@ func TestLoadFileAndErrors(t *testing.T) {
 	}
 }
 
+func TestFindReportsMissingFile(t *testing.T) {
+	root := t.TempDir()
+	cfg, found, err := Find(root)
+	if err != nil || found || cfg == nil || cfg.Profiles.Dir != "profiles" {
+		t.Fatalf("Find(empty) = %+v, %v, %v", cfg, found, err)
+	}
+	if err := os.WriteFile(filepath.Join(root, FileName), []byte(""), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, found, err = Find(root); err != nil || !found {
+		t.Errorf("an empty ccshelf.toml is a present file: found=%v err=%v", found, err)
+	}
+	if err := os.WriteFile(filepath.Join(root, FileName), []byte("[bogus]\nx=1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if cfg, found, err = Find(root); err == nil || !found || cfg != nil {
+		t.Errorf("a broken file is found and an error: %+v %v %v", cfg, found, err)
+	}
+}
+
 func TestCheckPathsSymlinkEscape(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("symlinks need privileges on Windows")

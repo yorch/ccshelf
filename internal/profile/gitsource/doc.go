@@ -55,6 +55,17 @@
 // special files) and the directory is left for the user to delete. Nothing
 // outside the watched folders is ever read.
 //
+// # The org config and offline use
+//
+// ccshelf.toml at the source root is a watched file like the folders, with the
+// same hygiene and size limit. It is read from the object store first; its
+// profiles.dir and profiles.mcp_registry say which folder and which registry
+// file are watched, and its [protect] lists are exposed through OrgConfig. A
+// ccshelf.toml that does not parse fails Prepare with an error wrapping
+// orgconfig.ErrInvalid. PrepareCached prepares from an already verified
+// checkout of a known commit (the launcher takes it from the trust lockfile)
+// without contacting the remote.
+//
 // # Process hygiene
 //
 // Git runs through exec.CommandContext with explicit argument slices and "--"

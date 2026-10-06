@@ -141,7 +141,7 @@ func TestPinProtectedLeavesPlainClosureAlone(t *testing.T) {
 	if r.Closure.Hash != "x" || len(r.Closure.Items) != 1 {
 		t.Errorf("closure changed without protected controls: %+v", r.Closure)
 	}
-	s := &session{protectedPlugins: []string{"a@b"}, protectedMCP: []string{"m"}}
+	s := &session{pinPlugins: []string{"a@b"}, pinMCP: []string{"m"}}
 	s.pinProtected(r)
 	if len(r.Closure.Items) != 3 || r.Closure.Hash != profile.HashItems(r.Closure.Items) {
 		t.Errorf("closure %+v", r.Closure)

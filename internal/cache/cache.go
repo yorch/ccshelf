@@ -163,13 +163,19 @@ func ReadFile(dir, name string) ([]byte, error) {
 	return readRegular(filepath.Join(dir, name), MaxFileSize)
 }
 
+// deleteHint is appended to errors about a cache file that cannot be trusted:
+// every cache file can be rebuilt, so removing it is always safe.
+func deleteHint(path string) string {
+	return "; delete " + path + " and run again to rebuild it"
+}
+
 func readRegular(path string, limit int64) ([]byte, error) {
 	f, err := openNoFollow(path, os.O_RDONLY, 0)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, err
 		}
-		return nil, fmt.Errorf("%w: open %s: %w", ErrTampered, filepath.Base(path), err)
+		return nil, fmt.Errorf("%w: open %s: %w%s", ErrTampered, filepath.Base(path), err, deleteHint(path))
 	}
 	defer f.Close()
 	fi, err := f.Stat()
@@ -177,17 +183,17 @@ func readRegular(path string, limit int64) ([]byte, error) {
 		return nil, fmt.Errorf("stat cache file: %w", err)
 	}
 	if !fi.Mode().IsRegular() {
-		return nil, fmt.Errorf("%w: %s is not a regular file", ErrTampered, filepath.Base(path))
+		return nil, fmt.Errorf("%w: %s is not a regular file%s", ErrTampered, filepath.Base(path), deleteHint(path))
 	}
 	if err := checkOwner(fi); err != nil {
-		return nil, fmt.Errorf("%w: %s: %w", ErrTampered, filepath.Base(path), err)
+		return nil, fmt.Errorf("%w: %s: %w%s", ErrTampered, filepath.Base(path), err, deleteHint(path))
 	}
 	data, err := io.ReadAll(io.LimitReader(f, limit+1))
 	if err != nil {
 		return nil, fmt.Errorf("read cache file: %w", err)
 	}
 	if int64(len(data)) > limit {
-		return nil, fmt.Errorf("%w: %s is larger than %d bytes", ErrTampered, filepath.Base(path), limit)
+		return nil, fmt.Errorf("%w: %s is larger than %d bytes%s", ErrTampered, filepath.Base(path), limit, deleteHint(path))
 	}
 	return data, nil
 }
@@ -201,7 +207,7 @@ func verify(path string, content []byte) error {
 	want := sha256.Sum256(content)
 	have := sha256.Sum256(got)
 	if want != have || !bytes.Equal(got, content) {
-		return fmt.Errorf("%w: %s", ErrTampered, filepath.Base(path))
+		return fmt.Errorf("%w: %s does not hold what its name says%s", ErrTampered, filepath.Base(path), deleteHint(path))
 	}
 	return nil
 }
@@ -321,6 +327,85 @@ func GC(dir string, maxAge time.Duration, inUse func(path string) bool) ([]strin
 			continue
 		}
 		removed = append(removed, path)
+	}
+	sort.Strings(removed)
+	return removed, errors.Join(errs...)
+}
+
+var (
+	urlKeyPattern   = regexp.MustCompile(`^[0-9a-f]{16}$`)
+	commitPattern   = regexp.MustCompile(`^([0-9a-f]{40}|[0-9a-f]{64})$`)
+	tmpCheckoutName = regexp.MustCompile(`^\.tmp-[0-9]+$`)
+)
+
+// gitFolder is the folder of the cache directory that holds git checkouts, as
+// <url key>/<commit>.
+const gitFolder = "git"
+
+// Prune removes what has not been used for maxAge from the cache directory
+// (see [PruneDir]). A maxAge of zero or less means [DefaultMaxAge]. keep, if
+// non-nil, is asked about every candidate and protects the ones it reports.
+func Prune(maxAge time.Duration, keep func(path string) bool) ([]string, error) {
+	dir, err := Dir()
+	if err != nil {
+		return nil, err
+	}
+	return PruneDir(dir, maxAge, keep)
+}
+
+// PruneDir is Prune for the cache directory dir. It removes
+//
+//   - the files this package created in dir (see [GC]),
+//   - the git checkouts dir/git/<url key>/<commit>, and left-over temporary
+//     checkouts, whose modification time (refreshed by every use) is older
+//     than maxAge.
+//
+// Nothing newer than maxAge is removed, nothing keep reports is removed, and
+// anything that does not look like what this tool creates (other names,
+// symbolic links) is left alone. Removal is best effort: the removed paths are
+// returned in sorted order together with the joined errors of the failures.
+func PruneDir(dir string, maxAge time.Duration, keep func(path string) bool) ([]string, error) {
+	if maxAge <= 0 {
+		maxAge = DefaultMaxAge
+	}
+	removed, err := GC(dir, maxAge, keep)
+	errs := []error{err}
+	cutoff := time.Now().Add(-maxAge)
+	gitDir := filepath.Join(dir, gitFolder)
+	urlDirs, rerr := os.ReadDir(gitDir)
+	if rerr != nil && !errors.Is(rerr, os.ErrNotExist) {
+		errs = append(errs, fmt.Errorf("read git cache: %w", rerr))
+	}
+	for _, ue := range urlDirs {
+		if !urlKeyPattern.MatchString(ue.Name()) || !ue.IsDir() {
+			continue
+		}
+		urlDir := filepath.Join(gitDir, ue.Name())
+		entries, rerr := os.ReadDir(urlDir)
+		if rerr != nil {
+			errs = append(errs, fmt.Errorf("read %s: %w", urlDir, rerr))
+			continue
+		}
+		for _, e := range entries {
+			name := e.Name()
+			if !commitPattern.MatchString(name) && !tmpCheckoutName.MatchString(name) {
+				continue
+			}
+			p := filepath.Join(urlDir, name)
+			fi, lerr := os.Lstat(p)
+			if lerr != nil || !fi.IsDir() || !fi.ModTime().Before(cutoff) {
+				continue
+			}
+			if keep != nil && keep(p) {
+				continue
+			}
+			if err := os.RemoveAll(p); err != nil {
+				errs = append(errs, fmt.Errorf("remove %s: %w", name, err))
+				continue
+			}
+			removed = append(removed, p)
+		}
+		_ = os.Remove(urlDir) // only succeeds when it is empty
 	}
 	sort.Strings(removed)
 	return removed, errors.Join(errs...)

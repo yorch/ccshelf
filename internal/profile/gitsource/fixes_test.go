@@ -337,7 +337,7 @@ func TestCheckTreeSizesAndModes(t *testing.T) {
 		"executable":         {e("100755", 1, false), ""},
 		"outside is ignored": {[]treeEntry{{mode: "100644", size: MaxFileSize * 9, path: "docs/big"}}, ""},
 	} {
-		err := checkTree(tt.entries, "")
+		err := checkTree(tt.entries, "", newWatch(nil))
 		switch {
 		case tt.want == "" && err != nil:
 			t.Errorf("%s: %v", name, err)
@@ -349,18 +349,18 @@ func TestCheckTreeSizesAndModes(t *testing.T) {
 	for i := range many {
 		many[i] = treeEntry{mode: "100644", size: 1, path: "prompts/" + itoa(i)}
 	}
-	if err := checkTree(many, ""); !errors.Is(err, ErrHygiene) {
+	if err := checkTree(many, "", newWatch(nil)); !errors.Is(err, ErrHygiene) {
 		t.Errorf("file count: %v", err)
 	}
 	big := make([]treeEntry, 40)
 	for i := range big {
 		big[i] = treeEntry{mode: "100644", size: MaxFileSize, path: "prompts/" + itoa(i)}
 	}
-	if err := checkTree(big, ""); !errors.Is(err, ErrHygiene) {
+	if err := checkTree(big, "", newWatch(nil)); !errors.Is(err, ErrHygiene) {
 		t.Errorf("total bytes: %v", err)
 	}
 	for _, p := range []string{"profiles/a:b", "profiles/a\u202eb", "profiles/a\u200bb"} {
-		if err := checkTree([]treeEntry{{mode: "100644", path: p}}, ""); !errors.Is(err, ErrHygiene) {
+		if err := checkTree([]treeEntry{{mode: "100644", path: p}}, "", newWatch(nil)); !errors.Is(err, ErrHygiene) {
 			t.Errorf("%q: %v", p, err)
 		}
 	}
@@ -462,7 +462,7 @@ func TestVerifyDisk(t *testing.T) {
 					}
 				}
 			}
-			err := verifyDisk(root, "", entries)
+			err := verifyDisk(root, "", entries, newWatch(nil))
 			if c.want == nil {
 				if err != nil {
 					t.Fatal(err)
@@ -484,7 +484,7 @@ func TestVerifyDiskBaseMustBePlain(t *testing.T) {
 	if err := os.Symlink(t.TempDir(), filepath.Join(root, "org")); err != nil {
 		t.Fatal(err)
 	}
-	if err := verifyDisk(root, "org", nil); !errors.Is(err, ErrHygiene) {
+	if err := verifyDisk(root, "org", nil, newWatch(nil)); !errors.Is(err, ErrHygiene) {
 		t.Errorf("symlinked base: %v", err)
 	}
 }

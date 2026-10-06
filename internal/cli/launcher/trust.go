@@ -46,7 +46,9 @@ trust.trust_project_profiles is true); --accept then takes the folder hash.
 }
 
 func (l *launcher) trustProfile(ctx context.Context, cc *clicore.Context, name, accept string, revoke bool) error {
-	s, err := l.open(ctx, cc, true, false)
+	// Reviewing re-resolves the git tags on the remote, so a tag that moved
+	// since the last acceptance is seen (a run uses the pinned commit).
+	s, err := l.openWith(ctx, cc, openOpts{prepare: true, refresh: true})
 	if err != nil {
 		return err
 	}

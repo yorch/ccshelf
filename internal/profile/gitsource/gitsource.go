@@ -18,6 +18,7 @@ import (
 
 	"github.com/ccshelf/ccshelf/internal/cache"
 	"github.com/ccshelf/ccshelf/internal/config"
+	"github.com/ccshelf/ccshelf/internal/orgconfig"
 	"github.com/ccshelf/ccshelf/internal/profile"
 )
 
@@ -33,6 +34,9 @@ var (
 	// ErrTampered is returned when a cached checkout does not match the
 	// commit it is supposed to hold.
 	ErrTampered = errors.New("cached git checkout does not match its commit")
+	// ErrNotCached is returned by PrepareCached when no checkout of the
+	// requested commit is in the cache.
+	ErrNotCached = errors.New("no checkout of that commit is cached")
 )
 
 // Options configures a Source.
@@ -71,9 +75,14 @@ type Source struct {
 	sha      string
 	root     string
 	inner    profile.Source
+	cfg      *orgconfig.Config
+	cfgFound bool
 }
 
-var _ profile.Source = (*Source)(nil)
+var (
+	_ profile.Source          = (*Source)(nil)
+	_ profile.RegistryLocator = (*Source)(nil)
+)
 
 // New validates opts and returns an unprepared Source. It does no I/O.
 func New(opts Options) (*Source, error) {
@@ -131,6 +140,26 @@ func (s *Source) Root() string {
 	return s.root
 }
 
+// OrgConfig returns the org config (ccshelf.toml) read from the pinned
+// checkout, and whether the repository has one. Without one the defaults are
+// returned and found is false; the launcher uses that to warn that no
+// protected controls are declared. It returns (nil, false) before Prepare.
+func (s *Source) OrgConfig() (cfg *orgconfig.Config, found bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cfg, s.cfgFound
+}
+
+// RegistryPath returns the MCP registry file below Root (profile.RegistryLocator).
+func (s *Source) RegistryPath() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.cfg != nil {
+		return s.cfg.Profiles.MCPRegistry
+	}
+	return profile.DefaultRegistryPath
+}
+
 // Names lists the profiles in the checkout.
 func (s *Source) Names() ([]string, error) {
 	in, err := s.prepared()
@@ -167,7 +196,25 @@ func (s *Source) prepared() (profile.Source, error) {
 // checkout and validates its content. It is safe to call more than once and
 // from several goroutines or processes at the same time; each call
 // re-resolves a tag so a moved tag is noticed.
-func (s *Source) Prepare(ctx context.Context) error {
+func (s *Source) Prepare(ctx context.Context) error { return s.prepare(ctx, "") }
+
+// PrepareCached is Prepare for a commit that is already known (the launcher
+// takes it from the trust lockfile): it never contacts the remote. The
+// checkout of that commit must already be in the cache and passes the same
+// verification as in Prepare; when it is not there, ErrNotCached is returned
+// and the caller can fall back to Prepare. A tag that moved on the remote is
+// not noticed, but nothing but the pinned commit is ever read.
+func (s *Source) PrepareCached(ctx context.Context, commit string) error {
+	commit = strings.ToLower(commit)
+	if !fullSHA.MatchString(commit) {
+		return fmt.Errorf("%w: %q is not a full commit SHA", ErrNotPinned, commit)
+	}
+	return s.prepare(ctx, commit)
+}
+
+// prepare is Prepare and PrepareCached; a non-empty cached is the commit to
+// use without any network access.
+func (s *Source) prepare(ctx context.Context, cached string) error {
 	s.prepMu.Lock()
 	defer s.prepMu.Unlock()
 	timeout := s.opts.Timeout
@@ -184,22 +231,39 @@ func (s *Source) Prepare(ctx context.Context) error {
 	if err := s.ensureHooksDir(base); err != nil {
 		return err
 	}
-	sha, err := s.resolve(ctx, base)
+	var sha, checkout string
+	if cached != "" {
+		sha = cached
+		checkout = CheckoutDir(base, s.opts.URL, sha)
+		if _, err := os.Lstat(checkout); err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				return fmt.Errorf("%w: %s", ErrNotCached, sha)
+			}
+			return fmt.Errorf("inspecting %s: %w", checkout, err)
+		}
+	} else {
+		if sha, err = s.resolve(ctx, base); err != nil {
+			return err
+		}
+		if checkout, err = s.materialize(ctx, base, sha); err != nil {
+			return err
+		}
+	}
+	root, cfg, found, err := s.verify(ctx, checkout, sha)
 	if err != nil {
+		if errors.Is(err, ErrTampered) {
+			return fmt.Errorf("%w; delete %s to fetch the commit again", err, checkout)
+		}
 		return err
 	}
-	checkout, err := s.materialize(ctx, base, sha)
-	if err != nil {
-		return err
-	}
-	root, err := s.verify(ctx, checkout, sha)
-	if err != nil {
-		return err
-	}
+	now := time.Now()
+	_ = os.Chtimes(checkout, now, now) // marks the checkout as used, for cache.Prune
+	inner := profile.DirSourceAt(profile.KindOrg, root, profile.Layout{Profiles: cfg.Profiles.Dir, Registry: cfg.Profiles.MCPRegistry})
 	s.mu.Lock()
 	s.sha = sha
 	s.root = root
-	s.inner = profile.DirSource(profile.KindOrg, filepath.Join(root, "profiles"))
+	s.inner = inner
+	s.cfg, s.cfgFound = cfg, found
 	s.mu.Unlock()
 	return nil
 }
@@ -215,6 +279,12 @@ func (s *Source) cacheBase() (string, error) {
 		}
 		return abs, nil
 	}
+	return CacheBase()
+}
+
+// CacheBase returns the folder that holds the checkouts when Options.CacheDir
+// is empty (the "git" folder of the cache directory), creating it.
+func CacheBase() (string, error) {
 	d, err := cache.Dir()
 	if err != nil {
 		return "", err
@@ -224,6 +294,13 @@ func (s *Source) cacheBase() (string, error) {
 		return "", err
 	}
 	return g, nil
+}
+
+// CheckoutDir returns the folder that holds the checkout of commit sha of the
+// repository at url below the cache base (see CacheBase). It does no I/O; the
+// cache pruning uses it to know which checkouts the trust lockfile pins.
+func CheckoutDir(base, url, sha string) string {
+	return filepath.Join(base, urlKey(url), sha)
 }
 
 // ensureHooksDir creates the empty directory core.hooksPath points at.
@@ -313,8 +390,8 @@ const fetchFilter = "--filter=blob:limit=1048577"
 // here, so no filter driver (git-lfs, git-crypt, a custom clean/smudge),
 // attribute, hook or checkout-time rewrite can change a byte.
 func (s *Source) materialize(ctx context.Context, base, sha string) (string, error) {
-	urlDir := filepath.Join(base, urlKey(s.opts.URL))
-	final := filepath.Join(urlDir, sha)
+	final := CheckoutDir(base, s.opts.URL, sha)
+	urlDir := filepath.Dir(final)
 	if fi, err := os.Lstat(final); err == nil {
 		if !fi.IsDir() {
 			return "", fmt.Errorf("%w: %s is not a directory", ErrTampered, final)
@@ -362,7 +439,11 @@ func (s *Source) materialize(ctx context.Context, base, sha string) (string, err
 	if err != nil {
 		return "", err
 	}
-	if err := s.extract(ctx, tmp, entries, layoutBase(entries, s.subpath)); err != nil {
+	pl, err := s.plan(entries, func(e treeEntry) ([]byte, error) { return s.readBlob(ctx, tmp, e) })
+	if err != nil {
+		return "", err
+	}
+	if err := s.extract(ctx, tmp, pl); err != nil {
 		return "", err
 	}
 	if err := os.Rename(tmp, final); err != nil {
@@ -374,20 +455,88 @@ func (s *Source) materialize(ctx context.Context, base, sha string) (string, err
 	return final, nil
 }
 
-// verify re-verifies the checkout and returns the source root inside it.
-func (s *Source) verify(ctx context.Context, checkout, sha string) (string, error) {
+// verify re-verifies the checkout and returns the source root inside it and
+// the org config (the defaults, with found false, when the commit has no
+// ccshelf.toml).
+func (s *Source) verify(ctx context.Context, checkout, sha string) (root string, cfg *orgconfig.Config, found bool, err error) {
 	if err := s.verifyRepo(ctx, checkout, sha); err != nil {
-		return "", err
+		return "", nil, false, err
 	}
 	entries, err := s.listTree(ctx, checkout, sha)
 	if err != nil {
-		return "", err
+		return "", nil, false, err
 	}
 	base := layoutBase(entries, s.subpath)
-	if err := verifyDisk(checkout, base, entries); err != nil {
-		return "", err
+	root, err = checkBase(checkout, base)
+	if err != nil {
+		return "", nil, false, err
 	}
-	return filepath.Join(checkout, filepath.FromSlash(base)), nil
+	pl, err := s.plan(entries, func(e treeEntry) ([]byte, error) {
+		return readVerified(filepath.Join(root, orgconfig.FileName), shortPath(checkout, filepath.Join(root, orgconfig.FileName)), e)
+	})
+	if err != nil {
+		return "", nil, false, err
+	}
+	if err := verifyDisk(checkout, base, entries, pl.watch); err != nil {
+		return "", nil, false, err
+	}
+	return root, pl.cfg, pl.found, nil
+}
+
+// plan is what the committed tree says before anything is read from it: where
+// the source root is, the org config and what is watched.
+type plan struct {
+	entries []treeEntry
+	base    string
+	cfg     *orgconfig.Config
+	found   bool
+	watch   watchSet
+}
+
+// plan checks the paths of the tree, finds the source root and the org config
+// (read through read, which also verifies it) and checks the watched part of
+// the tree.
+func (s *Source) plan(entries []treeEntry, read func(treeEntry) ([]byte, error)) (*plan, error) {
+	if err := checkPaths(entries); err != nil {
+		return nil, err
+	}
+	pl := &plan{entries: entries, base: layoutBase(entries, s.subpath), cfg: orgconfig.Default()}
+	if e, ok := orgConfigEntry(entries, pl.base); ok {
+		if err := checkWatchedEntry(e); err != nil {
+			return nil, err
+		}
+		data, err := read(e)
+		if err != nil {
+			return nil, err
+		}
+		if pl.cfg, err = parseOrgConfig(data); err != nil {
+			return nil, err
+		}
+		pl.found = true
+	}
+	pl.watch = newWatch(pl.cfg)
+	if err := checkTree(entries, pl.base, pl.watch); err != nil {
+		return nil, err
+	}
+	return pl, nil
+}
+
+// readBlob reads the content of tree entry e from the object store of dir and
+// checks that it hashes to its id.
+func (s *Source) readBlob(ctx context.Context, dir string, e treeEntry) ([]byte, error) {
+	out, err := s.run(ctx, dir, dir, nil, int(e.size)+1024, "cat-file", "blob", e.oid)
+	if err != nil {
+		return nil, err
+	}
+	content := []byte(out)
+	id, err := gitObjectID(e.oid, "blob", content)
+	if err != nil {
+		return nil, err
+	}
+	if id != e.oid {
+		return nil, fmt.Errorf("%w: %s does not hash to its tree entry", ErrTampered, e.path)
+	}
+	return content, nil
 }
 
 // verifyRepo checks that the object store holds the commit the checkout is
@@ -414,26 +563,19 @@ func (s *Source) verifyRepo(ctx context.Context, dir, sha string) error {
 	return nil
 }
 
-// listTree lists the files of commit sha and validates the tree.
+// listTree lists the files of commit sha. The tree is checked by plan.
 func (s *Source) listTree(ctx context.Context, dir, sha string) ([]treeEntry, error) {
 	out, err := s.git(ctx, dir, dir, "ls-tree", "-r", "-z", "--long", sha)
 	if err != nil {
 		return nil, err
 	}
-	entries, err := parseLsTree(out)
-	if err != nil {
-		return nil, err
-	}
-	if err := checkTree(entries, layoutBase(entries, s.subpath)); err != nil {
-		return nil, err
-	}
-	return entries, nil
+	return parseLsTree(out)
 }
 
-// extract writes the files of the watched folders from the object store into
-// dir. The tree has been checked, so every path is a clean relative path.
-func (s *Source) extract(ctx context.Context, dir string, entries []treeEntry, base string) error {
-	files, _ := expectedFiles(entries, base)
+// extract writes the watched files from the object store into dir. The tree
+// has been checked, so every path is a clean relative path.
+func (s *Source) extract(ctx context.Context, dir string, pl *plan) error {
+	files, _ := expectedFiles(pl.entries, pl.base, pl.watch)
 	paths := make([]string, 0, len(files))
 	for p := range files {
 		paths = append(paths, p)

@@ -339,3 +339,78 @@ func TestRootSymlinkEscapeWithoutProfilesFolder(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func prepared(t *testing.T, dir string) *Source {
+	t.Helper()
+	s, err := New(Options{Plugin: "a@b", Installed: list(claude.Plugin{ID: "a@b", Scope: "user", Enabled: true, InstallPath: dir})})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Prepare(context.Background()); err != nil {
+		t.Fatalf("Prepare: %v", err)
+	}
+	return s
+}
+
+func TestOrgConfigOfPlugin(t *testing.T) {
+	dir := t.TempDir()
+	s := prepared(t, dir)
+	if cfg, found := s.OrgConfig(); found || cfg == nil {
+		t.Errorf("OrgConfig without a file = %v, %v", cfg, found)
+	}
+	if got := s.RegistryPath(); got != profile.DefaultRegistryPath {
+		t.Errorf("RegistryPath = %q", got)
+	}
+
+	dir = t.TempDir()
+	write(t, dir, "ccshelf.toml", "[profiles]\nmcp_registry = \"cfg/mcp.toml\"\n[protect]\nplugins = [\"audit@acme\"]\n")
+	write(t, dir, "profiles/dev.toml", "name = \"dev\"\ndescription = \"d\"\n[mcp]\nservers = [\"docs\"]\n")
+	write(t, dir, "cfg/mcp.toml", "[servers.docs]\ntype = \"http\"\nurl = \"https://mcp.example.com/docs\"\n")
+	write(t, dir, "mcp/registry.toml", "[servers.docs]\ntype = \"http\"\nurl = \"https://evil.example.com/docs\"\n")
+	s = prepared(t, dir)
+	cfg, found := s.OrgConfig()
+	if !found || len(cfg.Protect.Plugins) != 1 || s.RegistryPath() != "cfg/mcp.toml" {
+		t.Fatalf("OrgConfig = %+v %v, registry %q", cfg, found, s.RegistryPath())
+	}
+	r, err := profile.Resolve("dev", []profile.Source{s}, profile.ResolveOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := r.MCP["docs"].URL; got != "https://mcp.example.com/docs" {
+		t.Errorf("registry URL = %q", got)
+	}
+}
+
+func TestBrokenOrgConfigOfPluginFailsClosed(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "ccshelf.toml", "[protect]\nplugin = [\"x@y\"]\n")
+	s, _ := New(Options{Plugin: "a@b", Installed: list(claude.Plugin{ID: "a@b", Scope: "user", Enabled: true, InstallPath: dir})})
+	err := s.Prepare(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "org config") {
+		t.Errorf("err = %v", err)
+	}
+	if s.Root() != "" {
+		t.Error("a failed Prepare must leave the source unprepared")
+	}
+}
+
+func TestOrgConfigWithCustomPathAndMissingRoot(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "data/ccshelf.toml", "[profiles]\nmcp_registry = \"r.toml\"\n")
+	write(t, dir, "data/profiles/x.toml", "name = \"x\"\ndescription = \"d\"\n")
+	s, _ := New(Options{Plugin: "a@b", Path: "data/profiles", Installed: list(claude.Plugin{ID: "a@b", Scope: "user", Enabled: true, InstallPath: dir})})
+	if err := s.Prepare(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.RegistryPath(); got != "r.toml" {
+		t.Errorf("RegistryPath = %q", got)
+	}
+	if names, err := s.Names(); err != nil || len(names) != 1 {
+		t.Errorf("Names = %v, %v", names, err)
+	}
+	// The folder of the profiles does not exist at all.
+	s, _ = New(Options{Plugin: "a@b", Path: "nowhere/profiles", Installed: list(claude.Plugin{ID: "a@b", Scope: "user", Enabled: true, InstallPath: t.TempDir()})})
+	if err := s.Prepare(context.Background()); err != nil {
+		t.Fatalf("a missing profiles folder is not an error: %v", err)
+	}
+}

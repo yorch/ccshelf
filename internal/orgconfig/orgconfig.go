@@ -14,6 +14,12 @@ import (
 	"github.com/ccshelf/ccshelf/internal/catalog/safepath"
 )
 
+// ErrInvalid is wrapped by every error about a ccshelf.toml that exists but
+// cannot be used (it does not parse, fails validation, or points outside its
+// root). The launcher treats it as fatal: guessing what the file meant could
+// mask a protected control.
+var ErrInvalid = errors.New("invalid org config")
+
 // FileName is the org config file name at the repository root.
 const FileName = "ccshelf.toml"
 
@@ -115,23 +121,34 @@ func Default() *Config {
 const marketplaceDefault = ".claude-plugin/marketplace.json"
 
 // Load reads <root>/ccshelf.toml. A missing file returns Default(). The
-// result is validated, including that every path stays inside root.
+// result is validated, including that every path stays inside root. Use Find
+// when the caller must tell a missing file from a present one.
 func Load(root string) (*Config, error) {
+	cfg, _, err := Find(root)
+	return cfg, err
+}
+
+// Find is Load that also reports whether the file exists. A missing file
+// returns Default() and found == false, which is not an error: callers that
+// rely on [protect] (the launcher) use found to warn that nothing is
+// protected instead of silently using the defaults. The result is validated,
+// including that every path stays inside root.
+func Find(root string) (cfg *Config, found bool, err error) {
 	data, err := safepath.ReadFile(root, FileName, MaxFileSize)
 	if errors.Is(err, fs.ErrNotExist) {
-		return Default(), nil
+		return Default(), false, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", FileName, err)
+		return nil, false, fmt.Errorf("read %s: %w", FileName, err)
 	}
-	cfg, err := Parse(data)
+	cfg, err = Parse(data)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", FileName, err)
+		return nil, true, fmt.Errorf("%w: %s: %w", ErrInvalid, FileName, err)
 	}
 	if err := cfg.CheckPaths(root); err != nil {
-		return nil, fmt.Errorf("%s: %w", FileName, err)
+		return nil, true, fmt.Errorf("%w: %s: %w", ErrInvalid, FileName, err)
 	}
-	return cfg, nil
+	return cfg, true, nil
 }
 
 // Parse decodes ccshelf.toml bytes strictly over the defaults and validates

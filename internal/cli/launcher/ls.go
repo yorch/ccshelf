@@ -33,8 +33,10 @@ sources and, only when trusted, the repository's .ccshelf folder. Invalid
 profiles are listed with their error. Use --json for a stable machine-readable form.`,
 		Args: cobra.NoArgs,
 	}
+	var refresh bool
+	c.Flags().BoolVar(&refresh, "refresh", false, "re-resolve git tags on the remote instead of using the commits the trust lockfile pins")
 	c.RunE = l.do(func(ctx context.Context, cc *clicore.Context, _ *cobra.Command, _ []string) error {
-		s, err := l.open(ctx, cc, true, false)
+		s, err := l.openWith(ctx, cc, openOpts{prepare: true, refresh: refresh})
 		if err != nil {
 			return err
 		}

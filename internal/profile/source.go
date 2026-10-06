@@ -100,8 +100,87 @@ type dirSource struct {
 	dir  string // absolute profiles directory
 	root string // absolute source root; "" when refused
 	rel  string // profiles directory below root, slash separated; "" when it is root
-	aux  bool   // prompts/ and mcp/registry.toml are available
+	aux  bool   // prompts/ and the MCP registry are available
+	reg  string // registry file below root, slash separated; "" means DefaultRegistryPath
 	err  error  // why the source is unusable, if it is
+}
+
+// DefaultRegistryPath is where a source keeps its MCP registry below its
+// root unless the org config says otherwise.
+const DefaultRegistryPath = "mcp/registry.toml"
+
+// RegistryLocator is implemented by sources that keep their MCP registry
+// somewhere other than DefaultRegistryPath (the org config key
+// profiles.mcp_registry). Resolve reads the registry from the path reported
+// here, with the same confinement as for the default path.
+type RegistryLocator interface {
+	// RegistryPath is the slash separated registry file below Root.
+	RegistryPath() string
+}
+
+// registryPathOf returns the registry location of s below its root.
+func registryPathOf(s Source) string {
+	if l, ok := s.(RegistryLocator); ok {
+		if p := l.RegistryPath(); p != "" {
+			return p
+		}
+	}
+	return DefaultRegistryPath
+}
+
+// Layout says where a source keeps its profiles and its MCP registry below
+// its root. Both are slash separated, relative, and made of plain components
+// (no "..", no component that starts with "."). The zero value is the
+// default layout: "profiles" and "mcp/registry.toml".
+type Layout struct {
+	// Profiles is the folder that holds <name>.toml files.
+	Profiles string
+	// Registry is the MCP registry file.
+	Registry string
+}
+
+// checkLayoutPath validates one Layout path.
+func checkLayoutPath(what, p string) error {
+	if p == "" || strings.ContainsAny(p, "\\:\x00") || strings.HasPrefix(p, "/") {
+		return fmt.Errorf("%w: %s %q must be a relative path with forward slashes", ErrPath, what, p)
+	}
+	for _, c := range strings.Split(p, "/") {
+		if c == "" || strings.HasPrefix(c, ".") {
+			return fmt.Errorf("%w: %s %q has an unsafe component %q", ErrPath, what, p, c)
+		}
+	}
+	return nil
+}
+
+// DirSourceAt returns a Source for a source root whose layout is given
+// explicitly (the org config of the repository says where profiles and the MCP
+// registry are). root is made absolute; prompts/ stays at root/prompts. The
+// same root checks as DirSource apply, and an invalid layout makes every use
+// of the source fail.
+func DirSourceAt(kind Kind, root string, l Layout) Source {
+	abs, err := filepath.Abs(root)
+	if err != nil {
+		abs = filepath.Clean(root)
+	}
+	if l.Profiles == "" {
+		l.Profiles = "profiles"
+	}
+	if l.Registry == "" {
+		l.Registry = DefaultRegistryPath
+	}
+	d := &dirSource{kind: kind, root: abs, aux: true, rel: l.Profiles, reg: l.Registry}
+	d.dir = filepath.Join(abs, filepath.FromSlash(l.Profiles))
+	d.err = checkRootDir(abs)
+	if d.err == nil {
+		d.err = checkLayoutPath("the profiles folder", l.Profiles)
+	}
+	if d.err == nil {
+		d.err = checkLayoutPath("the MCP registry path", l.Registry)
+	}
+	if d.err != nil {
+		d.root = ""
+	}
+	return d
 }
 
 // DirSource returns a Source for a local profiles folder. profilesDir is made
@@ -178,9 +257,17 @@ func (d *dirSource) Root() string { return d.root }
 // Commit returns "": directory sources have no commit.
 func (d *dirSource) Commit() string { return "" }
 
-// auxAllowed reports whether prompts/ and mcp/registry.toml exist for this
+// auxAllowed reports whether prompts/ and the MCP registry exist for this
 // source (see DirSource).
 func (d *dirSource) auxAllowed() bool { return d.aux }
+
+// RegistryPath returns the MCP registry file below Root.
+func (d *dirSource) RegistryPath() string {
+	if d.reg != "" {
+		return d.reg
+	}
+	return DefaultRegistryPath
+}
 
 // Names lists the profile files, or fails when the source was refused.
 func (d *dirSource) Names() ([]string, error) {

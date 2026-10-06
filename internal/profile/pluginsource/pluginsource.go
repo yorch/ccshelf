@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/ccshelf/ccshelf/internal/claude"
+	"github.com/ccshelf/ccshelf/internal/orgconfig"
 	"github.com/ccshelf/ccshelf/internal/profile"
 	"github.com/ccshelf/ccshelf/internal/ui"
 )
@@ -59,9 +60,14 @@ type Source struct {
 	version string
 	market  string // the verified marketplace source, "" when not checked
 	inner   profile.Source
+	cfg     *orgconfig.Config
+	found   bool
 }
 
-var _ profile.Source = (*Source)(nil)
+var (
+	_ profile.Source          = (*Source)(nil)
+	_ profile.RegistryLocator = (*Source)(nil)
+)
 
 // New validates opts. It does no I/O.
 func New(opts Options) (*Source, error) {
@@ -158,6 +164,27 @@ func (s *Source) Root() string {
 	return s.inner.Root()
 }
 
+// OrgConfig returns the org config (ccshelf.toml) found next to the profiles
+// folder inside the plugin, and whether the plugin has one. It returns
+// (nil, false) before Prepare.
+func (s *Source) OrgConfig() (cfg *orgconfig.Config, found bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cfg, s.found
+}
+
+// RegistryPath returns the MCP registry file below Root
+// (profile.RegistryLocator): profiles.mcp_registry of the plugin's org config,
+// else mcp/registry.toml.
+func (s *Source) RegistryPath() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.cfg != nil {
+		return s.cfg.Profiles.MCPRegistry
+	}
+	return profile.DefaultRegistryPath
+}
+
 // Names lists the profiles in the plugin.
 func (s *Source) Names() ([]string, error) {
 	in, err := s.prepared()
@@ -234,10 +261,24 @@ func (s *Source) Prepare(ctx context.Context) error {
 	if err := confine(installDir, profilesDir, "profiles folder"); err != nil {
 		return err
 	}
+	cfg, cfgFound := orgconfig.Default(), false
+	if _, err := os.Stat(root); err == nil {
+		// A broken org config fails closed: guessing what it meant could mask
+		// a protected control. The profiles folder stays where Options.Path
+		// says; only the MCP registry location is taken from the config.
+		if cfg, cfgFound, err = orgconfig.Find(root); err != nil {
+			return fmt.Errorf("plugin %s: org config: %w", s.opts.Plugin, err)
+		}
+	}
+	inner := profile.DirSource(profile.KindOrg, profilesDir)
+	if cfg.Profiles.MCPRegistry != profile.DefaultRegistryPath {
+		inner = profile.DirSourceAt(profile.KindOrg, root, profile.Layout{Profiles: path.Base(s.path), Registry: cfg.Profiles.MCPRegistry})
+	}
 	s.mu.Lock()
 	s.version = found.Version
 	s.market = market
-	s.inner = profile.DirSource(profile.KindOrg, profilesDir)
+	s.inner = inner
+	s.cfg, s.found = cfg, cfgFound
 	s.mu.Unlock()
 	return nil
 }

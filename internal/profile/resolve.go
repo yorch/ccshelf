@@ -16,9 +16,6 @@ const MaxExtendsDepth = 16
 // MaxPromptSize is the largest append_system_prompt_file accepted.
 const MaxPromptSize = 64 << 10
 
-// registryRel is the registry location below a source root.
-const registryRel = "mcp/registry.toml"
-
 // ResolveOptions controls Resolve.
 type ResolveOptions struct {
 	// AllowProject lets project-kind sources take part. The caller sets it
@@ -281,7 +278,7 @@ func (r *resolver) registry(s Source) (map[string]MCPServer, error) {
 		if err := checkRootDir(root); err != nil {
 			return nil, fmt.Errorf("MCP registry of %s: %w", s.ID(), err)
 		}
-		b, resolved, err := readConfined(root, registryRel, MaxRegistrySize)
+		b, resolved, err := readConfined(root, registryPathOf(s), MaxRegistrySize)
 		switch {
 		case err == nil:
 			reg, err = ParseRegistry(b, filepath.Base(resolved))
@@ -418,7 +415,7 @@ func (r *resolver) merge(res *Resolved, req *File) error {
 			}
 		}
 		if len(found) == 0 {
-			return fmt.Errorf("%w: %q is not defined in the registry (%s) of the source of %s", ErrUnknownMCPServer, name, registryRel, listerNames(listers[name]))
+			return fmt.Errorf("%w: %q is not defined in the registry (%s) of the source of %s", ErrUnknownMCPServer, name, registryPathOf(listers[name][0].Source), listerNames(listers[name]))
 		}
 		first, _ := found[0].canonicalJSON()
 		for _, s := range found[1:] {

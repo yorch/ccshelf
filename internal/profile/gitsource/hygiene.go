@@ -16,10 +16,12 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/ccshelf/ccshelf/internal/orgconfig"
 	"github.com/ccshelf/ccshelf/internal/ui"
 )
 
-// MaxFileSize is the largest file allowed under profiles/, mcp/ and prompts/.
+// MaxFileSize is the largest file allowed in a watched folder, and the largest
+// ccshelf.toml.
 const MaxFileSize = 1 << 20
 
 // ErrHygiene is wrapped by content hygiene failures.
@@ -32,8 +34,70 @@ const (
 	MaxWatchedBytes = 32 << 20
 )
 
-// watched are the folders of a source root that are ever read.
-var watched = []string{"profiles", "mcp", "prompts"}
+// promptsDir is the folder of append_system_prompt_file targets.
+const promptsDir = "prompts"
+
+// watchSet lists what is ever read from a source root: folders (read
+// recursively) and single files, all slash separated and relative to the root.
+// It always holds ccshelf.toml, the profiles folder, the prompts folder and
+// the MCP registry; the org config can move the profiles folder and the
+// registry (profiles.dir, profiles.mcp_registry), so the set is built from it.
+type watchSet struct {
+	dirs  []string
+	files []string
+}
+
+// newWatch builds the watch set for an org config (nil means the defaults).
+// The folder of the MCP registry is watched as a whole, as the "mcp" folder
+// always was; a registry at the root of the source is a single file.
+func newWatch(cfg *orgconfig.Config) watchSet {
+	if cfg == nil {
+		cfg = orgconfig.Default()
+	}
+	w := watchSet{dirs: []string{path.Clean(cfg.Profiles.Dir), promptsDir}, files: []string{orgconfig.FileName}}
+	reg := path.Clean(cfg.Profiles.MCPRegistry)
+	if d := path.Dir(reg); d != "." {
+		w.dirs = append(w.dirs, d)
+	} else {
+		w.files = append(w.files, reg)
+	}
+	return w
+}
+
+// inDir reports whether rel is d or lies below it.
+func inDir(rel, d string) bool { return rel == d || strings.HasPrefix(rel, d+"/") }
+
+// has reports whether rel is a watched file or inside a watched folder.
+func (w watchSet) has(rel string) bool {
+	for _, d := range w.dirs {
+		if inDir(rel, d) {
+			return true
+		}
+	}
+	for _, f := range w.files {
+		if rel == f {
+			return true
+		}
+	}
+	return false
+}
+
+// loneFiles returns the watched files that are not inside a watched folder.
+func (w watchSet) loneFiles() []string {
+	var out []string
+	for _, f := range w.files {
+		inside := false
+		for _, d := range w.dirs {
+			if inDir(f, d) {
+				inside = true
+			}
+		}
+		if !inside {
+			out = append(out, f)
+		}
+	}
+	return out
+}
 
 type treeEntry struct {
 	mode string
@@ -90,9 +154,9 @@ func badComponent(c string) bool {
 	return false
 }
 
-// isWatched reports whether p is inside (or is) one of the watched folders
-// below base.
-func isWatched(p, base string) bool {
+// isWatched reports whether p is a watched file or inside (or is) a watched
+// folder below base.
+func isWatched(p, base string, w watchSet) bool {
 	rel := p
 	if base != "" {
 		if !strings.HasPrefix(p, base+"/") {
@@ -100,24 +164,19 @@ func isWatched(p, base string) bool {
 		}
 		rel = p[len(base)+1:]
 	}
-	for _, w := range watched {
-		if rel == w || strings.HasPrefix(rel, w+"/") {
-			return true
-		}
-	}
-	return false
+	return w.has(rel)
 }
 
 // layoutBase decides which folder of the tree is the source root: subpath
-// itself when it holds profiles/ (or nothing identifies it), or its parent
-// when subpath names the profiles folder.
+// itself when it holds ccshelf.toml or profiles/ (or nothing identifies it), or
+// its parent when subpath names the profiles folder.
 func layoutBase(entries []treeEntry, subpath string) string {
 	prefix := ""
 	if subpath != "" {
 		prefix = subpath + "/"
 	}
 	for _, e := range entries {
-		if strings.HasPrefix(e.path, prefix+"profiles/") {
+		if e.path == prefix+orgconfig.FileName || strings.HasPrefix(e.path, prefix+"profiles/") {
 			return subpath
 		}
 	}
@@ -131,36 +190,81 @@ func layoutBase(entries []treeEntry, subpath string) string {
 	return subpath
 }
 
-// checkTree validates the committed tree before anything is written: every
-// path, and for the watched folders the entry type, the size and the totals.
-func checkTree(entries []treeEntry, base string) error {
-	files, total := 0, int64(0)
+// orgConfigEntry returns the tree entry of ccshelf.toml at the source root.
+func orgConfigEntry(entries []treeEntry, base string) (treeEntry, bool) {
+	want := orgconfig.FileName
+	if base != "" {
+		want = base + "/" + want
+	}
+	for _, e := range entries {
+		if e.path == want {
+			return e, true
+		}
+	}
+	return treeEntry{}, false
+}
+
+// checkPaths rejects every path of the tree that has an unsafe component.
+func checkPaths(entries []treeEntry) error {
 	for _, e := range entries {
 		for _, c := range strings.Split(e.path, "/") {
 			if badComponent(c) {
 				return fmt.Errorf("%w: path %q has an unsafe component", ErrHygiene, ui.SanitizeLine(e.path))
 			}
 		}
-		if !isWatched(e.path, base) {
+	}
+	return nil
+}
+
+// parseOrgConfig parses the bytes of ccshelf.toml. A file that does not parse
+// is refused: guessing what it meant could mask a protected control.
+func parseOrgConfig(data []byte) (*orgconfig.Config, error) {
+	cfg, err := orgconfig.Parse(data)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w: %s: %w", ErrHygiene, orgconfig.ErrInvalid, orgconfig.FileName, err)
+	}
+	return cfg, nil
+}
+
+// checkTree validates the committed tree before anything is written: every
+// path, and for the watched files and folders the entry type, the size and the
+// totals.
+func checkTree(entries []treeEntry, base string, w watchSet) error {
+	if err := checkPaths(entries); err != nil {
+		return err
+	}
+	files, total := 0, int64(0)
+	for _, e := range entries {
+		if !isWatched(e.path, base, w) {
 			continue
 		}
-		switch {
-		case e.mode == "120000":
-			return fmt.Errorf("%w: %s is a symlink", ErrHygiene, e.path)
-		case e.mode == "160000":
-			return fmt.Errorf("%w: %s is a submodule", ErrHygiene, e.path)
-		case e.mode != "100644" && e.mode != "100755":
-			return fmt.Errorf("%w: %s has the unsupported mode %s", ErrHygiene, e.path, ui.SanitizeLine(e.mode))
-		case e.sizeUnknown:
-			return fmt.Errorf("%w: %s is missing or larger than %d bytes", ErrHygiene, e.path, MaxFileSize)
-		case e.size > MaxFileSize:
-			return fmt.Errorf("%w: %s is larger than %d bytes", ErrHygiene, e.path, MaxFileSize)
+		if err := checkWatchedEntry(e); err != nil {
+			return err
 		}
 		files++
 		total += e.size
 		if files > MaxWatchedFiles || total > MaxWatchedBytes {
-			return fmt.Errorf("%w: the profiles, mcp and prompts folders hold more than %d files or %d bytes", ErrHygiene, MaxWatchedFiles, MaxWatchedBytes)
+			return fmt.Errorf("%w: the watched folders hold more than %d files or %d bytes", ErrHygiene, MaxWatchedFiles, MaxWatchedBytes)
 		}
+	}
+	return nil
+}
+
+// checkWatchedEntry checks the type, mode and size of one entry that will be
+// read: a regular file, not a symlink or a submodule, no bigger than
+// MaxFileSize.
+func checkWatchedEntry(e treeEntry) error {
+	switch {
+	case e.mode == "120000":
+		return fmt.Errorf("%w: %s is a symlink", ErrHygiene, e.path)
+	case e.mode == "160000":
+		return fmt.Errorf("%w: %s is a submodule", ErrHygiene, e.path)
+	case e.mode != "100644" && e.mode != "100755":
+		return fmt.Errorf("%w: %s has the unsupported mode %s", ErrHygiene, e.path, ui.SanitizeLine(e.mode))
+	case e.sizeUnknown:
+		return fmt.Errorf("%w: %s is missing or larger than %d bytes", ErrHygiene, e.path, MaxFileSize)
+	case e.size > MaxFileSize:
+		return fmt.Errorf("%w: %s is larger than %d bytes", ErrHygiene, e.path, MaxFileSize)
 	}
 	return nil
 }
@@ -189,12 +293,12 @@ func gitObjectID(like, typ string, content []byte) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-// expectedFiles maps the path of every file of the watched folders to its
-// tree entry, and lists their directories.
-func expectedFiles(entries []treeEntry, base string) (files map[string]treeEntry, dirs map[string]bool) {
+// expectedFiles maps the path of every watched file to its tree entry, and
+// lists their directories.
+func expectedFiles(entries []treeEntry, base string, w watchSet) (files map[string]treeEntry, dirs map[string]bool) {
 	files, dirs = map[string]treeEntry{}, map[string]bool{}
 	for _, e := range entries {
-		if !isWatched(e.path, base) {
+		if !isWatched(e.path, base, w) {
 			continue
 		}
 		files[e.path] = e
@@ -205,35 +309,25 @@ func expectedFiles(entries []treeEntry, base string) (files map[string]treeEntry
 	return files, dirs
 }
 
-// verifyDisk checks that the watched folders under checkout hold exactly the
-// committed files, byte for byte (the content is hashed the way git hashes a
-// blob and compared with the id in the tree). Structural problems (symlinks,
-// special files, a watched folder that is not a plain directory) are
-// ErrHygiene; missing, extra or changed files are ErrTampered. Nothing outside
-// the watched folders is ever read, so nothing there can matter.
-func verifyDisk(checkout, base string, entries []treeEntry) error {
-	root := checkout
-	if base != "" {
-		root = filepath.Join(checkout, filepath.FromSlash(base))
-		cur := checkout
-		for _, part := range strings.Split(base, "/") {
-			cur = filepath.Join(cur, part)
-			fi, err := os.Lstat(cur)
-			if err != nil {
-				if errors.Is(err, fs.ErrNotExist) {
-					break
-				}
-				return fmt.Errorf("inspecting %s: %w", cur, err)
-			}
-			if fi.Mode()&os.ModeSymlink != 0 || !fi.IsDir() {
-				return fmt.Errorf("%w: %s is not a plain directory", ErrHygiene, part)
-			}
-		}
+// verifyDisk checks that the watched folders and files under checkout hold
+// exactly the committed files, byte for byte (the content is hashed the way
+// git hashes a blob and compared with the id in the tree). Structural problems
+// (symlinks, special files, a watched folder that is not a plain directory)
+// are ErrHygiene; missing, extra or changed files are ErrTampered. Nothing
+// outside the watched folders and files is ever read, so nothing there can
+// matter.
+func verifyDisk(checkout, base string, entries []treeEntry, w watchSet) error {
+	root, err := checkBase(checkout, base)
+	if err != nil {
+		return err
 	}
-	files, dirs := expectedFiles(entries, base)
+	files, dirs := expectedFiles(entries, base, w)
 	seen := map[string]bool{}
-	for _, w := range watched {
-		dir := filepath.Join(root, w)
+	for _, wd := range w.dirs {
+		if err := plainParents(root, wd); err != nil {
+			return err
+		}
+		dir := filepath.Join(root, filepath.FromSlash(wd))
 		fi, err := os.Lstat(dir)
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
@@ -242,7 +336,7 @@ func verifyDisk(checkout, base string, entries []treeEntry) error {
 			return fmt.Errorf("inspecting %s: %w", dir, err)
 		}
 		if fi.Mode()&os.ModeSymlink != 0 || !fi.IsDir() {
-			return fmt.Errorf("%w: %s is not a plain directory", ErrHygiene, w)
+			return fmt.Errorf("%w: %s is not a plain directory", ErrHygiene, wd)
 		}
 		err = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 			if err != nil {
@@ -272,6 +366,11 @@ func verifyDisk(checkout, base string, entries []treeEntry) error {
 			return err
 		}
 	}
+	for _, f := range w.loneFiles() {
+		if err := verifyLoneFile(root, base, f, files, seen); err != nil {
+			return err
+		}
+	}
 	for p := range files {
 		if !seen[p] {
 			return fmt.Errorf("%w: %s is missing", ErrTampered, p)
@@ -280,36 +379,125 @@ func verifyDisk(checkout, base string, entries []treeEntry) error {
 	return nil
 }
 
+// checkBase returns the source root inside checkout and checks that every
+// folder on the way (the subpath) is a plain directory.
+func checkBase(checkout, base string) (string, error) {
+	if base == "" {
+		return checkout, nil
+	}
+	cur := checkout
+	for _, part := range strings.Split(base, "/") {
+		cur = filepath.Join(cur, part)
+		fi, err := os.Lstat(cur)
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				break
+			}
+			return "", fmt.Errorf("inspecting %s: %w", cur, err)
+		}
+		if fi.Mode()&os.ModeSymlink != 0 || !fi.IsDir() {
+			return "", fmt.Errorf("%w: %s is not a plain directory", ErrHygiene, part)
+		}
+	}
+	return filepath.Join(checkout, filepath.FromSlash(base)), nil
+}
+
+// plainParents checks that no folder above the last component of rel (below
+// root) is a symlink or a file, so a watched path cannot be redirected.
+func plainParents(root, rel string) error {
+	cur := root
+	parts := strings.Split(rel, "/")
+	for _, part := range parts[:len(parts)-1] {
+		cur = filepath.Join(cur, part)
+		fi, err := os.Lstat(cur)
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				return nil
+			}
+			return fmt.Errorf("inspecting %s: %w", part, err)
+		}
+		if fi.Mode()&os.ModeSymlink != 0 || !fi.IsDir() {
+			return fmt.Errorf("%w: %s is not a plain directory", ErrHygiene, part)
+		}
+	}
+	return nil
+}
+
+// verifyLoneFile verifies one watched file that is not inside a watched
+// folder (ccshelf.toml, a registry at the root). A file that does not exist
+// is reported by the caller when the commit has it.
+func verifyLoneFile(root, base, rel string, files map[string]treeEntry, seen map[string]bool) error {
+	if err := plainParents(root, rel); err != nil {
+		return err
+	}
+	full := rel
+	if base != "" {
+		full = base + "/" + rel
+	}
+	p := filepath.Join(root, filepath.FromSlash(rel))
+	fi, err := os.Lstat(p)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("inspecting %s: %w", full, err)
+	}
+	if fi.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("%w: %s is a symlink", ErrHygiene, full)
+	}
+	if !fi.Mode().IsRegular() {
+		return fmt.Errorf("%w: %s is not a regular file", ErrHygiene, full)
+	}
+	want, ok := files[full]
+	if !ok {
+		return fmt.Errorf("%w: %s is not in the commit", ErrTampered, full)
+	}
+	seen[full] = true
+	return verifyFile(p, full, want)
+}
+
 // verifyFile compares one file on disk with its tree entry: size first, then
 // content.
 func verifyFile(p, rel string, want treeEntry) error {
+	_, err := readVerified(p, rel, want)
+	return err
+}
+
+// readVerified is verifyFile that also returns the content it verified.
+func readVerified(p, rel string, want treeEntry) ([]byte, error) {
 	info, err := os.Lstat(p)
 	if err != nil {
-		return fmt.Errorf("inspecting %s: %w", rel, err)
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, fmt.Errorf("%w: %s is missing", ErrTampered, rel)
+		}
+		return nil, fmt.Errorf("inspecting %s: %w", rel, err)
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("%w: %s is not a regular file", ErrHygiene, rel)
 	}
 	if info.Size() > MaxFileSize {
-		return fmt.Errorf("%w: %s is larger than %d bytes", ErrHygiene, rel, MaxFileSize)
+		return nil, fmt.Errorf("%w: %s is larger than %d bytes", ErrHygiene, rel, MaxFileSize)
 	}
 	if info.Size() != want.size {
-		return fmt.Errorf("%w: %s is %d bytes on disk, the commit has %d", ErrTampered, rel, info.Size(), want.size)
+		return nil, fmt.Errorf("%w: %s is %d bytes on disk, the commit has %d", ErrTampered, rel, info.Size(), want.size)
 	}
 	f, err := os.Open(p) //nolint:gosec // a path under the verified checkout
 	if err != nil {
-		return fmt.Errorf("reading %s: %w", rel, err)
+		return nil, fmt.Errorf("reading %s: %w", rel, err)
 	}
 	defer f.Close()
 	b, err := io.ReadAll(io.LimitReader(f, MaxFileSize+1))
 	if err != nil {
-		return fmt.Errorf("reading %s: %w", rel, err)
+		return nil, fmt.Errorf("reading %s: %w", rel, err)
 	}
 	id, err := gitObjectID(want.oid, "blob", b)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if id != want.oid {
-		return fmt.Errorf("%w: %s differs from the commit", ErrTampered, rel)
+		return nil, fmt.Errorf("%w: %s differs from the commit", ErrTampered, rel)
 	}
-	return nil
+	return b, nil
 }
 
 func shortPath(root, p string) string {
