@@ -60,7 +60,7 @@ Also: never bypass or probe managed policy by trial, no telemetry, and no networ
 
 ## Commit and pull request style
 
-[Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `docs:`, `test:`, `ci:`, `chore:`, `refactor:`, with an optional scope, for example `fix(settings): reject env names matching ANTHROPIC_*`. The release changelog is generated from these messages. Keep pull requests focused, fill in the template, and make sure `ci-ok` is green. Maintainers squash-merge.
+[Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `docs:`, `test:`, `ci:`, `chore:`, `refactor:`, with an optional scope, for example `fix(settings): reject env names matching ANTHROPIC_*`. The release changelog is generated from these messages. The **pull request title** follows the same format, because maintainers squash-merge and the title becomes the commit on `main`. Keep pull requests focused, fill in the template, and make sure `ci-ok` is green. The full rules are in [AGENTS.md](AGENTS.md#commits-and-pull-requests).
 
 ## Documentation rules
 
