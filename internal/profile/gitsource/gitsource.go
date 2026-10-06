@@ -598,6 +598,12 @@ func (s *Source) verifyRepo(ctx context.Context, dir, sha string) error {
 			names = append(names, e.Name())
 		}
 		sh, _ := os.ReadFile(filepath.Join(dir, ".git", "shallow"))
+		fh, _ := os.ReadFile(filepath.Join(dir, ".git", "FETCH_HEAD"))
+		lg, _ := s.git(ctx, dir, dir, "for-each-ref")
+		cfg, _ := os.ReadFile(filepath.Join(dir, ".git", "config"))
+		sh = append(append(sh, " FETCH_HEAD="...), fh...)
+		sh = append(append(sh, " REFS="...), lg...)
+		sh = append(append(sh, " CFG="...), cfg...)
 		return fmt.Errorf("%w: %s: %w [DEBUG cat-file -t=%q err=%v HEAD=%q entries=%v shallow=%q]", ErrTampered, dir, err, ct, cerr, hb, names, sh)
 	}
 	if strings.TrimSpace(head) != sha {
