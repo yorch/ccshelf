@@ -1,8 +1,7 @@
 package sidecar
 
 import (
-	"github.com/ccshelf/ccshelf/internal/catalog/catalogtest"
-	toml "github.com/pelletier/go-toml/v2"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -10,6 +9,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ccshelf/ccshelf/internal/catalog/catalogtest"
+	toml "github.com/pelletier/go-toml/v2"
 
 	"github.com/ccshelf/ccshelf/internal/marketplace"
 	"github.com/ccshelf/ccshelf/internal/orgconfig"
@@ -82,7 +84,8 @@ func TestParseErrors(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), tt.want) {
 				t.Fatalf("err = %v, want containing %q", err, tt.want)
 			}
-			if le, ok := err.(*lineError); ok && tt.line > 0 && le.line != tt.line {
+			var le *lineError
+			if errors.As(err, &le) && tt.line > 0 && le.line != tt.line {
 				t.Errorf("line = %d, want %d", le.line, tt.line)
 			}
 		})

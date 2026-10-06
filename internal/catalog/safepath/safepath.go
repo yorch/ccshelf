@@ -49,7 +49,7 @@ func CheckRel(rel string) error {
 // outside root, including through a symlink or a dangling symlink.
 func Resolve(root, rel string) (string, error) {
 	if err := CheckRel(rel); err != nil {
-		return "", fmt.Errorf("%w: %v", ErrEscape, err)
+		return "", fmt.Errorf("%w: %w", ErrEscape, err)
 	}
 	realRoot, err := filepath.EvalSymlinks(root)
 	if err != nil {

@@ -170,7 +170,7 @@ func BuildContext(ctx context.Context, root string, cfg *orgconfig.Config, opt O
 	})
 
 	if opt.GitData || cfg.Catalog.GitData {
-		if err := addGitData(ctx, root, c, dirs); err != nil {
+		if err := addGitData(ctx, root, c, dirs, cfg.Catalog.ReleaseTagPattern); err != nil {
 			return nil, nil, fmt.Errorf("git data: %w", err)
 		}
 	}
@@ -239,9 +239,14 @@ func entryFor(ref lint.PluginRef, d *lint.Data) Entry {
 	return e
 }
 
-func addGitData(ctx context.Context, root string, c *Catalog, dirs map[string]string) error {
+func addGitData(ctx context.Context, root string, c *Catalog, dirs map[string]string, tagPattern string) error {
 	if !gitdata.IsRepo(ctx, root) {
 		return errors.New("the repository root is not inside a git work tree")
+	}
+	if shallow, err := gitdata.IsShallow(ctx, root); err != nil {
+		return err
+	} else if shallow {
+		return fmt.Errorf("%w; fetch the full history (in GitHub Actions: actions/checkout with fetch-depth: 0, with fetch-tags if tags are needed) or turn catalog.git_data off", gitdata.ErrShallow)
 	}
 	var list []string
 	seen := map[string]bool{}
@@ -256,7 +261,7 @@ func addGitData(ctx context.Context, root string, c *Catalog, dirs map[string]st
 	if err != nil {
 		return err
 	}
-	tag, err := gitdata.LatestTag(ctx, root)
+	tag, err := gitdata.LatestReleaseTag(ctx, root, tagPattern)
 	if err != nil {
 		return err
 	}

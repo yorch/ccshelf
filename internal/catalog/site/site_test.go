@@ -42,8 +42,10 @@ func hostileCatalog() *catalog.Catalog {
 	return &catalog.Catalog{
 		Version: 1, Title: `Evil </title><script>alert(1)</script> {{CATALOG_JSON}}`,
 		Plugins: []catalog.Entry{
-			{Name: xss, Description: img + "</script><!--", Owner: xss, Docs: "javascript:alert(1)", Homepage: "data:text/html,x", Tags: []string{img}, Category: xss,
-				WhenToUse: []string{"</script>"}, Marketplace: "m"},
+			{
+				Name: xss, Description: img + "</script><!--", Owner: xss, Docs: "javascript:alert(1)", Homepage: "data:text/html,x", Tags: []string{img}, Category: xss,
+				WhenToUse: []string{"</script>"}, Marketplace: "m",
+			},
 			{Name: "huge", Description: strings.Repeat("A", 500000), Marketplace: "m"},
 			{Name: "ctl\x1b[31m ", Description: "x\x00y\u202e", Marketplace: "m"},
 		},
@@ -195,8 +197,10 @@ func TestHostileTitleAndData(t *testing.T) {
 
 func TestAppJSAvoidsDangerousAPIs(t *testing.T) {
 	js := fileMap(t, fixtureCatalog(t))["app.js"]
-	for _, bad := range []string{"innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval(", "new Function", "Function(", "setTimeout(\"", "setInterval(\"",
-		"srcdoc", "createContextualFragment", "DOMParser", "XMLHttpRequest", "fetch(", "importScripts", "localStorage", "sessionStorage", "document.cookie", "postMessage", "WebSocket", "sendBeacon", "location.href =", "location.assign", "location.replace", "window.open"} {
+	for _, bad := range []string{
+		"innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval(", "new Function", "Function(", "setTimeout(\"", "setInterval(\"",
+		"srcdoc", "createContextualFragment", "DOMParser", "XMLHttpRequest", "fetch(", "importScripts", "localStorage", "sessionStorage", "document.cookie", "postMessage", "WebSocket", "sendBeacon", "location.href =", "location.assign", "location.replace", "window.open",
+	} {
 		if strings.Contains(js, bad) {
 			t.Errorf("app.js contains %q", bad)
 		}
@@ -246,13 +250,13 @@ func TestWrite(t *testing.T) {
 		}
 		if runtime.GOOS != "windows" {
 			st, _ := os.Stat(filepath.Join(dir, name))
-			if st.Mode().Perm() != 0o600 {
+			if st.Mode().Perm() != 0o644 {
 				t.Errorf("%s mode = %v", name, st.Mode().Perm())
 			}
 		}
 	}
 	if runtime.GOOS != "windows" {
-		if st, _ := os.Stat(dir); st.Mode().Perm() != 0o700 {
+		if st, _ := os.Stat(dir); st.Mode().Perm() != 0o755 {
 			t.Errorf("dir mode = %v", st.Mode().Perm())
 		}
 	}

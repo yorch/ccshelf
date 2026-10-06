@@ -97,9 +97,10 @@ func mutations() []mutation {
 		{"no author", "CAT007", Warning, "figma-bridge", mkt, nil, rep(mkt, `"tags": ["ui"],
       "author": {"name": "Acme Web Team"}`, `"tags": ["ui"]`)},
 		{"bad taxonomy", "CAT008", Error, "", "catalog/taxonomy.toml", nil, write("catalog/taxonomy.toml", "categoriez = []\n")},
+		{"bad plugin name", "CAT009", Error, "bad name", mkt, nil, rep(mkt, `"name": "figma-bridge"`, `"name": "bad name"`)},
 		{"missing sidecar", "CAT010", Error, "design-kit", mkt, nil, remove("catalog/plugins/design-kit.toml")},
 		{"orphan sidecar", "CAT011", Warning, "ghost", "catalog/plugins/ghost.toml", nil, write("catalog/plugins/ghost.toml", "owner = \"@acme/web\"\nstatus = \"active\"\nreview_by = \"2027-01-01\"\n")},
-		{"malformed sidecar", "CAT012", Error, "design-kit", "catalog/plugins/design-kit.toml", nil, rep("catalog/plugins/design-kit.toml", `support = "#web-help"`, `suport = "#web-help"`)},
+		{"malformed sidecar", "CAT012", Error, "design-kit", "catalog/plugins/design-kit.toml", nil, rep("catalog/plugins/design-kit.toml", `support = "#web-help"`, `sup_port = "#web-help"`)},
 		{"missing owner", "CAT013", Error, "design-kit", "catalog/plugins/design-kit.toml", nil, rep("catalog/plugins/design-kit.toml", `owner = "@acme/web"`, `owner = " "`)},
 		{"missing status", "CAT013", Error, "data-tools", "catalog/plugins/data-tools.toml", nil, rep("catalog/plugins/data-tools.toml", `status = "experimental"`, ``)},
 		{"bad status", "CAT014", Error, "design-kit", "catalog/plugins/design-kit.toml", nil, rep("catalog/plugins/design-kit.toml", `status = "active"`, `status = "retired"`)},
@@ -112,7 +113,10 @@ func mutations() []mutation {
 		{"replacement cycle", "CAT017", Error, "ops-helper", "catalog/plugins/ops-helper.toml", nil, func(t *testing.T, root string) {
 			catalogtest.Replace(t, root, "catalog/plugins/sre-kit.toml", `status = "active"`, `status = "deprecated"`+"\nsuperseded_by = \"ops-helper\"")
 		}},
-		{"active without review_by", "CAT018", Error, "sre-kit", "catalog/plugins/sre-kit.toml", nil, rep("catalog/plugins/sre-kit.toml", `review_by = "2027-03-01"`, ``)},
+		{"active without review_by", "CAT018", Error, "sre-kit", "catalog/plugins/sre-kit.toml", nil, func(t *testing.T, root string) {
+			catalogtest.Replace(t, root, "ccshelf.toml", `require = ["owner", "status"]`, `require = ["owner", "status", "review_by"]`)
+			catalogtest.Replace(t, root, "catalog/plugins/sre-kit.toml", `review_by = "2027-03-01"`, ``)
+		}},
 		{"invalid review_by", "CAT018", Error, "sre-kit", "catalog/plugins/sre-kit.toml", nil, rep("catalog/plugins/sre-kit.toml", `review_by = "2027-03-01"`, `review_by = "2027-13-45"`)},
 		{"stale review", "CAT019", Warning, "design-kit", "catalog/plugins/design-kit.toml", at(2028, 1, 1), nil},
 		{"overdue review", "CAT020", Info, "design-kit", "catalog/plugins/design-kit.toml", at(2027, 4, 1), nil},
@@ -141,7 +145,7 @@ func mutations() []mutation {
 		{"invalid CODEOWNERS line", "CAT047", Warning, "", co, nil, func(t *testing.T, root string) {
 			catalogtest.Write(t, root, co, catalogtest.Read(t, root, co)+"!negated @acme/web\n")
 		}},
-		{"profile without bundle", "CAT050", Error, "profile-qa", "profiles/qa.toml", nil, write("profiles/qa.toml", "name = \"qa\"\n")},
+		{"profile without bundle", "CAT050", Error, "profile-qa", "profiles/qa.toml", nil, write("profiles/qa.toml", "name = \"qa\"\n[plugins]\ninclude = [\"sre-kit@acme-tools\"]\n")},
 		{"bundle without profile", "CAT051", Error, "profile-sre", mkt, nil, remove("profiles/sre.toml")},
 		{"bundle wrong source", "CAT052", Error, "profile-sre", mkt, nil, rep(mkt, `"source": "./bundles/profile-sre"`, `"source": "./plugins/sre-kit"`)},
 		{"bundle sets version", "CAT053", Error, "profile-sre", mkt, nil, rep(mkt, `"name": "profile-sre",`, `"name": "profile-sre",
@@ -356,8 +360,10 @@ func TestNonRE2Feature(t *testing.T) {
 
 func TestIsHTTPURL(t *testing.T) {
 	good := []string{"https://example.com", "http://example.com/a?b=c#d", "https://wiki.example.com/x y"[:26]}
-	bad := []string{"", "javascript:alert(1)", "data:text/html,x", "ftp://example.com", "https://", "//example.com", "https://a b.com",
-		"https://user:pw@example.com", "https://example.com/\x00", "HTTPS://", "example.com", "https:example.com", "file:///etc/passwd"}
+	bad := []string{
+		"", "javascript:alert(1)", "data:text/html,x", "ftp://example.com", "https://", "//example.com", "https://a b.com",
+		"https://user:pw@example.com", "https://example.com/\x00", "HTTPS://", "example.com", "https:example.com", "file:///etc/passwd",
+	}
 	for _, s := range good {
 		if !IsHTTPURL(s) {
 			t.Errorf("%q should be valid", s)

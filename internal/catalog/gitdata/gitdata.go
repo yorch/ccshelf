@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"sort"
@@ -64,15 +65,46 @@ func env() []string {
 	)
 }
 
-// run executes git in dir with the safe environment and returns stdout.
+// gitArgs builds the argument list for one git call: the fixed hardening
+// options come first, then the caller's arguments. extra holds additional
+// "-c" options.
+func gitArgs(dir string, extra []string, args ...string) []string {
+	full := []string{"-C", dir, "-c", "core.fsmonitor=false", "-c", "core.quotepath=false", "-c", "log.showSignature=false"}
+	full = append(full, extra...)
+	return append(full, args...)
+}
+
+// dubiousOwnership reports whether git refused the directory because it is
+// owned by another user (typical for a container job that checks the
+// repository out as root and runs the tool as someone else).
+func dubiousOwnership(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "dubious ownership")
+}
+
+// run executes git in dir with the safe environment and returns stdout. The
+// global and system configuration are nulled, so git's safe.directory list is
+// empty; when git refuses the directory for ownership, the call is retried
+// once with safe.directory set to exactly that directory, which the caller
+// named explicitly as the repository to read.
 func run(ctx context.Context, dir string, args ...string) (string, error) {
+	out, err := runGit(ctx, gitArgs(dir, nil, args...), args[0])
+	if dubiousOwnership(err) {
+		abs, aerr := filepath.Abs(dir)
+		if aerr != nil {
+			return "", err
+		}
+		return runGit(ctx, gitArgs(dir, []string{"-c", "safe.directory=" + filepath.ToSlash(abs)}, args...), args[0])
+	}
+	return out, err
+}
+
+func runGit(ctx context.Context, full []string, name string) (string, error) {
 	bin, err := exec.LookPath("git")
 	if err != nil {
 		return "", ErrNoGit
 	}
 	ctx, cancel := context.WithTimeout(ctx, CallTimeout)
 	defer cancel()
-	full := append([]string{"-C", dir, "-c", "core.fsmonitor=false", "-c", "core.quotepath=false", "-c", "log.showSignature=false"}, args...)
 	cmd := exec.CommandContext(ctx, bin, full...)
 	cmd.Env = env()
 	var stdout, stderr bytes.Buffer
@@ -82,7 +114,7 @@ func run(ctx context.Context, dir string, args ...string) (string, error) {
 		if len(msg) > 300 {
 			msg = msg[:300]
 		}
-		return "", fmt.Errorf("git %s: %w: %s", args[0], err, msg)
+		return "", fmt.Errorf("git %s: %w: %s", name, err, msg)
 	}
 	return stdout.String(), nil
 }
@@ -138,10 +170,50 @@ func Collect(ctx context.Context, root string, dirs []string) (map[string]Info, 
 	return out, nil
 }
 
-// LatestTag returns the newest tag reachable from HEAD, or "" when there is
-// none.
+// ErrShallow is returned by Shallow-aware callers when the clone lacks
+// history.
+var ErrShallow = errors.New("the repository is a shallow clone, so last-change dates, author counts and tags would be wrong")
+
+// IsShallow reports whether root is a shallow clone. Old git versions that do
+// not know --is-shallow-repository print the option back; that counts as not
+// shallow.
+func IsShallow(ctx context.Context, root string) (bool, error) {
+	out, err := run(ctx, root, "rev-parse", "--is-shallow-repository")
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(out) == "true", nil
+}
+
+// DefaultReleaseTagPattern is the glob of release tags: v followed by a
+// digit. It does not match plugin tags such as <plugin>--v1.2.0.
+const DefaultReleaseTagPattern = "v[0-9]*"
+
+var patternRe = regexp.MustCompile(`^[A-Za-z0-9*?\[\]!._/+-]{1,100}$`)
+
+// ValidTagPattern reports whether s is acceptable as a release-tag glob.
+func ValidTagPattern(s string) bool {
+	return patternRe.MatchString(s) && !strings.HasPrefix(s, "-") && !strings.Contains(s, "..")
+}
+
+// LatestTag returns the newest release tag reachable from HEAD that matches
+// DefaultReleaseTagPattern, or "" when there is none.
 func LatestTag(ctx context.Context, root string) (string, error) {
-	out, err := run(ctx, root, "describe", "--tags", "--abbrev=0")
+	return LatestReleaseTag(ctx, root, DefaultReleaseTagPattern)
+}
+
+// LatestReleaseTag returns the newest tag reachable from HEAD that matches
+// the glob pattern (git describe --match), never a per-plugin tag of the
+// form <plugin>--v<version>, or "" when there is none. An empty pattern means
+// DefaultReleaseTagPattern.
+func LatestReleaseTag(ctx context.Context, root, pattern string) (string, error) {
+	if pattern == "" {
+		pattern = DefaultReleaseTagPattern
+	}
+	if !ValidTagPattern(pattern) {
+		return "", fmt.Errorf("invalid release tag pattern %q", pattern)
+	}
+	out, err := run(ctx, root, "describe", "--tags", "--abbrev=0", "--match", pattern, "--exclude", "*--v*")
 	if err != nil {
 		if strings.Contains(err.Error(), "No names found") || strings.Contains(err.Error(), "No tags can describe") ||
 			strings.Contains(err.Error(), "does not have any commits") || strings.Contains(err.Error(), "bad revision") {

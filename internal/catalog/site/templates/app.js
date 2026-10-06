@@ -94,10 +94,12 @@
     try { window.history.replaceState(null, '', s ? '#' + s : window.location.pathname + window.location.search); } catch (err) { /* not available */ }
   }
 
+  // Names come from the catalog data, so they can be "constructor",
+  // "__proto__" or "toString": keys are kept in Maps, never in plain objects.
   function uniqueSorted(values) {
-    var seen = {};
-    values.forEach(function (v) { if (v) { seen[v] = true; } });
-    return Object.keys(seen).sort();
+    var seen = new Set();
+    values.forEach(function (v) { if (v) { seen.add(v); } });
+    return Array.from(seen).sort();
   }
 
   function fillSelect(select, values) {
@@ -129,8 +131,8 @@
     e.hay = [e.name, e.displayName, e.description, e.category, e.tags.join(' '), e.whenToUse.join(' '), e.owner].join('\n').toLowerCase();
     return e;
   });
-  var byName = {};
-  plugins.forEach(function (p) { byName[p.name] = p; });
+  var byName = new Map();
+  plugins.forEach(function (p) { byName.set(p.name, p); });
 
   var profiles = (Array.isArray(data.profiles) ? data.profiles : []).map(function (p) {
     return { name: str(p.name), description: str(p.description), owner: str(p.owner), status: str(p.status), whenToUse: list(p.when_to_use) };
@@ -305,19 +307,23 @@
 
   // Overlap clusters: plugins connected through overlaps_with, in both directions.
   function clusters() {
-    var parent = {};
-    function find(x) { while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; }
-    function union(a, b) { var ra = find(a), rb = find(b); if (ra !== rb) { parent[ra] = rb; } }
-    plugins.forEach(function (p) { parent[p.name] = p.name; });
+    var parent = new Map();
+    function find(x) {
+      while (parent.get(x) !== x) { parent.set(x, parent.get(parent.get(x))); x = parent.get(x); }
+      return x;
+    }
+    function union(a, b) { var ra = find(a), rb = find(b); if (ra !== rb) { parent.set(ra, rb); } }
+    plugins.forEach(function (p) { parent.set(p.name, p.name); });
     plugins.forEach(function (p) {
-      p.overlapsWith.forEach(function (n) { if (byName[n]) { union(p.name, n); } });
+      p.overlapsWith.forEach(function (n) { if (byName.has(n)) { union(p.name, n); } });
     });
-    var groups = {};
+    var groups = new Map();
     plugins.forEach(function (p) {
       var r = find(p.name);
-      (groups[r] = groups[r] || []).push(p);
+      if (!groups.has(r)) { groups.set(r, []); }
+      groups.get(r).push(p);
     });
-    return Object.keys(groups).map(function (k) { return groups[k]; })
+    return Array.from(groups.values())
       .filter(function (g) { return g.length > 1; })
       .map(function (g) { return g.sort(function (a, b) { return a.name < b.name ? -1 : 1; }); })
       .sort(function (a, b) { return a[0].name < b[0].name ? -1 : 1; });

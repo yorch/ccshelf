@@ -1,13 +1,16 @@
 package lint
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 	"path"
-	"regexp"
 	"sort"
 	"strings"
+
+	toml "github.com/pelletier/go-toml/v2"
 
 	"github.com/ccshelf/ccshelf/internal/catalog/codeowners"
 	"github.com/ccshelf/ccshelf/internal/catalog/safepath"
@@ -34,10 +37,19 @@ type PluginRef struct {
 	InfoErr error
 	// Dup is true for the second and later entries with the same name.
 	Dup bool
+	// bundle is set by LoadData when the name has the bundle prefix and a
+	// profile manifest of that name exists.
+	bundle bool
 }
 
-// IsBundle reports whether the entry is a generated profile bundle.
-func (p PluginRef) IsBundle() bool { return strings.HasPrefix(p.Plugin.Name, BundlePrefix) }
+// IsBundle reports whether the entry is a generated profile bundle: its name
+// is profile-<name> and a profile manifest <name>.toml exists. A plugin that
+// merely has the prefix is an ordinary plugin (and CAT051 reports it).
+func (p PluginRef) IsBundle() bool { return p.bundle }
+
+// HasBundlePrefix reports whether the name starts with the bundle prefix,
+// whether or not a profile manifest exists.
+func (p PluginRef) HasBundlePrefix() bool { return strings.HasPrefix(p.Plugin.Name, BundlePrefix) }
 
 // Data is everything the lint and the catalog build read from a repo.
 type Data struct {
@@ -56,29 +68,72 @@ type Data struct {
 	OwnersPath string
 	// Profiles are the names of the profile manifests (file names without .toml).
 	Profiles []string
+	// ProfileEmpty maps a profile name to true when it resolves to no plugins
+	// (an abstract parent such as a shared base), so it gets no bundle. A
+	// profile that cannot be read or parsed is absent from the map.
+	ProfileEmpty map[string]bool
 	// Findings collected while loading.
 	Findings []Finding
 }
 
-var entryName = regexp.MustCompile(`"name"\s*:\s*"((?:[^"\\]|\\.)*)"`)
-
-// entryLines maps plugin name to the line of its "name" key inside "plugins".
+// entryLines maps plugin name to the line of its "name" key inside the
+// top-level "plugins" array. It scans JSON tokens, so author names, escapes
+// and text such as "plugins" inside strings cannot confuse the line numbers.
+// The first entry with a name wins; malformed input yields what was found.
 func entryLines(data []byte) map[string]int {
 	out := map[string]int{}
-	inPlugins := false
-	for i, l := range strings.Split(string(data), "\n") {
-		if !inPlugins {
-			if strings.Contains(l, `"plugins"`) {
-				inPlugins = true
-			} else {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	line := func() int { return 1 + bytes.Count(data[:dec.InputOffset()], []byte("\n")) }
+	if t, err := dec.Token(); err != nil || t != json.Delim('{') {
+		return out
+	}
+	for dec.More() {
+		kt, err := dec.Token()
+		if err != nil {
+			return out
+		}
+		if key, _ := kt.(string); key != "plugins" {
+			var skip json.RawMessage
+			if dec.Decode(&skip) != nil {
+				return out
+			}
+			continue
+		}
+		if t, err := dec.Token(); err != nil || t != json.Delim('[') {
+			return out
+		}
+		for dec.More() {
+			if t, err := dec.Token(); err != nil || t != json.Delim('{') {
+				// Not an object (or broken): consume if it was a scalar and go on.
+				if err != nil {
+					return out
+				}
 				continue
 			}
-		}
-		for _, m := range entryName.FindAllStringSubmatch(l, -1) {
-			if _, ok := out[m[1]]; !ok {
-				out[m[1]] = i + 1
+			for dec.More() {
+				kt, err := dec.Token()
+				if err != nil {
+					return out
+				}
+				at := line()
+				var raw json.RawMessage
+				if dec.Decode(&raw) != nil {
+					return out
+				}
+				if key, _ := kt.(string); key == "name" {
+					var name string
+					if json.Unmarshal(raw, &name) == nil {
+						if _, ok := out[name]; !ok {
+							out[name] = at
+						}
+					}
+				}
+			}
+			if _, err := dec.Token(); err != nil { // closing brace
+				return out
 			}
 		}
+		return out
 	}
 	return out
 }
@@ -169,6 +224,14 @@ func LoadData(root string, cfg *orgconfig.Config) (*Data, error) {
 		}
 		sort.Strings(d.Profiles)
 	}
+	d.ProfileEmpty = emptyProfiles(root, cfg.Profiles.Dir, d.Profiles)
+	have := map[string]bool{}
+	for _, n := range d.Profiles {
+		have[BundlePrefix+n] = true
+	}
+	for i := range d.Plugins {
+		d.Plugins[i].bundle = have[d.Plugins[i].Plugin.Name]
+	}
 	return d, nil
 }
 
@@ -188,18 +251,77 @@ func inspect(root string, p marketplace.Plugin) (*marketplace.PluginInfo, error)
 	}
 	if rel := p.Source.LocalPath(); rel != "" {
 		if err := safepath.CheckRel(rel); err != nil {
-			return nil, fmt.Errorf("%w: %v", safepath.ErrEscape, err)
+			return nil, fmt.Errorf("%w: %w", safepath.ErrEscape, err)
 		}
 	}
 	return marketplace.Inspect(root, p)
 }
 
-// pluginDir is the repo-relative directory of a local plugin ("" for none).
 // PluginDir is the repo-relative directory of a local plugin, or "" for an
 // external one.
-func (r PluginRef) PluginDir() string {
-	if r.Plugin.Source.IsLocal() {
-		return path.Clean(r.Plugin.Source.LocalPath())
+func (p PluginRef) PluginDir() string {
+	if p.Plugin.Source.IsLocal() {
+		return path.Clean(p.Plugin.Source.LocalPath())
 	}
 	return ""
+}
+
+// maxProfileSize caps one profile manifest read for emptiness.
+const maxProfileSize = 1 << 20
+
+// emptyProfiles reports, per readable profile, whether it resolves to no
+// plugins: no plugins.include in itself or any parent it extends, after the
+// excludes. It reads only the keys it needs and is lenient; the launcher is
+// the strict parser.
+func emptyProfiles(root, dir string, names []string) map[string]bool {
+	type man struct {
+		Extends []string `toml:"extends"`
+		Plugins struct {
+			Include []string `toml:"include"`
+			Exclude []string `toml:"exclude"`
+		} `toml:"plugins"`
+	}
+	loaded := map[string]*man{}
+	for _, n := range names {
+		data, err := safepath.ReadFile(root, path.Join(dir, n+".toml"), maxProfileSize)
+		if err != nil {
+			continue
+		}
+		var m man
+		if toml.Unmarshal(data, &m) != nil {
+			continue
+		}
+		loaded[n] = &m
+	}
+	var resolve func(n string, depth int) (map[string]bool, bool)
+	resolve = func(n string, depth int) (map[string]bool, bool) {
+		m := loaded[n]
+		if m == nil || depth > 16 {
+			return nil, false
+		}
+		out := map[string]bool{}
+		for _, par := range m.Extends {
+			ids, ok := resolve(par, depth+1)
+			if !ok {
+				return nil, false
+			}
+			for id := range ids {
+				out[id] = true
+			}
+		}
+		for _, id := range m.Plugins.Include {
+			out[id] = true
+		}
+		for _, id := range m.Plugins.Exclude {
+			delete(out, id)
+		}
+		return out, true
+	}
+	res := map[string]bool{}
+	for _, n := range names {
+		if ids, ok := resolve(n, 0); ok {
+			res[n] = len(ids) == 0
+		}
+	}
+	return res
 }

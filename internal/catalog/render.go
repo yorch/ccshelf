@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -57,11 +58,15 @@ var mdEscaper = strings.NewReplacer(
 	"@", "&#64;",
 )
 
+var wwwRe = regexp.MustCompile(`(?i)(www)\.`)
+
 // MarkdownText escapes untrusted plain text for Markdown prose and tables.
-// "@" and the colon of "://" become numeric entities so a mention or an
-// autolink cannot form.
+// "@", the colon of "://" and the dot after "www" become numeric entities so a
+// mention or an autolink cannot form.
 func MarkdownText(s string) string {
 	s = strings.ReplaceAll(mdEscaper.Replace(s), "://", "&#58;//")
+	// GFM autolinks text that starts with "www." without any scheme.
+	s = wwwRe.ReplaceAllString(s, "${1}&#46;")
 	if strings.HasPrefix(s, "+") || strings.HasPrefix(s, "-") || strings.HasPrefix(s, "=") {
 		s = "\\" + s
 	}
@@ -83,8 +88,8 @@ func markdownCode(s string) string {
 	return fence + s + fence
 }
 
-// markdownLink renders [label](url) for a URL already validated as http(s).
-func markdownLink(label, raw string) string {
+// markdownLink renders [docs](url) for a URL already validated as http(s).
+func markdownLink(raw string) string {
 	if Link(raw) == "" {
 		return ""
 	}
@@ -92,7 +97,7 @@ func markdownLink(label, raw string) string {
 	if _, err := url.Parse(u); err != nil {
 		return ""
 	}
-	return "[" + MarkdownText(label) + "](" + u + ")"
+	return "[docs](" + u + ")"
 }
 
 func joinText(list []string, sep string) string {
@@ -157,7 +162,7 @@ func Markdown(c *Catalog) []byte {
 				name += " (needs platform review)"
 			}
 			fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s |\n", name, MarkdownText(e.Description), markdownCode(e.Owner),
-				MarkdownText(e.Status), joinText(e.WhenToUse, "; "), markdownLink("docs", e.Docs))
+				MarkdownText(e.Status), joinText(e.WhenToUse, "; "), markdownLink(e.Docs))
 		}
 		b.WriteString("\n")
 	}

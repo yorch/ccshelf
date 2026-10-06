@@ -1,8 +1,10 @@
 # Org configuration for ccshelf.
-platform_owners = ["@acme/platform"]
 
 [lint]
-require = ["owner", "status"]
+require = ["owner", "status", "review_by"]
+# CODEOWNERS owners that must own everything that runs code or shapes the catalog (hooks, MCP,
+# LSP, plugin manifests that declare them, workflows, profiles, bundles, this file).
+platform_owners = ["@acme/platform"]
 require_when_deprecated = ["superseded_by"]
 max_review_age_days = 180
 taxonomy = "catalog/taxonomy.toml"

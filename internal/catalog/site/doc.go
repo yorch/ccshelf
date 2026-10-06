@@ -17,9 +17,10 @@
 // an HTML string, and it makes a link only for an absolute http or https URL
 // (checked again in JavaScript), always with rel="noopener noreferrer".
 // Embedding the data lets the page work from file:// where browsers refuse
-// to fetch a neighbouring JSON file.
+// to fetch a neighboring JSON file.
 //
-// Files are created with mode 0600 and directories with 0700, written to a
-// temporary name and renamed, and an existing symbolic link at a target path
+// The site is published output, so files are written with mode 0644 and a new
+// directory with 0755 (the 0600/0700 private-cache rule covers the tool's
+// cache, not this). Each file goes to a temporary name and is renamed, and an existing symbolic link at a target path
 // is refused instead of followed.
 package site

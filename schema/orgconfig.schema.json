@@ -26,6 +26,7 @@
         "metadata_source": {"enum": ["sidecar", "marketplace"], "default": "sidecar"},
         "marketplaces": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "\\.json$"}, "default": [".claude-plugin/marketplace.json"]},
         "git_data": {"type": "boolean", "default": false, "description": "Add last change, author count and changed-since-tag data (needs git)."},
+        "release_tag_pattern": {"type": "string", "default": "v[0-9]*", "pattern": "^[A-Za-z0-9*?\\[\\]!._/+-]{1,100}$", "description": "Git glob that selects release tags for changed-since-tag data; never matches plugin tags <plugin>--v<version>."},
         "base_url": {"type": "string", "pattern": "^https?://", "description": "Public URL of the catalog site."}
       }
     },

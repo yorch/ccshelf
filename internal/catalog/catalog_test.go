@@ -211,8 +211,10 @@ func hostileRepo(t *testing.T) (string, string) {
 	mk := map[string]any{
 		"name": "evil",
 		"plugins": []any{
-			map[string]any{"name": "p1", "source": "./p1", "description": xss + " </script> " + img, "category": "c<b>x", "tags": []string{img}, "author": xss,
-				"homepage": "javascript:alert(1)", "repository": "data:text/html,<script>alert(1)</script>", "displayName": "[x](javascript:alert(1))"},
+			map[string]any{
+				"name": "p1", "source": "./p1", "description": xss + " </script> " + img, "category": "c<b>x", "tags": []string{img}, "author": xss,
+				"homepage": "javascript:alert(1)", "repository": "data:text/html,<script>alert(1)</script>", "displayName": "[x](javascript:alert(1))",
+			},
 			map[string]any{"name": "p2", "source": "./p2", "description": huge, "author": "a\x1b[31mb\u202ec\r\nd"},
 			map[string]any{"name": "p3|`x`", "source": "./p3", "description": "| a | b |\n# heading\n*bold* _it_ ![i](x) @octocat http://evil.example <b>"},
 		},
@@ -320,10 +322,10 @@ func TestMarkdownHelpers(t *testing.T) {
 			t.Errorf("markdownCode(%q) = %q, want %q", in, got, want)
 		}
 	}
-	if markdownLink("docs", "javascript:x") != "" || markdownLink("docs", "") != "" {
+	if markdownLink("javascript:x") != "" || markdownLink("") != "" {
 		t.Error("unsafe link rendered")
 	}
-	if got := markdownLink("docs", "https://e.example/a(b)"); got != "[docs](https://e.example/a%28b%29)" {
+	if got := markdownLink("https://e.example/a(b)"); got != "[docs](https://e.example/a%28b%29)" {
 		t.Errorf("markdownLink = %q", got)
 	}
 }
@@ -460,9 +462,11 @@ func TestGitData(t *testing.T) {
 		t.Skip("git is not installed; skipping git-backed tests")
 	}
 	root := catalogtest.CopyFixture(t)
-	env := []string{"GIT_CONFIG_GLOBAL=" + devNull(), "GIT_CONFIG_SYSTEM=" + devNull(), "GIT_CONFIG_NOSYSTEM=1",
+	env := []string{
+		"GIT_CONFIG_GLOBAL=" + devNull(), "GIT_CONFIG_SYSTEM=" + devNull(), "GIT_CONFIG_NOSYSTEM=1",
 		"GIT_AUTHOR_NAME=T", "GIT_AUTHOR_EMAIL=t@example.com", "GIT_COMMITTER_NAME=T", "GIT_COMMITTER_EMAIL=t@example.com",
-		"GIT_AUTHOR_DATE=2026-05-01T10:00:00Z", "GIT_COMMITTER_DATE=2026-05-01T10:00:00Z"}
+		"GIT_AUTHOR_DATE=2026-05-01T10:00:00Z", "GIT_COMMITTER_DATE=2026-05-01T10:00:00Z",
+	}
 	git := func(args ...string) {
 		t.Helper()
 		cmd := exec.Command("git", args...)
@@ -526,4 +530,69 @@ func devNull() string {
 		return "NUL"
 	}
 	return "/dev/null"
+}
+
+func TestMarkdownTextBreaksWWWAutolinks(t *testing.T) {
+	for _, in := range []string{"www.evil.example", "see WWW.Evil.example now", "(www.x.example)", "awww.x.example"} {
+		out := MarkdownText(in)
+		if strings.Contains(strings.ToLower(out), "www.") {
+			t.Errorf("MarkdownText(%q) = %q still has www.", in, out)
+		}
+	}
+	if got := MarkdownText("www"); got != "www" {
+		t.Errorf("plain www changed: %q", got)
+	}
+	if got := MarkdownText("WWW.x"); got != "WWW&#46;x" {
+		t.Errorf("case not kept: %q", got)
+	}
+}
+
+func TestGitDataShallowAndTagPattern(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed; skipping git-backed tests")
+	}
+	root := catalogtest.CopyFixture(t)
+	env := []string{
+		"GIT_CONFIG_GLOBAL=" + devNull(), "GIT_CONFIG_SYSTEM=" + devNull(), "GIT_CONFIG_NOSYSTEM=1",
+		"GIT_AUTHOR_NAME=T", "GIT_AUTHOR_EMAIL=t@example.com", "GIT_COMMITTER_NAME=T", "GIT_COMMITTER_EMAIL=t@example.com",
+	}
+	git := func(dir string, args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), env...)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	git(root, "init", "-q", "-b", "main")
+	git(root, "add", "-A")
+	git(root, "-c", "commit.gpgsign=false", "commit", "-q", "-m", "one")
+	git(root, "tag", "v1.0.0")
+	catalogtest.Write(t, root, "plugins/data-tools/skills/sql-review/EXTRA.md", "more")
+	git(root, "add", "-A")
+	git(root, "-c", "commit.gpgsign=false", "commit", "-q", "-m", "two")
+	git(root, "tag", "data-tools--v9.0.0") // a per-plugin tag is newer but not a release tag
+	git(root, "tag", "stable-3")
+
+	cfg, _ := orgconfig.Load(root)
+	c, _, err := BuildContext(context.Background(), root, cfg, Options{GitData: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.LatestTag != "v1.0.0" {
+		t.Errorf("LatestTag = %q, want v1.0.0 (plugin tags are not release tags)", c.LatestTag)
+	}
+	cfg.Catalog.ReleaseTagPattern = "stable-*"
+	if c, _, err = BuildContext(context.Background(), root, cfg, Options{GitData: true}); err != nil || c.LatestTag != "stable-3" {
+		t.Errorf("custom pattern: %q %v", c.LatestTag, err)
+	}
+
+	clone := filepath.Join(t.TempDir(), "clone")
+	git(filepath.Dir(clone), "clone", "-q", "--depth", "1", "file://"+filepath.ToSlash(root), clone)
+	cfg.Catalog.ReleaseTagPattern = "v[0-9]*"
+	_, _, err = BuildContext(context.Background(), clone, cfg, Options{GitData: true})
+	if err == nil || !strings.Contains(err.Error(), "shallow") || !strings.Contains(err.Error(), "fetch-depth: 0") {
+		t.Errorf("shallow clone: %v", err)
+	}
 }

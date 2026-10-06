@@ -7,10 +7,13 @@ import (
 	"net/url"
 	"path"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
+	"github.com/ccshelf/ccshelf/internal/catalog/codeowners"
 	"github.com/ccshelf/ccshelf/internal/catalog/safepath"
 	"github.com/ccshelf/ccshelf/internal/catalog/sidecar"
 	"github.com/ccshelf/ccshelf/internal/marketplace"
@@ -70,7 +73,7 @@ func Check(d *Data, cfg *orgconfig.Config, opt Options) *Report {
 		c.source(ref)
 		c.metadata(ref, names)
 		c.relevance(ref)
-		c.dependencies(ref, names)
+		c.dependencies(ref)
 		c.ownership(ref)
 	}
 	c.orphanSidecars(names)
@@ -97,6 +100,7 @@ func (c *checker) entry(ref *PluginRef) {
 			c.add(Warning, "CAT004", fmt.Sprintf("plugin %s: %s", q(p.Name), reason), ref, "", 0, "")
 		}
 	}
+	c.nameFormat(ref)
 	desc := strings.TrimSpace(p.Description)
 	switch {
 	case desc == "":
@@ -111,6 +115,32 @@ func (c *checker) entry(ref *PluginRef) {
 	}
 	if p.Author.IsZero() {
 		c.add(Warning, "CAT007", fmt.Sprintf("plugin %s has no author", q(p.Name)), ref, "", 0, "")
+	}
+}
+
+// kebabName is the plugin name shape Claude Code recommends {V}: lower case
+// letters and digits separated by single hyphens.
+var kebabName = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
+
+// MaxNameLength is the longest plugin name accepted without a warning.
+const MaxNameLength = 64
+
+// nameFormat is CAT009: a name Claude Code rejects is an error, a name that
+// is merely not kebab-case or is long is a warning.
+func (c *checker) nameFormat(ref *PluginRef) {
+	p := ref.Plugin
+	n := utf8.RuneCountInString(p.Name)
+	bad := strings.IndexFunc(p.Name, func(r rune) bool {
+		return r <= ' ' || r == 0x7f || r == '@' || r == ':' || r == '/' || r == '\\' || unicode.Is(unicode.Cf, r)
+	}) >= 0
+	switch {
+	case bad || n > 128:
+		c.add(Error, "CAT009", fmt.Sprintf("plugin name %s has spaces, @, :, path separators, control or formatting characters, or is longer than 128 characters", q(p.Name)), ref, "", 0,
+			"claude plugin validate rejects this name")
+	case !kebabName.MatchString(p.Name):
+		c.add(Warning, "CAT009", fmt.Sprintf("plugin name %s is not kebab-case (lower case letters, digits and single hyphens)", q(p.Name)), ref, "", 0, "")
+	case n > MaxNameLength:
+		c.add(Warning, "CAT009", fmt.Sprintf("plugin name %s has %d characters, more than %d", q(p.Name), n, MaxNameLength), ref, "", 0, "")
 	}
 }
 
@@ -141,8 +171,15 @@ func (c *checker) source(ref *PluginRef) {
 	if ref.Info.HasHooks {
 		c.add(Info, "CAT040", fmt.Sprintf("plugin %s ships hooks", q(p.Name)), ref, "", 0, "hooks run commands on developers' machines; they need platform review")
 	}
-	if ref.Info.HasMCP {
-		c.add(Info, "CAT041", fmt.Sprintf("plugin %s ships MCP servers", q(p.Name)), ref, "", 0, "MCP servers run code on developers' machines; they need platform review")
+	if ref.Info.HasMCP || ref.Info.HasLSP {
+		what := "MCP servers"
+		if ref.Info.HasLSP {
+			what = "LSP servers"
+			if ref.Info.HasMCP {
+				what = "MCP and LSP servers"
+			}
+		}
+		c.add(Info, "CAT041", fmt.Sprintf("plugin %s ships %s", q(p.Name), what), ref, "", 0, what+" run code on developers' machines; they need platform review")
 	}
 }
 
@@ -284,7 +321,7 @@ func (c *checker) review(ref *PluginRef, sc *sidecar.Sidecar, status string, add
 		addAt(Error, "CAT018", "review_by", fmt.Sprintf("plugin %s: %v", q(p.Name), err), "")
 		return
 	case !present:
-		if status == sidecar.StatusActive {
+		if status == sidecar.StatusActive && containsFold(c.cfg.Lint.Require, "review_by") {
 			addAt(Error, "CAT018", "review_by", fmt.Sprintf("plugin %s is active and needs a review_by date", q(p.Name)), "")
 		}
 		return
@@ -312,8 +349,10 @@ func (c *checker) orphanSidecars(names map[string]*PluginRef) {
 	}
 	for name, sc := range c.d.Sidecars {
 		if names[name] == nil {
-			c.out = append(c.out, Finding{Severity: Warning, Code: "CAT011", Message: fmt.Sprintf("sidecar for %s has no marketplace entry", q(name)),
-				File: sc.File, Line: sc.Line, Plugin: name})
+			c.out = append(c.out, Finding{
+				Severity: Warning, Code: "CAT011", Message: fmt.Sprintf("sidecar for %s has no marketplace entry", q(name)),
+				File: sc.File, Line: sc.Line, Plugin: name,
+			})
 		}
 	}
 }
@@ -404,7 +443,7 @@ func NonRE2Feature(p string) string {
 	return ""
 }
 
-func (c *checker) dependencies(ref *PluginRef, names map[string]*PluginRef) {
+func (c *checker) dependencies(ref *PluginRef) {
 	if ref.Dup {
 		return
 	}
@@ -466,47 +505,88 @@ func (c *checker) dependencies(ref *PluginRef, names map[string]*PluginRef) {
 	}
 }
 
-// ownership applies the CODEOWNERS rules that concern one plugin.
+// probeFile is a neutral path inside a plugin directory. Ownership probes
+// that are about the directory as a whole use it instead of a path that a
+// platform-owned rule (such as the manifest) may match.
+func probeFile(dir string) string { return joinDir(dir, "README.md") }
+
+func joinDir(dir, rel string) string {
+	if dir == "" || dir == "." {
+		return rel
+	}
+	return dir + "/" + rel
+}
+
+func dirLabel(dir string) string {
+	if dir == "." {
+		return "the repository root"
+	}
+	return dir + "/"
+}
+
+// ownership applies the CODEOWNERS rules that concern one plugin. A plugin
+// whose source is "./" lives at the repository root and is checked like any
+// other.
 func (c *checker) ownership(ref *PluginRef) {
-	dir := ref.PluginDir()
-	if dir == "" || dir == "." || ref.InfoErr != nil || ref.Dup {
+	if ref.InfoErr != nil || ref.Dup || !ref.Plugin.Source.IsLocal() {
 		return
 	}
+	dir := ref.PluginDir()
 	p := ref.Plugin
 	plat := c.cfg.Lint.PlatformOwners
-	hasHooks := ref.Info != nil && ref.Info.HasHooks
-	hasMCP := ref.Info != nil && ref.Info.HasMCP
+	info := ref.Info
+	hasExec := info != nil && (info.HasHooks || info.HasMCP || info.HasLSP || len(info.ManifestExec) > 0 || len(info.ExecFiles) > 0)
 	co := c.d.Owners
 	if co == nil {
-		if len(plat) > 0 && (hasHooks || hasMCP) {
-			c.add(Error, "CAT042", fmt.Sprintf("plugin %s ships hooks or MCP servers but there is no CODEOWNERS file", q(p.Name)), ref, "", 0, "add a CODEOWNERS rule that gives the platform team these paths")
+		if len(plat) > 0 && hasExec {
+			c.add(Error, "CAT042", fmt.Sprintf("plugin %s ships hooks, MCP or LSP servers but there is no CODEOWNERS file", q(p.Name)), ref, "", 0, "add a CODEOWNERS rule that gives the platform team these paths")
 		}
 		return
 	}
-	probe := dir + "/.claude-plugin/plugin.json"
-	owners := co.Owners(probe)
+	owners := co.Owners(probeFile(dir))
 	if len(owners) == 0 {
-		c.add(Warning, "CAT044", fmt.Sprintf("plugin %s: directory %s/ is not covered by CODEOWNERS", q(p.Name), dir), ref, "", 0, "add a line such as /"+dir+"/ @team")
+		c.add(Warning, "CAT044", fmt.Sprintf("plugin %s: %s is not covered by CODEOWNERS", q(p.Name), dirLabel(dir)), ref, "", 0, "add a line such as /"+strings.TrimSuffix(dir, "/")+"/ @team")
 	} else if sc := c.d.Sidecars[p.Name]; sc != nil && sc.Owner != "" && !containsFold(owners, sc.Owner) {
-		c.out = append(c.out, Finding{Severity: Warning, Code: "CAT046", Plugin: p.Name, File: sc.File, Line: sc.LineOf("owner"),
-			Message: fmt.Sprintf("plugin %s: owner %s is not among the CODEOWNERS owners of %s/ (%s)", q(p.Name), q(sc.Owner), dir, strings.Join(owners, ", "))})
+		c.out = append(c.out, Finding{
+			Severity: Warning, Code: "CAT046", Plugin: p.Name, File: sc.File, Line: sc.LineOf("owner"),
+			Message: fmt.Sprintf("plugin %s: owner %s is not among the CODEOWNERS owners of %s (%s)", q(p.Name), q(sc.Owner), dirLabel(dir), strings.Join(owners, ", ")),
+		})
 	}
-	if len(plat) > 0 {
-		check := func(present bool, rel, what string) {
-			if !present {
+	if len(plat) == 0 || info == nil {
+		return
+	}
+	checked := map[string]bool{}
+	check := func(rel, what string, sev Severity) {
+		if checked[rel] {
+			return
+		}
+		checked[rel] = true
+		got := co.Owners(rel)
+		for _, g := range got {
+			if containsFold(plat, g) {
 				return
 			}
-			got := co.Owners(dir + "/" + rel)
-			for _, g := range got {
-				if containsFold(plat, g) {
-					return
-				}
-			}
-			c.add(Error, "CAT042", fmt.Sprintf("plugin %s ships %s but CODEOWNERS does not give a platform owner %s/%s (owners: %s)", q(p.Name), what, dir, rel, ownersText(got)), ref, "", 0,
-				"add a rule for /"+dir+"/"+rel+" after the team rule, because the last matching rule wins")
 		}
-		check(hasHooks, "hooks/hooks.json", "hooks")
-		check(hasMCP, ".mcp.json", "MCP servers")
+		c.add(sev, "CAT042", fmt.Sprintf("plugin %s ships %s but CODEOWNERS does not give a platform owner /%s (owners: %s)", q(p.Name), what, rel, ownersText(got)), ref, "", 0,
+			"add a rule for /"+rel+" after the team rule, because the last matching rule wins")
+	}
+	if info.HasHooks {
+		check(joinDir(dir, "hooks/hooks.json"), "hooks", Error)
+	}
+	if info.HasMCP {
+		check(joinDir(dir, ".mcp.json"), "MCP servers", Error)
+	}
+	if info.HasLSP {
+		check(joinDir(dir, ".lsp.json"), "LSP servers", Error)
+	}
+	if len(info.ManifestExec) > 0 {
+		check(joinDir(dir, ".claude-plugin/plugin.json"), "plugin.json that declares "+strings.Join(info.ManifestExec, ", "), Error)
+	}
+	for _, f := range info.ExecFiles {
+		check(f, "hook, MCP or LSP configuration", Error)
+	}
+	for _, f := range info.ScriptRefs {
+		check(f, "a file that its hook, MCP or LSP configuration runs", Warning)
 	}
 }
 
@@ -530,22 +610,116 @@ func (c *checker) codeownersGeneral() {
 	co := c.d.Owners
 	if co == nil {
 		if len(c.d.Plugins) > 0 {
-			c.out = append(c.out, Finding{Severity: Warning, Code: "CAT043", Message: "no CODEOWNERS file found (looked in .github/, the root and docs/)",
-				Hint: "CODEOWNERS routes review of plugins, the catalog metadata and workflows"})
+			c.out = append(c.out, Finding{
+				Severity: Warning, Code: "CAT043", Message: "no CODEOWNERS file found (looked in .github/, the root and docs/)",
+				Hint: "CODEOWNERS routes review of plugins, the catalog metadata and workflows",
+			})
 		}
 		return
 	}
 	for _, is := range co.Issues {
 		c.out = append(c.out, Finding{Severity: Warning, Code: "CAT047", Message: is.Message, File: c.d.OwnersPath, Line: is.Line, Hint: "GitHub ignores this line"})
 	}
-	if !co.Covers(".github/CODEOWNERS") {
-		c.out = append(c.out, Finding{Severity: Warning, Code: "CAT045", Message: "/.github/ is not covered by CODEOWNERS", File: c.d.OwnersPath,
-			Hint: "without it a plugin team can edit workflows and CODEOWNERS itself"})
+	githubOpen := co.Covers(".github/CODEOWNERS")
+	if !githubOpen {
+		c.out = append(c.out, Finding{
+			Severity: Warning, Code: "CAT045", Message: "/.github/ is not covered by CODEOWNERS", File: c.d.OwnersPath,
+			Hint: "without it a plugin team can edit workflows and CODEOWNERS itself",
+		})
+	}
+	c.platformPaths(co, !githubOpen)
+	c.orphanDirs(co)
+}
+
+// platformPaths checks that the paths that decide what runs on developer
+// machines or what the catalog says belong to a platform owner.
+func (c *checker) platformPaths(co *codeowners.File, githubUncovered bool) {
+	plat := c.cfg.Lint.PlatformOwners
+	if len(plat) == 0 {
+		return
+	}
+	probes := []string{
+		".github/workflows/ccshelf-probe.yml", orgconfig.FileName, c.cfg.Profiles.MCPRegistry,
+		c.cfg.Profiles.Dir + "/probe.toml", "bundles/profile-probe/.claude-plugin/plugin.json", c.cfg.Lint.Taxonomy,
+	}
+	if c.d.OwnersPath != "" {
+		probes = append(probes, c.d.OwnersPath)
+	}
+	if c.cfg.Catalog.MetadataSource != orgconfig.SourceMarketplace {
+		probes = append(probes, sidecar.Dir+"/probe.toml")
+	}
+	probes = append(probes, c.cfg.Catalog.Marketplaces...)
+	done := map[string]bool{}
+	for _, p := range probes {
+		if p == "" || done[p] {
+			continue
+		}
+		done[p] = true
+		if githubUncovered && strings.HasPrefix(p, ".github/") {
+			continue // already reported as not covered
+		}
+		got := co.Owners(p)
+		owned := false
+		for _, g := range got {
+			owned = owned || containsFold(plat, g)
+		}
+		if !owned {
+			c.out = append(c.out, Finding{
+				Severity: Warning, Code: "CAT045", File: c.d.OwnersPath,
+				Message: fmt.Sprintf("/%s is not owned by a platform owner in CODEOWNERS (owners: %s)", p, ownersText(got)),
+				Hint:    "a plugin team could change it without platform review; remember the last matching rule wins",
+			})
+		}
 	}
 }
 
+// orphanDirs flags directories next to the plugin directories that no
+// marketplace entry uses and CODEOWNERS does not cover: nobody is asked to
+// review what lands in them.
+func (c *checker) orphanDirs(co *codeowners.File) {
+	used := map[string]bool{}
+	parents := map[string]bool{}
+	for i := range c.d.Plugins {
+		ref := &c.d.Plugins[i]
+		d := ref.PluginDir()
+		if d == "" || d == "." {
+			continue
+		}
+		used[d] = true
+		if par := path.Dir(d); par != "." {
+			parents[par] = true
+		}
+	}
+	for _, par := range sortedKeys(parents) {
+		entries, err := safepath.ReadDir(c.d.Root, par)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			d := par + "/" + e.Name()
+			if !e.IsDir() || used[d] || co.Covers(probeFile(d)) {
+				continue
+			}
+			c.out = append(c.out, Finding{
+				Severity: Warning, Code: "CAT044", File: c.d.OwnersPath,
+				Message: fmt.Sprintf("directory %s has no marketplace entry and is not covered by CODEOWNERS", q(d+"/")),
+				Hint:    "add a CODEOWNERS line or a catch-all rule so new directories get a reviewer",
+			})
+		}
+	}
+}
+
+func sortedKeys[V any](m map[string]V) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
 // profiles checks the profile manifest and bundle entry correspondence using
-// file names only.
+// file names only (plus whether a profile resolves to any plugins).
 func (c *checker) profiles() {
 	profileSet := map[string]bool{}
 	for _, n := range c.d.Profiles {
@@ -558,12 +732,17 @@ func (c *checker) profiles() {
 		}
 	}
 	for _, n := range c.d.Profiles {
+		if abstract, known := c.d.ProfileEmpty[n]; known && abstract {
+			continue // no plugins: the compiler writes no bundle
+		}
 		ref := byName[BundlePrefix+n]
 		file := path.Join(c.cfg.Profiles.Dir, n+".toml")
 		if ref == nil {
-			c.out = append(c.out, Finding{Severity: Error, Code: "CAT050", Plugin: BundlePrefix + n, File: file,
+			c.out = append(c.out, Finding{
+				Severity: Error, Code: "CAT050", Plugin: BundlePrefix + n, File: file,
 				Message: fmt.Sprintf("profile %s has no bundle entry %s in the marketplace", q(n), q(BundlePrefix+n)),
-				Hint:    `add {"name": "` + BundlePrefix + n + `", "source": "./bundles/` + BundlePrefix + n + `", "category": "profile"} to marketplace.json`})
+				Hint:    `add {"name": "` + BundlePrefix + n + `", "source": "./bundles/` + BundlePrefix + n + `", "category": "profile"} to marketplace.json`,
+			})
 		}
 	}
 	for i := range c.d.Plugins {
@@ -572,17 +751,17 @@ func (c *checker) profiles() {
 			continue
 		}
 		name := ref.Plugin.Name
-		isBundle := ref.IsBundle()
+		prefixed := ref.HasBundlePrefix()
 		src := ref.Plugin.Source
 		underBundles := src.IsLocal() && (src.Path == "bundles" || strings.HasPrefix(src.Path, "bundles/"))
-		if !isBundle && !underBundles {
+		if !prefixed && !underBundles {
 			continue
 		}
-		if isBundle && !profileSet[strings.TrimPrefix(name, BundlePrefix)] {
+		if prefixed && !profileSet[strings.TrimPrefix(name, BundlePrefix)] {
 			c.add(Error, "CAT051", fmt.Sprintf("bundle entry %s has no profile manifest %s", q(name), path.Join(c.cfg.Profiles.Dir, strings.TrimPrefix(name, BundlePrefix)+".toml")), ref, "", 0, "")
 		}
 		want := "bundles/" + name
-		if !isBundle || !src.IsLocal() || src.Path != want {
+		if !prefixed || !src.IsLocal() || src.Path != want {
 			c.add(Error, "CAT052", fmt.Sprintf("bundle entry %s must have the source ./%s, found %s", q(name), want, q(src.Summary())), ref, "", 0, "")
 		}
 		if ref.Plugin.Version != "" {

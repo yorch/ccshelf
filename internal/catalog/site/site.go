@@ -63,14 +63,29 @@ func Render(c *catalog.Catalog) ([]File, error) {
 	return files, nil
 }
 
-// Write generates the site into dir, creating it (mode 0700) when needed.
+// Published file and directory modes. The site is published output that a web
+// server or Pages action must be able to read, so it is world-readable; the
+// private-cache rule (0700/0600) applies to the tool's cache, not to this.
+const (
+	dirMode  fs.FileMode = 0o755
+	fileMode fs.FileMode = 0o644
+)
+
+// Write generates the site into dir, creating it (mode 0755) when needed.
 func Write(dir string, c *catalog.Catalog) error {
 	files, err := Render(c)
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	_, existed := os.Stat(dir)
+	if err := os.MkdirAll(dir, dirMode); err != nil {
 		return fmt.Errorf("create %s: %w", dir, err)
+	}
+	if existed != nil {
+		// MkdirAll is subject to the umask; a new publish directory is 0755.
+		if err := os.Chmod(dir, dirMode); err != nil {
+			return fmt.Errorf("set mode of %s: %w", dir, err)
+		}
 	}
 	st, err := os.Stat(dir)
 	if err != nil {
@@ -87,8 +102,8 @@ func Write(dir string, c *catalog.Catalog) error {
 	return nil
 }
 
-// writeFile writes atomically: an exclusively created temporary file (os.CreateTemp, mode 0600), then a
-// rename over the target. It refuses a target that is a symlink or anything
+// writeFile writes atomically: an exclusively created temporary file (os.CreateTemp, mode 0600) that is
+// set to 0644 before a rename over the target. It refuses a target that is a symlink or anything
 // but a regular file.
 func writeFile(dir string, f File) error {
 	target := filepath.Join(dir, f.Name)
@@ -113,6 +128,10 @@ func writeFile(dir string, f File) error {
 	if err := tmp.Close(); err != nil {
 		cleanup()
 		return fmt.Errorf("close %s: %w", f.Name, err)
+	}
+	if err := os.Chmod(name, fileMode); err != nil {
+		cleanup()
+		return fmt.Errorf("set mode of %s: %w", f.Name, err)
 	}
 	if err := os.Rename(name, target); err != nil {
 		cleanup()

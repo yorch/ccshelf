@@ -38,7 +38,7 @@ func CopyFixture(t testing.TB) string {
 		if d.IsDir() {
 			return os.MkdirAll(target, 0o700)
 		}
-		data, err := os.ReadFile(p)
+		data, err := os.ReadFile(p) //nolint:gosec // test helper copying a fixture tree this package owns
 		if err != nil {
 			return err
 		}

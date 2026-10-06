@@ -54,6 +54,10 @@ type Catalog struct {
 	Marketplaces   []string `toml:"marketplaces"`
 	// GitData enables last-change, contributor and tag data (needs git).
 	GitData bool `toml:"git_data"`
+	// ReleaseTagPattern is the git glob (git describe --match) that selects
+	// release tags for the changed-since-tag data; it never selects the
+	// per-plugin tags <plugin>--v<version>. Default "v[0-9]*".
+	ReleaseTagPattern string `toml:"release_tag_pattern"`
 	// BaseURL is the public URL of the catalog site, used for links only.
 	BaseURL string `toml:"base_url"`
 }
@@ -101,6 +105,8 @@ func Default() *Config {
 		Catalog: Catalog{
 			MetadataSource: SourceSidecar,
 			Marketplaces:   []string{marketplaceDefault},
+
+			ReleaseTagPattern: "v[0-9]*",
 		},
 		Profiles: Profiles{Dir: "profiles", MCPRegistry: "mcp/registry.toml"},
 	}
@@ -233,6 +239,9 @@ func (c *Config) Validate() error {
 	if len(c.Catalog.Title) > 200 || strings.ContainsAny(c.Catalog.Title, "\x00\r\n") {
 		add("catalog.title: must be one line of at most 200 characters")
 	}
+	if !validReleaseTagPattern(c.Catalog.ReleaseTagPattern) {
+		add("catalog.release_tag_pattern: %q must be a git glob of 1 to 100 letters, digits and . _ - + / * ? [ ] !, not starting with -", c.Catalog.ReleaseTagPattern)
+	}
 	if c.Catalog.BaseURL != "" {
 		u, err := url.Parse(c.Catalog.BaseURL)
 		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
@@ -240,7 +249,8 @@ func (c *Config) Validate() error {
 		}
 	}
 
-	for key, p := range map[string]string{"profiles.dir": c.Profiles.Dir, "profiles.mcp_registry": c.Profiles.MCPRegistry} {
+	for _, kp := range [][2]string{{"profiles.dir", c.Profiles.Dir}, {"profiles.mcp_registry", c.Profiles.MCPRegistry}} {
+		key, p := kp[0], kp[1]
 		if p == "" {
 			add("%s: must not be empty", key)
 		} else if err := safepath.CheckRel(p); err != nil {
@@ -264,13 +274,14 @@ func (c *Config) Validate() error {
 // CheckPaths verifies that every configured path stays inside root once
 // symlinks are resolved. Paths that do not exist yet are accepted.
 func (c *Config) CheckPaths(root string) error {
-	paths := map[string]string{
-		"lint.taxonomy":         c.Lint.Taxonomy,
-		"profiles.dir":          c.Profiles.Dir,
-		"profiles.mcp_registry": c.Profiles.MCPRegistry,
+	paths := [][2]string{
+		{"lint.taxonomy", c.Lint.Taxonomy},
+		{"profiles.dir", c.Profiles.Dir},
+		{"profiles.mcp_registry", c.Profiles.MCPRegistry},
 	}
 	var errs []error
-	for key, p := range paths {
+	for _, kp := range paths {
+		key, p := kp[0], kp[1]
 		if p == "" {
 			continue
 		}
@@ -301,4 +312,10 @@ func contains(list []string, s string) bool {
 		}
 	}
 	return false
+}
+
+var releasePatternRe = regexp.MustCompile(`^[A-Za-z0-9*?\[\]!._/+-]{1,100}$`)
+
+func validReleaseTagPattern(s string) bool {
+	return releasePatternRe.MatchString(s) && !strings.HasPrefix(s, "-") && !strings.Contains(s, "..")
 }

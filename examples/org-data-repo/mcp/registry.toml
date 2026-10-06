@@ -1,8 +1,8 @@
 # Named MCP server definitions that profiles reference by name.
 # Security-sensitive: a command here runs on developer machines. Owned by the platform team.
 
+# Read design files and tokens from Figma (fictional package).
 [servers.figma]
-description = "Read design files and tokens from Figma (fictional package)"
 type = "stdio"
 command = "npx"
 args = ["-y", "@acme-example/figma-mcp@1.0.0"]
@@ -11,7 +11,7 @@ args = ["-y", "@acme-example/figma-mcp@1.0.0"]
 command = "cmd"
 args = ["/c", "npx", "-y", "@acme-example/figma-mcp@1.0.0"]
 
+# Read-only access to the on-call schedule and incidents.
 [servers.pagerduty-ro]
-description = "Read-only access to the on-call schedule and incidents"
 type = "http"
 url = "https://pagerduty-mcp.acme.example/v1"

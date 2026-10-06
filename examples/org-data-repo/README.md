@@ -74,10 +74,10 @@ For `profile-sre` that is:
 ### Conventions in this example
 
 - Profile `append_system_prompt_file` paths are relative to the **repository root** (`prompts/frontend.md`) and must stay inside it.
-- The MCP registry has one `[servers.<name>]` table per server with `description`, `type` (`stdio` or `http`), and either `command` and `args` or `url`; `[servers.<name>.windows]` overrides `command` and `args` on Windows (`cmd /c npx`).
-- `ccshelf.toml` holds `platform_owners` at the top level and the protected plugin ids under `[protect] plugins`.
+- The MCP registry has one `[servers.<name>]` table per server (the schema is closed: there is no `description` key, use a comment) with `type` (`stdio` or `http`), and either `command` and `args` or `url`; `[servers.<name>.windows]` overrides `command` and `args` on Windows (`cmd /c npx`).
+- `ccshelf.toml` holds `platform_owners` under `[lint]` and the protected plugin ids under `[protect] plugins`.
 - Generated bundles have no sidecar: their owner and status come from the profile. Plugins from external repositories (`partner-linter`) get a sidecar like any other.
-- `CODEOWNERS` uses last-match-wins: a catch-all `* @acme/platform` first, then the team rules, then the platform rules for hooks, `.mcp.json` and plugin manifests (`/plugins/*/.claude-plugin/`, last, because a manifest can declare hooks and MCP servers inline). `ccshelf lint` is getting an inline-hooks rule that flags those declarations in manifests; keep the last rule so a plugin team cannot add them without platform review.
+- `CODEOWNERS` uses last-match-wins: a catch-all `* @acme/platform` first, then the team rules, then the platform rules for hooks, `.mcp.json` and plugin manifests (`/plugins/*/.claude-plugin/`, last, because a manifest can declare hooks and MCP servers inline). `ccshelf lint` (CAT042) errors when a plugin that declares hooks, MCP or LSP servers inline in `plugin.json`, in a declared config path or in `.lsp.json` is not owned by a `platform_owners` entry, and warns about scripts those configs run through `${CLAUDE_PLUGIN_ROOT}`; keep the last rule so a plugin team cannot add them without platform review. CAT045 checks the same for workflows, `CODEOWNERS`, `ccshelf.toml`, profiles, bundles, the catalog and the MCP registry.
 - `partner-linter` is pinned with both `ref` and a `sha`. The 40-hex value in this template is fictional but well formed; replace it with the real commit.
 - Plugin repository tags `<plugin>--v<version>` are not created here: there is no `tag-plugins.yml` until you use dependency version ranges.
 

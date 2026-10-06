@@ -299,3 +299,95 @@ func TestInspect(t *testing.T) {
 		t.Errorf("root plugin = %+v, %v", info, err)
 	}
 }
+
+func TestInspectExactKeysAndDuplicates(t *testing.T) {
+	root := t.TempDir()
+	local := func(path string) Plugin { return Plugin{Name: "p", Source: Source{Kind: "path", Path: path}} }
+	for name, body := range map[string]string{
+		"case":    `{"name":"x","hooks":{"a":[]},"HOOKS":null}`,
+		"exact":   `{"name":"x","hooks":{"a":[]},"hooks":null}`,
+		"trail":   `{"name":"x"} {"hooks":{}}`,
+		"array":   `[]`,
+		"nothing": ``,
+		"open":    `{"name":"x"`,
+	} {
+		write(t, root, "plugins/"+name+"/.claude-plugin/plugin.json", body)
+		if _, err := Inspect(root, local("plugins/"+name)); err == nil || !strings.Contains(err.Error(), "plugin.json") {
+			t.Errorf("%s: want an error naming plugin.json, got %v", name, err)
+		}
+	}
+	// A different-case key alone is an unknown key, not hooks.
+	write(t, root, "plugins/lower/.claude-plugin/plugin.json", `{"name":"x","Hooks":{"a":[]}}`)
+	if info, err := Inspect(root, local("plugins/lower")); err != nil || info.HasHooks {
+		t.Errorf("unknown-case key: %+v %v", info, err)
+	}
+	// null values are not declarations.
+	write(t, root, "plugins/nulls/.claude-plugin/plugin.json", `{"name":"x","hooks":null,"mcpServers":null,"lspServers":null}`)
+	if info, err := Inspect(root, local("plugins/nulls")); err != nil || info.HasHooks || info.HasMCP || info.HasLSP || len(info.ManifestExec) != 0 {
+		t.Errorf("nulls: %+v %v", info, err)
+	}
+	write(t, root, "plugins/types/.claude-plugin/plugin.json", `{"version":3}`)
+	if _, err := Inspect(root, local("plugins/types")); err == nil || !strings.Contains(err.Error(), "version") {
+		t.Errorf("type error should name the key: %v", err)
+	}
+}
+
+func TestInspectLSPAndExecFiles(t *testing.T) {
+	root := t.TempDir()
+	local := func(path string) Plugin { return Plugin{Name: "p", Source: Source{Kind: "path", Path: path}} }
+	write(t, root, "plugins/a/.lsp.json", `{"go":{"command":"${CLAUDE_PLUGIN_ROOT}/bin/gopls"}}`)
+	write(t, root, "plugins/a/monitors/monitors.json", `[]`)
+	write(t, root, "plugins/a/.claude-plugin/plugin.json",
+		`{"name":"a","hooks":["./cfg/h.json",{"hooks":{}}],"mcpServers":"https://example.com/b.mcpb","experimental":{"monitors":"./m.json"},"lspServers":{"x":{"command":"node","args":["${CLAUDE_PLUGIN_ROOT}\\srv\\x.js"]}}}`)
+	write(t, root, "plugins/a/cfg/h.json", `{"hooks":{"E":[{"hooks":[{"command":"$CLAUDE_PLUGIN_ROOT/scripts/s.sh \"${CLAUDE_PLUGIN_ROOT}/hooks/own.sh\" ${CLAUDE_PLUGIN_ROOT}/../other/y.sh ${CLAUDE_PLUGIN_ROOT}/../../../etc"}]}]}}`)
+	write(t, root, "plugins/a/m.json", `[]`)
+	info, err := Inspect(root, local("plugins/a"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !info.HasHooks || !info.HasMCP || !info.HasLSP {
+		t.Errorf("flags: %+v", info)
+	}
+	wantKeys := "experimental.monitors,hooks,lspServers,mcpServers"
+	if got := strings.Join(info.ManifestExec, ","); got != wantKeys {
+		t.Errorf("ManifestExec = %s, want %s", got, wantKeys)
+	}
+	wantFiles := "plugins/a/.lsp.json,plugins/a/cfg/h.json,plugins/a/m.json,plugins/a/monitors/monitors.json"
+	if got := strings.Join(info.ExecFiles, ","); got != wantFiles {
+		t.Errorf("ExecFiles = %s, want %s", got, wantFiles)
+	}
+	wantRefs := "plugins/a/bin/gopls,plugins/a/hooks/own.sh,plugins/a/scripts/s.sh,plugins/a/srv/x.js,plugins/other/y.sh"
+	if got := strings.Join(info.ScriptRefs, ","); got != wantRefs {
+		t.Errorf("ScriptRefs = %s, want %s", got, wantRefs)
+	}
+
+	// A declared path that leaves the plugin directory is an error.
+	write(t, root, "plugins/b/.claude-plugin/plugin.json", `{"name":"b","hooks":"./../a/cfg/h.json"}`)
+	if _, err := Inspect(root, local("plugins/b")); err == nil || !strings.Contains(err.Error(), "outside the plugin directory") {
+		t.Errorf("escape: %v", err)
+	}
+	// Entry-level lspServers count too, and a root plugin works.
+	p := local("")
+	p.Extra = map[string]json.RawMessage{"lspServers": []byte(`{}`)}
+	write(t, root, "README.md", "x")
+	if info, err = Inspect(root, p); err != nil || !info.HasLSP {
+		t.Errorf("entry lspServers: %+v %v", info, err)
+	}
+}
+
+func TestExecKeys(t *testing.T) {
+	m := map[string]json.RawMessage{
+		"hooks": []byte(` null `), "mcpServers": []byte(`{}`), "monitors": []byte(`[]`),
+		"experimental": []byte(`{"monitors": []}`), "HOOKS": []byte(`{}`),
+	}
+	if got := strings.Join(ExecKeys(m), ","); got != "experimental.monitors,mcpServers,monitors" {
+		t.Errorf("ExecKeys = %s", got)
+	}
+	m["experimental"] = []byte(`"nope"`)
+	if got := strings.Join(ExecKeys(m), ","); got != "mcpServers,monitors" {
+		t.Errorf("ExecKeys = %s", got)
+	}
+	if ExecKeys(nil) != nil {
+		t.Error("nil map")
+	}
+}

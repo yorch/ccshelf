@@ -2,10 +2,12 @@ package gitdata
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -114,7 +116,7 @@ func TestEmptyRepoAndErrors(t *testing.T) {
 	cctx, cancel := context.WithCancel(ctx)
 	cancel()
 	if _, err := LatestTag(cctx, root); err == nil {
-		t.Error("cancelled context should fail")
+		t.Error("canceled context should fail")
 	}
 }
 
@@ -152,5 +154,126 @@ func TestNoGit(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	if _, err := LatestTag(context.Background(), t.TempDir()); err == nil || !strings.Contains(err.Error(), "git was not found") {
 		t.Errorf("err = %v", err)
+	}
+}
+
+func TestGitArgsAreHardened(t *testing.T) {
+	got := gitArgs("/r", []string{"-c", "safe.directory=/r"}, "log", "--", "x")
+	want := []string{"-C", "/r", "-c", "core.fsmonitor=false", "-c", "core.quotepath=false", "-c", "log.showSignature=false", "-c", "safe.directory=/r", "log", "--", "x"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("gitArgs = %v\nwant %v", got, want)
+	}
+}
+
+func TestFsmonitorHookIsNotRun(t *testing.T) {
+	needGit(t)
+	if runtime.GOOS == "windows" {
+		t.Skip("the hook is a POSIX script")
+	}
+	root := t.TempDir()
+	ctx := context.Background()
+	git(t, root, nil, "init", "-q", "-b", "main")
+	commit(t, root, "plugins/a/x.txt", "1", "a@example.com", "2026-01-10T12:00:00Z")
+	marker := filepath.Join(t.TempDir(), "ran")
+	hook := filepath.Join(t.TempDir(), "hook.sh")
+	if err := os.WriteFile(hook, []byte("#!/bin/sh\ntouch '"+marker+"'\nprintf '\\0'\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	git(t, root, nil, "config", "core.fsmonitor", hook)
+	git(t, root, nil, "tag", "v1.0.0")
+	if _, err := run(ctx, root, "status", "--porcelain"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ChangedSince(ctx, root, "v1.0.0", []string{"plugins/a"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("core.fsmonitor from the repository configuration was executed")
+	}
+}
+
+func TestCheckDir(t *testing.T) {
+	for _, bad := range []string{"", "-", "--", "-x", "-x/y", "/abs", "a\x00b"} {
+		if checkDir(bad) == nil {
+			t.Errorf("checkDir(%q) accepted", bad)
+		}
+	}
+	for _, ok := range []string{"a", "a-b", "plugins/-x", "plugins/a/", "a.b", "."} {
+		if err := checkDir(ok); err != nil {
+			t.Errorf("checkDir(%q) = %v", ok, err)
+		}
+	}
+}
+
+func TestChangedSinceOnlyResolvesTags(t *testing.T) {
+	needGit(t)
+	root := t.TempDir()
+	ctx := context.Background()
+	git(t, root, nil, "init", "-q", "-b", "main")
+	commit(t, root, "plugins/a/x.txt", "1", "a@example.com", "2026-01-10T12:00:00Z")
+	git(t, root, nil, "branch", "feature")
+	commit(t, root, "plugins/a/y.txt", "2", "a@example.com", "2026-01-11T12:00:00Z")
+	// "feature" and "main" are branches, not tags: they must not be accepted.
+	for _, name := range []string{"feature", "main", "HEAD"} {
+		if _, err := ChangedSince(ctx, root, name, []string{"plugins/a"}); err == nil {
+			t.Errorf("branch or ref %q resolved as a tag", name)
+		}
+	}
+}
+
+func TestPluginTagsAreNotReleaseTags(t *testing.T) {
+	needGit(t)
+	root := t.TempDir()
+	ctx := context.Background()
+	git(t, root, nil, "init", "-q", "-b", "main")
+	commit(t, root, "plugins/a/x.txt", "1", "a@example.com", "2026-01-10T12:00:00Z")
+	git(t, root, nil, "tag", "v1.0.0")
+	commit(t, root, "plugins/a/y.txt", "2", "a@example.com", "2026-01-11T12:00:00Z")
+	git(t, root, nil, "tag", "sre-kit--v9.9.9")
+	git(t, root, nil, "tag", "rel-2026.1")
+	if tag, err := LatestTag(ctx, root); err != nil || tag != "v1.0.0" {
+		t.Errorf("LatestTag = %q %v, want v1.0.0", tag, err)
+	}
+	if tag, err := LatestReleaseTag(ctx, root, "rel-*"); err != nil || tag != "rel-2026.1" {
+		t.Errorf("custom pattern = %q %v", tag, err)
+	}
+	// Even a broad pattern never returns a plugin tag.
+	if tag, err := LatestReleaseTag(ctx, root, "*"); err != nil || tag == "sre-kit--v9.9.9" || tag == "" {
+		t.Errorf("broad pattern = %q %v", tag, err)
+	}
+	if tag, err := LatestReleaseTag(ctx, root, "nomatch*"); err != nil || tag != "" {
+		t.Errorf("no match = %q %v", tag, err)
+	}
+	for _, bad := range []string{"-x", "a b", "a;b", "a..b", strings.Repeat("a", 101), "$(x)"} {
+		if _, err := LatestReleaseTag(ctx, root, bad); err == nil {
+			t.Errorf("pattern %q accepted", bad)
+		}
+	}
+}
+
+func TestIsShallow(t *testing.T) {
+	needGit(t)
+	src := t.TempDir()
+	ctx := context.Background()
+	git(t, src, nil, "init", "-q", "-b", "main")
+	commit(t, src, "a.txt", "1", "a@example.com", "2026-01-10T12:00:00Z")
+	commit(t, src, "b.txt", "2", "a@example.com", "2026-01-11T12:00:00Z")
+	if sh, err := IsShallow(ctx, src); err != nil || sh {
+		t.Fatalf("full repo: %v %v", sh, err)
+	}
+	dst := filepath.Join(t.TempDir(), "clone")
+	git(t, filepath.Dir(dst), nil, "clone", "-q", "--depth", "1", "file://"+filepath.ToSlash(src), dst)
+	if sh, err := IsShallow(ctx, dst); err != nil || !sh {
+		t.Fatalf("shallow clone: %v %v", sh, err)
+	}
+	if _, err := IsShallow(ctx, t.TempDir()); err == nil {
+		t.Log("temp dir is inside a repository")
+	}
+}
+
+func TestDubiousOwnershipDetection(t *testing.T) {
+	err := errors.New("git log: exit status 128: fatal: detected dubious ownership in repository at '/w'")
+	if !dubiousOwnership(err) || dubiousOwnership(nil) || dubiousOwnership(errors.New("other")) {
+		t.Error("dubiousOwnership misclassifies")
 	}
 }

@@ -2,8 +2,6 @@ package orgconfig
 
 import (
 	"encoding/json"
-	"github.com/ccshelf/ccshelf/internal/catalog/catalogtest"
-	toml "github.com/pelletier/go-toml/v2"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -11,6 +9,9 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/ccshelf/ccshelf/internal/catalog/catalogtest"
+	toml "github.com/pelletier/go-toml/v2"
 )
 
 const full = `
@@ -199,5 +200,54 @@ func TestSchemaMatchesStructs(t *testing.T) {
 	_ = json.Unmarshal(b, &asJSON)
 	if probs := catalogtest.Validate(s, asJSON); len(probs) > 0 {
 		t.Errorf("schema problems: %v", probs)
+	}
+}
+
+func TestErrorOrderIsStable(t *testing.T) {
+	const bad = "[profiles]\ndir = \"/abs\"\nmcp_registry = \"../up\"\n[lint]\ntaxonomy = \"../t\"\n"
+	var first string
+	for i := 0; i < 20; i++ {
+		_, err := Parse([]byte(bad))
+		if err == nil {
+			t.Fatal("want an error")
+		}
+		if i == 0 {
+			first = err.Error()
+			if strings.Index(first, "profiles.dir") > strings.Index(first, "profiles.mcp_registry") {
+				t.Fatalf("keys out of order:\n%s", first)
+			}
+		} else if err.Error() != first {
+			t.Fatalf("error text changed between runs:\n%s\n---\n%s", first, err.Error())
+		}
+	}
+}
+
+func TestCheckPathsOrderIsStable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlinks need privileges on Windows")
+	}
+	root := t.TempDir()
+	out := t.TempDir()
+	for _, n := range []string{"t", "p", "r"} {
+		if err := os.Symlink(out, filepath.Join(root, n)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cfg := Default()
+	cfg.Lint.Taxonomy, cfg.Profiles.Dir, cfg.Profiles.MCPRegistry = "t/x", "p/x", "r/x"
+	var first string
+	for i := 0; i < 20; i++ {
+		err := cfg.CheckPaths(root)
+		if err == nil {
+			t.Fatal("want an error")
+		}
+		if i == 0 {
+			first = err.Error()
+			if !(strings.Index(first, "lint.taxonomy") < strings.Index(first, "profiles.dir") && strings.Index(first, "profiles.dir") < strings.Index(first, "profiles.mcp_registry")) {
+				t.Fatalf("keys out of order:\n%s", first)
+			}
+		} else if err.Error() != first {
+			t.Fatal("error text changed between runs")
+		}
 	}
 }
