@@ -204,7 +204,7 @@ Never in the tool repo: a real org's plugins, profiles, sidecars, marketplace, t
 Two choices: (1) **no built-in default profiles**: roles like "frontend" are org choices and a shipped default invites arguments about what belongs in it, so the examples show the format and nothing more; (2) a **public demo catalog** built from the fictional starter data and published (for example on GitHub Pages) is optional, to show what the catalog looks like.
 
 ### License (decided 2026-10-06)
-**MIT** for the tool repo (code and docs). Still to do: add a `LICENSE` file (needs the copyright holder name and year), and confirm that the user's employer allows open-sourcing this before the first public commit. The data repo (the org's profiles and catalog data) is the org's own and is not covered by this license.
+**MIT** for the tool repo (code and docs). The `LICENSE` file exists at the repo root (copyright holder Jorge Barnaby, 2026). Still to do: confirm that the employer allows open-sourcing this, and that the employer has no IP claim on it, before the first public commit. The data repo (the org's profiles and catalog data) is the org's own and is not covered by this license.
 
 ### Name (decided 2026-10-06): `ccshelf`
 The project and the command are both called **`ccshelf`**: kits (profiles and bundles) on a shelf (the catalog), with the `cc` prefix signaling the Claude Code ecosystem. The word "profile" stays the name of the concept in the docs (a `ccshelf` profile).
@@ -235,7 +235,7 @@ Accounts, the trust lockfile and git sources, `compile` and committed bundles, `
 ### Phase 1: MVP, if Phase 0 supports it
 - **Launcher:** `run`, `show`, `dry-run`, `ls`, `dir` sources only, `extends`, default-deny masking regenerated on every launch, settings validation before launch, `exec` on Unix and spawn on Windows. Closed schema from SR1. macOS and Linux first; Windows compile-checked and tested once Phase 0 item 4 passes.
 - **Catalog:** `lint` (required fields from the marketplace entry plus a minimal sidecar: `owner`, `status`, `when_to_use`) and a generated `CATALOG.md`. Push "when to use" into native `description` and `relevance` blocks, which Claude Code itself reads. A static site only if people use the Markdown version.
-- **Project setup:** `LICENSE` (MIT) once the employer has approved open-sourcing; `SECURITY.md` and a threat model; `CONTRIBUTING.md`.
+- **Project setup:** employer approval for open-sourcing (the MIT `LICENSE` file already exists); `SECURITY.md` and a threat model; `CONTRIBUTING.md`.
 - **Release gates, staged:** github.com and GHE Cloud first; GHE Server and Windows arm64 are documented best-effort until tested (R1 and R2 stay the direction, not first-release gates); macOS, Linux and Windows amd64 are the first build targets. The real-`claude` smoke test runs nightly before any release.
 
 ### Phase 2: deferred until someone asks

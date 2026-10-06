@@ -482,7 +482,7 @@ search &lt;q&gt;   recommend   doctor [--policy]</pre>
 <li><b>Starter template</b> (<code>examples/org-data-repo/</code>): a complete but fictional org data repo (sample marketplace, example plugins, profiles such as frontend and sre, sidecars, org config, CI workflows). Adopters copy it; it doubles as a test fixture.</li>
 </ul>
 <p class="small">Never in the tool repo: a real org's plugins, profiles, sidecars, marketplace, taxonomy or MCP server definitions, or org-specific URLs, team names and secrets. No built-in default profiles (roles are org choices; examples show the format only). A public demo catalog built from the fictional data is optional.</p>
-<div class="callout"><b>License: MIT</b> for the tool repo. To do: add a LICENSE file (copyright holder and year) and confirm your employer allows open-sourcing this before the first public commit. The org's data repo is its own.</div>
+<div class="callout"><b>License: MIT</b> for the tool repo. The LICENSE file exists at the repo root (holder Jorge Barnaby, 2026). To do: confirm your employer allows open-sourcing this and has no IP claim on it before the first public commit. The org's data repo is its own.</div>
 <h3>Org data repo structure</h3>
 <p>The private repo an adopting org keeps (R5). Native files stay native so <code>/plugin</code> works unchanged; everything else is derived. Full detail in <code>08-org-data-repo-structure.md</code>. Names are provisional. Principles: native first; hand-written data is small and reviewable and everything else is derived; ownership must be routable in CODEOWNERS; pinned and releasable; works from ~50 plugins (single-file mode for tiny registries).</p>
 <pre>acme-claude-marketplace/
@@ -710,7 +710,7 @@ mcp_registry = "mcp/registry.toml"</pre>
 <tr><td>Targets</td><td>darwin, linux and windows, each arm64 and amd64 (R1)</td></tr>
 <tr><td>Security</td><td>SR1 to SR5 added after the security review: closed schema, closure trust by SHA with project profiles off by default, protected controls, private cache, hardened CI and releases</td></tr>
 <tr><td>Interaction</td><td>R6: interactive mode and flag-based mode; flags are the contract; prompts only on a TTY; trust never auto-accepted</td></tr>
-<tr><td>License</td><td>MIT (LICENSE file still to add; confirm employer approval first)</td></tr>
+<tr><td>License</td><td>MIT; LICENSE file added (holder Jorge Barnaby, 2026); confirm employer approval before going public</td></tr>
 </tbody></table>
 <h3>Reopened by the review round</h3>
 <ul>
@@ -976,7 +976,7 @@ const road=[
 "Phase 0.4: Stage 0 on Linux and Windows",
 "Phase 0.5: measure MCP and connector removal via settings keys",
 "Phase 0.6: write kill and obsolescence criteria",
-"Employer approval for open-sourcing; then LICENSE, SECURITY.md, threat model, CONTRIBUTING.md",
+"Employer approval for open-sourcing (LICENSE already added); then SECURITY.md, threat model, CONTRIBUTING.md",
 "MVP launcher: run, show, dry-run, ls, dir sources, extends, default-deny masking, closed schema, settings validation",
 "MVP catalog: lint (owner, status, when_to_use) and generated CATALOG.md",
 "Nightly real-claude smoke test before any release",

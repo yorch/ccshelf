@@ -64,7 +64,7 @@ These terms are used the same way in every document and in the report.
 | Targets | All six listed in R1 |
 | Security | SR1 to SR5 added after the security review (closed schema, closure trust by SHA, project profiles off by default, protected controls, private cache, hardened CI) |
 | Interaction | R6: interactive mode and flag-based mode, flags are the contract; prompts only on a TTY; trust never auto-accepted |
-| License | MIT (LICENSE file still to add; confirm employer approval first) |
+| License | MIT; `LICENSE` file added (holder Jorge Barnaby, 2026); confirm employer approval before going public |
 
 ## Versions
 Research ran against Claude Code 2.1.290. The local CLI reported 2.1.291 when Stage 0 ran, probably because it auto-updated in between. Claude Code changes fast; re-verify flag and field behavior before relying on it.
