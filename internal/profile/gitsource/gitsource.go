@@ -589,17 +589,7 @@ func (s *Source) readBlob(ctx context.Context, dir string, e treeEntry) ([]byte,
 func (s *Source) verifyRepo(ctx context.Context, dir, sha string) error {
 	head, err := s.git(ctx, dir, dir, "rev-parse", "--verify", "HEAD^{commit}")
 	if err != nil {
-		// TEMPDEBUG: non-sensitive facts only (counts, file names, object sizes).
-		co, _ := s.git(ctx, dir, dir, "count-objects", "-v")
-		var facts []string
-		_ = filepath.WalkDir(filepath.Join(dir, ".git", "objects"), func(p string, d fs.DirEntry, werr error) error {
-			if werr == nil && !d.IsDir() {
-				fi, _ := d.Info()
-				facts = append(facts, fmt.Sprintf("%s:%d", d.Name(), fi.Size()))
-			}
-			return nil
-		})
-		return fmt.Errorf("%w: %s: %w [DEBUG count=%q files=%v]", ErrTampered, dir, err, co, facts)
+		return fmt.Errorf("%w: %s: %w", ErrTampered, dir, err)
 	}
 	if strings.TrimSpace(head) != sha {
 		return fmt.Errorf("%w: %s is at %s, expected %s", ErrTampered, dir, strings.TrimSpace(head), sha)
