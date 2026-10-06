@@ -289,7 +289,7 @@ Per account: plugins and marketplaces are installed separately, the plugin cache
 <tr><td><code>bundles/profile-*</code></td><td><code>cprof compile</code>; CI fails if they drift</td><td>Yes</td></tr>
 <tr><td>catalog site, <code>catalog.json</code></td><td>CI</td><td>No</td></tr>
 </tbody></table>
-<div class="callout"><b>Proposed change: a metadata sidecar per plugin.</b> With ~50 plugins in one <code>marketplace.json</code>, CODEOWNERS can't route review per JSON entry, so "authors write, platform team reviews" can't be enforced by file ownership. One file per plugin in <code>catalog/plugins/&lt;name&gt;.toml</code> fixes that: a PR touching <code>catalog/</code> needs platform review while plugin source stays with the author's team. The catalog is then derived from <code>marketplace.json</code> + sidecars + git data. Small registries can opt into single-file mode (metadata inside each entry). Awaiting confirmation.</div>
+<div class="callout"><b>Decided: a metadata sidecar per plugin.</b> With ~50 plugins in one <code>marketplace.json</code>, CODEOWNERS can't route review per JSON entry, so "authors write, platform team reviews" can't be enforced by file ownership. One file per plugin in <code>catalog/plugins/&lt;name&gt;.toml</code> fixes that: a PR touching <code>catalog/</code> needs platform review while plugin source stays with the author's team. The catalog is then derived from <code>marketplace.json</code> + sidecars + git data. Small registries can opt into single-file mode (metadata inside each entry). Decided 2026-10-06.</div>
 <pre># catalog/plugins/sre-kit.toml  (fields provisional)
 owner = "@acme/sre"                  # accountable team (required)
 status = "active"                    # active | experimental | deprecated (required)
@@ -610,19 +610,19 @@ In ./infra (terraform files found): sre, platform`,
 ["recommend is rule-based (cwd, files, relevance signals); no LLM.","The same data renders on the catalog page as facets, an overlap view and a 'new since last tag' list."]],
 ["Publish a plugin","Platform owner flow through CI.",
 `1. Add the plugin to marketplace.json: author, category, tags,
-   metadata: owner, status, whenToUse, (overlapsWith)
+   catalog/plugins/<name>.toml: owner, status, when_to_use, (overlaps_with)
 2. PR -> CI: cprof lint + claude plugin validate
-   FAIL  plugin "x": metadata.owner missing
+   FAIL  catalog/plugins/x.toml: owner missing
 3. Merge -> CI: cprof compile (profile-* bundles)
               cprof catalog build (site + catalog.json)
 4. Optional: add a relevance block so Claude Code suggests it in the right dirs`,
-["CI gates are what stop metadata from rotting."]],
+["CI gates are what stop metadata from rotting.","The sidecar lets CODEOWNERS require platform review without touching plugin source."]],
 ["Retire a plugin","Deprecation without breaking people.",
-`1. metadata.status = "deprecated", metadata.supersededBy = "new-plugin"
+`1. In the plugin's sidecar: status = "deprecated", superseded_by = "new-plugin"
 2. cprof doctor lists profiles still including it
 3. Catalog shows a deprecated badge + replacement; runs warn
 4. After the grace period: remove from marketplace.json (use renames)`,
-["Claude Code has no native deprecation field, so this is a metadata convention enforced in CI."]],
+["Claude Code has no native deprecation field, so this is a sidecar convention enforced in CI."]],
 ["Doctor","Housekeeping report.",
 `$ cprof doctor
 overlap:      sre-kit@acme and ops-helper@acme share 9 of 12 tags
@@ -664,8 +664,8 @@ wf.forEach((w,i)=>{const x=document.createElement("button");x.textContent=w[0];x
 const road=[
 "Stage 0: launcher experiments (done 2026-10-06, see Stage 0 tab)",
 "Decided: build both tracks in parallel, shared core/ first",
-"Catalog 1: metadata convention (owner, status, supersededBy, whenToUse, overlapsWith, reviewBy)",
-"Catalog 2: CI lint requiring author/category/tags/metadata",
+"Catalog 1: sidecar metadata convention (owner, status, superseded_by, when_to_use, overlaps_with, review_by)",
+"Catalog 2: CI lint requiring author/category/tags and sidecar fields",
 "Catalog 3: static catalog generator (facets, overlap, new-since diff, owner/status)",
 "Catalog 4: relevance blocks + role bundles in marketplace.json",
 "Profiles 1: manifest + resolver + run/show/ls/dry-run with policy detection",

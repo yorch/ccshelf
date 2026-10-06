@@ -64,13 +64,13 @@ In ./infra (terraform files found): sre, platform
 The same data renders on the catalog page: facets by category/tag/team/status, an overlap view built from `overlaps_with`, and a "new or changed since last tag" list.
 
 ## 6. Publishing a plugin to the internal marketplace (platform owner)
-1. Add the plugin to `marketplace.json` with `author`, `category`, `tags`, and under `metadata`: `owner`, `status`, `whenToUse`, optionally `overlapsWith`.
+1. Add the plugin to `marketplace.json` with `author`, `category`, `tags`, and create its sidecar `catalog/plugins/<name>.toml` with `owner`, `status`, `when_to_use`, optionally `overlaps_with`. The sidecar needs platform review via `CODEOWNERS`.
 2. Open a PR. CI runs `cprof lint` (plus `claude plugin validate`). Missing `owner` or `status` fails the build with a clear message.
 3. On merge, CI runs `cprof compile` (regenerates the `profile-*` bundle plugins) and `cprof catalog build` (regenerates the static site and `catalog.json`).
 4. Optionally add a `relevance` block so Claude Code itself suggests the plugin in the right directories.
 
 ## 7. Retiring a plugin
-1. Set `metadata.status = "deprecated"` and `metadata.supersededBy = "new-plugin"`.
+1. In the plugin's sidecar, set `status = "deprecated"` and `superseded_by = "new-plugin"`.
 2. CI flags every profile that still includes it (`cprof doctor`) so owners can migrate.
 3. The catalog shows a deprecated badge and the replacement. Runs of an affected profile print a warning.
 4. After the grace period, remove it from `marketplace.json`, using the native `renames` mapping where applicable.

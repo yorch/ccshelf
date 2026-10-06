@@ -29,7 +29,7 @@
 |---|---|---|
 | A | One profile manifest in git that compiles to launch files, a bundle meta-plugin and a catalog entry | Brainstorm's pick |
 | B | Bundle-native minimalism: profile = bundle plugin; discovery stays native | Small, low risk |
-| C | CI static catalog from marketplace.json + `metadata` convention + git data | Core of the catalog |
+| C | CI static catalog from marketplace.json + per-plugin sidecar metadata + git data | Core of the catalog |
 | D | Concierge skill/MCP ("what should I use for X") | Later; high upstream risk (relevance suggestions + tool search exist) |
 | E | OTel telemetry loop (rank/prune/doctor) | Later; needs infra and `OTEL_LOG_TOOL_DETAILS=1` |
 | F, G | Config dir per profile; MCP gateway | Reject |

@@ -1,6 +1,6 @@
 # 08. Structure of the org data repo (profiles and catalog)
 
-This describes the **private repo an adopting organization keeps** (R5): its marketplace, profiles and catalog data. The public tool repo (this one) ships a starter template of it in `examples/org-data-repo/` once code starts. Everything here is a design proposal; names are provisional. The `cprof` commands shown don't exist yet.
+This describes the **private repo an adopting organization keeps** (R5): its marketplace, profiles and catalog data. The public tool repo (this one) ships a starter template of it in `examples/org-data-repo/` once code starts. Everything here is a design proposal except where marked decided; names are provisional. The `cprof` commands shown don't exist yet.
 
 ## Principles
 1. **Native first.** `marketplace.json` and plugin folders stay exactly what Claude Code expects, so `/plugin` works with the repo unchanged.
@@ -63,7 +63,7 @@ Not in the repo: the built catalog (`dist/`, published as an artifact or to a st
 | `claude-profile.toml` | Platform team | Yes | Which sidecar fields are required, lint severity, catalog title and sources, default profile sources. |
 | `dist/`, `catalog.json` | CI | No | Built catalog. |
 
-## Where catalog metadata lives: a sidecar per plugin (proposed change)
+## Where catalog metadata lives: a sidecar per plugin (decided 2026-10-06)
 The earlier convention put `owner`, `status`, `whenToUse`, etc. into each marketplace entry's free-form `metadata`. That has a problem: with ~50 plugins in one `marketplace.json`, **`CODEOWNERS` can't route review per entry**, so the decided "authors write, platform team reviews" model can't be enforced by file ownership. A sidecar file per plugin fixes this: a PR that touches `catalog/plugins/*.toml` requires platform review, while plugin source stays with the author's team.
 
 - `marketplace.json` keeps only what Claude Code reads (plus `category` and `tags`, which are native and searchable in some clients).
@@ -142,7 +142,7 @@ All steps call the same pinned binary from the public tool repo (R2, R5): `uses:
 - **Public marketplaces:** nothing prevents a public data repo; then R4 applies to the data as well.
 
 ## Open questions
-1. **Sidecar versus in-entry metadata** (the proposed change above): needs the user's confirmation.
+1. ~~Sidecar versus in-entry metadata~~: **decided, sidecar per plugin** (single-file mode stays available for small registries).
 2. Whether committed bundles should live under `plugins/` or a separate `bundles/` (proposed: separate, to make "generated" obvious).
 3. Whether the catalog should also commit a human-readable index (for example `CATALOG.md`) so the repo is browsable without the site.
 4. How to treat plugins that bundle MCP servers or hooks in `lint`: an extra review path may be warranted because they run code.
