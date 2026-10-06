@@ -101,6 +101,10 @@ func (s *Source) hardening() []string {
 		"-c", "submodule.recurse=false",
 		"-c", "core.symlinks=false",
 		"-c", "core.useReplaceRefs=false",
+		// git for Windows silently ignores files whose path exceeds MAX_PATH
+		// (260), such as a pack of a checkout with a long cache path, and then
+		// reports the commit as missing. No effect elsewhere.
+		"-c", "core.longpaths=true",
 		"-c", "gc.auto=0",
 		"-c", "maintenance.auto=false",
 		"-c", "advice.detachedHead=false",
