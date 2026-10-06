@@ -104,7 +104,7 @@ These pages are the project's **design notes, decision records and research**, p
 What each section is:
 
 - **Start** is this page: the overview, the glossary and the requirements.
-- **Reference** is the [command reference](reference/cli.md), generated from the real binary's `--help` output at build time, so it cannot drift from the code.
+- **Reference** is the [command reference](reference/cli.md), generated from the real binary's `--help` output and checked in CI, so it cannot drift from the code.
 - **Design** is the current design, one file per topic: how the launcher works, the profile format, the security model, platform support and the roadmap. It is kept up to date.
 - **Decisions** is the [decision log](DECISIONS.md): every decision, supersession and open question, with date, evidence, confidence and a trigger to revisit. Rows are never deleted.
 - **Research** holds dated findings. They are updated only to correct them, so they can be older than the design.
@@ -241,19 +241,26 @@ class Builder:
             return ("href", href + ("#" + frag if frag else ""))
         repo_path = posixpath.normpath(posixpath.join("docs", target))
         if repo_path.startswith("..") or repo_path.startswith("/"):
-            raise BuildError("%s: link leaves the repository: %s" % (cur.md, url))
+            raise BuildError("docs/%s: link leaves the repository: %s" % (cur.md, url))
         if repo_path == "site/index.html":
             return ("href", self.rel(cur.site_path, "index.html") + ("#" + frag if frag else ""))
-        return ("external", self.repo_link(repo_path, frag))
+        try:
+            return ("external", self.repo_link(repo_path, frag))
+        except BuildError as e:
+            raise BuildError("docs/%s: %s" % (cur.md, e)) from e
 
     # ------------------------------------------------------------ inline
     def inline(self, text: str, cur: Page) -> str:
         store: list[str] = []
 
-        def stash(m: re.Match) -> str:
-            store.append("<code>" + esc(m.group(2).strip()) + "</code>")
+        def stash_html(fragment: str) -> str:
+            store.append(fragment)
             return "\x00%d\x00" % (len(store) - 1)
 
+        def stash(m: re.Match) -> str:
+            return stash_html("<code>" + esc(m.group(2).strip()) + "</code>")
+
+        text = text.replace("\x00", "")  # the placeholder delimiter never comes from the source
         text = re.sub(r"(`+)(.+?)\1(?!`)", stash, text)
         text = esc(text)
 
@@ -265,10 +272,12 @@ class Builder:
             if kind == "xurl":
                 shown = re.sub(r"^https?://", "", url).rstrip("/")
                 if label.replace("\x00", "") == "" or html.unescape(re.sub(r"\x00\d+\x00", "", label)).strip() in (url, shown):
-                    return '<code class="xurl">%s</code>' % esc(shown)
-                return '%s <span class="xurl">(<code>%s</code>)</span>' % (label, esc(shown))
+                    return stash_html('<code class="xurl">%s</code>' % esc(shown))
+                return label + " " + stash_html('<span class="xurl">(<code>%s</code>)</span>' % esc(shown))
             ext = ' rel="external noopener"' if kind == "external" else ""
-            return '<a href="%s"%s>%s</a>' % (attr(href), ext, label)
+            # The finished tags are stashed: the emphasis and marker passes below must never rewrite
+            # text inside an href (a "**" or "{V}" in a URL), only the label between the tags.
+            return stash_html('<a href="%s"%s>' % (attr(href), ext)) + label + stash_html("</a>")
 
         text = re.sub(r"\[([^\]]+)\]\(([^)\s]+)\)", link, text)
         text = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
@@ -315,9 +324,9 @@ class Builder:
                 out.append("<blockquote>%s</blockquote>" % self.blocks(b[1], cur))
             elif k == "widget":
                 out.append(
-                    '<p class="widget-note">An interactive chart belongs here. It needs a script, which this site does not run, '
-                    'so it is only in the <a href="%s" rel="external noopener">generated report</a> (<code>docs/report.html</code>), '
-                    "and the same figures are given in the text.</p>" % attr(self.repo_link("docs/report.html", "")))
+                    '<p class="widget-note">An interactive chart belongs here. It needs an inline script, which this site\'s security policy blocks, '
+                    "so it is only in the generated report: open <code>docs/report.html</code> from a clone of the repository. "
+                    "The same figures are given in the text.</p>")
             elif k == "table":
                 out.append(self.table(b, cur))
             elif k == "list":
@@ -378,6 +387,8 @@ class Builder:
                 text = f.read()
         except OSError as e:
             raise BuildError("cannot read %s: %s" % (p.md, e)) from e
+        if SITE_URL_PLACEHOLDER in text:
+            raise BuildError("docs/%s contains %s, which scripts/build-site.sh reserves for the site address" % (p.md, SITE_URL_PLACEHOLDER))
         blocks = br.parse_blocks(text.replace("\r\n", "\n").split("\n"))
         title_raw = p.label
         if blocks and blocks[0][0] == "h" and blocks[0][1] == 1:
@@ -437,22 +448,22 @@ class Builder:
     def toc_html(self, p: Page) -> str:
         if len(p.toc) < 2:
             return ""
+        base = min(lvl for lvl, _h, _t in p.toc)  # levels are relative to the page's shallowest heading
         out = ['<nav class="toc" aria-label="On this page"><details class="toc-d"%s><summary>On this page</summary>' % ("" if p.wide else " open"), "<ul>"]
         open_sub = False
         for i, (lvl, hid, text) in enumerate(p.toc):
-            if lvl == 3 and not open_sub and i > 0:
-                out.append("<ul>")
+            sub = lvl > base and i > 0  # an entry deeper than the page's top level, with a parent entry before it
+            if sub and not open_sub:
+                out.append("<ul>")  # always inside the <li> of the entry before it: the first entry is never a sub entry
                 open_sub = True
-            elif lvl == 2 and open_sub:
+            elif not sub and open_sub:
                 out.append("</ul></li>")
                 open_sub = False
-            elif lvl == 2 and i > 0:
+            elif not sub and i > 0:
                 out.append("</li>")
-            out.append('<li><a href="#%s">%s</a>' % (hid, esc(text)) + ("</li>" if lvl == 3 else ""))
-        if open_sub:
-            out.append("</ul></li>")
-        else:
-            out.append("</li>")
+            out.append('<li><a href="#%s">%s</a></li>' % (hid, esc(text)) if sub
+                       else '<li><a href="#%s">%s</a>' % (hid, esc(text)))
+        out.append("</ul></li>" if open_sub else "</li>")
         out.append("</ul></details></nav>")
         return "\n".join(out)
 
@@ -492,6 +503,7 @@ class Builder:
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="light dark">
+<meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#eef0ec" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#111513" media="(prefers-color-scheme: dark)">
 <title>{esc(title)}</title>
@@ -531,7 +543,7 @@ class Builder:
     </nav>
     <div class="dsearch" id="dsearch" role="search" data-root="{data_root}" hidden>
       <label class="sr" for="docs-q">Search the documentation</label>
-      <input id="docs-q" type="search" autocomplete="off" spellcheck="false" enterkeyhint="search" placeholder="Search the docs" aria-keyshortcuts="/">
+      <input id="docs-q" type="search" role="combobox" aria-autocomplete="list" aria-haspopup="true" autocomplete="off" spellcheck="false" enterkeyhint="search" placeholder="Search the docs" aria-keyshortcuts="/" aria-controls="docs-list" aria-expanded="false">
       <kbd class="dkey" aria-hidden="true">/</kbd>
       <div class="dresults" id="docs-results" hidden>
         <ul id="docs-list"></ul>
@@ -603,9 +615,13 @@ class Builder:
             with open(dest, "w", encoding="utf-8", newline="\n") as f:
                 f.write(self.page_html(p))
             written.append(dest)
+        index = self.search_index()
+        if self.repo_url in index:
+            # build-site.sh swaps the repository address only inside HTML attributes, so the index must not carry it
+            raise BuildError("the search index would contain the repository address %s: reword the page text that mentions it" % self.repo_url)
         dest = os.path.join(out_dir, "docs", "search-index.js")
         with open(dest, "w", encoding="utf-8", newline="\n") as f:
-            f.write(self.search_index())
+            f.write(index)
         written.append(dest)
         return written
 

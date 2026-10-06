@@ -189,11 +189,27 @@ def desc_blocks(desc: list[str]) -> list[str]:
     return out
 
 
+# The inline patterns of docs/build_report.py's renderer (the one the site uses): text matching any of
+# them would be reformatted. A lone "*" (as in "profile-*") matches none and stays as written.
+_CELL_MARKUP = re.compile(
+    r"(`+)(.+?)\1(?!`)|\*\*(.+?)\*\*|(?<![\*\w])\*(?!\s)(.+?)(?<!\s)\*(?![\*\w])|~~(.+?)~~|\{[VRU]\}|\[([^\]]+)\]\(([^)\s]+)\)"
+)
+
+
+def md_cell(text: str) -> str:
+    """Help text as one Markdown table cell. A pipe is escaped; text the renderer would read as markup
+    (emphasis, strikethrough, a code span, a link, a confidence marker) is refused, because the site's Markdown subset
+    has no backslash escape for those and silently reformatting a flag description would misstate it."""
+    if _CELL_MARKUP.search(text):
+        raise ValueError("help text would be read as Markdown markup in a table cell: %r" % text[:60])
+    return text.replace("|", "\\|")
+
+
 def flag_table(flags: list[tuple[str, str, str, str]]) -> list[str]:
     rows = ["| Flag | Value | Description |", "|---|---|---|"]
     for short, long_, value, desc in flags:
         names = ("`%s`, " % short if short else "") + "`%s`" % long_
-        rows.append("| %s | %s | %s |" % (names, "`%s`" % value if value else "", desc.replace("|", "\\|")))
+        rows.append("| %s | %s | %s |" % (names, "`%s`" % value if value else "", md_cell(desc)))
     return rows + [""]
 
 
@@ -236,10 +252,10 @@ def render(pages: list[tuple[list[str], str, Help]], codes: list[tuple[int, str]
     ]
     o += flag_table(globals_ + root_only)
     o += ["## Exit codes", "", "Scripts can rely on these; they never change meaning.", "", "| Code | Meaning |", "|---|---|"]
-    o += ["| `%d` | %s |" % (c, m) for c, m in codes]
+    o += ["| `%d` | %s |" % (c, md_cell(m)) for c, m in codes]
     o += ["", "## Commands", "", "| Command | What it does |", "|---|---|"]
     for path, short, _h in pages[1:]:
-        o.append("| [`%s`](#%s) | %s |" % (title_of(path), anchor_of(path), short))
+        o.append("| [`%s`](#%s) | %s |" % (title_of(path), anchor_of(path), md_cell(short)))
     o.append("")
 
     for path, short, h in pages[1:]:
@@ -261,7 +277,7 @@ def render(pages: list[tuple[list[str], str, Help]], codes: list[tuple[int, str]
             o += ["**Subcommands**", "", "| Command | What it does |", "|---|---|"]
             for n, d in subs:
                 sub = path + [n]
-                o.append("| [`%s`](#%s) | %s |" % (title_of(sub), anchor_of(sub), d))
+                o.append("| [`%s`](#%s) | %s |" % (title_of(sub), anchor_of(sub), md_cell(d)))
             o.append("")
     text = "\n".join(o).rstrip("\n") + "\n"
     return text

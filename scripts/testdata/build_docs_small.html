@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="light dark">
+<meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#eef0ec" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#111513" media="(prefers-color-scheme: dark)">
 <title>Beta: ccshelf docs</title>
@@ -44,7 +45,7 @@
     </nav>
     <div class="dsearch" id="dsearch" role="search" data-root="../" hidden>
       <label class="sr" for="docs-q">Search the documentation</label>
-      <input id="docs-q" type="search" autocomplete="off" spellcheck="false" enterkeyhint="search" placeholder="Search the docs" aria-keyshortcuts="/">
+      <input id="docs-q" type="search" role="combobox" aria-autocomplete="list" aria-haspopup="true" autocomplete="off" spellcheck="false" enterkeyhint="search" placeholder="Search the docs" aria-keyshortcuts="/" aria-controls="docs-list" aria-expanded="false">
       <kbd class="dkey" aria-hidden="true">/</kbd>
       <div class="dresults" id="docs-results" hidden>
         <ul id="docs-list"></ul>
