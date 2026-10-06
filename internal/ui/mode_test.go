@@ -27,8 +27,9 @@ func TestComputeMode(t *testing.T) {
 		{name: "config never", in: true, out: true, vt: true, flags: ModeFlags{ConfigInteractive: "never"}, wantColor: true},
 		{name: "CI set", env: map[string]string{"CI": "true"}, in: true, out: true, vt: true, wantColor: true},
 		{name: "CI one", env: map[string]string{"CI": "1"}, in: true, out: true, vt: true, wantColor: true},
-		{name: "CI false", env: map[string]string{"CI": "false"}, in: true, out: true, vt: true, wantInter: true, wantColor: true},
-		{name: "CI zero", env: map[string]string{"CI": "0"}, in: true, out: true, vt: true, wantInter: true, wantColor: true},
+		{name: "CI false is still set", env: map[string]string{"CI": "false"}, in: true, out: true, vt: true, wantColor: true},
+		{name: "CI False is still set", env: map[string]string{"CI": "False"}, in: true, out: true, vt: true, wantColor: true},
+		{name: "CI zero is still set", env: map[string]string{"CI": "0"}, in: true, out: true, vt: true, wantColor: true},
 		{name: "CI empty", env: map[string]string{"CI": ""}, in: true, out: true, vt: true, wantInter: true, wantColor: true},
 		{name: "dumb", env: map[string]string{"TERM": "dumb"}, in: true, out: true, vt: true, wantPlain: true},
 		{name: "NO_COLOR", env: map[string]string{"NO_COLOR": "1"}, in: true, out: true, vt: true, wantInter: true},
@@ -40,6 +41,7 @@ func TestComputeMode(t *testing.T) {
 		{name: "config always loses to NO_COLOR", env: map[string]string{"NO_COLOR": "1"}, flags: ModeFlags{ConfigColor: "always"}},
 		{name: "config never", in: true, out: true, vt: true, flags: ModeFlags{ConfigColor: "never"}, wantInter: true},
 		{name: "windows console without VT", in: true, out: true, vt: false, wantPlain: true},
+		{name: "config always on console without VT", in: true, out: true, vt: false, flags: ModeFlags{ConfigColor: "always"}, wantPlain: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

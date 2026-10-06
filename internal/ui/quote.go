@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"unicode"
 	"unicode/utf8"
 )
 
@@ -19,7 +18,7 @@ func checkQuotable(s string) error {
 		return fmt.Errorf("%w: invalid UTF-8", ErrUnquotable)
 	}
 	for _, r := range s {
-		if unicode.IsControl(r) || r == ' ' || r == ' ' || isBidiControl(r) {
+		if needsSanitizing(r) || r == '\n' || r == '\t' {
 			return fmt.Errorf("%w: contains control character %U", ErrUnquotable, r)
 		}
 	}
@@ -41,7 +40,8 @@ func allSafe(s, extra string) bool {
 	return true
 }
 
-// QuotePOSIX quotes s as one word for sh, bash, zsh and fish (3.0+): bare when
+// QuotePOSIX quotes s as one word for sh, bash and zsh (use QuoteFish for
+// fish, which escapes backslash and quote inside single quotes): bare when
 // it only has safe characters, otherwise in single quotes, closing and
 // reopening the quotes around an escaped quote for each embedded single quote.
 // Control characters, including newline, are refused with ErrUnquotable.
@@ -53,6 +53,22 @@ func QuotePOSIX(s string) (string, error) {
 		return s, nil
 	}
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'", nil
+}
+
+// QuoteFish quotes s as one word for fish. Inside single quotes fish treats
+// backslash and single quote as escapes (unlike POSIX shells), so both are
+// escaped with a backslash. A word of safe characters stays bare. Control
+// characters, including newline, are refused with ErrUnquotable.
+func QuoteFish(s string) (string, error) {
+	if err := checkQuotable(s); err != nil {
+		return "", err
+	}
+	if allSafe(s, "@=,") {
+		return s, nil
+	}
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `'`, `\'`)
+	return "'" + s + "'", nil
 }
 
 // QuotePowerShell quotes s as one word for PowerShell: bare when safe,
@@ -141,6 +157,8 @@ func argvQuote(s string) string {
 const (
 	// ShellPOSIX is sh, bash, zsh and fish quoting.
 	ShellPOSIX = "posix"
+	// ShellFish is fish quoting, which differs from POSIX inside single quotes.
+	ShellFish = "fish"
 	// ShellPowerShell is PowerShell quoting.
 	ShellPowerShell = "powershell"
 	// ShellCmd is cmd.exe quoting.
@@ -157,12 +175,31 @@ func ShellForGOOS(goos string) string {
 	return ShellPOSIX
 }
 
-// Quote quotes s for the named shell style (ShellPOSIX, ShellPowerShell or
-// ShellCmd).
+// ShellForName maps a shell name ("bash", "zsh", "sh", "posix", "fish",
+// "pwsh", "powershell", "cmd") to its quoting style, and reports whether the
+// name is known.
+func ShellForName(name string) (string, bool) {
+	switch name {
+	case "bash", "zsh", "sh", ShellPOSIX:
+		return ShellPOSIX, true
+	case ShellFish:
+		return ShellFish, true
+	case "pwsh", ShellPowerShell:
+		return ShellPowerShell, true
+	case ShellCmd:
+		return ShellCmd, true
+	}
+	return "", false
+}
+
+// Quote quotes s for the named shell style (ShellPOSIX, ShellFish,
+// ShellPowerShell or ShellCmd).
 func Quote(shell, s string) (string, error) {
 	switch shell {
 	case ShellPOSIX:
 		return QuotePOSIX(s)
+	case ShellFish:
+		return QuoteFish(s)
 	case ShellPowerShell:
 		return QuotePowerShell(s)
 	case ShellCmd:
@@ -189,7 +226,14 @@ func Join(shell string, words []string) (string, error) {
 // safely (control characters) make it return an error and print nothing, so a
 // copied line can never run something the user did not choose.
 func Equivalent(w io.Writer, goos string, args []string) error {
-	line, err := Join(ShellForGOOS(goos), args)
+	return EquivalentFor(w, ShellForGOOS(goos), args)
+}
+
+// EquivalentFor is Equivalent for an explicit quoting style (ShellPOSIX,
+// ShellFish, ShellPowerShell or ShellCmd), for a flow that knows the user's
+// shell.
+func EquivalentFor(w io.Writer, shell string, args []string) error {
+	line, err := Join(shell, args)
 	if err != nil {
 		return fmt.Errorf("building the equivalent command: %w", err)
 	}

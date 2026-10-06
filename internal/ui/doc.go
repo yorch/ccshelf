@@ -36,7 +36,8 @@
 //     prompting. Prompts and menus are written to Streams.Err so Streams.Out
 //     stays clean for results. The launcher prompts only before it starts
 //     claude and never leaves a prompt open afterwards (rule 6); the TTY
-//     prompter uses no raw mode, so there is no terminal state to restore.
+//     prompter uses no raw mode; Secret saves and restores the terminal state
+//     on every exit, including cancellation and interrupts.
 //
 //  3. Record what the user chose and finish with the equivalent command (rule 4):
 //

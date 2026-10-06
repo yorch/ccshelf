@@ -7,6 +7,7 @@ import (
 	"io"
 	"sort"
 	"strings"
+	"unicode"
 )
 
 // minColumn is the narrowest a table column is squeezed to.
@@ -220,32 +221,82 @@ func RedactEnvList(env map[string]string) []string {
 	return out
 }
 
-var secretWords = []string{"token", "secret", "password", "passwd", "passphrase", "credential", "apikey", "api-key", "api_key", "auth", "bearer", "cookie", "private"}
+// secretSubstrings are long, unambiguous words: a name containing one is
+// secret wherever it appears ("--accessToken", "MYSECRETX").
+var secretSubstrings = []string{
+	"token", "secret", "password", "passwd", "passphrase", "credential",
+	"apikey", "bearer", "cookie", "private",
+}
 
-// looksSecret reports whether a flag or variable name suggests a secret.
+// secretWords are short, ambiguous words that only count as a whole word
+// (names are split at '-', '_', '.', spaces and camelCase boundaries), so
+// "--author" and "--monkey" stay visible while "--auth", "--deploy-key" and
+// "--key" are redacted.
+var secretWords = map[string]bool{"auth": true, "key": true, "keys": true}
+
+// benignWords are removed from a name before the substring check, for
+// ordinary words that happen to contain a secret word.
+var benignWords = []string{"secretary", "tokenize", "tokenizer", "tokenization"}
+
+// splitName splits a flag or variable name into lower-case words at '-', '_',
+// '.', spaces and camelCase boundaries.
+func splitName(name string) []string {
+	var b strings.Builder
+	rs := []rune(name)
+	for i, r := range rs {
+		if i > 0 && unicode.IsUpper(r) && (unicode.IsLower(rs[i-1]) || unicode.IsDigit(rs[i-1])) {
+			b.WriteByte(' ')
+		}
+		b.WriteRune(r)
+	}
+	return strings.FieldsFunc(strings.ToLower(b.String()), func(r rune) bool {
+		return r == '-' || r == '_' || r == '.' || r == ' '
+	})
+}
+
+// looksSecret reports whether a flag or variable name suggests a secret. It
+// errs toward yes: over-redacting a display line is the safe side.
 func looksSecret(name string) bool {
-	n := strings.ToLower(name)
-	for _, w := range secretWords {
-		if strings.Contains(n, w) {
+	toks := splitName(name)
+	for _, t := range toks {
+		if secretWords[t] {
 			return true
 		}
 	}
-	return strings.HasSuffix(n, "-key") || strings.HasSuffix(n, "_key") || n == "key"
+	joined := strings.Join(toks, "")
+	for _, w := range benignWords {
+		joined = strings.ReplaceAll(joined, w, "")
+	}
+	for _, w := range secretSubstrings {
+		if strings.Contains(joined, w) {
+			return true
+		}
+	}
+	return false
 }
 
 // RedactArgs returns a copy of args with secret-looking values replaced by
-// "<redacted>": the value after a flag whose name suggests a secret
-// ("--token x" and "--token=x"), and the value of NAME=value arguments whose
-// name suggests a secret. The result is for display only.
+// "<redacted>": the value of "--flag=value" and of NAME=value arguments whose
+// name suggests a secret (so "--author" is not a secret, but "--apiKey" and
+// "--accessToken" are), and the argument after a secret-looking flag that has
+// no "=", whatever it looks like (a secret may start with "-"), unless it is
+// exactly "--". Redaction errs toward too much. Everything after a "--"
+// is positional: only NAME=value arguments are checked there. The result is
+// for display only. A Recorder knows exactly which flags carry a value and
+// does not guess; prefer it for the Equivalent line.
 func RedactArgs(args []string) []string {
 	out := make([]string, len(args))
 	redactNext := false
+	positional := false
 	for i, a := range args {
 		switch {
 		case redactNext:
 			out[i] = RedactedValue
 			redactNext = false
-		case strings.HasPrefix(a, "-"):
+		case !positional && a == "--":
+			out[i] = a
+			positional = true
+		case !positional && strings.HasPrefix(a, "-"):
 			name, _, hasValue := strings.Cut(a, "=")
 			switch {
 			case !looksSecret(name):
@@ -254,7 +305,7 @@ func RedactArgs(args []string) []string {
 				out[i] = name + "=" + RedactedValue
 			default:
 				out[i] = a
-				redactNext = true
+				redactNext = i+1 < len(args) && args[i+1] != "--"
 			}
 		default:
 			if name, _, ok := strings.Cut(a, "="); ok && looksSecret(name) {

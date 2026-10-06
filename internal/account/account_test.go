@@ -295,7 +295,7 @@ func TestPlanLines(t *testing.T) {
 	}{
 		{"bash", `CLAUDE_CONFIG_DIR='/home/me/my dir/it'\''s' claude`},
 		{"zsh", `CLAUDE_CONFIG_DIR='/home/me/my dir/it'\''s' claude`},
-		{"fish", `env CLAUDE_CONFIG_DIR='/home/me/my dir/it'\''s' claude`},
+		{"fish", `env CLAUDE_CONFIG_DIR='/home/me/my dir/it\'s' claude`},
 		{"pwsh", `$env:CLAUDE_CONFIG_DIR = '/home/me/my dir/it''s'; claude`},
 	}
 	for _, tt := range tests {

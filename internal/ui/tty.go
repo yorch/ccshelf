@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"golang.org/x/term"
 )
@@ -19,12 +21,12 @@ import (
 // question is printed as a numbered list and the user types a number or, when
 // the question is filterable, part of a label (type-to-filter). Ambiguous text
 // narrows the list and asks again; "/" clears the filter. Ctrl+D or end of
-// input returns ErrAborted; cancelling the context returns ctx.Err().
+// input returns ErrAborted; canceling the context returns ctx.Err().
 //
 // Prompts are written to Streams.Err and answers are read from Streams.In. A
-// cancelled read cannot be interrupted at the operating system level, so one
+// canceled read cannot be interrupted at the operating system level, so one
 // goroutine may remain blocked reading input until the process exits; that is
-// harmless because a cancelled command is about to exit.
+// harmless because a canceled command is about to exit.
 type TTY struct {
 	streams Streams
 	mode    Mode
@@ -95,20 +97,21 @@ func (t *TTY) renderOption(i int, o Option, def bool) string {
 	if def {
 		mark = "*"
 	}
-	fmt.Fprintf(&b, " %s%3d) %s", mark, i+1, Sanitize(o.Label))
+	fmt.Fprintf(&b, " %s%3d) %s", mark, i+1, SanitizeLine(o.Label))
 	if o.Detail != "" {
 		sep := "  "
 		if t.mode.Plain {
 			sep = " - "
 		}
-		b.WriteString(sep + Sanitize(o.Detail))
+		b.WriteString(sep + SanitizeLine(o.Detail))
 	}
 	return b.String()
 }
 
 func (t *TTY) printList(q Question, cands []int) {
+	d, hasDef := q.defaultIndex()
 	for _, i := range cands {
-		t.printf("%s\n", t.renderOption(i, q.Options[i], i == q.Default))
+		t.printf("%s\n", t.renderOption(i, q.Options[i], hasDef && i == d))
 	}
 }
 
@@ -141,7 +144,7 @@ func matches(q Question, cands []int, text string) []int {
 }
 
 func (t *TTY) title(q Question) {
-	t.printf("? %s", Sanitize(q.Title))
+	t.printf("? %s", SanitizeLine(q.Title))
 	if q.Filterable {
 		t.printf("  (type a number or part of a name to filter)")
 	}
@@ -156,10 +159,10 @@ func (t *TTY) Select(ctx context.Context, q Question) (int, error) {
 	cands := allIndexes(len(q.Options))
 	t.title(q)
 	t.printList(q, cands)
-	hasDef := q.Default >= 0 && q.Default < len(q.Options)
+	def, hasDef := q.defaultIndex()
 	for {
 		if hasDef {
-			t.printf("Choose [%d]: ", q.Default+1)
+			t.printf("Choose [%d]: ", def+1)
 		} else {
 			t.printf("Choose: ")
 		}
@@ -171,7 +174,7 @@ func (t *TTY) Select(ctx context.Context, q Question) (int, error) {
 		switch {
 		case line == "":
 			if hasDef {
-				return q.Default, nil
+				return def, nil
 			}
 			t.printf("Please choose one.\n")
 			continue
@@ -194,12 +197,12 @@ func (t *TTY) Select(ctx context.Context, q Question) (int, error) {
 		m := matches(q, cands, line)
 		switch len(m) {
 		case 0:
-			t.printf("Nothing matches %q. Type / to show everything again.\n", Sanitize(line))
+			t.printf("Nothing matches %q. Type / to show everything again.\n", SanitizeLine(line))
 		case 1:
 			return m[0], nil
 		default:
 			cands = m
-			t.printf("%d matches for %q:\n", len(m), Sanitize(line))
+			t.printf("%d matches for %q:\n", len(m), SanitizeLine(line))
 			t.printList(q, cands)
 		}
 	}
@@ -212,7 +215,7 @@ func (t *TTY) MultiSelect(ctx context.Context, q Question) ([]int, error) {
 		return nil, errors.New("multi-select: no options to choose from")
 	}
 	t.title(q)
-	t.printList(Question{Options: q.Options, Default: -1}, allIndexes(len(q.Options)))
+	t.printList(Question{Options: q.Options}, allIndexes(len(q.Options)))
 	for {
 		t.printf("Select (numbers like 1,3 or 2-4; empty for none): ")
 		line, err := t.readLine(ctx)
@@ -221,7 +224,7 @@ func (t *TTY) MultiSelect(ctx context.Context, q Question) ([]int, error) {
 		}
 		sel, perr := parseMulti(q, line)
 		if perr != nil {
-			t.printf("%s\n", Sanitize(perr.Error()))
+			t.printf("%s\n", SanitizeLine(perr.Error()))
 			continue
 		}
 		return sel, nil
@@ -279,7 +282,7 @@ func (t *TTY) Confirm(ctx context.Context, text string, def bool) (bool, error) 
 		hint = "[Y/n]"
 	}
 	for {
-		t.printf("? %s %s ", Sanitize(text), hint)
+		t.printf("? %s %s ", SanitizeLine(text), hint)
 		line, err := t.readLine(ctx)
 		if err != nil {
 			return false, err
@@ -300,9 +303,9 @@ func (t *TTY) Confirm(ctx context.Context, text string, def bool) (bool, error) 
 func (t *TTY) Input(ctx context.Context, text, def string, validate func(string) error) (string, error) {
 	for {
 		if def != "" {
-			t.printf("? %s [%s]: ", Sanitize(text), Sanitize(def))
+			t.printf("? %s [%s]: ", SanitizeLine(text), SanitizeLine(def))
 		} else {
-			t.printf("? %s: ", Sanitize(text))
+			t.printf("? %s: ", SanitizeLine(text))
 		}
 		line, err := t.readLine(ctx)
 		if err != nil {
@@ -314,7 +317,7 @@ func (t *TTY) Input(ctx context.Context, text, def string, validate func(string)
 		}
 		if validate != nil {
 			if verr := validate(line); verr != nil {
-				t.printf("%s\n", Sanitize(verr.Error()))
+				t.printf("%s\n", SanitizeLine(verr.Error()))
 				continue
 			}
 		}
@@ -322,10 +325,20 @@ func (t *TTY) Input(ctx context.Context, text, def string, validate func(string)
 	}
 }
 
+// Test seams for Secret; production code never reassigns them.
+var (
+	termGetState     = term.GetState
+	termRestore      = term.Restore
+	termReadPassword = term.ReadPassword
+)
+
 // Secret implements Prompter. When input is a terminal the value is read
-// without echo; otherwise (a pipe in tests) a line is read.
+// without echo; otherwise (a pipe in tests) a line is read. The terminal state
+// is saved first and restored on every way out, including a canceled context
+// and an interrupt or termination signal (which cancel the read instead of
+// killing the process with echo still off).
 func (t *TTY) Secret(ctx context.Context, text string) (string, error) {
-	t.printf("? %s: ", Sanitize(text))
+	t.printf("? %s: ", SanitizeLine(text))
 	f, ok := t.streams.In.(*os.File)
 	if !ok || f == nil || !isTerminal(f.Fd()) {
 		return t.readLine(ctx)
@@ -333,19 +346,34 @@ func (t *TTY) Secret(ctx context.Context, text string) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
+	fd := int(f.Fd()) //nolint:gosec // fd fits in int
+	state, err := termGetState(fd)
+	if err != nil {
+		return "", fmt.Errorf("saving the terminal state: %w", err)
+	}
+	restore := func() { _ = termRestore(fd, state) }
+	defer restore()
+
+	sctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	type res struct {
 		b   []byte
 		err error
 	}
 	ch := make(chan res, 1)
+	readPassword := termReadPassword
 	go func() {
-		b, err := term.ReadPassword(int(f.Fd())) //nolint:gosec // fd fits in int
+		b, err := readPassword(fd)
 		ch <- res{b, err}
 	}()
 	select {
-	case <-ctx.Done():
-		return "", ctx.Err()
+	case <-sctx.Done():
+		restore()
+		t.printf("\n")
+		return "", sctx.Err()
 	case r := <-ch:
+		restore()
 		t.printf("\n")
 		if r.err != nil {
 			if errors.Is(r.err, io.EOF) {

@@ -32,6 +32,7 @@ var fruit = Question{
 func TestTTYSelect(t *testing.T) {
 	withDefault := fruit
 	withDefault.Default = 2
+	withDefault.HasDefault = true
 	noFilter := fruit
 	noFilter.Filterable = false
 	tests := []struct {
@@ -52,8 +53,10 @@ func TestTTYSelect(t *testing.T) {
 		{name: "match on value", q: fruit, input: "ap\n", want: 1}, // exact value "ap" wins over label prefix
 		{name: "ambiguous narrows then number", q: fruit, input: "r\n4\n", want: 3, out: []string{"2 matches"}},
 		{name: "ambiguous then narrower text", q: fruit, input: "ap\n", want: 1},
-		{name: "ambiguous narrows with text", q: Question{Filterable: true, Default: -1, Options: []Option{{Label: "alpha"}, {Label: "alpine"}, {Label: "alpaca"}}},
-			input: "alp\npine\n", want: 1, out: []string{"3 matches"}},
+		{
+			name: "ambiguous narrows with text", q: Question{Filterable: true, Default: -1, Options: []Option{{Label: "alpha"}, {Label: "alpine"}, {Label: "alpaca"}}},
+			input: "alp\npine\n", want: 1, out: []string{"3 matches"},
+		},
 		{name: "no match then reset", q: fruit, input: "zzz\n/\n2\n", want: 1, out: []string{"Nothing matches"}},
 		{name: "reset list", q: fruit, input: "r\n/\n4\n", want: 3},
 		{name: "not filterable rejects text", q: noFilter, input: "apple\n1\n", want: 0, out: []string{"Enter a number between 1 and 4."}},
@@ -235,7 +238,7 @@ func TestTTYContextCancel(t *testing.T) {
 	if CodeOf(err) != ExitInterrupted {
 		t.Errorf("code %d", CodeOf(err))
 	}
-	// Already-cancelled context fails fast for every prompt, without reading.
+	// Already-canceled context fails fast for every prompt, without reading.
 	if _, err = p.Select(ctx, fruit); !errors.Is(err, context.Canceled) {
 		t.Errorf("select: %v", err)
 	}

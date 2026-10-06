@@ -14,7 +14,7 @@ type NonInteractive struct {
 var _ Prompter = NonInteractive{}
 
 func (n NonInteractive) missing(hint string) error {
-	return &MissingFlagError{Flag: n.Flag, Hint: Sanitize(hint)}
+	return &MissingFlagError{Flag: n.Flag, Hint: SanitizeLine(hint)}
 }
 
 // Select returns a *MissingFlagError.

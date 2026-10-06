@@ -8,9 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
-	"unicode"
 
 	"github.com/ccshelf/ccshelf/internal/config"
 	"github.com/ccshelf/ccshelf/internal/ui"
@@ -103,21 +103,21 @@ func Add(ctx context.Context, cfg *config.Config, name, dir string, opts Options
 	if existing, ok := cfg.Accounts[name]; ok && samePath(existing.ConfigDir, abs) {
 		own = true
 	}
-	created, err := ensureDir(abs, own)
+	top, err := ensureDir(abs, own)
 	if err != nil {
 		return nil, err
 	}
-	plan := &Plan{Name: name, Dir: abs, Created: created, Steps: steps}
+	plan := &Plan{Name: name, Dir: abs, Created: top != "", Steps: steps}
 
 	if opts.Persist {
 		path := opts.ConfigPath
 		if path == "" {
 			if path, err = config.Path(); err != nil {
-				return nil, rollback(abs, created, fmt.Errorf("locating the config file: %w", err))
+				return nil, rollback(abs, top, fmt.Errorf("locating the config file: %w", err))
 			}
 		}
 		if err := config.Save(path, updated); err != nil {
-			return nil, rollback(abs, created, fmt.Errorf("saving account %q: %w", name, err))
+			return nil, rollback(abs, top, fmt.Errorf("saving account %q: %w", name, err))
 		}
 		cfg.Accounts = updated.Accounts
 		plan.Persisted = true
@@ -125,11 +125,11 @@ func Add(ctx context.Context, cfg *config.Config, name, dir string, opts Options
 	return plan, nil
 }
 
-// rollback removes a directory Add just created (only if still empty) and
-// returns err.
-func rollback(dir string, created bool, err error) error {
-	if created {
-		_ = os.Remove(dir)
+// rollback removes the directories Add just created (dir and any parents it
+// made; only while empty) and returns err.
+func rollback(dir, top string, err error) error {
+	if top != "" {
+		_ = removeCreated(dir, top)
 	}
 	return err
 }
@@ -144,12 +144,40 @@ func withAccount(cfg *config.Config, name, dir string) *config.Config {
 	return &c
 }
 
-func samePath(a, b string) bool {
+// samePath reports whether a and b name the same directory on the running OS.
+func samePath(a, b string) bool { return samePathFor(runtime.GOOS, a, b) }
+
+// foldsCase reports whether goos has case-insensitive file systems by default
+// (macOS and Windows), where ~/.Claude is ~/.claude.
+func foldsCase(goos string) bool { return goos == "windows" || goos == "darwin" }
+
+// samePathFor is samePath for an explicit goos so the case rules are testable
+// on every host. Two spellings are the same when they are equal after cleaning
+// (and case folding on case-insensitive systems), when their existing prefixes
+// resolve to the same place, or when both exist and are the same file.
+func samePathFor(goos, a, b string) bool {
 	a, b = filepath.Clean(a), filepath.Clean(b)
-	if a == b {
+	if a == b || sameFile(a, b) {
 		return true
 	}
-	return resolve(a) == resolve(b)
+	return canon(goos, a) == canon(goos, b)
+}
+
+// sameFile reports whether a and b both exist and are the same file.
+func sameFile(a, b string) bool {
+	fa, errA := os.Stat(a)
+	fb, errB := os.Stat(b)
+	return errA == nil && errB == nil && os.SameFile(fa, fb)
+}
+
+// canon returns p with its existing prefix's symlinks resolved and, on
+// case-insensitive systems, folded to lower case.
+func canon(goos, p string) string {
+	r := resolve(p)
+	if foldsCase(goos) {
+		r = strings.ToLower(r)
+	}
+	return r
 }
 
 // resolve returns p with symlinks in its existing prefix resolved, so two
@@ -172,7 +200,8 @@ func resolve(p string) string {
 	}
 }
 
-// within reports whether path is dir or below it.
+// within reports whether path is dir or below it. Both must already be
+// canonical (see canon).
 func within(dir, path string) bool {
 	rel, err := filepath.Rel(dir, path)
 	if err != nil {
@@ -181,9 +210,28 @@ func within(dir, path string) bool {
 	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
 }
 
-func hasControl(s string) bool {
-	return strings.ContainsFunc(s, func(r rune) bool { return unicode.IsControl(r) || r == ' ' || r == ' ' })
+// inside reports whether child is parent or below it: by name (resolving
+// symlinks and, where the file system folds case, ignoring case) or because an
+// existing ancestor of child is the very same file as parent.
+func inside(goos, parent, child string) bool {
+	if within(canon(goos, parent), canon(goos, child)) {
+		return true
+	}
+	fp, err := os.Stat(parent)
+	if err != nil {
+		return false
+	}
+	for p := filepath.Clean(child); ; p = filepath.Dir(p) {
+		if fi, err := os.Stat(p); err == nil && os.SameFile(fp, fi) {
+			return true
+		}
+		if filepath.Dir(p) == p {
+			return false
+		}
+	}
 }
+
+func hasControl(s string) bool { return ui.HasControl(s) }
 
 // checkDir expands and validates dir and returns the cleaned absolute path.
 func checkDir(cfg *config.Config, name, dir string) (string, error) {
@@ -197,6 +245,10 @@ func checkDir(cfg *config.Config, name, dir string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("account directory: %w", err)
 	}
+	// An environment variable can expand to a control character.
+	if hasControl(expanded) {
+		return "", errors.New("account directory contains a control character after expanding ~ and variables")
+	}
 	if !filepath.IsAbs(expanded) {
 		return "", fmt.Errorf("account directory %q must be an absolute path (use ~ for your home directory)", dir)
 	}
@@ -206,14 +258,16 @@ func checkDir(cfg *config.Config, name, dir string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	realAbs, realDef := resolve(abs), resolve(def)
 	switch {
-	case within(realDef, realAbs):
+	case inside(runtime.GOOS, def, abs):
 		return "", fmt.Errorf("account directory %s is Claude Code's default directory %s or inside it; pick a separate directory such as ~/.claude-%s", abs, def, name)
-	case within(realAbs, realDef):
+	case inside(runtime.GOOS, abs, def):
 		return "", fmt.Errorf("account directory %s contains Claude Code's default directory %s", abs, def)
 	}
 
+	if err := checkNoSymlinks(abs); err != nil {
+		return "", err
+	}
 	for n, a := range cfg.Accounts {
 		if n != name && samePath(a.ConfigDir, abs) {
 			return "", fmt.Errorf("%w: %s is already the directory of account %q", ErrDirInUse, abs, n)
@@ -222,41 +276,90 @@ func checkDir(cfg *config.Config, name, dir string) (string, error) {
 	return abs, nil
 }
 
+// checkNoSymlinks refuses a path where any existing component is a symlink,
+// so a link cannot redirect the account directory somewhere else. Two cases
+// are allowed because they are the operating system's own layout: a link that
+// is the home directory or one of its ancestors, and a link directly below the
+// root (such as /tmp or /var).
+func checkNoSymlinks(abs string) error {
+	home, _ := os.UserHomeDir()
+	for p := abs; ; p = filepath.Dir(p) {
+		parent := filepath.Dir(p)
+		if parent == p {
+			return nil
+		}
+		fi, err := os.Lstat(p)
+		if err != nil {
+			continue // not created yet
+		}
+		if fi.Mode()&fs.ModeSymlink == 0 {
+			continue
+		}
+		if filepath.Dir(parent) == parent || (home != "" && within(filepath.Clean(p), filepath.Clean(home))) {
+			continue
+		}
+		return fmt.Errorf("%w: %s is a symlink; use the real path", ErrDirInUse, p)
+	}
+}
+
 // ensureDir creates dir (mode 0700) or accepts an existing empty directory or
-// one that already is this account's directory (own). It reports whether it created dir.
-func ensureDir(dir string, own bool) (bool, error) {
+// one that already is this account's directory (own). It returns the topmost
+// directory it created (dir itself or one of its parents), or "" when nothing
+// was created, so a failure later can remove exactly what was added.
+func ensureDir(dir string, own bool) (string, error) {
 	fi, err := os.Lstat(dir)
 	switch {
 	case err == nil:
 		if fi.Mode()&fs.ModeSymlink != 0 {
-			return false, fmt.Errorf("%w: %s is a symlink", ErrDirInUse, dir)
+			return "", fmt.Errorf("%w: %s is a symlink", ErrDirInUse, dir)
 		}
 		if !fi.IsDir() {
-			return false, fmt.Errorf("%w: %s exists and is not a directory", ErrDirInUse, dir)
+			return "", fmt.Errorf("%w: %s exists and is not a directory", ErrDirInUse, dir)
 		}
 		entries, rerr := os.ReadDir(dir)
 		if rerr != nil {
-			return false, fmt.Errorf("reading %s: %w", dir, rerr)
+			return "", fmt.Errorf("reading %s: %w", dir, rerr)
 		}
 		if len(entries) > 0 && !own {
-			return false, fmt.Errorf("%w: %s exists and is not empty and is not an account directory", ErrDirInUse, dir)
+			return "", fmt.Errorf("%w: %s exists and is not empty and is not an account directory", ErrDirInUse, dir)
 		}
 		if len(entries) == 0 {
-			_ = os.Chmod(dir, 0o700) // best effort; meaningless on Windows
+			_ = os.Chmod(dir, 0o700) //nolint:gosec // a directory needs the execute bit; meaningless on Windows
 		}
-		return false, nil
+		return "", nil
 	case errors.Is(err, fs.ErrNotExist):
 	default:
-		return false, fmt.Errorf("inspecting %s: %w", dir, err)
+		return "", fmt.Errorf("inspecting %s: %w", dir, err)
+	}
+	top := dir
+	for p := filepath.Dir(dir); ; p = filepath.Dir(p) {
+		if _, serr := os.Lstat(p); serr == nil || filepath.Dir(p) == p {
+			break
+		}
+		top = p
 	}
 	if err := os.MkdirAll(filepath.Dir(dir), 0o700); err != nil {
-		return false, fmt.Errorf("creating %s: %w", filepath.Dir(dir), err)
+		return "", fmt.Errorf("creating %s: %w", filepath.Dir(dir), err)
 	}
 	if err := os.Mkdir(dir, 0o700); err != nil {
-		return false, fmt.Errorf("creating %s: %w", dir, err)
+		_ = removeCreated(dir, top)
+		return "", fmt.Errorf("creating %s: %w", dir, err)
 	}
-	_ = os.Chmod(dir, 0o700) // undo a permissive umask
-	return true, nil
+	_ = os.Chmod(dir, 0o700) //nolint:gosec // undo a permissive umask; a directory needs the execute bit
+	return top, nil
+}
+
+// removeCreated removes dir and then its parents up to and including top,
+// stopping at the first that is not empty. Only empty directories go.
+func removeCreated(dir, top string) error {
+	for p := dir; ; p = filepath.Dir(p) {
+		if err := os.Remove(p); err != nil {
+			return err
+		}
+		if p == top || filepath.Dir(p) == p {
+			return nil
+		}
+	}
 }
 
 func buildSteps(dir string, opts Options) ([]Step, error) {
@@ -301,10 +404,7 @@ func (p *Plan) Lines(shell string) ([]string, error) {
 }
 
 func shellCommand(shell string, s Step) (string, error) {
-	style, ok := map[string]string{
-		"bash": ui.ShellPOSIX, "zsh": ui.ShellPOSIX, "sh": ui.ShellPOSIX, "posix": ui.ShellPOSIX, "fish": ui.ShellPOSIX,
-		"pwsh": ui.ShellPowerShell, "powershell": ui.ShellPowerShell, "cmd": ui.ShellCmd,
-	}[shell]
+	style, ok := ui.ShellForName(shell)
 	if !ok {
 		return "", fmt.Errorf("unknown shell %q", shell)
 	}
@@ -330,6 +430,9 @@ func shellCommand(shell string, s Step) (string, error) {
 		case style == ui.ShellPowerShell:
 			sets = append(sets, "$env:"+k+" = "+qv)
 		default:
+			if strings.Contains(v, `"`) {
+				return "", fmt.Errorf("%w: a double quote cannot be carried safely in a cmd.exe set command", ui.ErrUnquotable)
+			}
 			sets = append(sets, `set "`+k+"="+v+`"`)
 		}
 	}

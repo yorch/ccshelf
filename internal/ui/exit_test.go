@@ -88,10 +88,16 @@ func TestReport(t *testing.T) {
 		{"nil", nil, Mode{}, ""},
 		{"plain error", errors.New("bad thing"), Mode{}, "error: bad thing\n"},
 		{"color", errors.New("bad"), Mode{Color: true}, "\x1b[31merror:\x1b[0m bad\n"},
-		{"missing flag", &MissingFlagError{Flag: "--from"},
-			Mode{}, "error: missing required flag --from\nhint: pass --from, or run in a terminal without --no-interactive to be asked\n"},
-		{"missing unknown", &MissingFlagError{Hint: "x"},
-			Mode{}, "error: a required value is missing (x) and prompting is off\nhint: pass the value as a flag, or run in a terminal without --no-interactive to be asked\n"},
+		{
+			"missing flag", &MissingFlagError{Flag: "--from"},
+			Mode{},
+			"error: missing required flag --from\nhint: pass --from, or run in a terminal without --no-interactive to be asked\n",
+		},
+		{
+			"missing unknown", &MissingFlagError{Hint: "x"},
+			Mode{},
+			"error: a required value is missing (x) and prompting is off\nhint: pass the value as a flag, or run in a terminal without --no-interactive to be asked\n",
+		},
 		{"hinter", hintErr{}, Mode{}, "error: boom\nhint: try again\n"},
 		{"escape injection", errors.New("\x1b[2Jgone"), Mode{}, "error: \uFFFD[2Jgone\n"},
 	}

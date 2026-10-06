@@ -14,46 +14,121 @@ import (
 //	rec.Flag("--plugin", "a@b")
 //	rec.Print(streams.Err, runtime.GOOS)
 //
-// A Recorder is for flags only. Never record a secret: values of flags whose
-// names look secret are shown as <redacted> by Print, but the right design is
-// to keep secrets out of flags altogether.
+// A Recorder is for flags only. Never record a secret: the value of a flag
+// whose name looks secret (whole words such as token or password) or that was
+// recorded with SecretFlag is shown as <redacted> by Print, but the right
+// design is to keep secrets out of flags altogether. The Recorder knows which
+// arguments are values, so unlike RedactArgs it never redacts by guessing.
 type Recorder struct {
-	args []string
+	command    string
+	positional []string
+	flags      []recorded
+}
+
+type recorded struct {
+	text   string // the switch, or the flag name when it has a value
+	value  string
+	hasVal bool
+	equals bool // render as name=value
+	secret bool
 }
 
 // NewRecorder starts a command line with the subcommand and its positional
 // arguments, for example NewRecorder("new", "sre-night").
 func NewRecorder(command string, positional ...string) *Recorder {
-	r := &Recorder{}
-	r.args = append(r.args, command)
-	r.args = append(r.args, positional...)
-	return r
+	return &Recorder{command: command, positional: append([]string(nil), positional...)}
+}
+
+func dashed(name string) string {
+	if strings.HasPrefix(name, "-") {
+		return name
+	}
+	return "--" + name
 }
 
 // Flag records "name value". A name without a leading "-" gets "--". A value
 // that starts with "-" is recorded as "name=value" so it cannot be mistaken
-// for another flag.
+// for another flag. The value is redacted by Print when the name looks secret.
 func (r *Recorder) Flag(name, value string) {
-	if !strings.HasPrefix(name, "-") {
-		name = "--" + name
-	}
-	if strings.HasPrefix(value, "-") {
-		r.args = append(r.args, name+"="+value)
-		return
-	}
-	r.args = append(r.args, name, value)
+	name = dashed(name)
+	r.flags = append(r.flags, recorded{
+		text: name, value: value, hasVal: true,
+		equals: strings.HasPrefix(value, "-"),
+		secret: looksSecret(name),
+	})
 }
 
-// Bool records a switch such as "--force".
-func (r *Recorder) Bool(name string) { r.args = append(r.args, name) }
+// SecretFlag records a flag with a value that Print always redacts, whatever
+// the flag is called.
+func (r *Recorder) SecretFlag(name, value string) {
+	r.Flag(name, value)
+	r.flags[len(r.flags)-1].secret = true
+}
 
-// Args returns the recorded arguments (after the program name).
-func (r *Recorder) Args() []string { return append([]string(nil), r.args...) }
+// Bool records a switch such as "--force". A name without a leading "-" gets
+// "--". A switch has no value, so nothing after it is ever redacted.
+func (r *Recorder) Bool(name string) {
+	r.flags = append(r.flags, recorded{text: dashed(name)})
+}
+
+// Args returns the recorded arguments (after the program name), with values
+// as given (not redacted). Positional arguments follow the command; when one
+// starts with "-" the flags come first and a "--" precedes the positional
+// arguments so they cannot be read as flags.
+func (r *Recorder) Args() []string { return r.render(false) }
+
+func (r *Recorder) render(redact bool) []string {
+	out := []string{r.command}
+	dashPos := false
+	for _, p := range r.positional {
+		if strings.HasPrefix(p, "-") {
+			dashPos = true
+		}
+	}
+	positionals := func() {
+		for _, p := range r.positional {
+			if redact {
+				if name, _, ok := strings.Cut(p, "="); ok && looksSecret(name) {
+					p = name + "=" + RedactedValue
+				}
+			}
+			out = append(out, p)
+		}
+	}
+	if !dashPos {
+		positionals()
+	}
+	for _, f := range r.flags {
+		v := f.value
+		if redact && f.secret {
+			v = RedactedValue
+		}
+		switch {
+		case !f.hasVal:
+			out = append(out, f.text)
+		case f.equals && !(redact && f.secret):
+			out = append(out, f.text+"="+v)
+		default:
+			out = append(out, f.text, v)
+		}
+	}
+	if dashPos {
+		out = append(out, "--")
+		positionals()
+	}
+	return out
+}
 
 // Print writes the "Equivalent: ccshelf ..." line to w, quoted for goos, with
-// secret-looking values redacted.
+// secret values redacted.
 func (r *Recorder) Print(w io.Writer, goos string) error {
-	if err := Equivalent(w, goos, RedactArgs(r.args)); err != nil {
+	return r.PrintFor(w, ShellForGOOS(goos))
+}
+
+// PrintFor is Print for an explicit quoting style (ShellPOSIX, ShellFish,
+// ShellPowerShell or ShellCmd).
+func (r *Recorder) PrintFor(w io.Writer, shell string) error {
+	if err := EquivalentFor(w, shell, r.render(true)); err != nil {
 		return fmt.Errorf("printing the equivalent command: %w", err)
 	}
 	return nil

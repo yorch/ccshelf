@@ -124,19 +124,19 @@ type hinter interface{ Hint() string }
 
 // Report prints err to w as "error: ..." followed by hints. For a
 // MissingFlagError the exact missing flags are named. The message is
-// sanitized so a hostile profile description cannot inject terminal escape
-// sequences. A nil err prints nothing.
+// sanitized to one line so a hostile profile description can neither inject
+// terminal escape sequences nor forge a "hint:" line with a newline. A nil err prints nothing.
 func Report(w io.Writer, err error, mode Mode) {
 	if err == nil {
 		return
 	}
 	var b strings.Builder
-	b.WriteString(Status(mode, LevelError, Sanitize(err.Error())))
+	b.WriteString(Status(mode, LevelError, SanitizeLine(err.Error())))
 	b.WriteString("\n")
 	var mf *MissingFlagError
 	if errors.As(err, &mf) {
 		if mf.Flag != "" {
-			fmt.Fprintf(&b, "hint: pass %s, or run in a terminal without --no-interactive to be asked\n", Sanitize(mf.Flag))
+			fmt.Fprintf(&b, "hint: pass %s, or run in a terminal without --no-interactive to be asked\n", SanitizeLine(mf.Flag))
 		} else {
 			b.WriteString("hint: pass the value as a flag, or run in a terminal without --no-interactive to be asked\n")
 		}
@@ -144,7 +144,7 @@ func Report(w io.Writer, err error, mode Mode) {
 	var h hinter
 	if errors.As(err, &h) {
 		if s := h.Hint(); s != "" {
-			fmt.Fprintf(&b, "hint: %s\n", Sanitize(s))
+			fmt.Fprintf(&b, "hint: %s\n", SanitizeLine(s))
 		}
 	}
 	_, _ = io.WriteString(w, b.String())

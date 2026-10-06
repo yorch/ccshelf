@@ -72,7 +72,7 @@ var terminalWidth = func(fd uintptr) int {
 //
 // Interactive is true only when stdin and stdout are both terminals,
 // --no-interactive is not set, ui.interactive is not "never", CI is not set
-// (any non-empty value except "false" and "0") and TERM is not "dumb". Color
+// (any non-empty value counts as set, including "false" and "0") and TERM is not "dumb". Color
 // is off when NO_COLOR is set to any non-empty value (the no-color.org rule), --no-color is
 // given, TERM is "dumb" or stdout is not a terminal; ui.color = "always"
 // turns it on for a non-terminal stdout but never overrides NO_COLOR,
@@ -128,5 +128,9 @@ func computeMode(env func(string) string, inTerm, outTerm, vtOK bool, flags Mode
 	return m
 }
 
-// ciSet implements the CI rule: any non-empty value except "false" and "0".
-func ciSet(v string) bool { return v != "" && v != "false" && v != "0" }
+// ciSet implements the CI rule of docs/design/cli.md literally: the CI
+// environment variable is set when it has any non-empty value. "false" and
+// "0" count as set, because many CI systems and wrappers export CI with
+// arbitrary spellings, and a wrongly interactive run is worse than a wrongly
+// non-interactive one.
+func ciSet(v string) bool { return v != "" }

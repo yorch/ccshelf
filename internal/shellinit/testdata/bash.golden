@@ -2,6 +2,9 @@
 # Defines one function per profile: cs-<profile> runs `ccshelf run <profile>`
 # and passes the remaining arguments through to claude.
 # Load it with: eval "$(ccshelf shell-init bash)"
-cs-frontend() { '/opt/cc shelf/ccshelf' run frontend "$@"; }
-cs-seo-2() { '/opt/cc shelf/ccshelf' run seo-2 "$@"; }
-cs-sre() { '/opt/cc shelf/ccshelf' run sre "$@"; }
+unalias cs-frontend 2>/dev/null || true
+function cs-frontend { '/opt/cc shelf/ccshelf' run frontend "$@"; }
+unalias cs-seo-2 2>/dev/null || true
+function cs-seo-2 { '/opt/cc shelf/ccshelf' run seo-2 "$@"; }
+unalias cs-sre 2>/dev/null || true
+function cs-sre { '/opt/cc shelf/ccshelf' run sre "$@"; }

@@ -7,20 +7,50 @@ import (
 )
 
 // Sanitize makes text safe to print on a terminal: control characters
-// (including ESC, so ANSI escape sequences, and CR) are replaced by U+FFFD
-// except newline and tab, and invalid UTF-8 is replaced too. Text that comes
-// from profiles, catalogs or other repositories must pass through Sanitize
-// before it reaches the terminal.
-func Sanitize(s string) string {
-	if !strings.ContainsFunc(s, needsSanitizing) && utf8.ValidString(s) {
+// (including ESC, so ANSI escape sequences, and CR), invisible and
+// formatting characters (zero-width space and joiners, the Arabic letter mark,
+// BOM, word joiner, soft hyphen, bidirectional controls, the tag block
+// U+E0000 to U+E007F), line and paragraph separators and invalid UTF-8 are
+// replaced by U+FFFD, except newline and tab, which are kept. Text that
+// comes from profiles, catalogs or other repositories must pass through
+// Sanitize (or SanitizeLine) before it reaches the terminal.
+//
+// Sanitize keeps newlines, so it is only for text that may span lines. Text
+// that is printed as one line of a prompt, a title, a label or a "hint:" line
+// must use SanitizeLine, or a newline in it could forge a line of the prompt.
+func Sanitize(s string) string { return sanitize(s, false) }
+
+// SanitizeLine is Sanitize for text that must stay on one line: newline
+// becomes U+FFFD (so the tampering stays visible) and tab becomes a space.
+func SanitizeLine(s string) string { return sanitize(s, true) }
+
+// HasControl reports whether s holds anything Sanitize would replace or
+// SanitizeLine would change: control characters (including newline and tab),
+// invisible or formatting characters, or invalid UTF-8. Code that must refuse
+// such values instead of cleaning them (paths, executable names) uses it.
+func HasControl(s string) bool {
+	return !utf8.ValidString(s) || strings.ContainsFunc(s, func(r rune) bool {
+		return needsSanitizing(r) || r == '\n' || r == '\t'
+	})
+}
+
+func sanitize(s string, oneLine bool) string {
+	needs := needsSanitizing
+	if oneLine {
+		needs = func(r rune) bool { return needsSanitizing(r) || r == '\n' || r == '\t' }
+	}
+	if !strings.ContainsFunc(s, needs) && utf8.ValidString(s) {
 		return s
 	}
 	var b strings.Builder
 	b.Grow(len(s))
-	for _, r := range strings.ToValidUTF8(s, "�") {
-		if needsSanitizing(r) {
-			b.WriteRune('�')
-		} else {
+	for _, r := range strings.ToValidUTF8(s, "\ufffd") {
+		switch {
+		case oneLine && r == '\t':
+			b.WriteByte(' ')
+		case needs(r):
+			b.WriteRune('\ufffd')
+		default:
 			b.WriteRune(r)
 		}
 	}
@@ -31,13 +61,8 @@ func needsSanitizing(r rune) bool {
 	if r == '\n' || r == '\t' {
 		return false
 	}
-	return unicode.IsControl(r) || r == ' ' || r == ' ' || isBidiControl(r)
-}
-
-// isBidiControl reports bidirectional formatting characters, which can make
-// terminal text read differently from what it is.
-func isBidiControl(r rune) bool {
-	return (r >= '‪' && r <= '‮') || (r >= '⁦' && r <= '⁩') || r == '‎' || r == '‏'
+	return unicode.IsControl(r) || unicode.Is(unicode.Cf, r) || r == '\u2028' || r == '\u2029' ||
+		(r >= 0xE0000 && r <= 0xE007F)
 }
 
 // runeWidth returns the number of terminal columns r occupies: 0 for
