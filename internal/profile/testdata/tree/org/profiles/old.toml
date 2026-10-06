@@ -1,0 +1,4 @@
+name = "old"
+status = "deprecated"
+superseded_by = "frontend"
+extends = ["base"]

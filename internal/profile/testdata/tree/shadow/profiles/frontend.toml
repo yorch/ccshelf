@@ -1,0 +1,5 @@
+name = "frontend"
+description = "My own frontend"
+
+[plugins]
+include = ["mine@home"]

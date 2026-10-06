@@ -1,0 +1,35 @@
+name = "full"
+description = "Every field set"
+owner = "@web-platform"
+status = "active"
+account = "work"
+extends = ["base"]
+when_to_use = ["UI components", "visual QA"]
+avoid_when = ["infra changes"]
+
+[plugins]
+mode = "additive"
+include = ["design-kit@acme", "playwright@acme"]
+exclude = ["noisy@acme"]
+
+[skills]
+off = ["legacy-helper"]
+name_only = ["docs-writer"]
+
+[mcp]
+servers = ["figma"]
+claudeai_connectors = "none"
+strict = true
+
+[session]
+model = "opus"
+effort = "high"
+append_system_prompt_file = "prompts/frontend.md"
+inherit_user_settings = false
+
+[session.env]
+FIGMA_TOKEN_REF = "op://dev/figma/token"
+CCSHELF_VAR_TEAM = "web"
+
+[policy]
+on_blocked = "fail"

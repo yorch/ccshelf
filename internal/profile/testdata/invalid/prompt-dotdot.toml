@@ -1,0 +1,3 @@
+name = "x"
+[session]
+append_system_prompt_file = "../secrets.md"

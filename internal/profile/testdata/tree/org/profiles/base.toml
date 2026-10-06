@@ -1,0 +1,9 @@
+name = "base"
+description = "Shared baseline"
+owner = "@platform"
+
+[plugins]
+include = ["core@acme", "noisy@acme"]
+
+[session.env]
+CCSHELF_VAR_TEAM = "platform"

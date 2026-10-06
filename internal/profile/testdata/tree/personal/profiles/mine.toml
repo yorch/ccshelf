@@ -1,0 +1,9 @@
+name = "mine"
+extends = ["frontend"]
+
+[plugins]
+include = ["my-tool@home"]
+
+[session]
+inherit_user_settings = false
+effort = "max"

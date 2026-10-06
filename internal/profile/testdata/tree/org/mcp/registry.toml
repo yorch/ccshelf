@@ -1,0 +1,13 @@
+[servers.figma]
+type = "stdio"
+command = "npx"
+args = ["-y", "figma-mcp"]
+env_refs = ["FIGMA_TOKEN_REF"]
+
+[servers.figma.windows]
+command = "cmd"
+args = ["/c", "npx", "-y", "figma-mcp"]
+
+[servers.docs]
+type = "http"
+url = "https://mcp.example.com/docs"

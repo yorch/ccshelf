@@ -1,0 +1,3 @@
+name = "x"
+[plugins]
+include = ["a@b", "a@b"]

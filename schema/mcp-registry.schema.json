@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ccshelf.dev/schema/mcp-registry.schema.json",
+  "title": "ccshelf MCP registry",
+  "description": "mcp/registry.toml: named MCP server definitions that profiles reference by name. Secrets are never stored here; env_refs lists variable names only.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["servers"],
+  "$defs": {
+    "override": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command"],
+      "properties": {
+        "command": { "type": "string", "minLength": 1 },
+        "args": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "server": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": { "enum": ["stdio", "http", "sse"] },
+        "command": { "type": "string" },
+        "args": { "type": "array", "items": { "type": "string" } },
+        "url": { "type": "string", "pattern": "^https://" },
+        "env_refs": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{0,63}$" } },
+        "windows": { "$ref": "#/$defs/override" },
+        "macos": { "$ref": "#/$defs/override" },
+        "linux": { "$ref": "#/$defs/override" }
+      }
+    }
+  },
+  "properties": {
+    "servers": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[A-Za-z0-9._-]{1,64}$" },
+      "additionalProperties": { "$ref": "#/$defs/server" }
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "docs": {
+      "type": "http",
+      "url": "https://mcp.example.com/docs"
+    },
+    "figma": {
+      "command": "cmd",
+      "args": [
+        "/c",
+        "npx",
+        "-y",
+        "figma-mcp"
+      ],
+      "env": {
+        "FIGMA_TOKEN_REF": "${FIGMA_TOKEN_REF}"
+      }
+    }
+  }
+}

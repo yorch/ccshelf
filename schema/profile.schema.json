@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ccshelf.dev/schema/profile.schema.json",
+  "title": "ccshelf profile manifest",
+  "description": "One profile file, profiles/<name>.toml, as a JSON document. Closed schema (SR1): a profile cannot carry permissions, hooks, auth settings or MCP definitions.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name"],
+  "$defs": {
+    "pluginId": { "type": "string", "pattern": "^[A-Za-z0-9._-]+@[A-Za-z0-9._-]+$" },
+    "skillName": { "type": "string", "pattern": "^[A-Za-z0-9._:-]+$" },
+    "profileName": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,62}$" },
+    "phrase": { "type": "string", "minLength": 1 }
+  },
+  "properties": {
+    "name": { "$ref": "#/$defs/profileName" },
+    "description": { "type": "string" },
+    "owner": { "type": "string" },
+    "status": { "enum": ["active", "experimental", "deprecated"] },
+    "superseded_by": { "$ref": "#/$defs/profileName" },
+    "account": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,31}$" },
+    "extends": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/profileName" } },
+    "when_to_use": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/phrase" } },
+    "avoid_when": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/phrase" } },
+    "plugins": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "enum": ["allow-only", "additive"] },
+        "include": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/pluginId" } },
+        "exclude": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/pluginId" } }
+      }
+    },
+    "skills": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "off": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/skillName" } },
+        "name_only": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/skillName" } }
+      }
+    },
+    "mcp": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "servers": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$" } },
+        "claudeai_connectors": { "enum": ["none", "keep"] },
+        "strict": { "type": "boolean" }
+      }
+    },
+    "session": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:\\[\\]-]{0,127}$" },
+        "effort": { "enum": ["low", "medium", "high", "xhigh", "max"] },
+        "append_system_prompt_file": { "type": "string", "minLength": 1 },
+        "inherit_user_settings": { "type": "boolean" },
+        "env": {
+          "type": "object",
+          "propertyNames": { "pattern": "^(CCSHELF_VAR_[A-Z0-9_]{1,40}|[A-Z][A-Z0-9_]{0,55}_REF)$" },
+          "additionalProperties": { "type": "string", "maxLength": 4096 }
+        }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "on_blocked": { "enum": ["warn", "fail"] }
+      }
+    }
+  }
+}

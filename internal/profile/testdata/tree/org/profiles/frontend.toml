@@ -1,0 +1,27 @@
+name = "frontend"
+description = "React, CSS and accessibility work"
+owner = "@web-platform"
+extends = ["base"]
+when_to_use = ["UI components", "visual QA"]
+avoid_when = ["infra changes"]
+
+[plugins]
+include = ["design-kit@acme"]
+exclude = ["noisy@acme"]
+
+[skills]
+off = ["legacy-helper"]
+name_only = ["docs-writer"]
+
+[mcp]
+servers = ["figma", "docs"]
+claudeai_connectors = "none"
+strict = true
+
+[session]
+model = "opus"
+effort = "high"
+append_system_prompt_file = "prompts/frontend.md"
+
+[session.env]
+FIGMA_TOKEN_REF = "op://dev/figma/token"

@@ -1,0 +1,3 @@
+name = "x"
+[policy]
+on_blocked = "ignore"
