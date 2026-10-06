@@ -5,7 +5,7 @@ Staged plan. Decisions and open questions are in [../DECISIONS.md](../DECISIONS.
 **Direction (decided 2026-10-06, after the adversarial review): evidence first, then trimmed scope.** This supersedes the earlier "both tracks in parallel" build order. The review's verdict was that the mechanism is sound but the plan was wider than its evidence, and that the benefit the pitch rests on (better skill routing, less clutter) was never measured.
 
 ## Phase 0: evidence (before writing product code)
-1. **Routing eval.** 20 or more realistic prompts on the real ~50-plugin setup, comparing the full set with a masked profile and recording which skill or plugin fires and whether it was the intended one (for example with `claude plugin eval` or `-p` runs). Fix the success criterion before running: the launcher is worth building only if the masked set measurably improves correct-first-try activation or reduces wrong-skill activations. If it does not, the launcher is documented as an alias recipe (`dry-run` prints the exact command) and not built as a product.
+1. **Routing eval.** 20 or more realistic prompts on a real plugin setup of the size the project targets, comparing the full set with a masked profile and recording which skill or plugin fires and whether it was the intended one (for example with `claude plugin eval` or `-p` runs). Fix the success criterion before running: the launcher is worth building only if the masked set measurably improves correct-first-try activation or reduces wrong-skill activations. If it does not, the launcher is documented as an alias recipe (`dry-run` prints the exact command) and not built as a product.
 2. **Adopt, build or contribute.** Evaluate `fuzzyalej/claude-profile` and `edimuj/claude-rig` against our gaps: default-deny masking on one shared plugin store, behavior under managed policy, concurrency, shared profiles from a private repo. Decide whether to contribute upstream instead of building a fourth tool.
 3. **Bundle and masking prototype (T7).** Does masking a plugin that an installed bundle depends on break the bundle? Needs a second config directory and a login only the user can do. Also settles whether `profile = bundle` stays the bridge between the launcher and the catalog.
 4. **Stage 0 on Linux and Windows** (including `windows-11-arm` if a runner is used), repeating T1, T2 and the concurrency check, plus the MCP `cmd /c` question.
@@ -75,7 +75,7 @@ Tick items in the report to track them (saved in your browser); the checked stat
 - [x] Stage 0: launcher experiments on macOS (done 2026-10-06)
 - [x] Adversarial review round absorbed and facts corrected (done 2026-10-06)
 - [x] LICENSE added (MIT); docs reorganized and the report generated from the Markdown
-- [ ] Phase 0.1: routing eval on the real ~50 plugins; protocol and success criterion fixed (2026-10-06, [routing-eval-protocol.md](../research/routing-eval-protocol.md)), runs pending the org's plugin set
+- [ ] Phase 0.1: routing eval on a real plugin set; protocol and success criterion fixed (2026-10-06, [routing-eval-protocol.md](../research/routing-eval-protocol.md)), runs pending the org's plugin set
 - [x] Phase 0.2: adopt, build or contribute: evaluated fuzzyalej/claude-profile and edimuj/claude-rig; recommendation to build (D-33, [adopt-or-build.md](../research/adopt-or-build.md)), pending user review
 - [ ] Phase 0.3: bundle and masking prototype (T7); needs a second config directory and a login
 - [ ] Phase 0.4: Stage 0 on Linux and Windows
