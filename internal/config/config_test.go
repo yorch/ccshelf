@@ -60,7 +60,7 @@ func TestConfigDirFor(t *testing.T) {
 
 func TestPaths(t *testing.T) {
 	isolate(t)
-	d, err := ConfigDir()
+	d, err := Dir()
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -3,10 +3,10 @@
 //
 // # Location
 //
-// ConfigDir is "$XDG_CONFIG_HOME/ccshelf" (or "~/.config/ccshelf") on macOS
+// Dir is "$XDG_CONFIG_HOME/ccshelf" (or "~/.config/ccshelf") on macOS
 // and Linux and "%APPDATA%\ccshelf" on Windows. A relative XDG_CONFIG_HOME is
 // ignored, as the XDG specification requires. The profile package derives its
-// personal profile directory from ConfigDir (profile imports config, never the
+// personal profile directory from Dir (profile imports config, never the
 // other way round, so there is no dependency cycle). Path, LockfilePath and
 // ProjectTrustPath name the files other packages keep next to the config.
 //

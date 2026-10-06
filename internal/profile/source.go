@@ -85,10 +85,10 @@ type File struct {
 	Source   Source
 }
 
-// PersonalDir returns the personal profiles directory: ConfigDir()/profiles
+// PersonalDir returns the personal profiles directory: config.Dir()/profiles
 // (see package config for the base directory).
 func PersonalDir() (string, error) {
-	d, err := config.ConfigDir()
+	d, err := config.Dir()
 	if err != nil {
 		return "", err
 	}
@@ -127,7 +127,7 @@ func DirSource(kind Kind, profilesDir string) Source {
 	if err := checkRootDir(d.root); err != nil {
 		d.err = err
 	} else if !d.aux {
-		if cfg, cerr := config.ConfigDir(); cerr == nil && sameDir(cfg, d.root) {
+		if cfg, cerr := config.Dir(); cerr == nil && sameDir(cfg, d.root) {
 			d.err = fmt.Errorf("%w: %s is the ccshelf config directory and cannot be used as a bare profiles folder", ErrPath, d.root)
 		}
 	}

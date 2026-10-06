@@ -12,8 +12,8 @@ import (
 // appDirName is the directory below the user's config base that ccshelf owns.
 const appDirName = "ccshelf"
 
-// ConfigDir returns the directory holding ccshelf's configuration files.
-func ConfigDir() (string, error) {
+// Dir returns the directory holding ccshelf's configuration files.
+func Dir() (string, error) {
 	home, _ := os.UserHomeDir()
 	return configDirFor(runtime.GOOS, os.Getenv, home)
 }
@@ -50,7 +50,7 @@ func LockfilePath() (string, error) { return inConfigDir("lock.json") }
 func ProjectTrustPath() (string, error) { return inConfigDir("project-trust.json") }
 
 func inConfigDir(name string) (string, error) {
-	d, err := ConfigDir()
+	d, err := Dir()
 	if err != nil {
 		return "", err
 	}
