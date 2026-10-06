@@ -7,7 +7,7 @@ Guidance for AI coding agents (and humans) working in this repo, the public **to
 1. **Launcher (profiles):** starts `claude` with a named profile (a set of plugins, standalone skills and MCP servers), so different terminals can run different sets at once.
 2. **Catalog (discoverability):** metadata lint plus a generated static catalog for an organization's git-based plugin marketplace.
 
-**Status:** research and design only. There is no code yet. Everything lives in `docs/`. Start with `docs/README.md` (overview and glossary), then `docs/DECISIONS.md` (what is decided, why, and what is open), then `docs/design/roadmap.md`.
+**Status:** implemented and in adversarial review; not released. Go code lives under `cmd/ccshelf` and `internal/`, schemas in `schema/`, the Action in `action/`, the starter template in `examples/org-data-repo/`, and the notes in `docs/`. Start with `docs/README.md` (overview and glossary), then `docs/DECISIONS.md` (what is decided, why, and what is open), then `docs/design/roadmap.md`.
 
 ## Decided requirements (decided by the user; reopen when evidence changes, and record why in the notes)
 - **R1:** macOS, Linux and native Windows; six targets (darwin, linux and windows, each arm64 and amd64). WSL counts as Linux.

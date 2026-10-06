@@ -138,7 +138,7 @@ section>input[type=search]{display:block}
 <body>
 <div class="shell">
 <aside class="rail">
-<div class="brand"><h1>ccshelf</h1><p>Research and design notes. Claude Code 2.1.290. Generated from the Markdown in docs/ (source hash 974de3be).</p></div>
+<div class="brand"><h1>ccshelf</h1><p>Research and design notes. Claude Code 2.1.290. Generated from the Markdown in docs/ (source hash 91914658).</p></div>
 <nav aria-label="Sections"><div id="tabs" role="tablist" aria-orientation="vertical"></div></nav>
 <div class="legend" aria-label="Confidence markers"><b>How sure we are</b><br><span class="lg gv" aria-hidden="true">&#9679;</span>verified in docs, gh or the CLI<br><span class="lg gr" aria-hidden="true">&#9680;</span>reported by a research agent<br><span class="lg gu" aria-hidden="true">&#9675;</span>unverified or inferred</div>
 <button class="themebtn" id="themebtn" type="button">Switch theme</button>
@@ -178,7 +178,7 @@ draw(false);
 })();
 </script>
 
-<p><strong>Status (2026-10-06):</strong> research and design only; no product code yet. The mechanism is confirmed on macOS (Stage 0), four adversarial reviews have been absorbed, and the plan is <strong>evidence first, then a trimmed MVP</strong>. See the <a href="#roadmap">roadmap</a> and the <a href="#decisions">decision log</a>.</p>
+<p><strong>Status (2026-10-06):</strong> implemented (launcher, catalog, Action, starter template, CI and release workflows) and reviewed in several adversarial rounds; not released. Only macOS has run real Stage 0 experiments, the Windows code paths compile and vet but have not run on Windows, and the Phase 0 evidence items are still open. See the <a href="#roadmap">roadmap</a> and the <a href="#decisions">decision log</a> (D-22).</p>
 <p><code>ccshelf</code> is an open-source Go tool for Claude Code with two parts: a <strong>launcher</strong> that starts <code>claude</code> with a named profile of plugins, skills and MCP servers per terminal, and a <strong>catalog</strong> that lints and publishes an org's plugin marketplace. The interactive report, report.html, is <strong>generated from these files</strong> by <code>build_report.py</code>; never edit it by hand.</p>
 <h3 id="overview-where-things-are">Where things are</h3>
 <table><thead><tr><th>File</th><th>What it holds</th></tr></thead><tbody>
@@ -242,6 +242,12 @@ draw(false);
 <tr><td class="nw">D-19</td><td class="nw">2026-10-06</td><td><strong>Direction: evidence first, then trimmed scope.</strong> Phase 0 evidence, Phase 1 MVP, Phase 2 deferred.</td><td>User chose it after the adversarial review (product reviewer: about 10% chance the plan should proceed unchanged <span class="R">R</span>).</td><td>User</td><td>Phase 0 results</td></tr>
 <tr><td class="nw">D-20</td><td class="nw">2026-10-06</td><td><strong>Exec on Unix, spawn on Windows</strong>; cache cleanup by age only; settings JSON validated before every launch.</td><td>An invalid settings file is ignored silently <span class="V">V</span>; spawn-and-wait breaks Unix job control <span class="R">R</span>; settings carry through to background sessions <span class="R">R</span>.</td><td><span class="V">V</span>/<span class="R">R</span></td><td>Linux and Windows Stage 0</td></tr>
 <tr><td class="nw">D-21</td><td class="nw">2026-10-06</td><td>Docs layout: README with glossary, this decision log, <code>design/</code> and <code>research/</code>; the HTML report is <strong>generated from the Markdown</strong> by <code>docs/build_report.py</code> and is never edited by hand.</td><td>The audit found drift between eight notes and a hand-mirrored report; the ops reviewer proposed this layout. User decision.</td><td>User</td><td>If the generator becomes a burden</td></tr>
+<tr><td class="nw">D-22</td><td class="nw">2026-10-06</td><td><strong>Full implementation directed.</strong> The user's <code>/goal</code> directs implementing the whole application (launcher, catalog, CI and release workflows) with fresh sub agents and Opus as adversarial reviewer. The Phase 0 evidence items (O-04 to O-07, O-10) stay <strong>open</strong>; code was written ahead of them and must be re-checked against their results.</td><td>User directive. Builds on D-19 without superseding its evidence list.</td><td>User</td><td>Phase 0 results contradict a design assumption</td></tr>
+<tr><td class="nw">D-23</td><td class="nw">2026-10-06</td><td><strong>Environment policy (SR1):</strong> the launcher passes only <code>CCSHELF_VAR_&lt;NAME&gt;</code>, names ending <code>_REF</code>, and <code>CCSHELF_PROFILE</code> from a profile; a denylist (including <code>GITHUB_</code>, <code>RUNNER_</code>, <code>ACTIONS_</code>, <code>CI</code>, proxy and loader variables) is applied first. An allowlist, not a denylist.</td><td>A security review flagged an incomplete denylist; adversarial review A found the CI-variable gap. <span class="V">V</span> (tested in <code>internal/envpolicy</code>)</td><td>Opus review</td><td>A real profile needs another variable</td></tr>
+<tr><td class="nw">D-24</td><td class="nw">2026-10-06</td><td><strong>Account precedence:</strong> an explicit <code>--account</code> flag overrides an existing <code>CLAUDE_CONFIG_DIR</code> and prints a note; otherwise the environment is honored.</td><td>Explicit intent beats ambient state; the note keeps it visible. Implemented in <code>config.ResolveAccount</code>.</td><td>Medium</td><td>User feedback</td></tr>
+<tr><td class="nw">D-25</td><td class="nw">2026-10-06</td><td><strong>Module path <code>github.com/ccshelf/ccshelf</code> is provisional</strong> until a GitHub home is chosen (O-08).</td><td>The org name is free but unregistered.</td><td>Medium</td><td>A GitHub org is registered</td></tr>
+<tr><td class="nw">D-26</td><td class="nw">2026-10-06</td><td><strong>Closed schemas are exact-case.</strong> Go's TOML and JSON decoders match keys case-insensitively, so every parse of profiles, the registry, <code>config.toml</code> and <code>plugin.json</code> also checks the exact spelling (<code>internal/config/tomlkeys</code>). The closure hash is version 2 and treats profile controls (env names, includes, excludes, inherit flag, account) as a risky item shown in the trust review.</td><td>Adversarial reviews B and C proved case variants bypassed the closed schema and hid hooks. <span class="V">V</span></td><td>High</td><td>Go decoders change</td></tr>
+<tr><td class="nw">D-27</td><td class="nw">2026-10-06</td><td><strong>Trust binds to what was reviewed:</strong> <code>Accept</code> takes the closure hash the reviewer saw; git sources read blobs from the object store at the pinned SHA instead of a filtered checkout; registry arguments are shown verbatim in the review. Confirmations use a typed <code>yes</code> with no default.</td><td>Adversarial review F (filters, redaction hiding commands) and E (unsafe defaults).</td><td>High</td><td>Opus review</td></tr>
 </tbody></table>
 <h3 id="decisions-superseded-or-corrected">Superseded or corrected</h3>
 <table><thead><tr><th>ID</th><th>Was</th><th>Replaced by</th></tr></thead><tbody>
@@ -310,11 +316,12 @@ draw(false);
 <li class="task"><label><input type="checkbox"> Phase 0.4: Stage 0 on Linux and Windows</label></li>
 <li class="task"><label><input type="checkbox"> Phase 0.5: measure MCP and connector removal through the settings keys</label></li>
 <li class="task"><label><input type="checkbox"> Phase 0.6: write kill and obsolescence criteria</label></li>
-<li class="task"><label><input type="checkbox"> Employer approval for open-sourcing; then SECURITY.md, threat model and CONTRIBUTING.md</label></li>
-<li class="task"><label><input type="checkbox"> MVP launcher: run, show, dry-run, ls, dir sources, extends, default-deny masking, closed schema, settings validation</label></li>
-<li class="task"><label><input type="checkbox"> MVP catalog: lint (owner, status, when_to_use) and a generated CATALOG.md</label></li>
-<li class="task"><label><input type="checkbox"> Nightly real-claude smoke test before any release</label></li>
-<li class="task"><label><input type="checkbox"> Deferred until someone asks: accounts, trust lockfile and git sources, compiled bundles, recommend, shell-init, static site, taxonomy, Analytics join</label></li>
+<li class="task"><label><input type="checkbox"> Employer approval for open-sourcing (SECURITY.md and CONTRIBUTING.md are written)</label></li>
+<li class="task"><label><input type="checkbox" checked> MVP launcher: run, show, dry-run, ls, dir sources, extends, default-deny masking, closed schema, settings validation</label></li>
+<li class="task"><label><input type="checkbox" checked> MVP catalog: lint (owner, status, when_to_use) and a generated CATALOG.md</label></li>
+<li class="task"><label><input type="checkbox" checked> Nightly real-claude smoke test before any release</label></li>
+<li class="task"><label><input type="checkbox" checked> Built ahead of the evidence (see D-22): accounts, trust lockfile and git/plugin sources, compiled bundles, recommend, shell-init, static site, doctor, usage analytics.</label></li>
+<li class="task"><label><input type="checkbox"> Not built yet: the taxonomy and the Analytics join beyond the OTel and usage-API reader; the marketplace-source check for plugin sources (the hook exists, the launcher does not pass it yet)</label></li>
 </ul>
 </section>
 
@@ -620,7 +627,7 @@ on_blocked = "warn"           # warn | fail. What to do when org policy blocks s
 <li><strong>Library choice</strong> is deferred to implementation, with constraints: static binary, no cgo, works on Windows consoles (Windows Terminal and legacy conhost, with a plain fallback), minimal dependencies (supply-chain surface), and no network use.</li>
 <li><strong>Testing:</strong> non-interactive behavior with golden files on every OS; interactive flows with the scripted <code>Prompter</code> in unit tests plus a small pty smoke test per OS (ConPTY on Windows).</li>
 <li><strong>Cross-platform:</strong> raw-mode terminal handling differs per OS; the picker must restore the terminal before spawning or replacing the process, which interacts with the Windows spawn-and-wait versus Unix <code>exec</code> choice.</li>
-<li><strong>Security:</strong> prompts must not echo secrets, and an interactive default must never be less safe than the flag default.</li>
+<li><strong>Security:</strong> prompts must not echo secrets, and an interactive default must never be less safe than the flag default. Implemented as: a question has no default unless it opts in (<code>HasDefault</code>); trust confirmations use <code>ConfirmRisky</code>, which has no default and needs the typed word <code>yes</code>; labels, hints and errors are single-line sanitized so a hostile profile cannot forge a prompt line; the terminal's echo state is restored when a secret prompt is cancelled. The <code>CI</code> variable set to any non-empty value (including <code>false</code>) disables prompts. Secret-looking flags are redacted, and the argument after one is redacted too, in the printed equivalent command.</li>
 </ul>
 </section>
 

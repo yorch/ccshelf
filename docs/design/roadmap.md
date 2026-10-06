@@ -39,9 +39,10 @@ Tick items in the report to track them (saved in your browser); the checked stat
 - [ ] Phase 0.4: Stage 0 on Linux and Windows
 - [ ] Phase 0.5: measure MCP and connector removal through the settings keys
 - [ ] Phase 0.6: write kill and obsolescence criteria
-- [ ] Employer approval for open-sourcing; then SECURITY.md, threat model and CONTRIBUTING.md
-- [ ] MVP launcher: run, show, dry-run, ls, dir sources, extends, default-deny masking, closed schema, settings validation
-- [ ] MVP catalog: lint (owner, status, when_to_use) and a generated CATALOG.md
-- [ ] Nightly real-claude smoke test before any release
-- [ ] Deferred until someone asks: accounts, trust lockfile and git sources, compiled bundles, recommend, shell-init, static site, taxonomy, Analytics join
+- [ ] Employer approval for open-sourcing (SECURITY.md and CONTRIBUTING.md are written)
+- [x] MVP launcher: run, show, dry-run, ls, dir sources, extends, default-deny masking, closed schema, settings validation
+- [x] MVP catalog: lint (owner, status, when_to_use) and a generated CATALOG.md
+- [x] Nightly real-claude smoke test before any release
+- [x] Built ahead of the evidence (see D-22): accounts, trust lockfile and git/plugin sources, compiled bundles, recommend, shell-init, static site, doctor, usage analytics.
+- [ ] Not built yet: the taxonomy and the Analytics join beyond the OTel and usage-API reader; the marketplace-source check for plugin sources (the hook exists, the launcher does not pass it yet)
 

@@ -1,6 +1,6 @@
 # ccshelf: research and design notes
 
-**Status (2026-10-06):** research and design only; no product code yet. The mechanism is confirmed on macOS (Stage 0), four adversarial reviews have been absorbed, and the plan is **evidence first, then a trimmed MVP**. See the [roadmap](design/roadmap.md) and the [decision log](DECISIONS.md).
+**Status (2026-10-06):** implemented (launcher, catalog, Action, starter template, CI and release workflows) and reviewed in several adversarial rounds; not released. Only macOS has run real Stage 0 experiments, the Windows code paths compile and vet but have not run on Windows, and the Phase 0 evidence items are still open. See the [roadmap](design/roadmap.md) and the [decision log](DECISIONS.md) (D-22).
 
 `ccshelf` is an open-source Go tool for Claude Code with two parts: a **launcher** that starts `claude` with a named profile of plugins, skills and MCP servers per terminal, and a **catalog** that lints and publishes an org's plugin marketplace. The interactive report, [report.html](report.html), is **generated from these files** by `build_report.py`; never edit it by hand.
 
