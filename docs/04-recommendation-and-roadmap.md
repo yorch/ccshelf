@@ -125,6 +125,30 @@ Decided 2026-10-06. The user's org **does enforce managed settings** (exact keys
 
 **R4: open source.** No org-specific names, URLs or assumptions in code, schemas or defaults; everything org-specific lives in config and in the org's marketplace repo. Needs a license, contribution docs, a project and command name (decided: `ccprofiles`, with the caveats noted under "Name"), and docs that don't depend on internal infrastructure. This reinforces R2 (GitHub.com, GHE Cloud and GHE Server all supported) and R1 (all three operating systems).
 
+## Interaction model (R6)
+**Requirement R6 (decided 2026-10-06):** the CLI supports both an **interactive mode** (prompts, pickers and wizards) and a **flag and option based mode**. Neither replaces the other.
+
+### Rules
+1. **Flags are the contract.** Every command is fully usable with flags and arguments alone, for scripts, CI, shell aliases and documentation. Interactive mode is an additional front-end over the same command definitions, never the only way to do something.
+2. **When interactive mode is used.** Only when both stdin and stdout are terminals, `--no-interactive` is not set, the `CI` environment variable is not set, and the terminal is not `dumb`. Otherwise a missing required value is an error that names the missing flags and exits with code 2 (usage), never a prompt.
+3. **Flags beat prompts.** Any value given on the command line is not asked again; interactive mode only asks for what is missing.
+4. **Parity.** Every interactive flow ends by printing the equivalent flag-based command line (for example `Equivalent: ccprofiles new sre --from base --plugin sre-kit@acme`), so a session can be replayed in a script.
+5. **Trust prompts fail closed.** Accepting a risky profile change is an explicit interactive confirmation or an explicit flag that names what is accepted (for example `ccprofiles trust sre --accept <closure-hash>`). `--yes` never accepts trust, and non-TTY and CI runs never default to allow (see the trust model in "Profile sources and sharing").
+6. **No prompts after `claude` starts.** The launcher prompts only before it starts `claude`. It restores the terminal to its original state before it starts or replaces itself with `claude`, so Claude Code's own terminal handling is untouched.
+7. **Machine-readable output.** Read commands (`ls`, `show`, `search`, `doctor`, `diff`) support `--json` (stable schema, versioned) and a plain text format; `NO_COLOR` and `--no-color` are honored; color is never the only carrier of meaning; `--plain` gives a line-oriented prompt mode for screen readers and dumb terminals.
+8. **Stable exit codes** (0 success, 1 failure, 2 usage error, 3 blocked by policy, 4 needs trust, 130 interrupted), documented, so scripts can react.
+9. **Shell completion** for bash, zsh, fish and PowerShell is generated from the same command definitions.
+
+### Scope for the first release
+Interactive: a profile picker when `ccprofiles run` or bare `ccprofiles` is run in a terminal without a name (filter as you type); a `new` wizard (name, parent, multi-select of installed plugins, standalone skills to hide, MCP servers); an `init` wizard (config location, profile sources, optional account); the `trust` diff-and-confirm; `edit` opens `$EDITOR`. Not in scope for the first release: a full-screen dashboard or persistent TUI manager.
+
+### Design implications
+- **One command tree** (a single source for flags, help, completion and prompts) and a thin prompt layer behind an interface (`Prompter`), so flows can be tested by feeding scripted answers.
+- **Library choice** is deferred to implementation, with constraints: static binary, no cgo, works on Windows consoles (Windows Terminal and legacy conhost, with a plain fallback), minimal dependencies (supply-chain surface), and no network use.
+- **Testing:** non-interactive behavior with golden files on every OS; interactive flows with the scripted `Prompter` in unit tests plus a small pty smoke test per OS (ConPTY on Windows).
+- **Cross-platform:** raw-mode terminal handling differs per OS; the picker must restore the terminal before spawning or replacing the process, which interacts with the Windows spawn-and-wait versus Unix `exec` choice.
+- **Security:** prompts must not echo secrets, and an interactive default must never be less safe than the flag default.
+
 ## Tool repo vs data repo (R5)
 Decided 2026-10-06: the **tool is hosted in a public GitHub repo** (this one), and an adopting company stores its **profiles and catalog data in its own private GHE repo**. The tool never assumes the two live together.
 
@@ -174,7 +198,7 @@ What was checked (2026-10-06, by command; nothing registered):
 Consequences already applied across the notes: command `ccprofiles` (users can alias it, for example `ccp`), config in `~/.config/ccprofiles/`, cache in `~/.cache/ccprofiles/`, per-project directory `.ccprofiles/`, org config file `ccprofiles.toml`, Action path `<owner>/ccprofiles/action`, and env var `CCPROFILES_PROFILE`. The `ccprof` shortcut was rejected as a command name because it is an existing Claude Code tool on npm and crates.io. The local folder name `claude-profile` is only the current checkout directory.
 
 ### Do not build (yet)
-Registry server/DB, vector search, TUI, custom install path (bundles cover install), MCP gateway, config-dir-per-profile, a concierge search tool before there is usage data, anything that writes shared settings.
+Registry server/DB, vector search, a full-screen TUI dashboard (interactive prompts and pickers are in scope, see R6), custom install path (bundles cover install), MCP gateway, config-dir-per-profile, a concierge search tool before there is usage data, anything that writes shared settings.
 
 ## Staged roadmap
 **Build order (decided 2026-10-06): both tracks in parallel.** Start with the shared `core/` package (read `marketplace.json`, installed-plugin state, resolve sets, capability probe), then one thin slice of each track: launcher `run`/`show`/`dry-run` with policy detection, and catalog metadata lint plus a minimal static page. Risk to watch: spreading effort. Keep each slice shippable on its own.

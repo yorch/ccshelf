@@ -133,6 +133,27 @@ accept? [y/N]
 ```
 The launcher only loads org profiles from sources the org already trusts (an allowlisted marketplace, or a pinned git ref). See "Profile sources and sharing" in 04.
 
+## 12. Interactive and scripted use of the same command
+In a terminal, with no arguments, `ccprofiles` offers a picker; with flags it never asks anything.
+```
+$ ccprofiles
+? Run which profile?  (type to filter)
+> frontend   React, CSS and accessibility work
+  sre        Incident response and observability
+  seo        Content and analytics
+Equivalent: ccprofiles run frontend
+
+$ ccprofiles new sre-night
+? Based on: sre
+? Plugins to add (space to select): pagerduty-tools@acme, grafana-helper@acme
+Equivalent: ccprofiles new sre-night --from sre --plugin pagerduty-tools@acme --plugin grafana-helper@acme
+
+# the same thing in a script or CI: no prompts, errors name what is missing
+$ ccprofiles new sre-night --from sre --plugin pagerduty-tools@acme --no-interactive
+error: nothing to add; give --plugin or --skill-off (exit 2)
+```
+Trust is never auto-accepted: `ccprofiles trust sre --accept <hash>` is the scripted form, and `--yes` does not apply to it.
+
 ## Not covered by any workflow yet
 - Installing missing plugins automatically (deliberately not done).
 - Switching profiles inside a running session (a profile is fixed at launch).

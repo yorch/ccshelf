@@ -229,6 +229,7 @@ ul,ol{padding-left:22px}
 <li>Precedent (press reports, not an Anthropic statement): in January 2026 the "Clawdbot" project renamed after a request from Anthropic (<a href="https://laravel-news.com/index.php/clawdbot-rebrands-to-moltbot-after-trademark-request-from-anthropic">Laravel News</a>). <span class="R">R</span></li>
 <li>At least three tools use the name <code>claude-profile</code> on GitHub (<a href="https://github.com/diranged/claude-profile">diranged</a>, <a href="https://github.com/fuzzyalej/claude-profile">fuzzyalej</a>, <a href="https://github.com/yarikleto/claude-profile">yarikleto</a>). The name is free on npm, PyPI and Homebrew. <span class="R">R</span></li>
 <li><b>Decision (2026-10-06): the project is named <code>ccprofiles</code>.</b> Checked by command: free on npm, PyPI, crates.io, Homebrew and the domains; the GitHub user <code>ccprofiles</code> exists (dormant, three junk repos); close names exist, such as <a href="https://github.com/Azurioh/ccprofile">Azurioh/ccprofile</a> and <a href="https://github.com/bman95/ccprofile">bman95/ccprofile</a> (both profile plugins and skills), an npm <code>cc-profiles</code> package, and <code>ccprof</code> on npm and crates.io.</li>
+<li>Second check of <code>cc</code>- and <code>claude</code>-prefixed names: free everywhere checked are <code>ccshelf</code>, <code>ccstow</code>, <code>ccpreset</code>, <code>ccbundle</code>, <code>ccwardrobe</code>, <code>ccshed</code>, <code>ccharbor</code> (and, with higher trademark exposure, <code>claudeshelf</code>, <code>claudecatalog</code>, <code>claudeprofiles</code>). <code>ccloadout</code> and <code>claudeloadout</code> are free on registries but a "Claude Loadout" tool on PyPI already does the same job. For <code>ccprofiles</code> the check found the GitHub user taken and ranked it below <code>ccshelf</code>, <code>ccstow</code> and <code>ccpreset</code> because "profile" names are crowded. <span class="R">R</span></li>
 <li>Earlier neutral candidates found free on GitHub, npm, PyPI, crates.io, Homebrew and Scoop: <code>kitshelf</code> (<code>kshelf</code>), <code>kitstow</code> (<code>kstow</code>), <code>loadmux</code> (<code>lmux</code>). A check of <code>cc</code>- and <code>claude</code>-prefixed names is in progress. Not checked: winget and a real trademark search. <span class="U">U</span></li>
 </ul>
 <h3>Review-round findings about the landscape</h3>
@@ -515,6 +516,18 @@ mcp_registry = "mcp/registry.toml"</pre>
 <p><b>Consumption.</b> Plugins: add the marketplace natively; bundles install a profile's set in one step. Profiles: a <code>git</code> source pinned to a tag of this repo, or a local clone as a <code>dir</code> source (<code>plugin</code> source later). Catalog: the published site, plus <code>search</code> and <code>doctor</code> reading the same data locally.</p>
 <p><b>Variants.</b> Plugins in other repos use a git <code>source</code> and still get a sidecar here; several teams can keep separate marketplace repos feeding one catalog build; a public data repo is possible (R4 then applies to the data).</p>
 <p class="small">Open: whether the catalog also commits a readable <code>CATALOG.md</code>; an extra review path in <code>lint</code> for plugins that bundle MCP servers or hooks (they run code); release cadence and naming for repo tags.</p>
+<h3>Interaction model (R6)</h3>
+<p>The CLI supports both an interactive mode (prompts, pickers, wizards) and a flag and option based mode. Decided 2026-10-06.</p>
+<ul>
+<li><b>Flags are the contract:</b> every command works with flags alone; interactive mode is a front-end over the same commands, never the only way.</li>
+<li><b>When interactive:</b> only when stdin and stdout are terminals, <code>--no-interactive</code> is not set, <code>CI</code> is unset and the terminal is not dumb. Otherwise a missing value is an error naming the missing flags (exit 2), never a prompt.</li>
+<li><b>Flags beat prompts;</b> interactive mode asks only for what is missing, and every flow ends by printing the equivalent flag-based command.</li>
+<li><b>Trust fails closed:</b> accepting a risky profile change is an explicit confirmation or an explicit flag naming what is accepted (<code>trust &lt;p&gt; --accept &lt;hash&gt;</code>); <code>--yes</code> never accepts trust; CI never defaults to allow.</li>
+<li><b>No prompts after <code>claude</code> starts;</b> the terminal is restored before the launcher starts or replaces itself with <code>claude</code>.</li>
+<li><b>Output:</b> <code>--json</code> with a versioned schema on read commands; <code>NO_COLOR</code> and <code>--no-color</code> honored; color is never the only carrier of meaning; <code>--plain</code> line-oriented mode for screen readers; documented exit codes (0 ok, 1 failure, 2 usage, 3 blocked by policy, 4 needs trust, 130 interrupted); shell completion for bash, zsh, fish and PowerShell.</li>
+<li><b>First release scope:</b> a profile picker (bare command), a <code>new</code> wizard, an <code>init</code> wizard, the <code>trust</code> diff-and-confirm, <code>edit</code> via <code>$EDITOR</code>. Not a full-screen dashboard.</li>
+</ul>
+<p class="small">Implications: one command tree feeds flags, help, completion and prompts; a thin <code>Prompter</code> interface so flows can be tested with scripted answers; library choice deferred (static binary, no cgo, Windows consoles with a plain fallback, minimal dependencies); golden tests for non-interactive behavior plus a pty smoke test per OS (ConPTY on Windows); prompts must not echo secrets.</p>
 <h3>Policy spectrum and open source (R3, R4)</h3>
 <p>The org enforces managed settings; the tool must also work with none or partial policy, and will be open source. The launcher is <b>capability-driven</b>: it probes each capability and degrades per feature.</p>
 <table><thead><tr><th>Capability</th><th>Needed for</th><th>If blocked</th></tr></thead><tbody>
@@ -636,6 +649,7 @@ mcp_registry = "mcp/registry.toml"</pre>
 <tr><td>Generated bundles</td><td>Committed in <code>bundles/</code>, checked for drift in CI</td></tr>
 <tr><td>Shared state</td><td>Auth, history and memory shared across profiles; accounts are a separate axis</td></tr>
 <tr><td>Targets</td><td>darwin, linux and windows, each arm64 and amd64 (R1)</td></tr>
+<tr><td>Interaction</td><td>R6: interactive mode and flag-based mode; flags are the contract; prompts only on a TTY; trust never auto-accepted</td></tr>
 <tr><td>License</td><td>MIT (LICENSE file still to add; confirm employer approval first)</td></tr>
 </tbody></table>
 <h3>Still open</h3>
@@ -862,6 +876,17 @@ sre changed since you last accepted it:
   + mcp.servers: pagerduty-ro (command: npx -y @acme/pagerduty-mcp)
 accept? [y/N]`,
 ["The platform team tags a release of the org data repo (e.g. v2026.10.1); users (or ccprofiles init with the repo URL, proposed) add it as a git source pinned to that tag. A plugin source is planned for later.","Accepted hashes live in a lockfile; risky changes (MCP command, env, prompt text) need explicit acceptance.","Org profiles load only from trusted sources: an allowlisted marketplace or a pinned git ref."]],
+["Interactive and scripted","The same command, two ways.",
+`$ ccprofiles
+? Run which profile?  (type to filter)
+> frontend   React, CSS and accessibility work
+  sre        Incident response and observability
+Equivalent: ccprofiles run frontend
+
+# in a script or CI: no prompts, errors name what is missing
+$ ccprofiles new sre-night --from sre --no-interactive
+error: nothing to add; give --plugin or --skill-off (exit 2)`,
+["Flags are the contract; interactive mode only asks for what is missing and prints the equivalent command.","Trust is never auto-accepted: use ccprofiles trust <p> --accept <hash>; --yes does not apply."]],
 ["Shortcuts","Speed, per shell.",
 `# bash / zsh
 alias cf='ccprofiles run frontend --'
