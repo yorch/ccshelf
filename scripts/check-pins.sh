@@ -45,6 +45,13 @@ cache_dir="$(mktemp -d)"
 trap '/bin/rm -rf "$cache_dir"' EXIT
 
 notice_offline() {
+  # In CI the verification must really run: an unauthenticated or offline
+  # runner would otherwise pass without checking a single comment.
+  if [ -n "${CI:-}" ] && [ "${CHECK_PINS_OFFLINE:-0}" != "1" ]; then
+    echo "check-pins: error: comment-to-SHA verification is unavailable in CI (set GH_TOKEN, or CHECK_PINS_OFFLINE=1 to skip on purpose)" >&2
+    status=1
+    return
+  fi
   if [ "$skip_notice_printed" -eq 0 ]; then
     echo "check-pins: notice: comment-to-SHA verification skipped (gh missing, offline or CHECK_PINS_OFFLINE=1)" >&2
     skip_notice_printed=1

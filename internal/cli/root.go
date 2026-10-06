@@ -14,6 +14,7 @@ import (
 	"github.com/ccshelf/ccshelf/internal/cli/launcher"
 	"github.com/ccshelf/ccshelf/internal/cli/orgcmd"
 	"github.com/ccshelf/ccshelf/internal/ui"
+	"github.com/ccshelf/ccshelf/internal/version"
 )
 
 // NewRoot builds the root command. The globals are bound as persistent flags
@@ -38,7 +39,9 @@ func newRoot(env *clicore.Env) (*cobra.Command, *clicore.Globals) {
 		Short:         "Run Claude Code with a named profile; lint and publish an org's plugin catalog",
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		Version:       version.String(),
 	}
+	root.SetVersionTemplate("{{.Version}}\n")
 	// Bare "ccshelf": the profile picker on a terminal, the help otherwise.
 	var run *cobra.Command
 	root.RunE = func(cmd *cobra.Command, _ []string) error {

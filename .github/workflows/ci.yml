@@ -55,6 +55,8 @@ jobs:
         with:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
       - name: Actions are pinned by full commit SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: scripts/check-pins.sh
       - name: actionlint (pinned release binary, checksum verified)
         run: |

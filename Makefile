@@ -10,7 +10,7 @@ CMD      := ./cmd/ccshelf
 DIST     := dist
 VERSION  ?= dev
 COMMIT   ?= $(shell git rev-parse --short=12 HEAD 2>/dev/null || echo none)
-DATE     ?= $(shell date -u +%Y-%m-%d)
+DATE     ?= $(shell git log -1 --format=%cs 2>/dev/null || date -u +%Y-%m-%d)
 LDFLAGS  := -s -w \
   -X $(MODULE)/internal/version.Version=$(VERSION) \
   -X $(MODULE)/internal/version.Commit=$(COMMIT) \

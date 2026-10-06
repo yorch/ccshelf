@@ -91,7 +91,7 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          if ! printf '%s' "$TAG" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'; then
+          if ! printf '%s' "$TAG" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$'; then
             echo "Tag is not a semantic version: $TAG" >&2
             exit 1
           fi
@@ -128,6 +128,8 @@ jobs:
       - name: Generated docs report is up to date
         run: python3 docs/build_report.py --check
       - name: Actions are pinned by full commit SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: scripts/check-pins.sh
 
   # Dry runs: build a snapshot with the read-only token. No environment (so no approval
@@ -333,6 +335,7 @@ jobs:
             -f "content=$(base64 -w0 pins.txt)" \
             -f "sha=${file_sha}" \
             -f "branch=${branch}" >/dev/null
-          gh pr create --repo "$REPO" --base main --head "$branch" \
-            --title "chore: pin checksums for ${TAG}" \
-            --body "Appends the SHA-256 of the six ${TAG} archives to action/pins.txt so that pinning the Action by commit SHA pins the binary. Compare the lines with the signed checksums.txt of the release before merging."
+          gh api --method POST "repos/${REPO}/pulls" \
+            -f "title=chore: pin checksums for ${TAG}" \
+            -f "head=${branch}" -f "base=main" \
+            -f "body=Appends the SHA-256 of the six ${TAG} archives to action/pins.txt so that pinning the Action by commit SHA pins the binary. Compare the lines with the signed checksums.txt of the release before merging." >/dev/null

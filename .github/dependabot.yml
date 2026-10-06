@@ -27,6 +27,10 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: "chore(deps)"
+    ignore:
+      # The starter template pins this Action to a placeholder SHA by design;
+      # adopters replace it with a real release.
+      - dependency-name: "ccshelf/ccshelf/*"
     groups:
       github-actions:
         patterns: ["*"]
