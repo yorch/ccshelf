@@ -138,7 +138,7 @@ Decided 2026-10-06: the **tool is hosted in a public GitHub repo** (this one), a
 Consequences:
 - **Reusable CI:** the data repo's workflow calls the public tool, either `uses: <owner>/claude-profile/action@<pinned tag or SHA>` or a step that downloads a pinned release binary. GHE Cloud can use public actions directly; **GHE Server needs GitHub Connect or a mirror** (e.g. `actions-sync`), or the binary-download variant (also mirrorable to an internal registry). Both variants must be documented; the logic stays in the binary (R2).
 - **Pin everything.** The data repo pins the tool version and (where supported) verifies a checksum, since the tool runs in the org's CI and on developers' machines.
-- **Starter template:** ship a template/example data repo (`examples/org-data-repo/`, possibly also a GitHub template repository) with a sample `marketplace.json`, `profiles/`, a CI workflow and a catalog publish recipe, so adopting takes minutes.
+- **Starter template** (layout in `08-org-data-repo-structure.md`): ship a template/example data repo (`examples/org-data-repo/`, possibly also a GitHub template repository) with a sample `marketplace.json`, `profiles/`, a CI workflow and a catalog publish recipe, so adopting takes minutes.
 - **Configuration points to the data repo**, not the reverse: profile sources (`git`/`plugin`/`dir`), catalog metadata schema location, and lint rules all come from the org's config, with sane defaults.
 - **Catalog hosting is the adopter's choice** (R2): the tool outputs a plain static directory; the starter template shows GitHub Pages and an internal static host. We don't pick one for the org.
 - **Telemetry:** none by default. An open-source tool that runs in corporate CI must not phone home.

@@ -11,6 +11,7 @@ Status: research and Stage 0 experiments complete (2026-10-06). Masking via `--s
 | [05-stage0-results.md](05-stage0-results.md) | Empirical tests of the launcher assumptions |
 | [06-example-workflows.md](06-example-workflows.md) | Example workflows showing how profiles and the catalog would be used (mockups) |
 | [07-how-it-invokes-claude.md](07-how-it-invokes-claude.md) | How the launcher invokes `claude`, what is shared between profiles, combining profiles with accounts |
+| [08-org-data-repo-structure.md](08-org-data-repo-structure.md) | How an adopting org's private profile and catalog repo should be structured (layout, sidecar metadata, CODEOWNERS, CI) |
 | [report.html](report.html) | Interactive single-file version of all of the above |
 
 ## How to read the confidence labels

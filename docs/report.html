@@ -266,6 +266,45 @@ Per account: plugins and marketplaces are installed separately, the plugin cache
 <li>Config points from the data repo to the tool, not the reverse. No telemetry by default.</li>
 </ul>
 <div class="callout"><b>License: MIT</b> for the tool repo. To do: add a LICENSE file (copyright holder and year) and confirm your employer allows open-sourcing this before the first public commit. The org's data repo is its own.</div>
+<h3>Org data repo structure</h3>
+<p>The private repo an adopting org keeps (R5). Native files stay native so <code>/plugin</code> works unchanged; everything else is derived. Full detail in <code>08-org-data-repo-structure.md</code>. Names are provisional.</p>
+<pre>acme-claude-marketplace/
+├── .claude-plugin/marketplace.json   native, hand-written
+├── plugins/                          in-repo plugin source
+│   ├── design-kit/  sre-kit/ ...
+├── bundles/                          GENERATED, committed: profile-frontend/, profile-sre/ ...
+├── profiles/                         base.toml  frontend.toml  sre.toml
+├── mcp/registry.toml                 named MCP server definitions
+├── prompts/                          files profiles reference
+├── catalog/
+│   ├── plugins/                      one sidecar per plugin (owner, status, when_to_use ...)
+│   ├── taxonomy.toml                 allowed categories and tags
+│   └── site/                         optional title, logo, template overrides
+├── claude-profile.toml               org config: required fields, lint, catalog settings
+├── .github/  CODEOWNERS  workflows/{validate,tag-plugins,catalog,release}.yml
+└── docs/  README.md</pre>
+<p class="small">Not committed: the built catalog site and <code>catalog.json</code> (built in CI from the files above).</p>
+<table><thead><tr><th>Path</th><th>Written by</th><th>Committed</th></tr></thead><tbody>
+<tr><td><code>marketplace.json</code>, <code>plugins/</code>, <code>profiles/</code>, <code>mcp/</code>, <code>catalog/</code>, <code>claude-profile.toml</code></td><td>Humans</td><td>Yes</td></tr>
+<tr><td><code>bundles/profile-*</code></td><td><code>cprof compile</code>; CI fails if they drift</td><td>Yes</td></tr>
+<tr><td>catalog site, <code>catalog.json</code></td><td>CI</td><td>No</td></tr>
+</tbody></table>
+<div class="callout"><b>Proposed change: a metadata sidecar per plugin.</b> With ~50 plugins in one <code>marketplace.json</code>, CODEOWNERS can't route review per JSON entry, so "authors write, platform team reviews" can't be enforced by file ownership. One file per plugin in <code>catalog/plugins/&lt;name&gt;.toml</code> fixes that: a PR touching <code>catalog/</code> needs platform review while plugin source stays with the author's team. The catalog is then derived from <code>marketplace.json</code> + sidecars + git data. Small registries can opt into single-file mode (metadata inside each entry). Awaiting confirmation.</div>
+<pre># catalog/plugins/sre-kit.toml  (fields provisional)
+owner = "@acme/sre"                  # accountable team (required)
+status = "active"                    # active | experimental | deprecated (required)
+when_to_use = ["incident response", "postmortems"]
+avoid_when = ["routine deploy checks"]
+overlaps_with = ["ops-helper"]
+superseded_by = ""                   # required when deprecated
+review_by = "2027-03-01"             # doctor flags stale entries
+support = "#sre-help"</pre>
+<table><thead><tr><th>Workflow</th><th>Trigger</th><th>Steps</th></tr></thead><tbody>
+<tr><td><code>validate.yml</code></td><td>pull request</td><td><code>claude plugin validate .</code>, lint, <code>compile --check</code>, catalog preview artifact</td></tr>
+<tr><td><code>tag-plugins.yml</code></td><td>merge to main</td><td>tag changed plugin versions <code>&lt;plugin&gt;--v&lt;version&gt;</code></td></tr>
+<tr><td><code>catalog.yml</code></td><td>merge to main</td><td>build and publish the catalog (Pages or any static host)</td></tr>
+<tr><td><code>release.yml</code></td><td>manual or scheduled</td><td>tag the repo (e.g. <code>v2026.10.1</code>) so consumers pin profile sources</td></tr>
+</tbody></table>
 <h3>Policy spectrum and open source (R3, R4)</h3>
 <p>The org enforces managed settings; the tool must also work with none or partial policy, and will be open source. The launcher is <b>capability-driven</b>: it probes each capability and degrades per feature.</p>
 <table><thead><tr><th>Capability</th><th>Needed for</th><th>If blocked</th></tr></thead><tbody>
