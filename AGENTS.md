@@ -45,8 +45,18 @@ Guidance for AI coding agents (and humans) working in this repo, the public **to
 - Tests: golden files for generated settings, a fake `claude` test double, CI matrix on macOS, Linux and Windows. A real-`claude` integration test is opt-in because it needs authentication.
 - No telemetry. No network calls except those the user asked for (git fetch of configured sources).
 
-## Commits
-- Commit **logically as you go**: one coherent change per commit (for example docs content, report redesign, a new package, a fix), not one big commit at the end.
-- Imperative, present-tense subject under ~70 characters, with a short body saying why when it isn't obvious. Prefixes such as `docs:`, `feat:`, `fix:`, `test:`, `chore:` are welcome.
-- Only commit when the user has asked to commit or has said to commit as you go. Never push unless asked.
-- Don't commit generated scratch files or anything from experiments (they live outside the repo).
+## Commits and pull requests
+Both commit messages **and pull request titles** use [Conventional Commits](https://www.conventionalcommits.org/). Maintainers squash-merge, so the PR title becomes the commit on `main`, and the release changelog is generated from those messages.
+
+- **Format:** `type(scope)!: description`. The scope and the `!` are optional.
+  - Types: `feat` (new behavior), `fix` (a bug), `docs`, `test`, `ci` (workflows and release tooling), `build`, `refactor`, `perf`, `chore`, `revert`.
+  - Scope: the area touched, in lowercase, for example `settings`, `trust`, `site`, `action`, `catalog`. Use none when the change spans areas.
+  - Description: imperative, present tense, lowercase start, no trailing period, whole subject under ~70 characters. Example: `fix(settings): reject env names matching ANTHROPIC_*`.
+  - Breaking change: add `!` after the type or scope and a `BREAKING CHANGE:` footer that says what to do instead.
+- **Body:** a short paragraph saying why, when it is not obvious. End commit messages with the attribution line the harness gives you (`Co-Authored-By: ...`).
+- **Commit logically as you go:** one coherent change per commit (for example docs content, a new package, a fix), not one big commit at the end. Do not commit generated scratch files or anything from experiments (they live outside the repo).
+- **Pull requests:**
+  - The title follows the format above, for example `feat(site): add the ccshelf website`. Never `Update README` or `Fixes`.
+  - One focused change per PR. Fill in the PR template; the description says what, why, how it was verified and what was not verified. End it with the attribution line the harness gives you (`🤖 Generated with [Claude Code]...`).
+  - `ci-ok` must be green before merge. Open a PR from a branch (`type/short-name`, for example `feat/site`), never push to `main` for non-trivial work.
+- **Permission:** only commit when the user asked to commit or said to commit as you go. Never push, open or edit a PR unless the user asked. When asked to retitle, edit with `gh pr edit --title`.
