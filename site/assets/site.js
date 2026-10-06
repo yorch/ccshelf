@@ -67,20 +67,13 @@
     var summaryEl = document.getElementById('demo-summary');
     var timer = null;
 
-    function stateOf(li) {
-      return li.classList.contains('is-on') ? 'is-on' : li.classList.contains('is-protected') ? 'is-protected' : 'is-off';
-    }
     function setItem(li, state, tagText) {
-      var before = stateOf(li);
-      li.classList.remove('is-on', 'is-off', 'is-protected', 'just-masked');
+      li.classList.remove('is-on', 'is-off', 'is-protected');
       li.classList.add(state);
       var tag = li.querySelector('.tag');
       if (tag) tag.textContent = tagText;
-      if (state === 'is-off' && before !== 'is-off' && !reduce) {
-        void li.offsetWidth; /* restart the animation */
-        li.classList.add('just-masked');
-        window.setTimeout(function () { li.classList.remove('just-masked'); }, 700);
-      }
+      /* The lift (and the settle) is a CSS transition on the state class; nothing to restart here.
+         With reduced motion the stylesheet has no transition, so the state changes at once. */
     }
     function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
 
@@ -88,7 +81,7 @@
       warnEl.textContent = d.warnings.join('\n');
       warnEl.hidden = d.warnings.length === 0;
       lineEl.textContent = d.command;
-      outEl.hidden = false;
+      outEl.classList.remove('is-pending');
     }
 
     function applyProfile(name, animate) {
@@ -128,7 +121,7 @@
         return;
       }
       typedEl.textContent = '';
-      outEl.hidden = true;
+      outEl.classList.add('is-pending'); /* keeps its space: no layout shift while typing */
       caret.classList.remove('done');
       var n = 0;
       timer = window.setInterval(function () {
@@ -150,10 +143,22 @@
       if (capDate && cap.date) capDate.textContent = cap.date;
       picker.addEventListener('change', function (ev) {
         var t = ev.target;
-        if (t && t.name === 'profile') applyProfile(t.value, true);
+        if (t && t.name === 'profile') { root.classList.remove('will-play'); applyProfile(t.value, true); }
       });
       var checked = picker.querySelector('input[name="profile"]:checked');
-      applyProfile(checked ? checked.value : 'frontend', false);
+      var first = checked ? checked.value : 'frontend';
+      /* Play once on load: type the command, then lift the spines. Not with reduced motion, not when
+         the visitor arrived at an anchor or already scrolled, and never again after that. */
+      var autoplay = !reduce && !window.location.hash && (window.pageYOffset || 0) < 80;
+      if (autoplay) {
+        root.classList.add('will-play');
+        applyProfile(first, true);
+        window.setTimeout(function () {
+          root.classList.remove('will-play');
+        }, 450);
+      } else {
+        applyProfile(first, false);
+      }
     }
 
     /* ---- Catalog filter, with a polite live count ("3 of 7 plugins"). ---- */
@@ -198,7 +203,7 @@
           var text = target.textContent.replace(/\n$/, '');
           var done = function (msg) {
             btn.textContent = msg;
-            window.setTimeout(function () { btn.textContent = 'Copy'; }, 1800);
+            window.setTimeout(function () { btn.textContent = 'Copy commands'; }, 1800);
           };
           var fallback = function () {
             var sel = window.getSelection();

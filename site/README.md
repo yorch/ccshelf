@@ -30,6 +30,8 @@ scripts/regen-site-demo.sh --check   # fails if it is stale
 
 then update the static `frontend` block and the commit label in `index.html` to match.
 
+What the page says under the terminal is one line: real `ccshelf dry-run` output, the commit, the fictional `acme` org, the fake `claude`. The longer account lives here: cache paths in the captured output are shortened to `~/.cache/ccshelf/`, the profiles come from `examples/org-data-repo`, and nothing on the page runs `ccshelf`; the script only replays the captured data.
+
 ## Addresses
 
 - **Repository link.** The href of `<a id="repo">` in `index.html` is `REPO_URL`; every other repository link starts with it (the validator enforces that). Today it is the private working repository. Change it to the public home before publishing: edit it in one find-and-replace in `index.html`, or pass `--repo-url` to `scripts/build-site.sh` at deploy time.
