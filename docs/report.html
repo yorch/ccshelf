@@ -138,7 +138,7 @@ section>input[type=search]{display:block}
 <body>
 <div class="shell">
 <aside class="rail">
-<div class="brand"><h1>ccshelf</h1><p>Research and design notes. Claude Code 2.1.290. Generated from the Markdown in docs/ (source hash 0eec612f).</p></div>
+<div class="brand"><h1>ccshelf</h1><p>Research and design notes. Claude Code 2.1.290. Generated from the Markdown in docs/ (source hash 974de3be).</p></div>
 <nav aria-label="Sections"><div id="tabs" role="tablist" aria-orientation="vertical"></div></nav>
 <div class="legend" aria-label="Confidence markers"><b>How sure we are</b><br><span class="lg gv" aria-hidden="true">&#9679;</span>verified in docs, gh or the CLI<br><span class="lg gr" aria-hidden="true">&#9680;</span>reported by a research agent<br><span class="lg gu" aria-hidden="true">&#9675;</span>unverified or inferred</div>
 <button class="themebtn" id="themebtn" type="button">Switch theme</button>
@@ -582,8 +582,8 @@ inherit_user_settings = true  # true: keep your ~/.claude/settings.json and mask
                               # Personal profiles only: a shared profile may not set false (SR3), because
                               # it would drop the user's deny rules and hooks.
 [session.env]
-FIGMA_TOKEN_REF = "op://dev/figma/token"   # Allowlisted names only (never ANTHROPIC_*, *_PROXY, NODE_*, OTEL_*,
-                              # CLAUDE_CODE_*). Values are references passed to the MCP server at spawn;
+FIGMA_TOKEN_REF = "op://dev/figma/token"   # Allowlist: only CCSHELF_VAR_&lt;NAME&gt; or names ending in _REF (never
+                              # ANTHROPIC_*, *_PROXY, NODE_*, PYTHON*, ...). Values are references passed to tools at spawn;
                               # the launcher never resolves secrets to disk or argv. Never commit secrets.
 
 # ---- Policy behavior ----
@@ -806,7 +806,7 @@ mcp_registry = "mcp/registry.toml"</code></pre>
 <p>Security requirements SR1 to SR5 (added after the security review) and the managed-policy model (R3).</p>
 <h3 id="security-security-requirements-sr1-to-sr5">Security requirements (SR1 to SR5)</h3>
 <p>Added 2026-10-06 after the security review, whose verdict was that the trust model was "not acceptable as written". SR1 to SR3 are required before a first release; SR4 and SR5 before anyone runs the tool in corporate CI. A written threat model and a <code>SECURITY.md</code> are also required before the repo goes public. The settings-file claim underneath SR1 was verified by me (see <a href="#stage0">stage0.md</a>): a <code>--settings</code> file can switch a session to <code>bypassPermissions</code>.</p>
-<p><strong>SR1: closed profile schema.</strong> The generator writes only an allowlist of settings keys: <code>enabledPlugins</code>, <code>skillOverrides</code>, <code>disableClaudeAiConnectors</code>, <code>deniedMcpServers</code>, <code>model</code>, <code>effort</code> and allowlisted env names. A profile can never write <code>permissions</code>, <code>hooks</code>, <code>apiKeyHelper</code>, <code>*McpServers</code> allow lists, <code>disableAllHooks</code>, or env names matching <code>ANTHROPIC_*</code>, <code>*_PROXY</code>, <code>NODE_*</code>, <code>OTEL_*</code> or <code>CLAUDE_CODE_*</code> (a profile's env alone could otherwise redirect every prompt and file to another endpoint). MCP server definitions are not part of a profile: a profile names servers, and the definitions live in a reviewed registry in the org data repo. A golden test proves that no profile, however crafted, produces a key outside the allowlist.</p>
+<p><strong>SR1: closed profile schema.</strong> The generator writes only an allowlist of settings keys: <code>enabledPlugins</code>, <code>skillOverrides</code>, <code>disableClaudeAiConnectors</code>, <code>deniedMcpServers</code>, <code>model</code> and env names that pass the env allowlist (<code>internal/envpolicy</code>: <strong>only</strong> names in the <code>CCSHELF_VAR_&lt;NAME&gt;</code> namespace, names ending in <code>_REF</code>, and <code>CCSHELF_PROFILE</code>; a denylist of known-dangerous prefixes such as <code>ANTHROPIC_</code>, <code>NODE_</code>, <code>PYTHON</code>, <code>JAVA_</code>, <code>LD_</code>, suffixes such as <code>_OPTIONS</code>, and exact names is applied first as defense in depth). <code>effort</code> is passed as a command-line flag, not a settings key. A profile can never write <code>permissions</code>, <code>hooks</code>, <code>apiKeyHelper</code>, <code>*McpServers</code> allow lists or <code>disableAllHooks</code> (a profile's env alone could otherwise redirect every prompt and file to another endpoint or run code at process start). MCP server definitions are not part of a profile: a profile names servers, and the definitions live in a reviewed registry in the org data repo. A golden test proves that no profile, however crafted, produces a key outside the allowlist.</p>
 <p><strong>SR2: trust the resolved closure, pinned by commit SHA.</strong></p>
 <ul>
 <li>Every non-personal source needs explicit trust; project sources (a <code>.ccshelf/</code> folder in a cloned repo) are <strong>off by default</strong>, are trusted per repo (path plus hash, like direnv <code>allow</code>), cannot shadow a name from another source (a collision is an error), and can never define MCP commands, env or prompt text. Otherwise a malicious repository could run code through the launcher while skipping Claude Code's own workspace trust and per-server MCP approval.</li>

@@ -116,8 +116,8 @@ inherit_user_settings = true  # true: keep your ~/.claude/settings.json and mask
                               # Personal profiles only: a shared profile may not set false (SR3), because
                               # it would drop the user's deny rules and hooks.
 [session.env]
-FIGMA_TOKEN_REF = "op://dev/figma/token"   # Allowlisted names only (never ANTHROPIC_*, *_PROXY, NODE_*, OTEL_*,
-                              # CLAUDE_CODE_*). Values are references passed to the MCP server at spawn;
+FIGMA_TOKEN_REF = "op://dev/figma/token"   # Allowlist: only CCSHELF_VAR_<NAME> or names ending in _REF (never
+                              # ANTHROPIC_*, *_PROXY, NODE_*, PYTHON*, ...). Values are references passed to tools at spawn;
                               # the launcher never resolves secrets to disk or argv. Never commit secrets.
 
 # ---- Policy behavior ----
