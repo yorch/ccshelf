@@ -1,0 +1,130 @@
+#!/usr/bin/env bash
+# regen-site-demo.sh: regenerate site/assets/demo-data.js, the data behind the website's loadout demo,
+# from REAL ccshelf output.
+#
+# It builds ccshelf and the repo's fake claude test double (internal/testutil/fakeclaude), makes a
+# throwaway HOME/XDG/APPDATA, points a `dir` source at examples/org-data-repo/profiles, trusts the
+# example profiles by their closure hash (the same two steps a user does: `ccshelf show`, then
+# `ccshelf trust --accept <hash>`), creates the extra "writing" profile with `ccshelf new`, and then
+# captures `ccshelf dry-run <profile>` plus the generated settings file for each profile.
+# The real `claude` is never run and nothing outside the throwaway directory is touched.
+#
+# Usage:
+#   scripts/regen-site-demo.sh            print the JavaScript file to stdout
+#   scripts/regen-site-demo.sh --write    write site/assets/demo-data.js
+#   scripts/regen-site-demo.sh --check    fail if the committed site/assets/demo-data.js differs
+#
+# Needs: bash, Go (see go.mod), git, python3. Environment overrides: CCSHELF_BIN and FAKE_CLAUDE_BIN
+# skip the build and use the given binaries.
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+repo=$(pwd)
+mode=${1:-print}
+case "$mode" in print | --write | --check) ;; *) echo "usage: $0 [--write|--check]" >&2; exit 2 ;; esac
+
+work=$(mktemp -d)
+trap '/bin/rm -rf "$work"' EXIT
+
+if [ -z "${CCSHELF_BIN:-}" ]; then
+  CCSHELF_BIN=$work/bin/ccshelf
+  go build -o "$CCSHELF_BIN" ./cmd/ccshelf
+fi
+if [ -z "${FAKE_CLAUDE_BIN:-}" ]; then
+  mkdir -p "$work/fakebin"
+  go build -o "$work/fakebin/claude" ./internal/testutil/fakeclaude
+  FAKE_CLAUDE_BIN=$work/fakebin/claude
+fi
+
+# Throwaway environment. Nothing of the real HOME or Claude Code config is read or written.
+mkdir -p "$work/home" "$work/config" "$work/cache" "$work/bin" "$work/path"
+cp "$FAKE_CLAUDE_BIN" "$work/path/claude"
+export HOME=$work/home XDG_CONFIG_HOME=$work/config XDG_CACHE_HOME=$work/cache
+export APPDATA=$work/config LOCALAPPDATA=$work/cache USERPROFILE=$work/home
+export PATH=$work/path:$PATH
+unset CLAUDE_CONFIG_DIR NO_COLOR
+
+# The plugins the fake claude reports as installed: the fictional acme plugins of the example template.
+python3 -I - "$work/plugins.json" <<'PY'
+import json, sys
+ids = ["audit-logger", "design-kit", "docs-writer", "partner-linter", "release-notes", "seo-tools", "sre-kit"]
+json.dump([{"id": i + "@acme", "version": "1.0.0", "scope": "user", "enabled": True,
+            "installPath": "/fake/" + i, "installedAt": "2026-01-01T00:00:00.000Z",
+            "lastUpdated": "2026-01-02T00:00:00.000Z", "projectEnabled": False} for i in ids],
+          open(sys.argv[1], "w"))
+PY
+export FAKE_CLAUDE_PLUGINS=$work/plugins.json
+
+cc() { "$CCSHELF_BIN" "$@"; }
+cd "$work"
+cc init --dir "$repo/examples/org-data-repo/profiles" >/dev/null
+trust() {
+  local hash
+  hash=$(cc show "$1" | sed -n 's/^Closure: sha256://p')
+  [ -n "$hash" ] || { echo "no closure hash for $1" >&2; exit 1; }
+  cc trust "$1" --accept "$hash" >/dev/null
+}
+for p in frontend sre seo; do trust "$p"; done
+WRITING_CMD='ccshelf new writing --from base --plugin docs-writer@acme'
+cc new writing --from base --plugin docs-writer@acme --no-interactive >/dev/null
+trust writing
+
+mkdir -p "$work/out"
+for p in frontend sre seo writing; do
+  cc dry-run "$p" >"$work/out/$p.cmd" 2>"$work/out/$p.warn"
+done
+commit=$(git -C "$repo" merge-base HEAD origin/main 2>/dev/null || git -C "$repo" rev-parse HEAD)
+commit_date=$(git -C "$repo" log -1 --format=%cs "$commit")
+
+js=$(python3 -I - "$work" "$commit" "$commit_date" "$WRITING_CMD" <<'PY'
+import json, os, re, sys
+work, commit, date, writing_cmd = sys.argv[1:5]
+out = os.path.join(work, "out")
+cache = os.path.join(work, "cache", "ccshelf")
+
+def sanitize(s):
+    # Show the usual cache dir and plain `claude` instead of this throwaway run's paths.
+    return s.replace(cache, "~/.cache/ccshelf").replace(os.path.join(work, "path", "claude"), "claude")
+
+profiles = {}
+for name in ["frontend", "sre", "seo", "writing"]:
+    cmd = open(os.path.join(out, name + ".cmd")).read().strip()
+    warns = [l.strip() for l in open(os.path.join(out, name + ".warn")).read().splitlines() if l.strip()]
+    settings_m = re.search(r"--settings (\S+)", cmd)
+    mcp_m = re.search(r"--mcp-config (\S+)", cmd)
+    if "\n" in cmd or not settings_m or not mcp_m:
+        sys.exit("unexpected dry-run output for " + name)
+    settings = json.load(open(settings_m.group(1)))
+    servers = sorted(json.load(open(mcp_m.group(1))).get("mcpServers", {}).keys())
+    profiles[name] = {
+        "source": "examples/org-data-repo/profiles/%s.toml" % name if name != "writing" else writing_cmd,
+        "warnings": [sanitize(w) for w in warns],
+        "command": sanitize(cmd),
+        "settings": settings,
+        "mcpServers": servers,
+    }
+
+data = {
+    "captured": {"commit": commit[:7], "date": date, "claude": "the repo's fake claude test double, not the real claude"},
+    "profiles": profiles,
+}
+print("/* Generated by scripts/regen-site-demo.sh from real ccshelf output. Do not edit by hand. */")
+print("window.CCSHELF_DEMO = " + json.dumps(data, indent=2) + ";")
+PY
+)
+
+# profiles_of prints the captured profiles of a demo-data.js file, ignoring the commit label.
+profiles_of() {
+  python3 -I -c 'import json,sys; t=open(sys.argv[1]).read(); print(json.dumps(json.loads(t[t.index("{", t.index("window.CCSHELF_DEMO")):t.rindex("}")+1])["profiles"], sort_keys=True))' "$1"
+}
+
+case "$mode" in
+  print) printf '%s\n' "$js" ;;
+  --write) printf '%s\n' "$js" >"$repo/site/assets/demo-data.js" ;;
+  --check)
+    printf '%s\n' "$js" >"$work/demo-data.js"
+    if [ "$(profiles_of "$work/demo-data.js")" != "$(profiles_of "$repo/site/assets/demo-data.js")" ]; then
+      echo "site/assets/demo-data.js is stale: run scripts/regen-site-demo.sh --write" >&2
+      exit 1
+    fi
+    ;;
+esac
