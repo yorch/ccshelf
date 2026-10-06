@@ -17,6 +17,7 @@
 | [design/security.md](design/security.md) | Security requirements SR1 to SR5 and the managed-policy model (R3) |
 | [design/platform.md](design/platform.md) | GitHub, GHE and cross-platform support (R1, R2) |
 | [design/project.md](design/project.md) | Open source (R4), license and the project name |
+| [design/release.md](design/release.md) | Versioning and the release pull request (release-please), the token, tag and signing chain, PR title rules, failure and rollback, first-release runbook, and the assessment of three other projects |
 | [design/workflows.md](design/workflows.md) | Example workflows (mockups) |
 | [design/roadmap.md](design/roadmap.md) | Phase 0 evidence, the MVP, deferred work and non-goals |
 | [research/context.md](research/context.md) | The two use cases and how the research was run |
