@@ -72,44 +72,33 @@ signs:
       - ${artifact}
     output: true
 
+# The release notes are written by release-please (CHANGELOG.md and the draft
+# release it creates), not by goreleaser: a second changelog would duplicate them.
 changelog:
-  sort: asc
-  use: github
-  filters:
-    exclude:
-      - "^test:"
-      - "^ci:"
-      - "^chore\\(deps\\)"
-      - "Merge pull request"
-      - "Merge branch"
-  groups:
-    - title: Security
-      regexp: '^.*?(fix|feat)(\([[:word:]]+\))?!?: .*(security|SR[1-5]|CVE).*$'
-      order: 0
-    - title: Features
-      regexp: '^.*?feat(\([[:word:]]+\))?!?:.+$'
-      order: 1
-    - title: Bug fixes
-      regexp: '^.*?fix(\([[:word:]]+\))?!?:.+$'
-      order: 2
-    - title: Documentation
-      regexp: '^.*?docs(\([[:word:]]+\))?!?:.+$'
-      order: 3
-    - title: Other changes
-      order: 999
+  disable: true
 
+# release-please creates the tag and a DRAFT release whose body is the changelog
+# entry. goreleaser finds that draft by its name (use_existing_draft; the name
+# template must equal release-please's release name, "vX.Y.Z"), uploads the archives,
+# checksums, signature and SBOMs to it, appends the verification footer to the notes
+# (mode: append, so the changelog is kept) and publishes it. The release workflow cuts
+# the footer from the notes first, so re-running a failed job does not repeat it.
+# replace_existing_artifacts only matters for a partial upload to the draft: a
+# published release is never found as a draft, so its assets are never replaced.
 release:
   github:
     owner: &owner ccshelf # OWNER
     name: ccshelf
   draft: false
+  use_existing_draft: true
+  replace_existing_artifacts: true
+  mode: append
   prerelease: auto
-  header: |
-    ## ccshelf {{ .Tag }}
+  footer: |
+    <!-- ccshelf-release-footer -->
+    ## Verify this release
 
     Unofficial; not affiliated with Anthropic.
-  footer: |
-    ## Verify this release
 
     Every archive is listed in `checksums.txt`, which is signed keyless with cosign
     (`checksums.txt.sigstore.json`) and covered by a GitHub build provenance attestation.
