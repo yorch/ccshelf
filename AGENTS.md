@@ -38,6 +38,10 @@ Guidance for AI coding agents (and humans) working in this repo, the public **to
 - **The HTML report is generated, not edited.** `docs/report.html` is built from the Markdown by `python3 docs/build_report.py` (Python 3, standard library only). Never edit `report.html` by hand; edit the Markdown or the build inputs under `docs/report/` and rebuild. Rebuild and commit `report.html` in the same commit as the Markdown change. The report must stay a single self-contained file: no external requests or CDN, light and dark themes, works at phone width, keyboard accessible, respects reduced motion. After a rebuild, load the page and check every tab.
 - Markdown subset the generator understands: headings, paragraphs, lists (including task lists), GFM tables, fenced code, inline code, bold, italic, strikethrough, links, and the `{V}` `{R}` `{U}` markers. Keep to it.
 
+## Website conventions
+- `site/` is the project website: plain HTML, one CSS file, one JS file, system fonts, no build step, no framework and no external request of any kind. All URLs are relative so it works from `file://` and a Pages project subpath. The repository address lives in one place (the `href` of `#repo` in `site/index.html`, `REPO_URL`); never hard-code it elsewhere.
+- A strict `<meta>` CSP forbids inline scripts, styles and handlers. Run `make site-check` (or `bash scripts/check-site.sh`) after any edit; every claim on the page must be traceable to `docs/`.
+
 ## Go conventions (when code starts)
 - One module, one binary, packages `core/`, `profiles/`, `catalog/`; start under `internal/` with no public API promise.
 - Platform differences via build tags; use `filepath`, `os.UserConfigDir`/cache dirs, never string-concatenated paths.

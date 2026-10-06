@@ -32,4 +32,6 @@ Every command works with flags alone; on a terminal, missing values are asked fo
 
 For organizations, `ccshelf lint`, `compile`, `catalog build`, `search`, `recommend` and `doctor` work on the org data repo (see [examples/org-data-repo](examples/org-data-repo/README.md) for a starter template). The design is in [docs/](docs/README.md).
 
+The project website (static, no build step) lives in [site/](site/); it is deployed to GitHub Pages by `.github/workflows/pages.yml` and checked by `make site-check`.
+
 Licensed under the [MIT License](LICENSE).
