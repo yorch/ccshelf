@@ -587,7 +587,7 @@ func (s *Source) readBlob(ctx context.Context, dir string, e treeEntry) ([]byte,
 // verifyRepo checks that the object store holds the commit the checkout is
 // named for: HEAD is that commit, and the commit object hashes to its id.
 func (s *Source) verifyRepo(ctx context.Context, dir, sha string) error {
-	head, err := s.git(ctx, dir, dir, "rev-parse", "--verify", "--quiet", "HEAD^{commit}")
+	head, err := s.git(ctx, dir, dir, "rev-parse", "--verify", "HEAD^{commit}")
 	if err != nil {
 		return fmt.Errorf("%w: %s: %w", ErrTampered, dir, err)
 	}
