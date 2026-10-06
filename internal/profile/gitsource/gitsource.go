@@ -249,6 +249,10 @@ func (s *Source) prepare(ctx context.Context, cached string) error {
 			return err
 		}
 	}
+	// Mark the checkout as used before verifying it, so a concurrent
+	// cache.Prune does not remove a checkout that is being used.
+	now := time.Now()
+	_ = os.Chtimes(checkout, now, now)
 	root, cfg, found, err := s.verify(ctx, checkout, sha)
 	if err != nil {
 		if errors.Is(err, ErrTampered) {
@@ -256,8 +260,6 @@ func (s *Source) prepare(ctx context.Context, cached string) error {
 		}
 		return err
 	}
-	now := time.Now()
-	_ = os.Chtimes(checkout, now, now) // marks the checkout as used, for cache.Prune
 	inner := profile.DirSourceAt(profile.KindOrg, root, profile.Layout{Profiles: cfg.Profiles.Dir, Registry: cfg.Profiles.MCPRegistry})
 	s.mu.Lock()
 	s.sha = sha
@@ -396,7 +398,7 @@ func (s *Source) materialize(ctx context.Context, base, sha string) (string, err
 		if !fi.IsDir() {
 			return "", fmt.Errorf("%w: %s is not a directory", ErrTampered, final)
 		}
-		return final, nil
+		return final, nil // verified by the caller (verify) before any use
 	}
 	if err := os.Mkdir(urlDir, 0o700); err != nil && !errors.Is(err, fs.ErrExist) {
 		return "", fmt.Errorf("creating %s: %w", urlDir, err)
@@ -503,11 +505,11 @@ func (s *Source) plan(entries []treeEntry, read func(treeEntry) ([]byte, error))
 	pl := &plan{entries: entries, base: layoutBase(entries, s.subpath), cfg: orgconfig.Default()}
 	if e, ok := orgConfigEntry(entries, pl.base); ok {
 		if err := checkWatchedEntry(e); err != nil {
-			return nil, err
+			return nil, orgConfigFatal(err)
 		}
 		data, err := read(e)
 		if err != nil {
-			return nil, err
+			return nil, orgConfigFatal(err)
 		}
 		if pl.cfg, err = parseOrgConfig(data); err != nil {
 			return nil, err
@@ -519,6 +521,17 @@ func (s *Source) plan(entries []treeEntry, read func(treeEntry) ([]byte, error))
 		return nil, err
 	}
 	return pl, nil
+}
+
+// orgConfigFatal marks a hygiene failure of the org config file itself as
+// orgconfig.ErrInvalid, as a directory source does, so the launcher treats it
+// as fatal (a config that cannot be read must not be skipped: it may hold the
+// protected plugins).
+func orgConfigFatal(err error) error {
+	if errors.Is(err, ErrHygiene) && !errors.Is(err, orgconfig.ErrInvalid) {
+		return fmt.Errorf("%w: %w", orgconfig.ErrInvalid, err)
+	}
+	return err
 }
 
 // readBlob reads the content of tree entry e from the object store of dir and
@@ -553,12 +566,127 @@ func (s *Source) verifyRepo(ctx context.Context, dir, sha string) error {
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrTampered, err)
 	}
+	if err := checkCommitObject(dir, sha, raw); err != nil {
+		return err
+	}
+	if err := s.dropReplaceRefs(ctx, dir); err != nil {
+		return err
+	}
+	return s.verifyTrees(ctx, dir, sha, raw)
+}
+
+// checkCommitObject checks that the text of the commit object hashes to sha.
+func checkCommitObject(dir, sha, raw string) error {
 	id, err := gitObjectID(sha, "commit", []byte(raw))
 	if err != nil {
 		return err
 	}
 	if id != sha {
 		return fmt.Errorf("%w: the commit object in %s does not hash to %s", ErrTampered, dir, sha)
+	}
+	return nil
+}
+
+// dropReplaceRefs deletes every refs/replace/* ref of the object store. They
+// are ignored by every git call of this package, and a store has no reason to
+// hold them.
+func (s *Source) dropReplaceRefs(ctx context.Context, dir string) error {
+	out, err := s.git(ctx, dir, dir, "for-each-ref", "--format=%(refname)", "refs/replace/")
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrTampered, err)
+	}
+	for _, ref := range strings.Fields(out) {
+		if _, err := s.git(ctx, dir, dir, "update-ref", "-d", ref); err != nil {
+			return fmt.Errorf("%w: removing %s: %w", ErrTampered, ref, err)
+		}
+	}
+	return nil
+}
+
+// maxTrees bounds how many tree objects verifyTrees reads.
+const maxTrees = 200000
+
+// checkTreeObject checks that the body of tree object want hashes to its id
+// and returns the ids of its subtrees; sha is the commit id, which fixes the
+// object format.
+func checkTreeObject(dir, sha, want string, body []byte) ([]string, error) {
+	id, err := gitObjectID(sha, "tree", body)
+	if err != nil {
+		return nil, err
+	}
+	if id != want {
+		return nil, fmt.Errorf("%w: tree %s in %s does not hash to its id", ErrTampered, want, dir)
+	}
+	rawLen := len(sha) / 2
+	var subs []string
+	for len(body) > 0 {
+		sp := bytes.IndexByte(body, ' ')
+		if sp < 0 {
+			return nil, fmt.Errorf("%w: tree %s is malformed", ErrTampered, want)
+		}
+		mode := string(body[:sp])
+		z := bytes.IndexByte(body[sp:], 0)
+		if z < 0 || len(body) < sp+z+1+rawLen {
+			return nil, fmt.Errorf("%w: tree %s is malformed", ErrTampered, want)
+		}
+		oid := hex.EncodeToString(body[sp+z+1 : sp+z+1+rawLen])
+		body = body[sp+z+1+rawLen:]
+		if mode == "40000" {
+			subs = append(subs, oid)
+		}
+	}
+	return subs, nil
+}
+
+// verifyTrees re-hashes every tree object reachable from the root tree of the
+// commit (raw is its text) and checks that each hashes to the id it is listed
+// under, so the object store holds exactly what the pinned commit names.
+func (s *Source) verifyTrees(ctx context.Context, dir, sha, raw string) error {
+	root, _, _ := strings.Cut(raw, "\n")
+	root = strings.TrimPrefix(root, "tree ")
+	if root == raw || len(root) != len(sha) || !fullSHA.MatchString(root) {
+		return fmt.Errorf("%w: the commit object in %s has no valid tree line", ErrTampered, dir)
+	}
+	seen := map[string]bool{root: true}
+	level := []string{root}
+	for len(level) > 0 {
+		var next []string
+		out, err := s.run(ctx, dir, dir, strings.NewReader(strings.Join(level, "\n")+"\n"), maxStdout, "cat-file", "--batch")
+		if err != nil {
+			return fmt.Errorf("%w: %w", ErrTampered, err)
+		}
+		rest := []byte(out)
+		for _, want := range level {
+			nl := bytes.IndexByte(rest, '\n')
+			if nl < 0 {
+				return fmt.Errorf("%w: git cat-file ended early at tree %s", ErrTampered, want)
+			}
+			hdr := strings.Fields(string(rest[:nl]))
+			rest = rest[nl+1:]
+			if len(hdr) != 3 || hdr[0] != want || hdr[1] != "tree" {
+				return fmt.Errorf("%w: tree %s is missing or not a tree", ErrTampered, want)
+			}
+			size, err := strconv.Atoi(hdr[2])
+			if err != nil || size < 0 || len(rest) < size+1 || rest[size] != '\n' {
+				return fmt.Errorf("%w: git cat-file output for tree %s is malformed", ErrTampered, want)
+			}
+			body := rest[:size]
+			rest = rest[size+1:]
+			children, err := checkTreeObject(dir, sha, want, body)
+			if err != nil {
+				return err
+			}
+			for _, oid := range children {
+				if !seen[oid] {
+					if len(seen) >= maxTrees {
+						return fmt.Errorf("%w: more than %d trees", ErrHygiene, maxTrees)
+					}
+					seen[oid] = true
+					next = append(next, oid)
+				}
+			}
+		}
+		level = next
 	}
 	return nil
 }

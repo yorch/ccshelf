@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/zlib"
 	"context"
+	"encoding/hex"
 	"errors"
 	"os"
 	"os/exec"
@@ -47,7 +48,7 @@ func TestGitEnvIsAnAllowlist(t *testing.T) {
 	}
 	s, _ := New(Options{URL: "https://h/r", Ref: "v1"})
 	env := envMap(s.gitEnv())
-	owned := map[string]string{"GIT_TERMINAL_PROMPT": "0", "GIT_ALLOW_PROTOCOL": "https:ssh", "GIT_LFS_SKIP_SMUDGE": "1"}
+	owned := map[string]string{"GIT_TERMINAL_PROMPT": "0", "GIT_ALLOW_PROTOCOL": "https:ssh", "GIT_LFS_SKIP_SMUDGE": "1", "GIT_NO_REPLACE_OBJECTS": "1"}
 	for _, k := range stripped {
 		if v, ok := env[k]; ok && owned[k] != v {
 			t.Errorf("%s=%q reached git", k, v)
@@ -134,7 +135,7 @@ func TestEveryGitCallIsHardenedAndNeverTouchesAWorkTree(t *testing.T) {
 	raw, _ := os.ReadFile(argLog)
 	lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
 	seen := map[string]bool{}
-	allowed := map[string]bool{"init": true, "remote": true, "fetch": true, "update-ref": true, "rev-parse": true, "cat-file": true, "ls-remote": true, "ls-tree": true}
+	allowed := map[string]bool{"init": true, "remote": true, "fetch": true, "update-ref": true, "rev-parse": true, "cat-file": true, "ls-remote": true, "ls-tree": true, "for-each-ref": true}
 	for _, l := range lines {
 		sub := subcommand(l)
 		seen[sub] = true
@@ -143,7 +144,7 @@ func TestEveryGitCallIsHardenedAndNeverTouchesAWorkTree(t *testing.T) {
 		}
 		for _, opt := range []string{
 			"-c core.symlinks=false", "-c core.fsmonitor=false", "-c protocol.ext.allow=never",
-			"-c protocol.file.allow=user", "-c core.hooksPath=", "-c submodule.recurse=false", "-c gc.auto=0",
+			"-c protocol.file.allow=user", "-c core.hooksPath=", "-c submodule.recurse=false", "-c gc.auto=0", "-c core.useReplaceRefs=false",
 		} {
 			if !strings.Contains(l, opt) {
 				t.Errorf("%q lacks %q", l, opt)
@@ -209,11 +210,34 @@ func TestExtractionIsExactlyTheWatchedFolders(t *testing.T) {
 	}
 }
 
+// explodePacks turns every pack of the object store into loose objects, so a
+// test can rewrite one object file.
+func explodePacks(t *testing.T, gitDir string) {
+	t.Helper()
+	packs, _ := filepath.Glob(filepath.Join(gitDir, "objects", "pack", "*.pack"))
+	for _, pk := range packs {
+		data, err := os.ReadFile(pk)
+		if err != nil {
+			t.Fatal(err)
+		}
+		base := strings.TrimSuffix(pk, ".pack")
+		for _, ext := range []string{".pack", ".idx", ".rev", ".promisor", ".keep"} {
+			_ = os.Remove(base + ext)
+		}
+		cmd := exec.Command("git", "--git-dir="+gitDir, "unpack-objects", "-q")
+		cmd.Stdin = bytes.NewReader(data)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git unpack-objects: %v\n%s", err, out)
+		}
+	}
+}
+
 func rewriteLooseObject(t *testing.T, gitDir, oid string, raw []byte) {
 	t.Helper()
 	p := filepath.Join(gitDir, "objects", oid[:2], oid[2:])
+	explodePacks(t, gitDir)
 	if _, err := os.Stat(p); err != nil {
-		t.Skipf("the commit is not a loose object here: %v", err)
+		t.Fatalf("the object is not a loose object after unpacking: %v", err)
 	}
 	var buf bytes.Buffer
 	zw := zlib.NewWriter(&buf)
@@ -237,8 +261,37 @@ func TestForgedCommitObjectIsRejected(t *testing.T) {
 	forged := "tree " + f.git("rev-parse", "HEAD^{tree}") + "\nauthor x <x@example.com> 1 +0000\ncommitter x <x@example.com> 1 +0000\n\nforged\n"
 	rewriteLooseObject(t, filepath.Join(s.Root(), ".git"), sha, []byte("commit "+itoa(len(forged))+"\x00"+forged))
 	err := f.source(sha, "").Prepare(context.Background())
-	if !errors.Is(err, ErrTampered) || !strings.Contains(err.Error(), "does not hash") {
+	// Current git notices a forged loose object itself; either way the
+	// checkout is refused.
+	if !errors.Is(err, ErrTampered) {
 		t.Fatalf("err = %v", err)
+	}
+	// The package's own hash check, which does not depend on git noticing.
+	if err := checkCommitObject("d", sha, forged); !errors.Is(err, ErrTampered) || !strings.Contains(err.Error(), "does not hash") {
+		t.Fatalf("checkCommitObject err = %v", err)
+	}
+	real := f.git("cat-file", "commit", sha) + "\n"
+	if err := checkCommitObject("d", sha, real); err != nil {
+		t.Fatalf("the real commit text must pass: %v", err)
+	}
+}
+
+func TestCheckTreeObject(t *testing.T) {
+	sha1 := strings.Repeat("a", 40)
+	child := strings.Repeat("b", 20)
+	body := []byte("40000 sub\x00" + child + "100644 f\x00" + strings.Repeat("c", 20))
+	id, _ := gitObjectID(sha1, "tree", body)
+	subs, err := checkTreeObject("d", sha1, id, body)
+	if err != nil || len(subs) != 1 || subs[0] != hex.EncodeToString([]byte(child)) {
+		t.Fatalf("subs %v err %v", subs, err)
+	}
+	if _, err := checkTreeObject("d", sha1, id, append(body, 'x')); !errors.Is(err, ErrTampered) {
+		t.Errorf("forged body: %v", err)
+	}
+	short := body[:len(body)-3]
+	id2, _ := gitObjectID(sha1, "tree", short)
+	if _, err := checkTreeObject("d", sha1, id2, short); !errors.Is(err, ErrTampered) {
+		t.Errorf("truncated entry: %v", err)
 	}
 }
 

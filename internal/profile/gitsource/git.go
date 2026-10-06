@@ -81,7 +81,10 @@ func (s *Source) gitEnv() []string {
 	if s.opts.AllowLocal {
 		protos += ":file"
 	}
-	return append(env, "GIT_TERMINAL_PROMPT=0", "GIT_ALLOW_PROTOCOL="+protos, "GIT_LFS_SKIP_SMUDGE=1")
+	return append(env, "GIT_TERMINAL_PROMPT=0", "GIT_ALLOW_PROTOCOL="+protos, "GIT_LFS_SKIP_SMUDGE=1",
+		// A replace ref in a cached object store would let git show other
+		// content than the pinned commit holds.
+		"GIT_NO_REPLACE_OBJECTS=1")
 }
 
 // hardening returns the -c options applied to every git call.
@@ -97,6 +100,7 @@ func (s *Source) hardening() []string {
 		"-c", "protocol.file.allow=" + file,
 		"-c", "submodule.recurse=false",
 		"-c", "core.symlinks=false",
+		"-c", "core.useReplaceRefs=false",
 		"-c", "gc.auto=0",
 		"-c", "maintenance.auto=false",
 		"-c", "advice.detachedHead=false",
