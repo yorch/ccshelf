@@ -1,0 +1,266 @@
+# CI for the tool repo. Pull requests from forks run with a read-only token and
+# no secrets (this workflow uses `pull_request`, never `pull_request_target`).
+# Require only the `ci-ok` job as a status check in the branch ruleset.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  merge_group:
+
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Tool versions are pinned here and bumped on purpose (Dependabot does not see them).
+  GOLANGCI_LINT_VERSION: v2.14.0
+  GOVULNCHECK_VERSION: v1.8.0
+  ACTIONLINT_VERSION: 1.7.12
+  # SHA-256 of actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz, from the release's checksums file.
+  ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "These files need gofmt:" >&2
+            echo "$unformatted" >&2
+            exit 1
+          fi
+      - name: go mod tidy leaves no diff
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+      - name: go vet
+        run: go vet ./...
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+      - name: Actions are pinned by full commit SHA
+        run: scripts/check-pins.sh
+      - name: actionlint (pinned release binary, checksum verified)
+        run: |
+          set -euo pipefail
+          archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL -o "${RUNNER_TEMP}/${archive}" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${archive}"
+          echo "${ACTIONLINT_SHA256}  ${RUNNER_TEMP}/${archive}" | sha256sum -c -
+          tar -xzf "${RUNNER_TEMP}/${archive}" -C "${RUNNER_TEMP}" actionlint
+          "${RUNNER_TEMP}/actionlint" -color
+      # zizmor (workflow security linter) is optional and not enabled: actionlint plus
+      # scripts/check-pins.sh cover the SR5 rules, and CodeQL scans the `actions` language.
+
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    # `experimental` runners: availability of the arm64 hosted runners for this
+    # repository was not verified when this file was written. A failure there
+    # does not fail the workflow until the flag is set to false.
+    continue-on-error: ${{ matrix.experimental }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, experimental: false, race: true }
+          - { os: ubuntu-24.04-arm, experimental: true, race: true }
+          - { os: macos-latest, experimental: false, race: true } # arm64
+          - { os: macos-15-intel, experimental: false, race: true } # x64
+          - { os: windows-latest, experimental: false, race: true }
+          # The Go race detector does not support windows/arm64.
+          - { os: windows-11-arm, experimental: true, race: false }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: go test
+        env:
+          USE_RACE: ${{ matrix.race }}
+        run: |
+          set -euo pipefail
+          race=""
+          if [ "$USE_RACE" = "true" ]; then race="-race"; fi
+          # shellcheck disable=SC2086 # $race is empty or a single fixed flag
+          go test $race -count=1 -coverprofile=coverage.out -covermode=atomic ./...
+      - name: Per-package coverage
+        if: always() && hashFiles('coverage.out') != ''
+        env:
+          COVER_MIN: "0"
+        run: scripts/check-cover.sh coverage.out
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: coverage-${{ matrix.os }}
+          path: coverage.out
+          if-no-files-found: ignore
+          retention-days: 14
+
+  vuln:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Install govulncheck (pinned, built from source)
+        run: go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
+      - name: govulncheck
+        run: govulncheck ./...
+
+  build:
+    name: build (${{ matrix.goos }}/${{ matrix.goarch }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        goos: [darwin, linux, windows]
+        goarch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Cross-compile
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          ext=""
+          if [ "$GOOS" = "windows" ]; then ext=".exe"; fi
+          pkg="github.com/ccshelf/ccshelf/internal/version"
+          go build -trimpath \
+            -ldflags "-s -w -X ${pkg}.Version=0.0.0-ci -X ${pkg}.Commit=${COMMIT_SHA}" \
+            -o "dist/ccshelf-${GOOS}-${GOARCH}${ext}" ./cmd/ccshelf
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ccshelf-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/
+          retention-days: 7
+
+  docs:
+    name: docs
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: The generated report matches the Markdown
+        run: python3 docs/build_report.py --check
+      - name: Relative Markdown links resolve
+        run: scripts/check-links.sh
+      - name: LF line endings and final newlines
+        run: scripts/check-eol.sh
+
+  examples:
+    name: examples
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Build
+        run: go build -trimpath -o dist/ccshelf ./cmd/ccshelf
+      - name: lint, compile --check and catalog build on examples/org-data-repo
+        run: scripts/check-examples.sh dist/ccshelf
+
+  smoke:
+    name: smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Build
+        run: go build -trimpath -o "dist/ccshelf$(go env GOEXE)" ./cmd/ccshelf
+      - name: --version, --help and shell completions
+        run: |
+          set -euo pipefail
+          bin="./dist/ccshelf$(go env GOEXE)"
+          "$bin" --version
+          "$bin" --help >/dev/null
+          for shell in bash zsh fish powershell; do
+            out="$("$bin" completion "$shell")"
+            [ -n "$out" ] || { echo "empty completion for $shell" >&2; exit 1; }
+          done
+
+  # Single required status check: fails if any needed job failed or was cancelled.
+  ci-ok:
+    name: ci-ok
+    if: always()
+    needs: [lint, test, vuln, build, docs, examples, smoke]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Check results of needed jobs
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          if echo "$NEEDS" | jq -e 'any(.[]; .result == "failure" or .result == "cancelled")' >/dev/null; then
+            echo "One or more required jobs failed or were cancelled." >&2
+            exit 1
+          fi

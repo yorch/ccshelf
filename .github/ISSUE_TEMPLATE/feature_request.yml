@@ -1,0 +1,31 @@
+name: Feature request
+description: Suggest an improvement
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing, skim `docs/DECISIONS.md`: some ideas were already decided against (see the superseded and rejected rows) and the reasons are recorded there.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem you want solved
+      description: Describe the situation, not only the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: What would you like the command or config to do? Every command must work with flags alone (R6).
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Constraints
+      options:
+        - label: I checked that this does not need to weaken the security requirements SR1 to SR5 (closed schema, trust, private cache, hardened CI).
+        - label: This should work on macOS, Linux and Windows, and on github.com and GitHub Enterprise.

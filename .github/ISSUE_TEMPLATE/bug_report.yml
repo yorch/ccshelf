@@ -1,0 +1,65 @@
+name: Bug report
+description: Something does not work as documented
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. If this is a **security** problem, stop here and follow `SECURITY.md` instead of filing a public issue.
+        Output of `ccshelf doctor`, `show` and `dry-run` redacts values, but check it before you paste it.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: The exact commands, and a minimal profile or config if relevant (no secrets, no real org data).
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: ccshelf version
+      description: Output of `ccshelf --version`.
+    validations:
+      required: true
+  - type: input
+    id: claude-version
+    attributes:
+      label: Claude Code version
+      description: Output of `claude --version`, if relevant.
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS (arm64)
+        - macOS (Intel)
+        - Linux (amd64)
+        - Linux (arm64)
+        - Windows (amd64)
+        - Windows (arm64)
+        - WSL
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: host
+    attributes:
+      label: Git host (if relevant)
+      options:
+        - github.com
+        - GitHub Enterprise Cloud
+        - GitHub Enterprise Server
+        - Other
+        - Not relevant
+  - type: textarea
+    id: logs
+    attributes:
+      label: Output
+      description: Relevant command output. Redact anything private.
+      render: text

@@ -1,0 +1,193 @@
+# GoReleaser configuration (version 2). Driven by .github/workflows/release.yml.
+# Reproducible builds: -trimpath, CGO disabled, mod_timestamp from the commit.
+version: 2
+
+# OWNER: the GitHub owner is defined once, as the YAML anchor `owner` under
+# `release.github` below, and reused by the tap, bucket and winget sections.
+# Literal `ccshelf/ccshelf` strings elsewhere (ldflags, homepage, the verify
+# instructions in the release footer) must be changed together with it.
+
+project_name: ccshelf
+
+# Optional publishers are enabled only when their token is present in the
+# environment (the release workflow passes them from the protected `release`
+# environment) and the tag is not a pre-release.
+
+before:
+  hooks:
+    - go mod verify
+
+builds:
+  - id: ccshelf
+    main: ./cmd/ccshelf
+    binary: ccshelf
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/ccshelf/ccshelf/internal/version.Version={{ .Version }}
+      - -X github.com/ccshelf/ccshelf/internal/version.Commit={{ .Commit }}
+      - -X github.com/ccshelf/ccshelf/internal/version.Date={{ .CommitDate }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: ccshelf
+    ids: [ccshelf]
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "ccshelf_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+sboms:
+  - id: archive-sboms
+    artifacts: archive
+    documents:
+      - "${artifact}.sbom.json"
+    cmd: syft
+    args: ["$artifact", "--output", "spdx-json=$document"]
+
+# Keyless signature of the checksums file. The bundle (signature, certificate
+# and transparency log entry) is uploaded with the release.
+signs:
+  - id: checksums
+    cmd: cosign
+    artifacts: checksum
+    signature: "${artifact}.sigstore.json"
+    args:
+      - sign-blob
+      - --yes
+      - --bundle=${signature}
+      - ${artifact}
+    output: true
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^test:"
+      - "^ci:"
+      - "^chore\\(deps\\)"
+      - "Merge pull request"
+      - "Merge branch"
+  groups:
+    - title: Security
+      regexp: '^.*?(fix|feat)(\([[:word:]]+\))?!?: .*(security|SR[1-5]|CVE).*$'
+      order: 0
+    - title: Features
+      regexp: '^.*?feat(\([[:word:]]+\))?!?:.+$'
+      order: 1
+    - title: Bug fixes
+      regexp: '^.*?fix(\([[:word:]]+\))?!?:.+$'
+      order: 2
+    - title: Documentation
+      regexp: '^.*?docs(\([[:word:]]+\))?!?:.+$'
+      order: 3
+    - title: Other changes
+      order: 999
+
+release:
+  github:
+    owner: &owner ccshelf # OWNER
+    name: ccshelf
+  draft: false
+  prerelease: auto
+  header: |
+    ## ccshelf {{ .Tag }}
+
+    Unofficial; not affiliated with Anthropic.
+  footer: |
+    ## Verify this release
+
+    Every archive is listed in `checksums.txt`, which is signed keyless with cosign
+    (`checksums.txt.sigstore.json`) and covered by a GitHub build provenance attestation.
+
+    ```sh
+    cosign verify-blob \
+      --bundle checksums.txt.sigstore.json \
+      --certificate-identity-regexp '^https://github.com/ccshelf/ccshelf/' \
+      --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+      checksums.txt
+    sha256sum --check --ignore-missing checksums.txt
+    gh attestation verify <archive> --repo ccshelf/ccshelf
+    ```
+
+    Targets without a native CI runner are built but not natively tested; see `SECURITY.md` and the README.
+  name_template: "{{ .Tag }}"
+
+# Homebrew cask (macOS and Linux) in the tap repository. Not signed or
+# notarized yet: macOS Gatekeeper may block the binary until it is (see
+# CONTRIBUTING.md, "Releasing"). No quarantine-stripping hook is added on purpose.
+homebrew_casks:
+  - name: ccshelf
+    ids: [ccshelf]
+    repository:
+      owner: *owner
+      name: homebrew-tap
+      token: '{{ index .Env "HOMEBREW_TAP_TOKEN" }}'
+    directory: Casks
+    homepage: "https://github.com/ccshelf/ccshelf"
+    description: "Profiles and a plugin catalog for Claude Code. Unofficial; not affiliated with Anthropic."
+    license: MIT
+    commit_author:
+      name: ccshelf-release
+      email: noreply@users.noreply.github.com
+    commit_msg_template: "chore: cask update for ccshelf {{ .Tag }}"
+    skip_upload: '{{ if or .Prerelease (not (index .Env "HOMEBREW_TAP_TOKEN")) }}true{{ else }}false{{ end }}'
+
+# Scoop manifest (Windows) in the bucket repository.
+scoops:
+  - ids: [ccshelf]
+    repository:
+      owner: *owner
+      name: scoop-bucket
+      token: '{{ index .Env "SCOOP_BUCKET_TOKEN" }}'
+    directory: bucket
+    homepage: "https://github.com/ccshelf/ccshelf"
+    description: "Profiles and a plugin catalog for Claude Code. Unofficial; not affiliated with Anthropic."
+    license: MIT
+    commit_author:
+      name: ccshelf-release
+      email: noreply@users.noreply.github.com
+    commit_msg_template: "chore: scoop update for ccshelf {{ .Tag }}"
+    skip_upload: '{{ if or .Prerelease (not (index .Env "SCOOP_BUCKET_TOKEN")) }}true{{ else }}false{{ end }}'
+
+# WinGet manifest, submitted as a pull request from a fork of microsoft/winget-pkgs.
+winget:
+  - name: ccshelf
+    ids: [ccshelf]
+    publisher: ccshelf
+    short_description: "Profiles and a plugin catalog for Claude Code."
+    description: "Profiles and a plugin catalog for Claude Code. Unofficial; not affiliated with Anthropic."
+    license: MIT
+    homepage: "https://github.com/ccshelf/ccshelf"
+    publisher_url: "https://github.com/ccshelf"
+    package_identifier: ccshelf.ccshelf
+    release_notes_url: "https://github.com/ccshelf/ccshelf/releases/tag/{{ .Tag }}"
+    repository:
+      owner: *owner
+      name: winget-pkgs
+      branch: "ccshelf-{{ .Version }}"
+      token: '{{ index .Env "WINGET_TOKEN" }}'
+      pull_request:
+        enabled: true
+        base:
+          owner: microsoft
+          name: winget-pkgs
+          branch: master
+    skip_upload: '{{ if or .Prerelease (not (index .Env "WINGET_TOKEN")) }}true{{ else }}false{{ end }}'
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-snapshot-{{ .ShortCommit }}"

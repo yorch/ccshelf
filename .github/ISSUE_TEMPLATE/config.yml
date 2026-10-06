@@ -1,0 +1,6 @@
+# OWNER: update the advisory URL below if the repository moves.
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/ccshelf/ccshelf/security/advisories/new
+    about: Please do not open a public issue. See SECURITY.md for private reporting.

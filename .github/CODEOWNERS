@@ -1,0 +1,19 @@
+# Code owners. Replace @ccshelf/maintainers with the real team once the
+# organization exists.
+#
+# A repository ruleset on `main` must require review from code owners and at
+# least two approvals; without that, this file only requests reviews.
+
+*                         @ccshelf/maintainers
+
+# Platform-sensitive paths: listed explicitly so they stay owned even if the
+# catch-all above is ever narrowed (SR1 to SR5).
+/.github/                 @ccshelf/maintainers
+/internal/settings/       @ccshelf/maintainers
+/internal/cache/          @ccshelf/maintainers
+/internal/trust/          @ccshelf/maintainers
+/internal/profile/        @ccshelf/maintainers
+/internal/policy/         @ccshelf/maintainers
+/action/                  @ccshelf/maintainers
+/.goreleaser.yaml         @ccshelf/maintainers
+/SECURITY.md              @ccshelf/maintainers

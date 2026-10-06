@@ -1,0 +1,19 @@
+* text=auto eol=lf
+
+*.go    text eol=lf
+*.md    text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.toml  text eol=lf
+*.json  text eol=lf
+*.sh    text eol=lf
+*.py    text eol=lf
+*.html  text eol=lf
+Makefile text eol=lf
+
+# Golden files and fixtures must keep exact bytes, including on Windows checkouts.
+testdata/** text eol=lf
+*.golden text eol=lf
+
+# The generated report is large and machine-made: collapse it in diffs.
+docs/report.html linguist-generated=true -diff

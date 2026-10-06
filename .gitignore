@@ -1,0 +1,31 @@
+# Build output
+/dist/
+/bin/
+
+# Test and coverage output
+*.test
+*.out
+coverage.html
+coverage.txt
+/coverage/
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Local environment and secrets
+.env
+.env.*
+*.local
+!.env.example
+
+# Python caches (docs/build_report.py)
+__pycache__/
+*.pyc
+
+# Do NOT ignore docs/report.html: it is generated from the Markdown and committed.

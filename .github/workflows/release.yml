@@ -1,0 +1,203 @@
+# Release pipeline (SR5).
+#
+# Triggers: pushing a tag vX.Y.Z[-pre], or a manual run. A manual run defaults
+# to a dry run (goreleaser --snapshot, no signing, no publishing).
+#
+# The `release` job uses the protected `release` environment. Configure that
+# environment (Settings > Environments) with required reviewers (two
+# maintainers), "prevent self-review", and a deployment branch/tag rule that
+# only allows tags matching v*. Secrets for the optional publishers
+# (HOMEBREW_TAP_TOKEN, SCOOP_BUCKET_TOKEN, WINGET_TOKEN) belong to that
+# environment, never to the repository, so forks and branch builds never see
+# them. See CONTRIBUTING.md, "Releasing".
+#
+# This repository is public on github.com by definition, so the gh calls below
+# target the github.com instance of the workflow run.
+name: release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+*"
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "Dry run: build a snapshot, sign nothing, publish nothing"
+        type: boolean
+        default: true
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  GORELEASER_VERSION: v2.18.2
+  COSIGN_VERSION: v3.1.3
+  SYFT_VERSION: 1.54.0
+  # SHA-256 of syft_${SYFT_VERSION}_linux_amd64.tar.gz, from the release's checksums file.
+  SYFT_SHA256: 54a87372498168b2d033e876fd41fa4e8035b872699e525a57046e1f2f09c860
+
+jobs:
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read # read the ci.yml run status for the tagged commit
+    outputs:
+      dry-run: ${{ steps.mode.outputs.dry-run }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # needed to compare the tag with main
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Decide the mode
+        id: mode
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_DRY_RUN: ${{ inputs.dry-run }}
+          REF_TYPE: ${{ github.ref_type }}
+        run: |
+          set -euo pipefail
+          dry=false
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$INPUT_DRY_RUN" = "true" ]; then
+            dry=true
+          fi
+          if [ "$dry" = "false" ] && [ "$REF_TYPE" != "tag" ]; then
+            echo "A real release must run from a version tag, not from a branch." >&2
+            exit 1
+          fi
+          echo "dry-run=$dry" >> "$GITHUB_OUTPUT"
+      - name: Tag is a semantic version on a commit reachable from main, and CI passed for it
+        if: steps.mode.outputs.dry-run == 'false'
+        env:
+          TAG: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if ! printf '%s' "$TAG" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'; then
+            echo "Tag is not a semantic version: $TAG" >&2
+            exit 1
+          fi
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$SHA" origin/main; then
+            echo "Tag $TAG does not point at a commit on main." >&2
+            exit 1
+          fi
+          ok="$(gh api -X GET "repos/${REPO}/actions/workflows/ci.yml/runs" \
+            -f head_sha="$SHA" -f status=success --jq '.total_count')"
+          if [ "${ok:-0}" -lt 1 ]; then
+            echo "ci.yml has no successful run for commit $SHA." >&2
+            exit 1
+          fi
+          echo "Tag $TAG verified: on main, CI green."
+      - name: go.mod is tidy
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+      - name: Generated docs report is up to date
+        run: python3 docs/build_report.py --check
+      - name: Actions are pinned by full commit SHA
+        run: scripts/check-pins.sh
+
+  release:
+    name: release
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # Requires approval from two maintainers (configured on the environment).
+    environment: release
+    permissions:
+      contents: write # create the GitHub release and upload assets
+      id-token: write # keyless cosign signing and build provenance
+      attestations: write # store the build provenance attestation
+    env:
+      DRY_RUN: ${{ needs.verify.outputs.dry-run }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # goreleaser builds the changelog from history
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: ${{ env.COSIGN_VERSION }}
+      - name: Install syft (pinned release, checksum verified) for SBOMs
+        run: |
+          set -euo pipefail
+          archive="syft_${SYFT_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL -o "${RUNNER_TEMP}/${archive}" \
+            "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/${archive}"
+          echo "${SYFT_SHA256}  ${RUNNER_TEMP}/${archive}" | sha256sum -c -
+          mkdir -p "${RUNNER_TEMP}/bin"
+          tar -xzf "${RUNNER_TEMP}/${archive}" -C "${RUNNER_TEMP}/bin" syft
+          echo "${RUNNER_TEMP}/bin" >> "$GITHUB_PATH"
+      - name: Optional publishers
+        env:
+          HAS_HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN != '' }}
+          HAS_SCOOP_BUCKET_TOKEN: ${{ secrets.SCOOP_BUCKET_TOKEN != '' }}
+          HAS_WINGET_TOKEN: ${{ secrets.WINGET_TOKEN != '' }}
+        run: |
+          set -euo pipefail
+          report() { # name has
+            if [ "$2" = "true" ]; then
+              echo "$1: token present, publishing enabled (skipped for pre-releases and dry runs)."
+            else
+              echo "::notice title=$1 skipped::No token configured on the release environment; not publishing."
+            fi
+          }
+          report "Homebrew tap" "$HAS_HOMEBREW_TAP_TOKEN"
+          report "Scoop bucket" "$HAS_SCOOP_BUCKET_TOKEN"
+          report "WinGet" "$HAS_WINGET_TOKEN"
+      - name: goreleaser
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+        with:
+          distribution: goreleaser
+          version: ${{ env.GORELEASER_VERSION }}
+          # Dry runs build a snapshot and never sign (that would write to the public
+          # transparency log) or publish.
+          args: ${{ env.DRY_RUN == 'true' && 'release --snapshot --clean --skip=sign' || 'release --clean' }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          SCOOP_BUCKET_TOKEN: ${{ secrets.SCOOP_BUCKET_TOKEN }}
+          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+      - name: Build provenance attestation (SLSA) for the archives
+        if: env.DRY_RUN == 'false'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-checksums: dist/checksums.txt
+      - name: Verify the signature we just produced
+        if: env.DRY_RUN == 'false'
+        env:
+          REPO: ${{ github.repository }}
+          SERVER_URL: ${{ github.server_url }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+        run: |
+          set -euo pipefail
+          cosign verify-blob \
+            --bundle dist/checksums.txt.sigstore.json \
+            --certificate-identity "${SERVER_URL}/${WORKFLOW_REF}" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            dist/checksums.txt
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-dist
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/checksums.txt
+            dist/checksums.txt.sigstore.json
+            dist/*.sbom.json
+          if-no-files-found: warn
+          retention-days: ${{ env.DRY_RUN == 'true' && 7 || 90 }}

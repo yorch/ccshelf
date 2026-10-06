@@ -1,0 +1,143 @@
+# golangci-lint v2 configuration. Keep strict; every exclusion has a reason.
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - unused
+    - ineffassign
+    - gosec # enforces 0600/0700 permissions (G301, G302, G306) for SR4; see settings.excludes
+    - errorlint
+    - bodyclose
+    - noctx
+    - misspell
+    - unconvert
+    - unparam
+    - gocritic
+    - revive
+    - forbidigo
+    - depguard
+
+  settings:
+    staticcheck:
+      checks:
+        - all
+        - -ST1000 # package comments: revive checks these
+        - -ST1003 # naming: revive checks these
+        - -ST1016
+        - -ST1020 # doc comment forms: revive checks exported identifiers
+        - -ST1021
+        - -ST1022
+        - -QF1001 # De Morgan quick fix: style only
+
+    gosec:
+      excludes:
+        - G104 # unhandled errors: errcheck already reports these, with better control
+        - G304 # file inclusion via variable: reading user-chosen files is the job; confinement to the source root is enforced and tested in internal/catalog/safepath and internal/profile (SR4)
+        - G703 # path traversal taint: same reason as G304
+
+    misspell:
+      locale: US
+
+    gocritic:
+      # Conservative: the default checks (diagnostic and style tagged as stable), nothing experimental.
+      enabled-tags:
+        - diagnostic
+
+    revive:
+      rules:
+        - name: exported
+          arguments:
+            - checkPrivateReceivers
+            - sayRepetitiveInsteadOfStutters
+        - name: package-comments
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: receiver-naming
+        - name: context-as-argument
+        - name: indent-error-flow
+        - name: var-naming
+        - name: unreachable-code
+        - name: increment-decrement
+
+    forbidigo:
+      forbid:
+        - pattern: ^fmt\.Print(f|ln)?$
+          msg: write to an io.Writer (cmd.OutOrStdout, or internal/ui) instead of printing to the process stdout
+        - pattern: ^log\.Fatal(f|ln)?$
+          msg: return an error; only main may decide to exit
+        - pattern: ^log\.Panic(f|ln)?$
+          msg: return an error instead of panicking
+
+    depguard:
+      rules:
+        # Third-party dependencies are limited to a short allowlist (SR5, R2).
+        deps:
+          list-mode: strict
+          files:
+            - $all
+            - "!$test"
+          allow:
+            - $gostd
+            - github.com/ccshelf/ccshelf
+            - github.com/spf13/cobra
+            - github.com/spf13/pflag # cobra's flag types, used through cobra
+            - github.com/pelletier/go-toml/v2
+            - golang.org/x/term
+            - golang.org/x/sys
+        # Packages that must never start a process.
+        no-exec:
+          files:
+            - "**/internal/profile/**"
+            - "**/internal/settings/**"
+            - "**/internal/config/**"
+            - "**/internal/envpolicy/**"
+            - "**/internal/cache/**"
+            - "**/internal/catalog/site/**"
+            - "!$test"
+          deny:
+            - pkg: os/exec
+              desc: this package must not run processes; only the launcher and git helpers may
+            - pkg: golang.org/x/sys/execabs
+              desc: this package must not run processes
+
+  exclusions:
+    generated: lax
+    presets:
+      - std-error-handling
+    rules:
+      # fmt.Print* is allowed in main packages and the UI package.
+      - path: ^cmd/
+        linters: [forbidigo]
+      - path: ^internal/ui/
+        linters: [forbidigo]
+      # Process execution is the point of these packages (arguments are an argv, never a shell string).
+      - path: ^internal/(launch|claude|git|exec)/
+        text: "G204"
+        linters: [gosec]
+      # Tests: relax what does not apply to throwaway fixtures.
+      - path: _test\.go
+        linters:
+          - gosec # temp files and fixtures
+          - forbidigo
+          - unparam
+          - errcheck
+          - noctx
+          - revive
+          - gocritic
+
+formatters:
+  enable:
+    - gofumpt
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

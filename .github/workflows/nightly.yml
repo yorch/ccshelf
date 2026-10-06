@@ -1,0 +1,114 @@
+# Nightly smoke test against a real Claude Code (roadmap Phase 1).
+#
+# Runs only when the secret ANTHROPIC_API_KEY exists on the protected `nightly`
+# environment (deployment branch rule: main only). Without it the workflow
+# succeeds with a notice. It never runs for pull requests, so fork code cannot
+# reach the key. On failure it opens or updates one issue labeled
+# `nightly-failure`.
+name: nightly
+
+on:
+  schedule:
+    - cron: "23 2 * * *" # daily, 02:23 UTC
+  workflow_dispatch:
+    inputs:
+      claude-code-version:
+        description: "Version of @anthropic-ai/claude-code to test (an npm version or dist-tag)"
+        type: string
+        default: latest
+
+permissions: {}
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    name: real-claude smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: nightly
+    permissions:
+      contents: read
+    steps:
+      - name: Check for the API key
+        id: gate
+        env:
+          HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+        run: |
+          if [ "$HAS_KEY" = "true" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=nightly skipped::ANTHROPIC_API_KEY is not set on the nightly environment; skipping the real-claude smoke test."
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.gate.outputs.run == 'true'
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: steps.gate.outputs.run == 'true'
+        with:
+          go-version-file: go.mod
+      - name: Install Claude Code (npm, the runner's Node)
+        if: steps.gate.outputs.run == 'true'
+        env:
+          REQUESTED_VERSION: ${{ inputs.claude-code-version }}
+        run: |
+          set -euo pipefail
+          version="${REQUESTED_VERSION:-latest}"
+          if ! printf '%s' "$version" | grep -Eq '^(latest|stable|[0-9A-Za-z][0-9A-Za-z.+-]*)$'; then
+            echo "Invalid Claude Code version: $version" >&2
+            exit 1
+          fi
+          npm install -g --prefix "${RUNNER_TEMP}/npm" "@anthropic-ai/claude-code@${version}"
+          echo "${RUNNER_TEMP}/npm/bin" >> "$GITHUB_PATH"
+          "${RUNNER_TEMP}/npm/bin/claude" --version
+      - name: Build ccshelf
+        if: steps.gate.outputs.run == 'true'
+        run: go build -trimpath -o dist/ccshelf ./cmd/ccshelf
+      - name: Real-claude end-to-end test (hermetic HOME)
+        if: steps.gate.outputs.run == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          set -euo pipefail
+          # Keep Go's caches where they are, then point HOME at an empty directory so
+          # the test never sees a real user configuration.
+          export GOCACHE="$(go env GOCACHE)" GOMODCACHE="$(go env GOMODCACHE)"
+          home="$(mktemp -d "${RUNNER_TEMP}/home.XXXXXX")"
+          export HOME="$home" XDG_CONFIG_HOME="$home/.config" XDG_CACHE_HOME="$home/.cache"
+          export PATH="${GITHUB_WORKSPACE}/dist:${PATH}"
+          go test -tags realclaude -count=1 -timeout 20m ./internal/e2e/...
+
+  report:
+    name: report failure
+    needs: smoke
+    if: always() && needs.smoke.result == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write # open or update the nightly-failure issue
+    steps:
+      - name: Open or update the nightly-failure issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          label="nightly-failure"
+          gh label create "$label" --repo "$REPO" --color B60205 \
+            --description "Nightly real-claude smoke test failed" 2>/dev/null || true
+          body="The nightly real-claude smoke test failed on commit ${SHA}.
+
+          Run: ${RUN_URL}"
+          existing="$(gh issue list --repo "$REPO" --label "$label" --state open --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$REPO" --body "$body"
+          else
+            gh issue create --repo "$REPO" --label "$label" \
+              --title "Nightly real-claude smoke test is failing" --body "$body"
+          fi
