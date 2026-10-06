@@ -23,7 +23,7 @@ const MaxEnvValueSize = 4096
 
 var (
 	nameRe      = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
-	pluginIDRe  = regexp.MustCompile(`^[A-Za-z0-9._-]+@[A-Za-z0-9._-]+$`)
+	pluginIDRe  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9._-]*$`)
 	skillNameRe = regexp.MustCompile(`^[A-Za-z0-9._:-]+$`)
 	accountRe   = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
 	serverRe    = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)

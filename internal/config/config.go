@@ -114,7 +114,7 @@ func Default() *Config {
 var (
 	accountNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
 	sourceNameRe  = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
-	pluginIDRe    = regexp.MustCompile(`^[A-Za-z0-9._-]+@[A-Za-z0-9._-]+$`)
+	pluginIDRe    = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9._-]*$`)
 	shaRe         = regexp.MustCompile(`^([0-9a-fA-F]{40}|[0-9a-fA-F]{64})$`)
 	hexRe         = regexp.MustCompile(`^[0-9a-fA-F]+$`)
 	// tagRe is the syntax of a pinned tag name. It has no "/", so a tag can

@@ -60,7 +60,7 @@ type Plan struct {
 }
 
 var (
-	pluginIDRe = regexp.MustCompile(`^[A-Za-z0-9._-]+@[A-Za-z0-9._-]+$`)
+	pluginIDRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9._-]*$`)
 	// ErrDirInUse is returned when the directory is not suitable for a new account.
 	ErrDirInUse = errors.New("directory is not available for a new account")
 )
