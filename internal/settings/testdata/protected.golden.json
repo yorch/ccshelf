@@ -1,0 +1,8 @@
+{
+  "enabledPlugins": {
+    "design-kit@acme": true,
+    "frontend-design@claude-plugins-official": false,
+    "seo-tools@acme": false,
+    "sre-kit@acme": false
+  }
+}

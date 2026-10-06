@@ -1,0 +1,33 @@
+{
+  "installed": [],
+  "available": [
+    {
+      "pluginId": "42crunch-api-security-testing@claude-plugins-official",
+      "name": "42crunch-api-security-testing",
+      "description": "Automate API security directly in Claude Code with 42Crunch - automatically audi",
+      "marketplaceName": "claude-plugins-official",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/42Crunch-AI/claude-plugins.git",
+        "path": "plugins/api-security-testing",
+        "ref": "v1.5.5",
+        "sha": "faf5305385de8afed9468904e8639be737aff39e"
+      },
+      "installCount": 3448
+    },
+    {
+      "pluginId": "adobe-for-creativity@claude-plugins-official",
+      "name": "adobe-for-creativity",
+      "description": "Harness Adobe's creative AI-powered tools to edit images, automate design workfl",
+      "marketplaceName": "claude-plugins-official",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/adobe/skills.git",
+        "path": "plugins/creative-cloud/adobe-for-creativity",
+        "ref": "main",
+        "sha": "acb6d76475e6c522a5b109d2df7c8a794ee74ea7"
+      },
+      "installCount": 3952
+    }
+  ]
+}

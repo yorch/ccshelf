@@ -1,0 +1,5 @@
+{"type":"hook","note":"other event first"}
+
+not json at all
+{"type":"system","subtype":"init","session_id":"abc","cwd":"/work","model":"claude-haiku","permissionMode":"bypassPermissions","plugins":[{"name":"feature-dev","path":"/p/feature-dev"},"plain-name"],"skills":["pdf","feature-dev:main"],"slash_commands":["/help","pdf"],"agents":["general-purpose"],"tools":["Bash","Read"],"mcp_servers":[{"name":"plugin:context7:context7","status":"connected"},{"name":"claude.ai Slack","status":"needs-auth"}],"future_field":{"x":1}}
+{"type":"result","subtype":"success","result":"ok"}

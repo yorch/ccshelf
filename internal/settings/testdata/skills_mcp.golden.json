@@ -1,0 +1,22 @@
+{
+  "deniedMcpServers": [
+    {
+      "serverName": "claude.ai Shopify"
+    },
+    {
+      "serverName": "plugin:context7:context7"
+    }
+  ],
+  "disableClaudeAiConnectors": true,
+  "env": {
+    "CCSHELF_PROFILE": "sre",
+    "CCSHELF_VAR_TEAM": "sre",
+    "FIGMA_TOKEN_REF": "env:FIGMA"
+  },
+  "model": "opus",
+  "skillOverrides": {
+    "big-skill": "name-only",
+    "legacy-helper": "off",
+    "pdf": "off"
+  }
+}

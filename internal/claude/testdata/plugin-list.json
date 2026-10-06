@@ -1,0 +1,40 @@
+[
+  {
+    "id": "chrome-devtools-mcp@claude-plugins-official",
+    "version": "1.9.0",
+    "scope": "user",
+    "enabled": true,
+    "installPath": "/home/user/.claude/plugins/cache/claude-plugins-official/chrome-devtools-mcp/1.9.0",
+    "installedAt": "2026-09-19T02:46:50.334Z",
+    "lastUpdated": "2026-09-19T02:46:50.334Z",
+    "mcpServers": {
+      "chrome-devtools": {
+        "command": "npx",
+        "args": [
+          "chrome-devtools-mcp@1.9.0"
+        ]
+      }
+    },
+    "projectEnabled": false
+  },
+  {
+    "id": "feature-dev@claude-plugins-official",
+    "version": "d4226d062928",
+    "scope": "user",
+    "enabled": true,
+    "installPath": "/home/user/.claude/plugins/cache/claude-plugins-official/feature-dev/d4226d062928",
+    "installedAt": "2026-03-16T01:37:29.723Z",
+    "lastUpdated": "2026-10-05T23:25:03.417Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "frontend-design@claude-plugins-official",
+    "version": "d4226d062928",
+    "scope": "user",
+    "enabled": true,
+    "installPath": "/home/user/.claude/plugins/cache/claude-plugins-official/frontend-design/d4226d062928",
+    "installedAt": "2026-02-25T20:16:59.085Z",
+    "lastUpdated": "2026-10-05T23:25:03.420Z",
+    "projectEnabled": false
+  }
+]
