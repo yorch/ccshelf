@@ -1,0 +1,16 @@
+Managed policy sources (highest rank first)
+  none checked
+
+Unknown
+  - managed settings file /etc/claude-code/managed-settings.json: malformed: not valid JSON
+
+Capabilities
+  settings-masking           available the generated --settings file is not a sideload flag and cannot be disabled by policy; keys that managed settings lock (force-enabled plugins) still win
+  hide-connectors            available disableClaudeAiConnectors is valid in any settings file
+  deny-mcp-servers           available deniedMcpServers is valid in any settings file; entries need full server names such as plugin:context7:context7
+  add-mcp-config             unknown   a managed source exists but could not be read, so disableSideloadFlags is not known
+  plugin-dir                 unknown   a managed source exists but could not be read, so disableSideloadFlags is not known
+  agents                     unknown   a managed source exists but could not be read, so disableSideloadFlags is not known
+  setting-sources            unknown   a managed source exists but could not be read
+  append-system-prompt-file  available not a sideload flag
+  forced-plugins             available no plugin is force-enabled by policy

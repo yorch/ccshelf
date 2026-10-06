@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "features": [
+    {
+      "id": "settings-masking",
+      "state": "available",
+      "reason": "the generated --settings file is not a sideload flag and cannot be disabled by policy; keys that managed settings lock (force-enabled plugins) still win"
+    },
+    {
+      "id": "hide-connectors",
+      "state": "available",
+      "reason": "disableClaudeAiConnectors is valid in any settings file"
+    },
+    {
+      "id": "deny-mcp-servers",
+      "state": "available",
+      "reason": "deniedMcpServers is valid in any settings file; entries need full server names such as plugin:context7:context7"
+    },
+    {
+      "id": "add-mcp-config",
+      "state": "blocked",
+      "reason": "managed settings set disableSideloadFlags, which rejects --mcp-config",
+      "source": "disableSideloadFlags"
+    },
+    {
+      "id": "plugin-dir",
+      "state": "blocked",
+      "reason": "managed settings set disableSideloadFlags, which rejects --plugin-dir and CLAUDE_CODE_PLUGIN_DIRS",
+      "source": "disableSideloadFlags"
+    },
+    {
+      "id": "agents",
+      "state": "blocked",
+      "reason": "managed settings set disableSideloadFlags, which rejects --agents",
+      "source": "disableSideloadFlags"
+    },
+    {
+      "id": "setting-sources",
+      "state": "available",
+      "reason": "not restricted by any readable managed key"
+    },
+    {
+      "id": "append-system-prompt-file",
+      "state": "available",
+      "reason": "not a sideload flag"
+    },
+    {
+      "id": "forced-plugins",
+      "state": "blocked",
+      "reason": "these plugins are force-enabled by policy and cannot be masked; they stay on in every profile",
+      "source": "enabledPlugins / required by your org",
+      "items": [
+        "audit-logger@acme",
+        "sre-kit@acme"
+      ]
+    }
+  ],
+  "locked_plugins": [
+    "audit-logger@acme",
+    "sre-kit@acme"
+  ],
+  "unknown": [
+    "server-managed settings cannot be read locally"
+  ],
+  "warnings": [
+    "managed key disableAllHooks should be a boolean; ignoring the value"
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "features": [
+    {
+      "id": "settings-masking",
+      "state": "available",
+      "reason": "the generated --settings file is not a sideload flag and cannot be disabled by policy; keys that managed settings lock (force-enabled plugins) still win"
+    },
+    {
+      "id": "hide-connectors",
+      "state": "available",
+      "reason": "disableClaudeAiConnectors is valid in any settings file"
+    },
+    {
+      "id": "deny-mcp-servers",
+      "state": "available",
+      "reason": "deniedMcpServers is valid in any settings file; entries need full server names such as plugin:context7:context7"
+    },
+    {
+      "id": "add-mcp-config",
+      "state": "available",
+      "reason": "no readable managed policy sets disableSideloadFlags"
+    },
+    {
+      "id": "plugin-dir",
+      "state": "available",
+      "reason": "no readable managed policy sets disableSideloadFlags"
+    },
+    {
+      "id": "agents",
+      "state": "available",
+      "reason": "no readable managed policy sets disableSideloadFlags"
+    },
+    {
+      "id": "setting-sources",
+      "state": "available",
+      "reason": "not restricted by any readable managed key"
+    },
+    {
+      "id": "append-system-prompt-file",
+      "state": "available",
+      "reason": "not a sideload flag"
+    },
+    {
+      "id": "forced-plugins",
+      "state": "available",
+      "reason": "no plugin is force-enabled by policy"
+    }
+  ],
+  "locked_plugins": [],
+  "unknown": [],
+  "warnings": []
+}
