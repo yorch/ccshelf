@@ -19,7 +19,8 @@
 | [design/project.md](design/project.md) | Open source (R4), license and the project name |
 | [design/release.md](design/release.md) | Versioning and the release pull request (release-please), the token, tag and signing chain, PR title rules, failure and rollback, first-release runbook, and the assessment of three other projects |
 | [design/workflows.md](design/workflows.md) | Example workflows (mockups) |
-| [../site/](../site/index.html) | The project website: a static page with a loadout demo from captured output, validated by `scripts/check-site.sh`; deployed to GitHub Pages only by hand (D-34), see `site/README.md` |
+| [../site/](../site/index.html) | The project website: a static page with a loadout demo from captured output, plus these notes published as a `/docs` section (D-35, built by `scripts/build_docs.py`); validated by `scripts/check-site.sh`; deployed to GitHub Pages only by hand (D-34), see `site/README.md` |
+| [reference/cli.md](reference/cli.md) | The command reference, **generated from the real binary** (`scripts/gen-cli-reference.sh`; CI fails when it is stale) {V} |
 | [design/roadmap.md](design/roadmap.md) | Phase 0 evidence, the MVP, deferred work and non-goals |
 | [research/context.md](research/context.md) | The two use cases and how the research was run |
 | [research/landscape.md](research/landscape.md) | Evidence of the problems, native mechanisms, existing tools, naming findings |

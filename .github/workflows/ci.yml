@@ -217,9 +217,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: The website validator's own tests
-        run: python3 -I scripts/test_check_site.py
-      - name: The website has no external requests, broken links or missing metadata
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: The website validator's and the docs builder's own tests
+        run: |
+          python3 -I scripts/test_check_site.py
+          python3 -I scripts/test_build_docs.py
+      - name: The docs command reference matches the real binary
+        run: bash scripts/gen-cli-reference.sh --check
+      - name: The built website (docs pages included) has no external requests, broken links or missing metadata
         run: bash scripts/check-site.sh
       - name: The deploy build fills in the site address and the result still passes
         run: bash scripts/build-site.sh "$RUNNER_TEMP/site-built" https://pages.example.test/ccshelf

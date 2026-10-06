@@ -40,7 +40,8 @@ Guidance for AI coding agents (and humans) working in this repo, the public **to
 
 ## Website conventions
 - `site/` is the project website: plain HTML, one CSS file, one JS file, system fonts, no build step, no framework and no external request of any kind. All URLs are relative so it works from `file://` and a Pages project subpath. The repository address lives in one place (the `href` of `#repo` in `site/index.html`, `REPO_URL`); never hard-code it elsewhere.
-- A strict `<meta>` CSP forbids inline scripts, styles and handlers. Run `make site-check` (or `bash scripts/check-site.sh`) after any edit; every claim on the page must be traceable to `docs/`.
+- A strict `<meta>` CSP forbids inline scripts, styles and handlers. Run `make site-check` (or `bash scripts/check-site.sh`, which builds `dist/site` first) after any edit; every claim on the page must be traceable to `docs/`.
+- **The documentation is published through `scripts/build_docs.py`** (D-35): it renders `docs/**/*.md` into `dist/site/docs/` at build time, reusing the parser of `docs/build_report.py`, so the Markdown subset below is the whole contract. Generated HTML is never committed. A new Markdown file must be added to `PAGES` in `scripts/build_docs.py` (the build fails otherwise). Link rules: write relative links to other notes (`../design/security.md#anchor`); a link to any other repository file becomes `REPO_URL/blob/main/<path>` and must exist; external links stay live only for the repository and `code.claude.com`, other addresses are shown as text. `docs/reference/cli.md` is generated from the real binary: regenerate it with `scripts/gen-cli-reference.sh --write` after a command or flag change (CI runs `--check`). The report widgets (`<!-- widget: x -->`) are not rendered on the site.
 
 ## Go conventions (when code starts)
 - One module, one binary, packages `core/`, `profiles/`, `catalog/`; start under `internal/` with no public API promise.

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# build-site.sh: copy site/ to an output directory and fill in the deploy-time values.
+# build-site.sh: build the deployable website: copy site/ to an output directory, render the
+# Markdown documentation into <out>/docs (scripts/build_docs.py) and fill in the deploy-time values.
 #
 #   scripts/build-site.sh <out_dir> <site_url> [--repo-url <url>]
 #
@@ -8,7 +9,9 @@
 # It replaces the __SITE_URL__ placeholder (canonical, og:url, social image) and becomes the
 # <base href> of 404.html, so the 404 page works on nested paths. --repo-url swaps the repository
 # address declared in index.html (the href of id="repo") for the public home before publishing.
-# The committed site/ is left untouched, and the result is validated with check_site.py.
+# The committed site/ is left untouched, the generated pages are never committed, and the result is
+# validated with check_site.py --built. The repository address of the docs pages comes from the same
+# id="repo" link, so one --repo-url swap covers the home page and the docs.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -37,7 +40,9 @@ cp -R site/. "$out/"
 old_repo=$(sed -n 's/.*<a id="repo" href="\([^"]*\)".*/\1/p' site/index.html | head -n 1)
 [ -n "$old_repo" ] || { echo "build-site: no id=\"repo\" link in site/index.html" >&2; exit 1; }
 
-for f in "$out"/*.html; do
+python3 -I scripts/build_docs.py --out "$out"
+
+while IFS= read -r f; do
   tmp=$f.tmp
   sed -e "s|__SITE_URL__|$site_url|g" \
       -e "s|<!--SITE_BASE-->|<base href=\"$site_url/\">|" "$f" >"$tmp"
@@ -47,5 +52,5 @@ for f in "$out"/*.html; do
   else
     mv "$tmp" "$f"
   fi
-done
+done < <(find "$out" -name '*.html' | sort)
 python3 -I scripts/check_site.py --built "$out"

@@ -45,6 +45,7 @@
         <li><a href="#install">Install</a></li>
         <li class="opt"><a href="#commands">Commands</a></li>
         <li class="opt"><a href="#faq">FAQ</a></li>
+        <li><a href="docs/index.html">Docs</a></li>
       </ul>
     </nav>
     <button class="theme" type="button" id="theme-toggle" hidden>Theme: light</button>
@@ -142,7 +143,7 @@
   <div class="sec-body prose">
     <p>An organization with around fifty internal plugins ends up with a crowded session: skills for incident response sit next to skills for CSS, and nobody can say which plugin a task should use. Claude Code enables plugins through settings, so the set you choose is usually the set every session starts with.</p>
     <p>ccshelf adds two things. A <strong>launcher</strong> that chooses the set per terminal, and a <strong>catalog</strong> that answers "what exists, which should I use, who owns it" from metadata the organization already keeps in git.</p>
-    <p class="evidence">What has been measured so far: in one run on one real setup, hiding MCP servers and claude.ai connectors through the generated settings cut about 5.7k input tokens (19%, from 29.7k to 24.0k). That is a single run, not a benchmark. Whether a smaller set also improves how often the right skill fires is the open Phase 0 routing evaluation. Details in <a href="https://github.com/yorch/ccshelf/blob/main/docs/research/stage0.md">docs/research/stage0.md</a>.</p>
+    <p class="evidence">What has been measured so far: in one run on one real setup, hiding MCP servers and claude.ai connectors through the generated settings cut about 5.7k input tokens (19%, from 29.7k to 24.0k). That is a single run, not a benchmark. Whether a smaller set also improves how often the right skill fires is the open Phase 0 routing evaluation. Details in <a href="docs/research/stage0.html">docs/research/stage0.md</a>.</p>
   </div>
 </section>
 
@@ -285,7 +286,7 @@
       <div id="sr5"><dt>Hardened CI and releases <span class="badge c-warn">workflows written, no release yet</span></dt>
         <dd>The Action is pinned by full commit SHA and embeds the expected checksum of the binary it downloads. Releases are planned with signatures, provenance and an SBOM. Workflows use <code>permissions: {}</code> and least privilege. <span class="protects">Protects against a tampered binary or a compromised action in your pipeline.</span></dd></div>
     </dl>
-    <p class="more"><a href="https://github.com/yorch/ccshelf/blob/main/docs/design/security.md">Read the full security design</a> and the <a href="https://github.com/yorch/ccshelf/blob/main/SECURITY.md">security policy</a>.</p>
+    <p class="more"><a href="docs/design/security.html">Read the full security design</a> and the <a href="https://github.com/yorch/ccshelf/blob/main/SECURITY.md">security policy</a>.</p>
   </div>
 </section>
 
@@ -361,7 +362,7 @@ ccshelf catalog build</code></pre>
 <!-- COMMANDS -->
 <section class="sec wrap" id="commands" aria-labelledby="h-cmds">
   <div class="sec-head"><h2 id="h-cmds">Command reference</h2>
-    <p>Read commands (<code>ls</code>, <code>show</code>, <code>search</code>, <code>doctor</code>, <code>diff</code>) accept <code>--json</code>. <code>NO_COLOR</code> and <code>--no-color</code> are honored, and <code>--no-interactive</code> turns prompts off.</p></div>
+    <p>Read commands (<code>ls</code>, <code>show</code>, <code>search</code>, <code>doctor</code>, <code>diff</code>) accept <code>--json</code>. <code>NO_COLOR</code> and <code>--no-color</code> are honored, and <code>--no-interactive</code> turns prompts off. Every flag of every command is in the <a href="docs/reference/cli.html">generated command reference</a>.</p></div>
   <div class="sec-body">
     <h3 class="sub">Launcher</h3>
     <dl class="cmds">
@@ -453,7 +454,7 @@ ccshelf catalog build</code></pre>
            repo today: change it to the public home before publishing, in one command:
            scripts/build-site.sh --repo-url <new> (see site/README.md). -->
       <a id="repo" href="https://github.com/yorch/ccshelf">the ccshelf repository</a>.
-      See <a href="https://github.com/yorch/ccshelf/blob/main/docs/README.md">the documentation overview</a>, <a href="https://github.com/yorch/ccshelf/blob/main/docs/DECISIONS.md">the decision log</a> and <a href="https://github.com/yorch/ccshelf/blob/main/CONTRIBUTING.md">how to contribute</a>.</p>
+      See <a href="docs/index.html">the documentation overview</a>, <a href="docs/decisions.html">the decision log</a> and <a href="https://github.com/yorch/ccshelf/blob/main/CONTRIBUTING.md">how to contribute</a>.</p>
     <p class="fine">Plugin names, teams and the <code>acme</code> organization on this page are fictional examples.</p>
   </div>
 </footer>

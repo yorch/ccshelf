@@ -378,6 +378,114 @@ class Assets(Base):
         self.assertFails("exceeds")
 
 
+DOC_PAGE = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="{csp}">
+<title>{name}</title><meta name="description" content="A docs page.">
+<link rel="canonical" href="__SITE_URL__/docs/{name}.html">
+<link rel="stylesheet" href="../assets/site.css"><script src="../assets/site.js"></script></head>
+<body><a class="skip" href="#main">Skip</a>
+<div class="dsearch" id="dsearch" data-root="" hidden></div>
+<nav id="docnav"><ul><li><a href="a.html">A</a></li><li><a href="b.html">B</a></li></ul></nav>
+<main id="main"><h1>{name}</h1><h2 id="sec">Sec</h2></main></body></html>"""
+SEARCH_INDEX_OK = 'window.CCSHELF_DOCS_INDEX = {"v":1,"pages":[{"u":"a.html","t":"A","g":"G","s":[["sec","Sec","text about fetch and eval"]]},{"u":"b.html","t":"B","g":"G","s":[]}]};\n'
+
+
+class Docs(Base):
+    """Rules for the generated documentation pages under docs/."""
+
+    def setUp(self):
+        super().setUp()
+        os.makedirs(os.path.join(self.d, "docs"))
+        for n in ("a", "b"):
+            self.write("docs/%s.html" % n, DOC_PAGE.format(csp=CSP, name=n))
+        self.write("docs/search-index.js", SEARCH_INDEX_OK)
+        self.mutate("</body>", '<a href="docs/a.html">docs</a></body>')
+
+    def test_good_docs_pass_and_the_index_may_mention_forbidden_words(self):
+        self.assertClean()
+
+    def test_missing_skip_link(self):
+        self.mutate('<a class="skip" href="#main">Skip</a>', "", "docs/a.html")
+        self.assertFails("docs/a.html: docs page has no skip link")
+
+    def test_skip_link_must_hit_an_id(self):
+        self.mutate('href="#main"', 'href="#content"', "docs/a.html")
+        self.assertFails("skip link #content does not point at an id")
+
+    def test_two_h1(self):
+        self.mutate("<h2 id=\"sec\">", "<h1>Again</h1><h2 id=\"sec\">", "docs/a.html")
+        self.assertFails("exactly one <h1>, found 2")
+
+    def test_no_h1(self):
+        self.mutate("<h1>a</h1>", "", "docs/a.html")
+        self.assertFails("exactly one <h1>, found 0")
+
+    def test_main_landmark_required(self):
+        self.mutate('<main id="main">', "<main>", "docs/a.html")
+        self.assertFails('needs exactly one <main id="main">')
+
+    def test_nav_must_list_every_page(self):
+        self.mutate('<li><a href="b.html">B</a></li>', "", "docs/a.html")
+        self.assertFails("the docs navigation does not link docs/b.html")
+
+    def test_nav_missing_entirely(self):
+        self.mutate('<nav id="docnav">', "<nav>", "docs/a.html")
+        self.assertFails('no navigation with id="docnav"')
+
+    def test_search_box_required_and_its_root_checked(self):
+        self.mutate('data-root=""', 'data-root="../"', "docs/a.html")
+        self.assertFails("search data-root")
+        self.mutate('<div class="dsearch" id="dsearch" data-root="../" hidden></div>', "", "docs/a.html")
+        self.assertFails('no search box (id="dsearch")')
+
+    def test_search_index_missing(self):
+        os.remove(os.path.join(self.d, "docs", "search-index.js"))
+        self.assertFails("docs/search-index.js: missing")
+
+    def test_search_index_must_be_pure_data(self):
+        self.write("docs/search-index.js", "alert(1);\n")
+        self.assertFails("must be exactly")
+        self.write("docs/search-index.js", 'window.CCSHELF_DOCS_INDEX = {"pages":[]};alert(1);\n')
+        self.assertFails("not valid JSON")
+
+    def test_search_index_must_list_exactly_the_pages(self):
+        self.write("docs/search-index.js", SEARCH_INDEX_OK.replace(',{"u":"b.html","t":"B","g":"G","s":[]}', ""))
+        self.assertFails("does not list the page b.html")
+        self.write("docs/search-index.js", SEARCH_INDEX_OK.replace('"u":"b.html"', '"u":"c.html"'))
+        self.assertFails("lists a page that does not exist: 'c.html'")
+
+    def test_search_index_anchor_must_exist(self):
+        self.write("docs/search-index.js", SEARCH_INDEX_OK.replace('"sec"', '"nope"', 1))
+        self.assertFails("a.html#nope is not an id on that page")
+
+    def test_search_index_size_limit(self):
+        big = "x" * (cs.MAX_SEARCH_INDEX_BYTES + 10)
+        self.write("docs/search-index.js", SEARCH_INDEX_OK.replace("text about fetch and eval", big))
+        self.assertFails("search index is over")
+
+    def test_orphan_page(self):
+        self.mutate('<a href="docs/a.html">docs</a>', "", "index.html")
+        self.assertFails("orphan page")
+
+    def test_404_is_not_an_orphan(self):
+        self.write("404.html", OTHER.format(csp=CSP).replace("<title>Other page", "<title>Not found").replace('<h1 id="o">', '<h1 id="x">'))
+        self.assertFalse(any("404.html" in e and "orphan" in e for e in self.errs()))
+
+    def test_a_docs_page_still_gets_the_generic_rules(self):
+        self.mutate("<title>a</title>", "<title></title>", "docs/a.html")
+        self.assertFails("docs/a.html: missing <title>")
+        self.mutate("</body>", '<a href="https://evil.test/">x</a></body>', "docs/b.html")
+        self.assertFails("external URL not allowed")
+        self.mutate("</body>", '<a href="#zzz">x</a></body>', "docs/b.html")
+        self.assertFails("missing fragment id #zzz")
+
+    def test_js_words_are_still_refused_outside_the_index(self):
+        self.write("assets/site.js", "fetch('x');")
+        self.assertFails("network or code-evaluation API")
+
+
 class Build(unittest.TestCase):
     """build-site.sh fills in the placeholders; its output passes --built, and a wrong URL is refused."""
 
@@ -415,11 +523,22 @@ class Build(unittest.TestCase):
 
 
 class RealSite(unittest.TestCase):
-    def test_the_real_site_passes(self):
+    def test_the_real_site_with_its_generated_docs_passes(self):
         root = os.path.join(HERE, "..", "site")
         if not os.path.isdir(root):
             self.skipTest("no site/ directory")
-        self.assertEqual(cs.check_site(root), [])
+        out = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, out, True)
+        built = os.path.join(out, "o")
+        shutil.copytree(root, built)
+        r = subprocess.run(["python3", "-I", os.path.join(HERE, "build_docs.py"), "--out", built], capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(cs.check_site(built), [])
+
+    def test_the_committed_site_alone_only_misses_the_generated_pages(self):
+        root = os.path.join(HERE, "..", "site")
+        errs = cs.check_site(root)
+        self.assertTrue(errs and all("broken relative link" in e and "docs/" in e for e in errs), errs)
 
 
 if __name__ == "__main__":
