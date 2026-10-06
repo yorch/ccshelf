@@ -78,27 +78,32 @@ func (l *launcher) trustProfile(ctx context.Context, cc *clicore.Context, name, 
 	}
 	v := store.CheckWithProject(r, s.proj.Allowed)
 	if v.State == trust.Trusted {
-		okf(cc, "%s is already trusted (closure %s)", name, r.Closure.Hash)
+		okf(cc, "%s is already trusted (closure %s)", name, v.Hash)
 		return nil
 	}
-	if v.Problem != "" || v.State == trust.ProjectUntrusted {
+	if v.Problem != "" {
+		// An inconsistent closure is a bug or tampering: exit 1, not exit 4.
+		return ui.Failure(withHint(fmt.Errorf("profile %s: %w: %s", ui.SanitizeLine(r.Name), trust.ErrInconsistentClosure, ui.SanitizeLine(v.Problem)),
+			"the closure cannot be trusted; this is a bug or a tampered file"))
+	}
+	if v.State == trust.ProjectUntrusted {
 		return ui.TrustRequired(withHint(&trust.NeedsTrustError{Profile: r.Name, Verdict: v},
 			"project profiles need: ccshelf trust --project (then trust the profile)"))
 	}
-	fmt.Fprintf(cc.Streams.Out, "Profile %s needs trust (%s). Closure: %s\n", ui.Sanitize(r.Name), v.State, r.Closure.Hash)
+	fmt.Fprintf(cc.Streams.Out, "Profile %s needs trust (%s). Closure: %s\n", ui.Sanitize(r.Name), v.State, v.Hash)
 	v.Describe(cc.Streams.Out)
 	if accept != "" {
 		if err := store.Accept(r, accept); err != nil {
 			if errors.Is(err, trust.ErrHashMismatch) {
-				return ui.TrustRequired(withHint(err, "the closure is now %s; review it above and pass that hash if you accept it", r.Closure.Hash))
+				return ui.TrustRequired(withHint(err, "the closure is now %s; review it above and pass that hash if you accept it", v.Hash))
 			}
 			return ui.Failure(fmt.Errorf("recording trust: %w", err))
 		}
-		okf(cc, "trusted %s (closure %s)", name, r.Closure.Hash)
+		okf(cc, "trusted %s (closure %s)", name, v.Hash)
 		return nil
 	}
 	if !canPrompt(cc) {
-		return ui.Usage(ui.MissingFlags("review the closure above, then name what you accept", "--accept "+r.Closure.Hash))
+		return ui.Usage(ui.MissingFlags("review the closure above, then name what you accept", "--accept "+v.Hash))
 	}
 	ok, err := ui.ConfirmRisky(ctx, cc.Prompt, fmt.Sprintf("Trust profile %s as shown?", ui.Sanitize(name)))
 	if err != nil {
@@ -107,13 +112,14 @@ func (l *launcher) trustProfile(ctx context.Context, cc *clicore.Context, name, 
 	if !ok {
 		return ui.TrustRequired(errors.New("not trusted"))
 	}
-	if err := store.Accept(r, r.Closure.Hash); err != nil {
+	// Accept what was shown (v.Hash), not whatever the closure is by now.
+	if err := store.Accept(r, v.Hash); err != nil {
 		return ui.Failure(fmt.Errorf("recording trust: %w", err))
 	}
-	okf(cc, "trusted %s (closure %s)", name, r.Closure.Hash)
+	okf(cc, "trusted %s (closure %s)", name, v.Hash)
 	if picked {
 		rec := ui.NewRecorder("trust", name)
-		rec.Flag("--accept", r.Closure.Hash)
+		rec.Flag("--accept", v.Hash)
 		printEquivalent(cc, rec)
 	}
 	return nil

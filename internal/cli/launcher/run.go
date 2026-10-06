@@ -400,10 +400,12 @@ func (s *session) settleTrust(ctx context.Context, r *profile.Resolved) error {
 		return nil
 	}
 	needs := &trust.NeedsTrustError{Profile: r.Name, Verdict: v}
-	review := fmt.Sprintf("review it with: ccshelf trust %s; accept it with: ccshelf trust %s --accept %s", r.Name, r.Name, r.Closure.Hash)
+	review := fmt.Sprintf("review it with: ccshelf trust %s; accept it with: ccshelf trust %s --accept %s", r.Name, r.Name, v.Hash)
 	switch {
 	case v.Problem != "":
-		return ui.TrustRequired(withHint(fmt.Errorf("%w: %s", needs, ui.Sanitize(v.Problem)), "the closure is inconsistent and cannot be trusted"))
+		// An inconsistent closure is a bug or tampering, not something a
+		// person can review and accept: exit 1, not "needs trust" (exit 4).
+		return ui.Failure(withHint(fmt.Errorf("profile %s: %w: %s", ui.SanitizeLine(r.Name), trust.ErrInconsistentClosure, ui.SanitizeLine(v.Problem)), "the closure cannot be trusted; this is a bug or a tampered file"))
 	case v.State == trust.ProjectUntrusted:
 		return ui.TrustRequired(withHint(needs, "review the .ccshelf folder, then run: ccshelf trust --project"))
 	}
@@ -411,7 +413,7 @@ func (s *session) settleTrust(ctx context.Context, r *profile.Resolved) error {
 	if !interactive {
 		return ui.TrustRequired(withHint(needs, "%s", review))
 	}
-	fmt.Fprintf(cc.Streams.Err, "Profile %s needs trust (closure %s):\n", ui.Sanitize(r.Name), r.Closure.Hash)
+	fmt.Fprintf(cc.Streams.Err, "Profile %s needs trust (closure %s):\n", ui.Sanitize(r.Name), v.Hash)
 	v.Describe(cc.Streams.Err)
 	ok, err := ui.ConfirmRisky(ctx, cc.Prompt, fmt.Sprintf("Trust profile %s as shown?", ui.Sanitize(r.Name)))
 	if err != nil {
@@ -420,11 +422,12 @@ func (s *session) settleTrust(ctx context.Context, r *profile.Resolved) error {
 	if !ok {
 		return ui.TrustRequired(withHint(needs, "%s", review))
 	}
-	if err := store.Accept(r, r.Closure.Hash); err != nil {
+	// Accept what was shown (v.Hash), not whatever the closure is by now.
+	if err := store.Accept(r, v.Hash); err != nil {
 		return ui.Failure(fmt.Errorf("recording trust: %w", err))
 	}
 	rec := ui.NewRecorder("trust", r.Name)
-	rec.Flag("--accept", r.Closure.Hash)
+	rec.Flag("--accept", v.Hash)
 	printEquivalent(cc, rec)
 	return nil
 }

@@ -1,6 +1,7 @@
 package gitsource
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -9,6 +10,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -78,7 +81,7 @@ func New(opts Options) (*Source, error) {
 		return nil, err
 	}
 	if err := config.ValidatePin(opts.Ref); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrNotPinned, err)
+		return nil, fmt.Errorf("%w: %w", ErrNotPinned, err)
 	}
 	sub, err := cleanSubpath(opts.Subpath)
 	if err != nil {
@@ -298,8 +301,17 @@ func urlKey(u string) string {
 	return hex.EncodeToString(sum[:8])
 }
 
-// materialize returns the verified checkout directory for sha, creating it if
-// needed.
+// fetchFilter makes the server leave out blobs bigger than the per-file limit
+// (a server that does not support filters sends them, and they are then
+// refused by the tree check before anything is written).
+const fetchFilter = "--filter=blob:limit=1048577"
+
+// materialize returns the checkout directory for sha, creating it if needed.
+// A new checkout is built without git ever writing a working tree: the commit
+// is fetched into an object store, the tree is listed and checked, and the
+// files of the watched folders are read from the object store and written
+// here, so no filter driver (git-lfs, git-crypt, a custom clean/smudge),
+// attribute, hook or checkout-time rewrite can change a byte.
 func (s *Source) materialize(ctx context.Context, base, sha string) (string, error) {
 	urlDir := filepath.Join(base, urlKey(s.opts.URL))
 	final := filepath.Join(urlDir, sha)
@@ -320,25 +332,37 @@ func (s *Source) materialize(ctx context.Context, base, sha string) (string, err
 		return "", fmt.Errorf("creating a temporary checkout: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(tmp) }()
-	if _, err := s.git(ctx, tmp, "", "init", "--quiet", "--", tmp); err != nil {
+	initArgs := []string{"init", "--quiet"}
+	if len(sha) == 64 {
+		initArgs = append(initArgs, "--object-format=sha256")
+	}
+	if _, err := s.git(ctx, tmp, "", append(initArgs, "--", tmp)...); err != nil {
 		return "", err
 	}
 	if _, err := s.git(ctx, tmp, tmp, "remote", "add", "--", "origin", s.opts.URL); err != nil {
 		return "", err
 	}
-	if _, err := s.git(ctx, tmp, tmp, "fetch", "--quiet", "--depth", "1", "--no-tags", "--no-recurse-submodules", "origin", sha); err != nil {
+	fetch := []string{"fetch", "--quiet", "--depth", "1", "--no-tags", "--no-recurse-submodules", fetchFilter, "origin"}
+	if _, err := s.git(ctx, tmp, tmp, append(fetch, sha)...); err != nil {
 		if fullSHA.MatchString(strings.ToLower(s.opts.Ref)) {
 			return "", fmt.Errorf("fetching commit %s: %w", sha, err)
 		}
 		tag := s.opts.Ref
-		if _, err2 := s.git(ctx, tmp, tmp, "fetch", "--quiet", "--depth", "1", "--no-tags", "--no-recurse-submodules", "origin", "+refs/tags/"+tag+":refs/tags/"+tag); err2 != nil {
+		if _, err2 := s.git(ctx, tmp, tmp, append(fetch, "+refs/tags/"+tag+":refs/tags/"+tag)...); err2 != nil {
 			return "", fmt.Errorf("fetching commit %s: %w", sha, err)
 		}
 	}
-	if _, err := s.git(ctx, tmp, tmp, "checkout", "--quiet", "--detach", sha, "--"); err != nil {
-		return "", fmt.Errorf("checking out %s: %w", sha, err)
+	if _, err := s.git(ctx, tmp, tmp, "update-ref", "--no-deref", "HEAD", sha); err != nil {
+		return "", fmt.Errorf("pinning %s: %w", sha, err)
 	}
-	if _, err := s.verifyCheckout(ctx, tmp, sha); err != nil {
+	if err := s.verifyRepo(ctx, tmp, sha); err != nil {
+		return "", err
+	}
+	entries, err := s.listTree(ctx, tmp, sha)
+	if err != nil {
+		return "", err
+	}
+	if err := s.extract(ctx, tmp, entries, layoutBase(entries, s.subpath)); err != nil {
 		return "", err
 	}
 	if err := os.Rename(tmp, final); err != nil {
@@ -352,51 +376,46 @@ func (s *Source) materialize(ctx context.Context, base, sha string) (string, err
 
 // verify re-verifies the checkout and returns the source root inside it.
 func (s *Source) verify(ctx context.Context, checkout, sha string) (string, error) {
-	entries, err := s.verifyCheckout(ctx, checkout, sha)
+	if err := s.verifyRepo(ctx, checkout, sha); err != nil {
+		return "", err
+	}
+	entries, err := s.listTree(ctx, checkout, sha)
 	if err != nil {
 		return "", err
 	}
 	base := layoutBase(entries, s.subpath)
-	root := filepath.Join(checkout, filepath.FromSlash(base))
-	if err := checkDisk(checkout, root); err != nil {
+	if err := verifyDisk(checkout, base, entries); err != nil {
 		return "", err
 	}
-	return root, nil
+	return filepath.Join(checkout, filepath.FromSlash(base)), nil
 }
 
-// verifyCheckout checks HEAD, rebuilds the index so content is re-hashed,
-// requires a clean tree and validates the committed content.
-func (s *Source) verifyCheckout(ctx context.Context, dir, sha string) ([]treeEntry, error) {
+// verifyRepo checks that the object store holds the commit the checkout is
+// named for: HEAD is that commit, and the commit object hashes to its id.
+func (s *Source) verifyRepo(ctx context.Context, dir, sha string) error {
 	head, err := s.git(ctx, dir, dir, "rev-parse", "--verify", "--quiet", "HEAD^{commit}")
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s: %v", ErrTampered, dir, err)
+		return fmt.Errorf("%w: %s: %w", ErrTampered, dir, err)
 	}
 	if strings.TrimSpace(head) != sha {
-		return nil, fmt.Errorf("%w: %s is at %s, expected %s", ErrTampered, dir, strings.TrimSpace(head), sha)
+		return fmt.Errorf("%w: %s is at %s, expected %s", ErrTampered, dir, strings.TrimSpace(head), sha)
 	}
-	// A private index outside the checkout: it has no stat data, so status
-	// re-hashes every file, and concurrent verifications never contend for
-	// the checkout's own index.lock.
-	idxDir, err := os.MkdirTemp(filepath.Dir(dir), ".idx-")
+	raw, err := s.git(ctx, dir, dir, "cat-file", "commit", sha)
 	if err != nil {
-		return nil, fmt.Errorf("creating a temporary index: %w", err)
+		return fmt.Errorf("%w: %w", ErrTampered, err)
 	}
-	defer func() { _ = os.RemoveAll(idxDir) }()
-	idx := []string{"GIT_INDEX_FILE=" + filepath.Join(idxDir, "index")}
-	if _, err := s.gitEnvRun(ctx, dir, dir, idx, "read-tree", "HEAD"); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrTampered, err)
-	}
-	st, err := s.gitEnvRun(ctx, dir, dir, idx, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignored")
+	id, err := gitObjectID(sha, "commit", []byte(raw))
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrTampered, err)
+		return err
 	}
-	if st != "" {
-		first := strings.SplitN(st, "\x00", 2)[0]
-		if len(first) > 3 {
-			first = first[3:]
-		}
-		return nil, fmt.Errorf("%w: %s has local changes (%s); delete the directory to fetch it again", ErrTampered, dir, first)
+	if id != sha {
+		return fmt.Errorf("%w: the commit object in %s does not hash to %s", ErrTampered, dir, sha)
 	}
+	return nil
+}
+
+// listTree lists the files of commit sha and validates the tree.
+func (s *Source) listTree(ctx context.Context, dir, sha string) ([]treeEntry, error) {
 	out, err := s.git(ctx, dir, dir, "ls-tree", "-r", "-z", "--long", sha)
 	if err != nil {
 		return nil, err
@@ -409,4 +428,79 @@ func (s *Source) verifyCheckout(ctx context.Context, dir, sha string) ([]treeEnt
 		return nil, err
 	}
 	return entries, nil
+}
+
+// extract writes the files of the watched folders from the object store into
+// dir. The tree has been checked, so every path is a clean relative path.
+func (s *Source) extract(ctx context.Context, dir string, entries []treeEntry, base string) error {
+	files, _ := expectedFiles(entries, base)
+	paths := make([]string, 0, len(files))
+	for p := range files {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+	if len(paths) == 0 {
+		return nil
+	}
+	var in strings.Builder
+	want := 0
+	for _, p := range paths {
+		in.WriteString(files[p].oid + "\n")
+		want += int(files[p].size) + 2*len(files[p].oid) + 64
+	}
+	out, err := s.run(ctx, dir, dir, strings.NewReader(in.String()), want+1024, "cat-file", "--batch")
+	if err != nil {
+		return err
+	}
+	rest := []byte(out)
+	for _, p := range paths {
+		e := files[p]
+		nl := bytes.IndexByte(rest, '\n')
+		if nl < 0 {
+			return fmt.Errorf("%w: git cat-file ended early at %s", ErrTampered, p)
+		}
+		hdr := strings.Fields(string(rest[:nl]))
+		rest = rest[nl+1:]
+		if len(hdr) != 3 || hdr[0] != e.oid || hdr[1] != "blob" || hdr[2] != strconv.FormatInt(e.size, 10) {
+			return fmt.Errorf("%w: git returned an unexpected object for %s", ErrTampered, p)
+		}
+		if int64(len(rest)) < e.size+1 || rest[e.size] != '\n' {
+			return fmt.Errorf("%w: git cat-file output for %s is malformed", ErrTampered, p)
+		}
+		content := rest[:e.size]
+		rest = rest[e.size+1:]
+		id, err := gitObjectID(e.oid, "blob", content)
+		if err != nil {
+			return err
+		}
+		if id != e.oid {
+			return fmt.Errorf("%w: %s does not hash to its tree entry", ErrTampered, p)
+		}
+		if err := writeNew(dir, p, content); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// writeNew creates rel (a slash separated path already checked by checkTree)
+// below dir with the content, mode 0600, directories 0700, failing when the
+// file already exists (which also refuses a symlink in its place).
+func writeNew(dir, rel string, content []byte) error {
+	p := filepath.Join(dir, filepath.FromSlash(rel))
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+		return fmt.Errorf("creating the folder of %s: %w", rel, err)
+	}
+	f, err := os.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return fmt.Errorf("writing %s: %w", rel, err)
+	}
+	if _, err := f.Write(content); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("writing %s: %w", rel, err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("writing %s: %w", rel, err)
+	}
+	return nil
 }

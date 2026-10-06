@@ -15,8 +15,10 @@ import (
 	"github.com/ccshelf/ccshelf/internal/profile"
 )
 
-const sha1 = "1111111111111111111111111111111111111111"
-const sha2 = "2222222222222222222222222222222222222222"
+const (
+	sha1 = "1111111111111111111111111111111111111111"
+	sha2 = "2222222222222222222222222222222222222222"
+)
 
 func TestPersonalIsAlwaysTrusted(t *testing.T) {
 	root := t.TempDir()
@@ -29,7 +31,7 @@ func TestPersonalIsAlwaysTrusted(t *testing.T) {
 	if err := s.Require(r); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Accept(r, ""); err != nil {
+	if err := accept(s, r); err != nil {
 		t.Fatal(err)
 	}
 	if len(s.List()) != 0 {
@@ -58,7 +60,7 @@ func TestNewThenAcceptThenTrusted(t *testing.T) {
 	if !strings.Contains(err.Error(), "ccshelf trust dev") {
 		t.Errorf("message: %v", err)
 	}
-	if err := s.Accept(r, ""); err != nil {
+	if err := accept(s, r); err != nil {
 		t.Fatal(err)
 	}
 	if v := s.Check(r); v.State != Trusted || v.Risky || len(v.Changes) != 0 {
@@ -106,7 +108,7 @@ func TestAcceptExpectedHash(t *testing.T) {
 	if err := s.Accept(r, r.Closure.Hash); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Accept(nil, ""); err == nil {
+	if err := s.Accept(nil, "x"); err == nil {
 		t.Error("nil must fail")
 	}
 }
@@ -115,7 +117,7 @@ func TestInconsistentClosureIsNeverTrusted(t *testing.T) {
 	org := orgTree(t)
 	r := resolve(t, "dev", gitLike(org, "v1", sha1))
 	s := newStore(t)
-	if err := s.Accept(r, ""); err != nil {
+	if err := accept(s, r); err != nil {
 		t.Fatal(err)
 	}
 	bad := *r
@@ -130,7 +132,7 @@ func TestInconsistentClosureIsNeverTrusted(t *testing.T) {
 	if !strings.Contains(buf.String(), "Problem:") {
 		t.Errorf("describe: %s", buf.String())
 	}
-	if err := s.Accept(&bad, ""); !errors.Is(err, ErrInconsistentClosure) {
+	if err := accept(s, &bad); !errors.Is(err, ErrInconsistentClosure) {
 		t.Errorf("Accept = %v", err)
 	}
 }
@@ -139,14 +141,14 @@ func TestChangedAndRiskyDiff(t *testing.T) {
 	org := orgTree(t)
 	src := gitLike(org, "v1", sha1)
 	s := newStore(t)
-	if err := s.Accept(resolve(t, "dev", src), ""); err != nil {
+	if err := accept(s, resolve(t, "dev", src)); err != nil {
 		t.Fatal(err)
 	}
 	// edit registry, prompt, add a plugin, and tweak the base profile text
 	put(t, org, "mcp/registry.toml", strings.Replace(regTOML, "pd-mcp", "pd-mcp-evil", 1))
 	put(t, org, "prompts/dev.md", "Be careless.\n")
 	put(t, org, "profiles/dev.toml", strings.Replace(devTOML, `["audit-kit@acme"]`, `["audit-kit@acme", "extra@acme"]`, 1))
-	put(t, org, "profiles/base.toml", baseTOML+"# a comment\n")
+	put(t, org, "profiles/base.toml", strings.Replace(baseTOML, `"d"`, `"changed text"`, 1))
 	r := resolve(t, "dev", gitLike(org, "v1", sha1))
 	v := s.Check(r)
 	if v.State != Changed || !v.Risky {
@@ -157,7 +159,7 @@ func TestChangedAndRiskyDiff(t *testing.T) {
 		kinds[c.Item.Kind+":"+c.Item.Name] = c.Kind
 	}
 	for k, want := range map[string]ChangeKind{
-		"registry:pd": Altered, "prompt:prompts/dev.md": Altered, "plugin:extra@acme": Added, "profile:base": Altered, "profile:dev": Altered,
+		"registry:pd": Altered, "prompt:prompts/dev.md": Altered, "plugin:extra@acme": Added, "profile:base": Altered, "profile-controls:dev": Altered,
 	} {
 		if kinds[k] != want {
 			t.Errorf("%s = %q, want %q (all: %v)", k, kinds[k], want, kinds)
@@ -175,7 +177,7 @@ func TestChangedAndRiskyDiff(t *testing.T) {
 	var buf bytes.Buffer
 	v.Describe(&buf)
 	out := buf.String()
-	for _, want := range []string{"changed since you last trusted", "Needs your review", "MCP server pd changed and now runs: npx -y pd-mcp-evil", "prompt text changed (prompts/dev.md)", "plugin extra@acme added", "Other changes:", "profile base changed"} {
+	for _, want := range []string{"changed since you last trusted", "Needs your review", "MCP server pd changed and now runs: npx -y pd-mcp-evil", "prompt text changed (prompts/dev.md)", "plugin extra@acme added", "profile dev controls changed", "plugins.include: extra@acme added", "Other changes:", "profile base changed"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("describe lacks %q:\n%s", want, out)
 		}
@@ -183,13 +185,11 @@ func TestChangedAndRiskyDiff(t *testing.T) {
 	if strings.Index(out, "Needs your review") > strings.Index(out, "Other changes:") {
 		t.Errorf("risky must come first:\n%s", out)
 	}
-	for _, secret := range []string{"hunter2", "zzz"} {
-		if strings.Contains(out, secret) {
-			t.Errorf("describe leaked %q:\n%s", secret, out)
+	// registry arguments are code, shown verbatim (F2); secrets come by env_refs names
+	for _, verbatim := range []string{"--token hunter2", "API_KEY=zzz", "PD_TOKEN_REF"} {
+		if !strings.Contains(strings.Join(strings.Fields(out), " "), verbatim) {
+			t.Errorf("describe must show %q verbatim:\n%s", verbatim, out)
 		}
-	}
-	if !strings.Contains(out, "PD_TOKEN_REF") || !strings.Contains(out, "<redacted>") {
-		t.Errorf("describe should list env names and mask secrets:\n%s", out)
 	}
 	err := s.Require(r)
 	if !IsNeedsTrust(err) || !strings.Contains(err.Error(), "changed since you accepted") {
@@ -210,7 +210,7 @@ func TestChangedAndRiskyDiff(t *testing.T) {
 func TestRemovedItemsAreReported(t *testing.T) {
 	org := orgTree(t)
 	s := newStore(t)
-	if err := s.Accept(resolve(t, "dev", gitLike(org, "v1", sha1)), ""); err != nil {
+	if err := accept(s, resolve(t, "dev", gitLike(org, "v1", sha1))); err != nil {
 		t.Fatal(err)
 	}
 	put(t, org, "profiles/dev.toml", "name = \"dev\"\ndescription = \"d\"\nextends = [\"base\"]\n")
@@ -230,7 +230,7 @@ func TestRemovedItemsAreReported(t *testing.T) {
 func TestTagMoved(t *testing.T) {
 	org := orgTree(t)
 	s := newStore(t)
-	if err := s.Accept(resolve(t, "dev", gitLike(org, "v1", sha1)), ""); err != nil {
+	if err := accept(s, resolve(t, "dev", gitLike(org, "v1", sha1))); err != nil {
 		t.Fatal(err)
 	}
 	// same ref, same content, other commit: still an untrusted update
@@ -270,7 +270,7 @@ func TestPersonalExtendingSharedNeedsTrust(t *testing.T) {
 	if v := s.Check(r); v.State != New {
 		t.Fatalf("verdict = %+v", v)
 	}
-	if err := s.Accept(r, ""); err != nil {
+	if err := accept(s, r); err != nil {
 		t.Fatal(err)
 	}
 	if v := s.Check(r); v.State != Trusted {
@@ -290,7 +290,7 @@ func TestOrgDirSourceKey(t *testing.T) {
 	src := profile.DirSource(profile.KindOrg, filepath.Join(org, "profiles"))
 	r := resolve(t, "base", src)
 	s := newStore(t)
-	if err := s.Accept(r, ""); err != nil {
+	if err := accept(s, r); err != nil {
 		t.Fatal(err)
 	}
 	if got := s.List(); len(got) != 1 || got[0].Source != "dir:org" || got[0].Ref != "" {
@@ -324,7 +324,7 @@ func TestProjectUntrustedUntilStated(t *testing.T) {
 	if v := s.CheckWithProject(r, true); v.State != New {
 		t.Errorf("trusted folder, no entry: %+v", v)
 	}
-	if err := s.Accept(r, ""); err != nil {
+	if err := accept(s, r); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.RequireWithProject(r, true); err != nil {
@@ -354,7 +354,7 @@ func TestRevoke(t *testing.T) {
 	b := resolve(t, "dev", other)
 	c := resolve(t, "base", gitLike(org, "v1", sha1))
 	for _, r := range []*profile.Resolved{a, b, c} {
-		if err := s.Accept(r, ""); err != nil {
+		if err := accept(s, r); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -391,7 +391,7 @@ func TestAcceptNowAndSortedFile(t *testing.T) {
 	fixed := time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)
 	s.now = func() time.Time { return fixed }
 	for _, name := range []string{"dev", "base"} {
-		if err := s.Accept(resolve(t, name, gitLike(org, "v1", sha1)), ""); err != nil {
+		if err := accept(s, resolve(t, name, gitLike(org, "v1", sha1))); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -422,7 +422,7 @@ func TestAcceptNowAndSortedFile(t *testing.T) {
 func TestOpenRejectsBadFiles(t *testing.T) {
 	org := orgTree(t)
 	good := newStore(t)
-	if err := good.Accept(resolve(t, "dev", gitLike(org, "v1", sha1)), ""); err != nil {
+	if err := accept(good, resolve(t, "dev", gitLike(org, "v1", sha1))); err != nil {
 		t.Fatal(err)
 	}
 	goodBytes, _ := os.ReadFile(good.Path())
@@ -501,7 +501,7 @@ func TestSymlinkedLockfileRefused(t *testing.T) {
 	// writing: start from a missing file, then plant the link before Accept
 	s := &Store{path: link, now: time.Now}
 	org := orgTree(t)
-	err := s.Accept(resolve(t, "dev", gitLike(org, "v1", sha1)), "")
+	err := accept(s, resolve(t, "dev", gitLike(org, "v1", sha1)))
 	if err == nil || !strings.Contains(err.Error(), "symlink") {
 		t.Fatalf("write through symlink: %v", err)
 	}
@@ -527,7 +527,7 @@ func TestInsecureDirRefused(t *testing.T) {
 		t.Fatal(err)
 	}
 	org := orgTree(t)
-	err = s.Accept(resolve(t, "dev", gitLike(org, "v1", sha1)), "")
+	err = accept(s, resolve(t, "dev", gitLike(org, "v1", sha1)))
 	if err == nil || !strings.Contains(err.Error(), "writable by group or others") {
 		t.Fatalf("err = %v", err)
 	}
@@ -541,7 +541,7 @@ func TestWriteFailures(t *testing.T) {
 	// parent is a file
 	s := &Store{path: filepath.Join(file, "lock.json"), now: time.Now}
 	org := orgTree(t)
-	if err := s.Accept(resolve(t, "dev", gitLike(org, "v1", sha1)), ""); err == nil {
+	if err := accept(s, resolve(t, "dev", gitLike(org, "v1", sha1))); err == nil {
 		t.Error("parent that is a file must fail")
 	}
 	// target is a directory
@@ -550,7 +550,7 @@ func TestWriteFailures(t *testing.T) {
 		t.Fatal(err)
 	}
 	s = &Store{path: filepath.Join(d, "lock.json"), now: time.Now}
-	if err := s.Accept(resolve(t, "dev", gitLike(org, "v1", sha1)), ""); err == nil {
+	if err := accept(s, resolve(t, "dev", gitLike(org, "v1", sha1))); err == nil {
 		t.Error("directory target must fail")
 	}
 	if err := writeStateFile(filepath.Join(t.TempDir(), "x.json"), make([]byte, maxStateFile+1)); err == nil {
@@ -567,7 +567,7 @@ func TestConcurrentAcceptCheck(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if err := s.Accept(r, ""); err != nil {
+			if err := accept(s, r); err != nil {
 				t.Error(err)
 			}
 			_ = s.Check(r)
@@ -580,7 +580,7 @@ func TestConcurrentAcceptCheck(t *testing.T) {
 	}
 }
 
-func TestDescribeSanitizesAndTruncates(t *testing.T) {
+func TestDescribeSanitizes(t *testing.T) {
 	c := Change{Kind: Added, Item: profile.ClosureItem{Kind: profile.ItemPlugin, Name: "evil\x1b[31m@acme"}, Risky: true}
 	v := Verdict{State: New, Profile: "p\x1b[2J", Changes: []Change{c}, Risky: true}
 	var buf bytes.Buffer
@@ -588,9 +588,8 @@ func TestDescribeSanitizesAndTruncates(t *testing.T) {
 	if strings.ContainsRune(buf.String(), 0x1b) {
 		t.Errorf("escape sequence leaked: %q", buf.String())
 	}
-	long := clean(strings.Repeat("x", 1000))
-	if len(long) > 250 || !strings.HasSuffix(long, "...") {
-		t.Errorf("clean did not truncate: %d", len(long))
+	if long := strings.Repeat("x", 1000); clean(long) != long {
+		t.Errorf("clean must never truncate: %d", len(clean(long)))
 	}
 }
 
@@ -600,15 +599,12 @@ func TestDescribeHTTPServerAndOverrides(t *testing.T) {
 	if strings.Contains(d, "pw") || strings.Contains(d, "abc") || !strings.Contains(d, "connects to: https://<redacted>@mcp.example.com/x?<redacted>") {
 		t.Errorf("describeServer = %q", d)
 	}
-	m = profile.MCPServer{Type: profile.MCPStdio, Command: "npx", Args: []string{"-y", "x", "--api-key", "SECRET", "--password=hunter2", "TOKEN=abc"},
-		Windows: &profile.MCPOverride{Command: "cmd", Args: []string{"/c", "npx"}}, MacOS: &profile.MCPOverride{Command: "m"}, Linux: &profile.MCPOverride{Command: "l"}}
-	d = describeServer(m)
-	for _, bad := range []string{"SECRET", "hunter2", "abc"} {
-		if strings.Contains(d, bad) {
-			t.Errorf("leaked %q in %q", bad, d)
-		}
+	m = profile.MCPServer{
+		Type: profile.MCPStdio, Command: "npx", Args: []string{"-y", "x", "--api-key", "SECRET"},
+		Windows: &profile.MCPOverride{Command: "cmd", Args: []string{"/c", "npx"}}, MacOS: &profile.MCPOverride{Command: "m"}, Linux: &profile.MCPOverride{Command: "l"},
 	}
-	for _, want := range []string{"on windows runs: cmd /c npx", "on macos runs: m", "on linux runs: l"} {
+	d = describeServer(m)
+	for _, want := range []string{"--api-key SECRET", "on windows runs: cmd /c npx", "on macos runs: m", "on linux runs: l"} {
 		if !strings.Contains(d, want) {
 			t.Errorf("lacks %q in %q", want, d)
 		}

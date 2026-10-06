@@ -106,7 +106,16 @@ func TestValidateURL(t *testing.T) {
 		ok    bool
 	}{
 		{"https://github.com/acme/data.git", false, true},
-		{"https://user@github.com/acme/data.git", false, true},
+		{"https://user@github.com/acme/data.git", false, false},
+		{"https://ghp_token@github.com/acme/data.git", false, false},
+		{"https://github.com/acme/data.git?token=x", false, false},
+		{"https://github.com/acme/data.git#frag", false, false},
+		{"https://github.com/acme/da\u202eta.git", false, false},
+		{"https://github.com/acme/da\u200bta.git", false, false},
+		{"ssh://git:pw@github.com/acme/data.git", false, false},
+		{"ssh://-oProxyCommand=x/repo", false, false},
+		{"file:///srv/repo?x=1", true, false},
+		{"https://tok@host/r", true, false},
 		{"https://user:pw@github.com/acme/data.git", false, false},
 		{"ssh://git@github.com/acme/data.git", false, true},
 		{"git@github.com:acme/data.git", false, true},
@@ -493,53 +502,14 @@ func TestParseLsTreeErrors(t *testing.T) {
 	}
 }
 
-func TestCheckDiskRejectsEscapes(t *testing.T) {
+func TestHooksAndFiltersNeverRun(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("creating symlinks needs privileges on Windows")
-	}
-	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, "profiles"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := checkDisk(root, root); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink("/etc", filepath.Join(root, "profiles", "x")); err != nil {
-		t.Fatal(err)
-	}
-	if err := checkDisk(root, root); !errors.Is(err, ErrHygiene) {
-		t.Errorf("symlink in profiles: %v", err)
-	}
-	root2 := t.TempDir()
-	if err := os.Symlink(t.TempDir(), filepath.Join(root2, "mcp")); err != nil {
-		t.Fatal(err)
-	}
-	if err := checkDisk(root2, root2); !errors.Is(err, ErrHygiene) {
-		t.Errorf("symlinked mcp dir: %v", err)
-	}
-	root3 := t.TempDir()
-	if err := os.Symlink(t.TempDir(), filepath.Join(root3, "sub")); err != nil {
-		t.Fatal(err)
-	}
-	if err := checkDisk(root3, filepath.Join(root3, "sub")); !errors.Is(err, ErrHygiene) {
-		t.Errorf("symlinked base: %v", err)
-	}
-	root4 := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root4, "prompts"), []byte("x"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := checkDisk(root4, root4); !errors.Is(err, ErrHygiene) {
-		t.Errorf("file named prompts: %v", err)
-	}
-}
-
-func TestHooksNeverRun(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("shell hook scripts are not portable to Windows")
+		t.Skip("shell hook and filter scripts are not portable to Windows")
 	}
 	f := newFixture(t)
 	marker := filepath.Join(t.TempDir(), "marker")
-	hookBody := "#!/bin/sh\necho ran >> " + marker + "\n"
+	filterMarker := filepath.Join(t.TempDir(), "filter-marker")
+	hookBody := "#!/bin/sh\necho ran $0 >> " + marker + "\n"
 	// hooks inside the repository content, in the origin's .git and in the
 	// user's own global configuration (core.hooksPath)
 	for _, h := range []string{"post-checkout", "post-merge", "reference-transaction", "post-commit"} {
@@ -554,15 +524,28 @@ func TestHooksNeverRun(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	cfg := os.Getenv("GIT_CONFIG_GLOBAL")
-	if err := os.WriteFile(cfg, []byte("[core]\n\thooksPath = "+filepath.ToSlash(userHooks)+"\n"), 0o600); err != nil {
+	// A real filter driver that would corrupt every file it touches, in the
+	// user's global configuration, selected by a hostile .gitattributes.
+	smudge := filepath.Join(t.TempDir(), "smudge.sh")
+	if err := os.WriteFile(smudge, []byte("#!/bin/sh\necho ran >> "+filterMarker+"\ncat >/dev/null\necho CORRUPTED\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
+	cfgText := "[core]\n\thooksPath = " + filepath.ToSlash(userHooks) + "\n" +
+		"[filter \"evil\"]\n\tsmudge = " + filepath.ToSlash(smudge) + "\n\tclean = cat\n\trequired = true\n" +
+		"[filter \"lfs\"]\n\tsmudge = " + filepath.ToSlash(smudge) + "\n\tclean = cat\n\trequired = true\n"
+	// the plain git of this test reads GIT_CONFIG_GLOBAL; the code under test
+	// must not honor that variable, so the same text is also the user's
+	// ~/.gitconfig, which it does read
+	for _, p := range []string{os.Getenv("GIT_CONFIG_GLOBAL"), filepath.Join(f.env["HOME"], ".gitconfig")} {
+		if err := os.WriteFile(p, []byte(cfgText), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
 	f.seed()
-	f.write(".gitattributes", "* filter=evil\n")
+	f.write(".gitattributes", "*.md filter=evil\n*.toml filter=lfs\n")
 	f.commit("attr")
 	f.git("tag", "v1")
-	// the hook setup above is only meaningful if git would have run it
+	// the setup is only meaningful if plain git would have run both
 	f.git("checkout", "--quiet", "-b", "other")
 	if _, err := os.Stat(marker); err != nil {
 		t.Fatalf("test setup: the user hook should run for plain git: %v", err)
@@ -570,12 +553,43 @@ func TestHooksNeverRun(t *testing.T) {
 	if err := os.Remove(marker); err != nil {
 		t.Fatal(err)
 	}
+	plain := filepath.Join(t.TempDir(), "plain")
+	if out, err := exec.Command("git", "clone", "--quiet", f.origin, plain).CombinedOutput(); err != nil {
+		t.Fatalf("clone: %v\n%s", err, out)
+	}
+	if _, err := os.Stat(filterMarker); err != nil {
+		t.Fatalf("test setup: the filter driver should run for a plain clone: %v", err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(plain, "profiles", "base.toml")); !strings.Contains(string(b), "CORRUPTED") {
+		t.Fatalf("test setup: the filter should corrupt a plain checkout, got %q", b)
+	}
+	if err := os.Remove(filterMarker); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.Remove(marker) // the plain clone ran hooks too
 	s := f.source("v1", "")
 	if err := s.Prepare(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(marker); err == nil {
-		t.Fatal("a git hook ran during fetch and checkout")
+		b, _ := os.ReadFile(marker)
+		t.Fatalf("a git hook ran during fetch and extraction: %s", b)
+	}
+	if _, err := os.Stat(filterMarker); err == nil {
+		t.Fatal("a filter driver ran")
+	}
+	for rel, want := range map[string]string{"profiles/base.toml": baseProfile, "prompts/p.md": "hello\n"} {
+		got, err := os.ReadFile(filepath.Join(s.Root(), filepath.FromSlash(rel)))
+		if err != nil || string(got) != want {
+			t.Errorf("%s = %q, %v; want the committed bytes %q", rel, got, err, want)
+		}
+	}
+	// and a second Prepare (the verification path) leaves them alone as well
+	if err := f.source("v1", "").Prepare(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filterMarker); err == nil {
+		t.Fatal("a filter driver ran during verification")
 	}
 }
 
@@ -808,30 +822,6 @@ func TestHooksDirMustStayEmpty(t *testing.T) {
 	}
 	if err := f.source("v1", "").Prepare(context.Background()); !errors.Is(err, ErrTampered) {
 		t.Fatalf("err = %v", err)
-	}
-}
-
-func TestGitEnvStripsRedirectingVariables(t *testing.T) {
-	t.Setenv("GIT_DIR", "/elsewhere")
-	t.Setenv("GIT_ASKPASS", "/bin/echo")
-	t.Setenv("GIT_ALLOW_PROTOCOL", "ext")
-	t.Setenv("GIT_CONFIG_COUNT", "1")
-	t.Setenv("GIT_CONFIG_GLOBAL", "/keep/me")
-	s, _ := New(Options{URL: "https://h/r", Ref: "v1"})
-	env := strings.Join(s.gitEnv(), "\n")
-	for _, bad := range []string{"GIT_DIR=", "GIT_ASKPASS=", "GIT_ALLOW_PROTOCOL=ext", "GIT_CONFIG_COUNT="} {
-		if strings.Contains(env, bad) {
-			t.Errorf("environment still contains %s", bad)
-		}
-	}
-	for _, want := range []string{"GIT_TERMINAL_PROMPT=0", "GIT_ALLOW_PROTOCOL=https:ssh\n", "GIT_CONFIG_GLOBAL=/keep/me"} {
-		if !strings.Contains(env+"\n", want) {
-			t.Errorf("environment lacks %s", want)
-		}
-	}
-	s.opts.AllowLocal = true
-	if !strings.Contains(strings.Join(s.gitEnv(), "\n"), "GIT_ALLOW_PROTOCOL=https:ssh:file") {
-		t.Error("AllowLocal must allow the file protocol")
 	}
 }
 

@@ -3,73 +3,63 @@ package gitsource
 import (
 	"errors"
 	"fmt"
-	"net/url"
 	"path"
 	"regexp"
 	"strings"
 	"unicode"
+
+	"github.com/ccshelf/ccshelf/internal/config"
 )
 
 // ErrBadURL is wrapped by every URL validation failure.
 var ErrBadURL = errors.New("unacceptable git URL")
 
 var (
-	scpLike    = regexp.MustCompile(`^[A-Za-z0-9._-]+@[A-Za-z0-9][A-Za-z0-9.-]*:[A-Za-z0-9._~%+/][^\s]*$`)
 	helperLike = regexp.MustCompile(`^[A-Za-z0-9+.-]+::`)
 	fullSHA    = regexp.MustCompile(`^([0-9a-f]{40}|[0-9a-f]{64})$`)
 )
 
-// validateURL checks raw against the allowed transports.
+// validateURL checks raw. The rules are those of config.ValidateGitURL (the
+// same ones the configuration applies), so a URL that reaches a Source can
+// never carry credentials, a query, a fragment or invisible characters into
+// Locator, ID, the lockfile, Describe output, argv or error text. With
+// allowLocal (tests only) file:// URLs and local paths are also accepted, but
+// every other check stays.
 func validateURL(raw string, allowLocal bool) error {
 	bad := func(format string, a ...any) error {
 		return fmt.Errorf("%w: %s", ErrBadURL, fmt.Sprintf(format, a...))
 	}
-	if raw == "" {
-		return bad("the URL is empty")
-	}
-	if strings.HasPrefix(raw, "-") {
-		return bad("it starts with \"-\"")
-	}
-	for _, r := range raw {
-		if unicode.IsControl(r) || unicode.IsSpace(r) {
-			return bad("it contains whitespace or control characters")
+	err := config.ValidateGitURL(raw)
+	if err == nil {
+		// git must never see a host that reads as an option
+		if i := strings.Index(raw, "://"); i >= 0 {
+			host := raw[i+3:]
+			if at := strings.LastIndexByte(host, '@'); at >= 0 {
+				host = host[at+1:]
+			}
+			if strings.HasPrefix(host, "-") {
+				return bad("the host starts with \"-\"")
+			}
 		}
+		return nil
 	}
-	if helperLike.MatchString(raw) {
+	msg := strings.ReplaceAll(err.Error(), raw, "<url>") // never echo what may hold a credential
+	if !allowLocal {
+		return bad("%s", msg)
+	}
+	switch {
+	case raw == "" || strings.HasPrefix(raw, "-"):
+		return bad("%s", msg)
+	case strings.IndexFunc(raw, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) || unicode.Is(unicode.Cf, r) }) >= 0:
+		return bad("it contains whitespace, control or invisible formatting characters")
+	case helperLike.MatchString(raw):
 		return bad("transport helpers such as ext:: are not allowed")
+	case strings.Contains(raw, "://") && !strings.HasPrefix(strings.ToLower(raw), "file://"):
+		return bad("%s", msg) // a remote URL stays under the strict rules
+	case strings.ContainsAny(raw, "?#"):
+		return bad("it contains a query or a fragment")
 	}
-	if i := strings.Index(raw, "://"); i >= 0 {
-		u, err := url.Parse(raw)
-		if err != nil {
-			return bad("it does not parse")
-		}
-		switch strings.ToLower(u.Scheme) {
-		case "https", "ssh":
-			if u.Host == "" || strings.HasPrefix(u.Host, "-") {
-				return bad("the host is missing or starts with \"-\"")
-			}
-			if u.User != nil {
-				if _, hasPw := u.User.Password(); hasPw {
-					return bad("it embeds a password; use a credential helper or an ssh key")
-				}
-			}
-			return nil
-		case "file":
-			if allowLocal {
-				return nil
-			}
-			return bad("the file transport is not allowed")
-		default:
-			return bad("scheme %q is not allowed (use https or ssh)", u.Scheme)
-		}
-	}
-	if scpLike.MatchString(raw) {
-		return nil
-	}
-	if allowLocal {
-		return nil
-	}
-	return bad("use an https:// or ssh:// URL, or user@host:path")
+	return nil
 }
 
 // cleanSubpath validates and normalizes the folder inside the repository. It

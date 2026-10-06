@@ -39,20 +39,41 @@
 // hash of Closure.Items (profile.HashItems); an inconsistent closure is
 // never Trusted.
 //
-// Accept records a closure. With a non-empty expectedHash it requires the
-// closure hash to equal it, which is the scripted "ccshelf trust <profile>
-// --accept <closure-hash>" form that names exactly what is accepted. The
-// interactive path shows Verdict.Describe and asks. "--yes" never reaches
+// Accept records a closure and always needs the hash that was reviewed: an
+// empty hash is ErrHashRequired and a hash that is not the current closure
+// hash is ErrHashMismatch, so what was shown (Verdict.Hash) is what is stored.
+// The scripted form is "ccshelf trust <profile> --accept <closure-hash>"; the
+// interactive path shows Verdict.Describe, asks, and passes Verdict.Hash. "--yes" never reaches
 // Accept: trust is never auto-accepted (R6). Non-interactive callers use
 // Require, which returns a *NeedsTrustError (exit code 4, ExitNeedsTrust)
 // unless the verdict is Trusted.
 //
+// An entry also records the ref and commit of every shared source in the chain
+// (a tag that moved in an inherited source is TagMoved), and the canonical
+// controls text of every profile in the chain, so a later change to what a
+// profile can do is explained field by field: environment variables added,
+// removed or changed (values of *_REF names and of secret-looking names are
+// never shown), plugin includes and excludes, inherit_user_settings, account
+// and so on. An inconsistent closure (hash not matching its items) is never a
+// "needs trust" outcome: Require returns ErrInconsistentClosure, which callers
+// report as a failure (exit 1), not as exit 4.
+//
+// All state files (lockfile, project trust file) are written under an
+// exclusive operating system lock ("<file>.lock", flock or LockFileEx), so
+// concurrent processes never lose each other's accept or revoke, and are
+// refused on read unless owned by the user and mode 0600 in a 0700-style
+// directory (Unix). Project folders are read relative to directory
+// descriptors (openat with O_NOFOLLOW) where the OS has them, and directories
+// count toward the size limits.
+//
 // Describe lists risky changes first (registry entries, prompts, plugin
 // includes, profiles that set environment names), in plain words such as
-// "new MCP server pagerduty-ro runs: npx -y ...". It prints names, commands
-// and environment variable names only; arguments that look like secrets and
-// URL credentials are masked, and control characters are replaced so
-// repository content cannot inject terminal escape sequences.
+// "new MCP server pagerduty-ro runs: npx -y ...". Registry arguments are shown
+// verbatim (they are committed code; hiding them would let a profile conceal
+// what it runs), server URLs show only scheme, host and path, and long text is
+// wrapped, never truncated. Control characters, invisible and bidirectional
+// formatting characters are replaced so repository content cannot inject
+// terminal escape sequences or disguise text.
 //
 // # Project trust
 //

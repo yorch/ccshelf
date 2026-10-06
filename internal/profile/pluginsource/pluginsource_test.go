@@ -43,6 +43,8 @@ func TestNewValidation(t *testing.T) {
 		{"abs path", Options{Plugin: "a@b", Path: "/etc", Installed: ok}, "relative"},
 		{"dotdot", Options{Plugin: "a@b", Path: "x/../..", Installed: ok}, ".."},
 		{"dot", Options{Plugin: "a@b", Path: ".", Installed: ok}, "folder"},
+		{"not named profiles", Options{Plugin: "a@b", Path: "data/org", Installed: ok}, "must be named"},
+		{"expected without lookup", Options{Plugin: "a@b", ExpectedMarketplace: "acme/plugins", Installed: ok}, "MarketplaceSource"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -59,7 +61,7 @@ func TestPrepareAndRead(t *testing.T) {
 	write(t, dir, "mcp/registry.toml", "[servers.docs]\ntype = \"http\"\nurl = \"https://mcp.example.com/docs\"\n")
 	s, err := New(Options{Plugin: "acme-profiles@acme", Installed: list(
 		claude.Plugin{ID: "other@acme", InstallPath: t.TempDir()},
-		claude.Plugin{ID: "acme-profiles@acme", Version: "1.2.3", InstallPath: dir, Enabled: true},
+		claude.Plugin{ID: "acme-profiles@acme", Version: "1.2.3", InstallPath: dir, Enabled: true, Scope: "managed"},
 	)})
 	if err != nil {
 		t.Fatal(err)
@@ -110,7 +112,7 @@ func TestPrepareAndRead(t *testing.T) {
 
 func TestUnversioned(t *testing.T) {
 	dir := t.TempDir()
-	s, _ := New(Options{Plugin: "a@b", Installed: list(claude.Plugin{ID: "a@b", InstallPath: dir})})
+	s, _ := New(Options{Plugin: "a@b", Installed: list(claude.Plugin{ID: "a@b", Scope: "user", Enabled: true, InstallPath: dir})})
 	if err := s.Prepare(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +127,7 @@ func TestUnversioned(t *testing.T) {
 func TestCustomPath(t *testing.T) {
 	dir := t.TempDir()
 	write(t, dir, "data/profiles/x.toml", "name = \"x\"\ndescription = \"d\"\n")
-	s, _ := New(Options{Plugin: "a@b", Path: "data/profiles", Installed: list(claude.Plugin{ID: "a@b", InstallPath: dir})})
+	s, _ := New(Options{Plugin: "a@b", Path: "data/profiles", Installed: list(claude.Plugin{ID: "a@b", Scope: "user", Enabled: true, InstallPath: dir})})
 	if err := s.Prepare(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +146,7 @@ func TestPrepareErrors(t *testing.T) {
 	if !errors.Is(err, ErrNotInstalled) || !strings.Contains(err.Error(), "/plugin install a@b") {
 		t.Errorf("not installed: %v", err)
 	}
-	s, _ = New(Options{Plugin: "a@b", Installed: list(claude.Plugin{ID: "a@b"})})
+	s, _ = New(Options{Plugin: "a@b", Installed: list(claude.Plugin{ID: "a@b", Scope: "user", Enabled: true})})
 	if err := s.Prepare(ctx); !errors.Is(err, ErrNotInstalled) {
 		t.Errorf("no install path: %v", err)
 	}
@@ -152,11 +154,11 @@ func TestPrepareErrors(t *testing.T) {
 	if err := s.Prepare(ctx); err == nil || !strings.Contains(err.Error(), "boom") {
 		t.Errorf("list error: %v", err)
 	}
-	s, _ = New(Options{Plugin: "a@b", Installed: list(claude.Plugin{ID: "a@b", InstallPath: "rel/path"})})
+	s, _ = New(Options{Plugin: "a@b", Installed: list(claude.Plugin{ID: "a@b", Scope: "user", Enabled: true, InstallPath: "rel/path"})})
 	if err := s.Prepare(ctx); err == nil || !strings.Contains(err.Error(), "relative") {
 		t.Errorf("relative: %v", err)
 	}
-	s, _ = New(Options{Plugin: "a@b", Installed: list(claude.Plugin{ID: "a@b", InstallPath: filepath.Join(t.TempDir(), "gone")})})
+	s, _ = New(Options{Plugin: "a@b", Installed: list(claude.Plugin{ID: "a@b", Scope: "user", Enabled: true, InstallPath: filepath.Join(t.TempDir(), "gone")})})
 	if err := s.Prepare(ctx); err == nil || !strings.Contains(err.Error(), "/plugin install a@b") {
 		t.Errorf("missing dir: %v", err)
 	}
@@ -164,7 +166,7 @@ func TestPrepareErrors(t *testing.T) {
 	if err := os.WriteFile(file, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	s, _ = New(Options{Plugin: "a@b", Installed: list(claude.Plugin{ID: "a@b", InstallPath: file})})
+	s, _ = New(Options{Plugin: "a@b", Installed: list(claude.Plugin{ID: "a@b", Scope: "user", Enabled: true, InstallPath: file})})
 	if err := s.Prepare(ctx); err == nil {
 		t.Error("file as install path must fail")
 	}
@@ -181,7 +183,7 @@ func TestSymlinkEscapeRejected(t *testing.T) {
 	if err := os.Symlink(outside, filepath.Join(dir, "profiles")); err != nil {
 		t.Fatal(err)
 	}
-	s, _ := New(Options{Plugin: "a@b", Installed: list(claude.Plugin{ID: "a@b", InstallPath: dir})})
+	s, _ := New(Options{Plugin: "a@b", Installed: list(claude.Plugin{ID: "a@b", Scope: "user", Enabled: true, InstallPath: dir})})
 	if err := s.Prepare(context.Background()); err == nil || !strings.Contains(err.Error(), "outside") {
 		t.Errorf("profiles symlink: %v", err)
 	}
@@ -191,7 +193,7 @@ func TestSymlinkEscapeRejected(t *testing.T) {
 	if err := os.Symlink(outside, filepath.Join(dir2, "data")); err != nil {
 		t.Fatal(err)
 	}
-	s, _ = New(Options{Plugin: "a@b", Path: "data/profiles", Installed: list(claude.Plugin{ID: "a@b", InstallPath: dir2})})
+	s, _ = New(Options{Plugin: "a@b", Path: "data/profiles", Installed: list(claude.Plugin{ID: "a@b", Scope: "user", Enabled: true, InstallPath: dir2})})
 	if err := s.Prepare(context.Background()); err == nil || !strings.Contains(err.Error(), "outside") {
 		t.Errorf("root symlink: %v", err)
 	}
@@ -202,7 +204,7 @@ func TestSymlinkEscapeRejected(t *testing.T) {
 	if err := os.Symlink(real, link); err != nil {
 		t.Fatal(err)
 	}
-	s, _ = New(Options{Plugin: "a@b", Installed: list(claude.Plugin{ID: "a@b", InstallPath: link})})
+	s, _ = New(Options{Plugin: "a@b", Installed: list(claude.Plugin{ID: "a@b", Scope: "user", Enabled: true, InstallPath: link})})
 	if err := s.Prepare(context.Background()); err != nil {
 		t.Errorf("symlinked install dir: %v", err)
 	}
@@ -214,11 +216,126 @@ func TestSymlinkEscapeRejected(t *testing.T) {
 	if err := os.Symlink(filepath.Join(outside, "x.toml"), filepath.Join(dir3, "profiles", "x.toml")); err != nil {
 		t.Fatal(err)
 	}
-	s, _ = New(Options{Plugin: "a@b", Installed: list(claude.Plugin{ID: "a@b", InstallPath: dir3})})
+	s, _ = New(Options{Plugin: "a@b", Installed: list(claude.Plugin{ID: "a@b", Scope: "user", Enabled: true, InstallPath: dir3})})
 	if err := s.Prepare(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.Open("x"); err == nil {
 		t.Error("a profile symlinked out of the plugin must be rejected")
+	}
+}
+
+func TestScopeAndEnabledAreRequired(t *testing.T) {
+	dir := t.TempDir()
+	for scope, ok := range map[string]bool{"user": true, "managed": true, "USER": true, "project": false, "local": false, "synced": false, "": false} {
+		s, _ := New(Options{Plugin: "a@b", Installed: list(claude.Plugin{ID: "a@b", Scope: scope, Enabled: true, InstallPath: dir})})
+		err := s.Prepare(context.Background())
+		if ok && err != nil {
+			t.Errorf("scope %q: %v", scope, err)
+		}
+		if !ok && (err == nil || !strings.Contains(err.Error(), "scope")) {
+			t.Errorf("scope %q: %v", scope, err)
+		}
+		if !ok && s.Commit() != "" {
+			t.Errorf("scope %q: a refused plugin must not become prepared", scope)
+		}
+	}
+	s, _ := New(Options{Plugin: "a@b", Installed: list(claude.Plugin{ID: "a@b", Scope: "user", Enabled: false, InstallPath: dir})})
+	if err := s.Prepare(context.Background()); err == nil || !strings.Contains(err.Error(), "not enabled") {
+		t.Errorf("disabled: %v", err)
+	}
+	s, _ = New(Options{Plugin: "a@b", Installed: list(claude.Plugin{ID: "a@b", Scope: "pro\x1b[2Jject", Enabled: true, InstallPath: dir})})
+	if err := s.Prepare(context.Background()); err == nil || strings.Contains(err.Error(), "\x1b") {
+		t.Errorf("scope text must be sanitized: %v", err)
+	}
+}
+
+func TestMarketplaceSourceIsBoundAndChecked(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "profiles/base.toml", "name = \"base\"\ndescription = \"d\"\n")
+	plugin := claude.Plugin{ID: "a@b", Scope: "user", Enabled: true, InstallPath: dir}
+	src := func(v string, err error) func(context.Context, string) (string, error) {
+		return func(_ context.Context, mkt string) (string, error) {
+			if mkt != "b" {
+				t.Errorf("marketplace = %q", mkt)
+			}
+			return v, err
+		}
+	}
+	mk := func(v string, err error, expected string) *Source {
+		s, e := New(Options{Plugin: "a@b", Installed: list(plugin), MarketplaceSource: src(v, err), ExpectedMarketplace: expected})
+		if e != nil {
+			t.Fatal(e)
+		}
+		return s
+	}
+	s := mk("https://github.com/acme/plugins.git", nil, "https://github.com/ACME/plugins/")
+	if s.ID() != "plugin:a@b" {
+		t.Errorf("before Prepare: %q", s.ID())
+	}
+	if err := s.Prepare(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if want := "plugin:a@b from https://github.com/acme/plugins.git"; s.ID() != want || s.Locator() != want {
+		t.Errorf("ID = %q, Locator = %q", s.ID(), s.Locator())
+	}
+	f, err := s.Open("base")
+	if err != nil || f.Source != profile.Source(s) {
+		t.Fatalf("%v", err)
+	}
+	// a different origin is a different identity
+	other := mk("https://evil.example/plugins", nil, "")
+	if err := other.Prepare(context.Background()); err != nil || other.Locator() == s.Locator() {
+		t.Errorf("an unexpected origin without ExpectedMarketplace must still change the key: %v %q", err, other.Locator())
+	}
+	for name, tt := range map[string]*Source{
+		"mismatch": mk("https://evil.example/plugins", nil, "https://github.com/acme/plugins"),
+		"lookup":   mk("", errors.New("boom"), ""),
+		"empty":    mk("  ", nil, ""),
+		"control":  mk("https://x/\x1b[2J", nil, ""),
+	} {
+		err := tt.Prepare(context.Background())
+		if err == nil || strings.Contains(err.Error(), "\x1b") {
+			t.Errorf("%s: %v", name, err)
+		}
+		if tt.Commit() != "" || tt.Root() != "" {
+			t.Errorf("%s: a refused source must stay unprepared", name)
+		}
+	}
+}
+
+func TestRootComesFromTheDirectorySource(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "profiles/base.toml", "name = \"base\"\ndescription = \"d\"\n")
+	s, _ := New(Options{Plugin: "a@b", Installed: list(claude.Plugin{ID: "a@b", Scope: "user", Enabled: true, InstallPath: dir})})
+	if err := s.Prepare(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	real, _ := filepath.EvalSymlinks(dir)
+	if got, _ := filepath.EvalSymlinks(s.Root()); got != real {
+		t.Errorf("Root = %q, want %q", got, real)
+	}
+	s.mu.Lock()
+	want := s.inner.Root()
+	s.mu.Unlock()
+	if s.Root() != want {
+		t.Errorf("Root %q != inner.Root() %q", s.Root(), want)
+	}
+}
+
+func TestRootSymlinkEscapeWithoutProfilesFolder(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("creating symlinks needs privileges on Windows")
+	}
+	// data -> outside, and outside has no profiles/ folder: only the root
+	// check can notice the escape
+	outside := t.TempDir()
+	dir := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(dir, "data")); err != nil {
+		t.Fatal(err)
+	}
+	s, _ := New(Options{Plugin: "a@b", Path: "data/profiles", Installed: list(claude.Plugin{ID: "a@b", Scope: "user", Enabled: true, InstallPath: dir})})
+	if err := s.Prepare(context.Background()); err == nil || !strings.Contains(err.Error(), "source root") {
+		t.Fatalf("err = %v", err)
 	}
 }

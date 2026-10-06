@@ -163,43 +163,10 @@ func HashProjectFolder(root string) (string, error) {
 	if fi.Mode()&os.ModeSymlink != 0 || !fi.IsDir() {
 		return "", fmt.Errorf("%s must be a plain directory, not a symlink", dir)
 	}
-	type ent struct {
-		rel   string
-		isDir bool
-		abs   string
-	}
-	var ents []ent
-	err = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if p == dir {
-			return nil
-		}
-		rel, err := filepath.Rel(dir, p)
-		if err != nil {
-			return err
-		}
-		rel = filepath.ToSlash(rel)
-		switch {
-		case d.Type()&os.ModeSymlink != 0:
-			return fmt.Errorf("%s/%s is a symlink; symlinks are not allowed in a project folder", ProjectFolder, rel)
-		case d.IsDir():
-			ents = append(ents, ent{rel: rel, isDir: true})
-		case d.Type().IsRegular():
-			if len(ents) >= maxProjectFiles {
-				return fmt.Errorf("%s has too many files", dir)
-			}
-			ents = append(ents, ent{rel: rel, abs: p})
-		default:
-			return fmt.Errorf("%s/%s is not a regular file", ProjectFolder, rel)
-		}
-		return nil
-	})
+	ents, err := readProjectTree(dir)
 	if err != nil {
 		return "", err
 	}
-	sort.Slice(ents, func(i, j int) bool { return ents[i].rel < ents[j].rel })
 	h := sha256.New()
 	put := func(b []byte) {
 		var n [binary.MaxVarintLen64]byte
@@ -207,34 +174,65 @@ func HashProjectFolder(root string) (string, error) {
 		h.Write(b)
 	}
 	put([]byte(projectHashDomain))
-	total := int64(0)
 	for _, e := range ents {
 		if e.isDir {
 			put([]byte("d"))
 			put([]byte(e.rel))
 			continue
 		}
-		b, err := readProjectFile(e.abs, e.rel)
-		if err != nil {
-			return "", err
-		}
-		total += int64(len(b))
-		if total > maxProjectBytes {
-			return "", fmt.Errorf("%s is larger than %d bytes", dir, maxProjectBytes)
-		}
 		put([]byte("f"))
 		put([]byte(e.rel))
-		put(b)
+		put(e.data)
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-func readProjectFile(abs, rel string) ([]byte, error) {
-	f, err := openNoFollow(abs, os.O_RDONLY, 0)
-	if err != nil {
-		return nil, fmt.Errorf("reading %s/%s: %w", ProjectFolder, rel, err)
+// projectEntry is one directory or file below <root>/.ccshelf.
+type projectEntry struct {
+	rel   string // slash separated, relative to the folder
+	isDir bool
+	data  []byte
+}
+
+// projectLimits bounds the size of a project folder while it is read.
+type projectLimits struct {
+	dir     string
+	entries int
+	total   int64
+}
+
+// addEntry counts one file or directory.
+func (l *projectLimits) addEntry() error {
+	l.entries++
+	if l.entries > maxProjectFiles {
+		return fmt.Errorf("%s has too many files", l.dir)
 	}
-	defer f.Close()
+	return nil
+}
+
+// addBytes counts n bytes of file content.
+func (l *projectLimits) addBytes(n int) error {
+	l.total += int64(n)
+	if l.total > maxProjectBytes {
+		return fmt.Errorf("%s is larger than %d bytes", l.dir, maxProjectBytes)
+	}
+	return nil
+}
+
+func sortProjectEntries(ents []projectEntry) {
+	sort.Slice(ents, func(i, j int) bool { return ents[i].rel < ents[j].rel })
+}
+
+func errProjectSymlink(rel string) error {
+	return fmt.Errorf("%s/%s is a symlink; symlinks are not allowed in a project folder", ProjectFolder, rel)
+}
+
+func errProjectSpecial(rel string) error {
+	return fmt.Errorf("%s/%s is not a regular file", ProjectFolder, rel)
+}
+
+// readProjectFile reads one regular file, bounded by maxProjectFile.
+func readProjectFile(f io.Reader, rel string) ([]byte, error) {
 	b, err := io.ReadAll(io.LimitReader(f, maxProjectFile+1))
 	if err != nil {
 		return nil, fmt.Errorf("reading %s/%s: %w", ProjectFolder, rel, err)
@@ -258,6 +256,11 @@ func (s *ProjectStore) Trust(root string) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	unlock, err := lockState(s.path)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	if err := s.reload(); err != nil {
 		return err
 	}
@@ -325,6 +328,11 @@ func (s *ProjectStore) Revoke(root string) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	unlock, err := lockState(s.path)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	if err := s.reload(); err != nil {
 		return err
 	}

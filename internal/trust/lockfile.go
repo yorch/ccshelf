@@ -19,8 +19,9 @@ import (
 const LockVersion = 1
 
 const (
-	maxEntries = 10000
-	maxItems   = 5000
+	maxEntries      = 10000
+	maxItems        = 5000
+	maxControlsText = 64 << 10
 )
 
 // Errors returned by the store.
@@ -31,6 +32,9 @@ var (
 	// ErrInconsistentClosure is returned when a Closure's Hash is not the
 	// hash of its Items.
 	ErrInconsistentClosure = errors.New("closure hash does not match its items")
+	// ErrHashRequired is returned by Accept when no closure hash is given: the
+	// caller must name the hash that was shown for review.
+	ErrHashRequired = errors.New("accepting trust needs the closure hash that was reviewed")
 	// ErrNotFound is returned by Revoke when nothing matched.
 	ErrNotFound = errors.New("no trust record found")
 )
@@ -51,12 +55,38 @@ type Entry struct {
 	Commit string
 	// ClosureHash is the accepted closure hash.
 	ClosureHash string
+	// Sources records the ref and commit of every shared source in the
+	// profile's chain (most specific first), so a tag that moved in any of
+	// them is noticed. Ref and Commit above repeat the first one.
+	Sources []SourceRecord
 	// Items is the accepted closure, kept to explain later changes.
 	Items []profile.ClosureItem
+	// Controls holds, per profile name in the chain, the canonical JSON of
+	// its controls (profile.ControlsJSON) as it was accepted. The digest of
+	// each text is the digest of the matching profile-controls item. It lets
+	// a later change be explained field by field.
+	Controls map[string]string
 	// AcceptedAt is when the user accepted it (UTC).
 	AcceptedAt time.Time
 	// ToolVersion is the ccshelf version that recorded the entry.
 	ToolVersion string
+}
+
+// SourceRecord is the identity and pin of one shared source in an entry.
+type SourceRecord struct {
+	// Source is the source without its commit ("git:<url>", "plugin:<id>",
+	// "dir:org").
+	Source string
+	// Ref is the tag or version it was pinned to ("" when it has none).
+	Ref string
+	// Commit is what the ref resolved to when the entry was accepted.
+	Commit string
+}
+
+type sourceJSON struct {
+	Source string `json:"source"`
+	Ref    string `json:"ref,omitempty"`
+	Commit string `json:"commit,omitempty"`
 }
 
 type itemJSON struct {
@@ -67,20 +97,27 @@ type itemJSON struct {
 }
 
 type entryJSON struct {
-	Profile     string     `json:"profile"`
-	Source      string     `json:"source"`
-	Ref         string     `json:"ref,omitempty"`
-	Commit      string     `json:"commit,omitempty"`
-	ClosureHash string     `json:"closureHash"`
-	Items       []itemJSON `json:"items"`
-	AcceptedAt  time.Time  `json:"acceptedAt"`
-	ToolVersion string     `json:"toolVersion,omitempty"`
+	Profile     string            `json:"profile"`
+	Source      string            `json:"source"`
+	Ref         string            `json:"ref,omitempty"`
+	Commit      string            `json:"commit,omitempty"`
+	ClosureHash string            `json:"closureHash"`
+	Sources     []sourceJSON      `json:"sources,omitempty"`
+	Items       []itemJSON        `json:"items"`
+	Controls    map[string]string `json:"controls,omitempty"`
+	AcceptedAt  time.Time         `json:"acceptedAt"`
+	ToolVersion string            `json:"toolVersion,omitempty"`
 }
 
 // MarshalJSON writes the entry with stable lower-case keys.
 func (e Entry) MarshalJSON() ([]byte, error) {
-	j := entryJSON{Profile: e.Profile, Source: e.Source, Ref: e.Ref, Commit: e.Commit, ClosureHash: e.ClosureHash,
-		Items: make([]itemJSON, 0, len(e.Items)), AcceptedAt: e.AcceptedAt, ToolVersion: e.ToolVersion}
+	j := entryJSON{
+		Profile: e.Profile, Source: e.Source, Ref: e.Ref, Commit: e.Commit, ClosureHash: e.ClosureHash,
+		Items: make([]itemJSON, 0, len(e.Items)), Controls: e.Controls, AcceptedAt: e.AcceptedAt, ToolVersion: e.ToolVersion,
+	}
+	for _, sr := range e.Sources {
+		j.Sources = append(j.Sources, sourceJSON(sr))
+	}
 	for _, it := range e.Items {
 		j.Items = append(j.Items, itemJSON{Kind: it.Kind, Name: it.Name, Digest: it.Digest, Risky: it.Risky})
 	}
@@ -95,8 +132,13 @@ func (e *Entry) UnmarshalJSON(b []byte) error {
 	if err := dec.Decode(&j); err != nil {
 		return err
 	}
-	*e = Entry{Profile: j.Profile, Source: j.Source, Ref: j.Ref, Commit: j.Commit, ClosureHash: j.ClosureHash,
-		AcceptedAt: j.AcceptedAt, ToolVersion: j.ToolVersion}
+	*e = Entry{
+		Profile: j.Profile, Source: j.Source, Ref: j.Ref, Commit: j.Commit, ClosureHash: j.ClosureHash,
+		Controls: j.Controls, AcceptedAt: j.AcceptedAt, ToolVersion: j.ToolVersion,
+	}
+	for _, sr := range j.Sources {
+		e.Sources = append(e.Sources, SourceRecord(sr))
+	}
 	for _, it := range j.Items {
 		e.Items = append(e.Items, profile.ClosureItem{Kind: it.Kind, Name: it.Name, Digest: it.Digest, Risky: it.Risky})
 	}
@@ -120,14 +162,32 @@ func (e *Entry) validate() error {
 		return fmt.Errorf("entry %s/%s has too many items", e.Profile, e.Source)
 	case profile.HashItems(e.Items) != e.ClosureHash:
 		return fmt.Errorf("entry %s/%s: %w (the lockfile was edited or is corrupt)", e.Profile, e.Source, ErrInconsistentClosure)
+	case len(e.Sources) > maxItems || len(e.Controls) > maxItems:
+		return fmt.Errorf("entry %s/%s has too many sources or controls", e.Profile, e.Source)
+	}
+	digests := map[string]string{}
+	for _, it := range e.Items {
+		if it.Kind == profile.ItemProfileControls {
+			digests[it.Name] = it.Digest
+		}
+	}
+	for name, text := range e.Controls {
+		d, ok := digests[name]
+		switch {
+		case len(text) > maxControlsText:
+			return fmt.Errorf("entry %s/%s: the controls of %q are too large", e.Profile, e.Source, name)
+		case !ok || profile.DigestBytes([]byte(text)) != d:
+			return fmt.Errorf("entry %s/%s: the stored controls of %q: %w (the lockfile was edited or is corrupt)", e.Profile, e.Source, name, ErrInconsistentClosure)
+		}
 	}
 	return nil
 }
 
 // Store is the trust lockfile. Methods are safe for concurrent use by
-// goroutines; Accept and Revoke re-read the file before writing so two
-// processes rarely lose each other's update, but there is no cross-process
-// lock.
+// goroutines. Accept and Revoke hold an exclusive operating system lock on
+// "<lockfile>.lock" while they re-read the file, change it and replace it, so
+// concurrent processes (and other Store values on the same file) never lose
+// each other's update.
 type Store struct {
 	path string
 	now  func() time.Time
@@ -233,20 +293,25 @@ func (s *Store) find(profileName, source string) *Entry {
 	return nil
 }
 
-// Accept records the closure of r as trusted. When expectedHash is not empty
-// it must equal the closure hash of r (the scripted "--accept <hash>" form
-// that names exactly what is accepted). Callers must never pass a value that
-// came from "--yes": that flag never accepts trust. A closure with only
-// personal sources needs no entry and Accept does nothing.
+// Accept records the closure of r as trusted. expectedHash is required: it
+// must be the closure hash that was shown for review (Verdict.Hash, or the
+// value the user passed to "ccshelf trust --accept"), so that what was
+// reviewed is what is stored. An empty hash is ErrHashRequired and a hash that
+// is not the current closure hash is ErrHashMismatch. Callers must never pass
+// a value that came from "--yes": that flag never accepts trust. A closure
+// with only personal sources needs no entry and Accept then does nothing.
 func (s *Store) Accept(r *profile.Resolved, expectedHash string) error {
 	if r == nil {
 		return errors.New("nothing to accept")
+	}
+	if expectedHash == "" {
+		return ErrHashRequired
 	}
 	hash, err := closureHash(r)
 	if err != nil {
 		return err
 	}
-	if expectedHash != "" && expectedHash != hash {
+	if expectedHash != hash {
 		return fmt.Errorf("%w: expected %s, the profile now resolves to %s", ErrHashMismatch, expectedHash, hash)
 	}
 	id := identify(r)
@@ -256,16 +321,26 @@ func (s *Store) Accept(r *profile.Resolved, expectedHash string) error {
 	if len(r.Closure.Items) > maxItems {
 		return errors.New("closure has too many items")
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if err := s.reload(); err != nil {
+	controls, err := controlsOf(r)
+	if err != nil {
 		return err
 	}
 	e := Entry{
-		Profile: r.Name, Source: id.source, Ref: id.ref, Commit: id.commit,
-		ClosureHash: hash, Items: append([]profile.ClosureItem(nil), r.Closure.Items...),
-		AcceptedAt: s.now(), ToolVersion: version.Version,
+		Profile: r.Name, Source: id.source, Ref: id.ref, Commit: id.commit, Sources: id.sources,
+		ClosureHash: hash, Items: append([]profile.ClosureItem(nil), r.Closure.Items...), Controls: controls,
+		ToolVersion: version.Version,
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	unlock, err := lockState(s.path)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	if err := s.reload(); err != nil {
+		return err
+	}
+	e.AcceptedAt = s.now()
 	if old := s.find(e.Profile, e.Source); old != nil {
 		*old = e
 	} else {
@@ -277,12 +352,44 @@ func (s *Store) Accept(r *profile.Resolved, expectedHash string) error {
 	return s.save()
 }
 
+// controlsOf returns the canonical controls text of every profile in r's
+// chain, checked against the closure: each text must hash to the digest of its
+// profile-controls item.
+func controlsOf(r *profile.Resolved) (map[string]string, error) {
+	digests := map[string]string{}
+	for _, it := range r.Closure.Items {
+		if it.Kind == profile.ItemProfileControls {
+			digests[it.Name] = it.Digest
+		}
+	}
+	out := map[string]string{}
+	for _, f := range r.Chain {
+		if f == nil || f.Manifest == nil {
+			continue
+		}
+		b, err := profile.ControlsJSON(f.Manifest)
+		if err != nil {
+			return nil, err
+		}
+		if d, ok := digests[f.Name]; !ok || profile.DigestBytes(b) != d {
+			return nil, fmt.Errorf("the controls of profile %q: %w", f.Name, ErrInconsistentClosure)
+		}
+		out[f.Name] = string(b)
+	}
+	return out, nil
+}
+
 // Revoke removes the trust records of a profile. An empty source removes the
 // profile's records for every source. It returns ErrNotFound when nothing
 // matched.
 func (s *Store) Revoke(profileName, source string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	unlock, err := lockState(s.path)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	if err := s.reload(); err != nil {
 		return err
 	}

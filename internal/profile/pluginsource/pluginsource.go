@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
 
 	"github.com/ccshelf/ccshelf/internal/claude"
 	"github.com/ccshelf/ccshelf/internal/profile"
+	"github.com/ccshelf/ccshelf/internal/ui"
 )
 
 // DefaultPath is the profiles folder inside the plugin when Options.Path is empty.
@@ -32,6 +34,19 @@ type Options struct {
 	// Installed lists installed plugins. The caller injects it (usually a
 	// wrapper around claude.ListInstalled) so tests never run claude.
 	Installed func(ctx context.Context) ([]claude.Plugin, error)
+	// MarketplaceSource returns the real source (a URL or owner/repo) the
+	// named marketplace was added from. The "@marketplace" part of a plugin id
+	// is only a local alias: anyone can add a marketplace under any name, so
+	// without this the id proves nothing about where the plugin came from.
+	// When set, the source is bound into ID and Locator, so the trust record
+	// is keyed to it and a plugin of the same name from elsewhere is a new
+	// source. The caller injects it (a wrapper around the marketplace listing)
+	// so tests never run claude.
+	MarketplaceSource func(ctx context.Context, marketplace string) (string, error)
+	// ExpectedMarketplace is the source the organization says the marketplace
+	// must come from. When set, MarketplaceSource is required and Prepare
+	// fails unless they match (ignoring case, a trailing slash and ".git").
+	ExpectedMarketplace string
 }
 
 // Source is a profile source backed by an installed plugin. It satisfies
@@ -42,7 +57,7 @@ type Source struct {
 
 	mu      sync.Mutex
 	version string
-	root    string
+	market  string // the verified marketplace source, "" when not checked
 	inner   profile.Source
 }
 
@@ -73,6 +88,15 @@ func New(opts Options) (*Source, error) {
 	if p == "." {
 		return nil, fmt.Errorf("path %q must name a folder below the plugin", opts.Path)
 	}
+	if path.Base(p) != DefaultPath {
+		// prompts/ and mcp/registry.toml sit next to a folder named "profiles";
+		// the profile package decides that from the name and a wrapper cannot
+		// pass the decision on, so another name would be misread.
+		return nil, fmt.Errorf("path %q: the profiles folder must be named %q (prompts/ and mcp/ sit next to it)", opts.Path, DefaultPath)
+	}
+	if opts.ExpectedMarketplace != "" && opts.MarketplaceSource == nil {
+		return nil, errors.New("ExpectedMarketplace needs MarketplaceSource to check it against")
+	}
 	return &Source{opts: opts, path: p}, nil
 }
 
@@ -83,10 +107,20 @@ func (s *Source) Plugin() string { return s.opts.Plugin }
 // settings spec must never mask it.
 func (s *Source) ProtectedPluginIDs() []string { return []string{s.opts.Plugin} }
 
-// ID returns "plugin:<name@marketplace>".
-func (s *Source) ID() string { return "plugin:" + s.opts.Plugin }
+// ID returns "plugin:<name@marketplace>", followed by " from <source>" once
+// Prepare has verified the real marketplace source. It contains no machine
+// path.
+func (s *Source) ID() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.market != "" {
+		return "plugin:" + s.opts.Plugin + " from " + s.market
+	}
+	return "plugin:" + s.opts.Plugin
+}
 
-// Locator is the same as ID; the version is not part of a plugin's identity.
+// Locator is the same as ID; the version is not part of a plugin's identity,
+// the real marketplace source is.
 func (s *Source) Locator() string { return s.ID() }
 
 // Ref returns the installed plugin version, or "" before Prepare. It lets the
@@ -113,11 +147,15 @@ func (s *Source) Commit() string {
 	return "plugin:" + s.version
 }
 
-// Root returns the folder that holds profiles/, or "" before Prepare.
+// Root returns the folder that holds profiles/ as the underlying directory
+// source reports it ("" before Prepare, or when that source was refused).
 func (s *Source) Root() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.root
+	if s.inner == nil {
+		return ""
+	}
+	return s.inner.Root()
 }
 
 // Names lists the profiles in the plugin.
@@ -166,6 +204,15 @@ func (s *Source) Prepare(ctx context.Context) error {
 			break
 		}
 	}
+	if found != nil {
+		if err := s.checkInstalled(found); err != nil {
+			return err
+		}
+	}
+	market, err := s.checkMarketplace(ctx)
+	if err != nil {
+		return err
+	}
 	if found == nil || found.InstallPath == "" {
 		return fmt.Errorf("%w: %s (it carries the shared profiles); install it with: /plugin install %s", ErrNotInstalled, s.opts.Plugin, s.opts.Plugin)
 	}
@@ -189,7 +236,7 @@ func (s *Source) Prepare(ctx context.Context) error {
 	}
 	s.mu.Lock()
 	s.version = found.Version
-	s.root = root
+	s.market = market
 	s.inner = profile.DirSource(profile.KindOrg, profilesDir)
 	s.mu.Unlock()
 	return nil
@@ -209,4 +256,48 @@ func confine(dir, p, what string) error {
 		return fmt.Errorf("the %s resolves outside the plugin's install directory", what)
 	}
 	return nil
+}
+
+// checkInstalled requires that the plugin is enabled and installed at user or
+// managed scope. A project or local plugin comes from the repository the
+// session starts in (SR3: a project never supplies the shared profiles), and a
+// disabled plugin is not what the user set up.
+func (s *Source) checkInstalled(p *claude.Plugin) error {
+	switch strings.ToLower(p.Scope) {
+	case "user", "managed":
+	default:
+		return fmt.Errorf("plugin %s is installed at scope %q; a shared profile source must be installed at user or managed scope", s.opts.Plugin, ui.SanitizeLine(p.Scope))
+	}
+	if !p.Enabled {
+		return fmt.Errorf("plugin %s is installed but not enabled; enable it with: /plugin enable %s", s.opts.Plugin, s.opts.Plugin)
+	}
+	return nil
+}
+
+// checkMarketplace looks up the real source of the plugin's marketplace and
+// compares it with the expected one. It returns the source to bind into the
+// identity, or "" when no lookup was configured.
+func (s *Source) checkMarketplace(ctx context.Context) (string, error) {
+	if s.opts.MarketplaceSource == nil {
+		return "", nil
+	}
+	_, mkt := claude.SplitID(s.opts.Plugin)
+	src, err := s.opts.MarketplaceSource(ctx, mkt)
+	if err != nil {
+		return "", fmt.Errorf("finding the source of marketplace %q: %w", ui.SanitizeLine(mkt), err)
+	}
+	src = strings.TrimSpace(src)
+	if src == "" || ui.HasControl(src) {
+		return "", fmt.Errorf("marketplace %q reports no usable source", ui.SanitizeLine(mkt))
+	}
+	if want := s.opts.ExpectedMarketplace; want != "" && !strings.EqualFold(normalizeSource(src), normalizeSource(want)) {
+		return "", fmt.Errorf("marketplace %q was added from %q, not from the expected %q; remove it and add the expected one", ui.SanitizeLine(mkt), ui.SanitizeLine(src), ui.SanitizeLine(want))
+	}
+	return src, nil
+}
+
+func normalizeSource(s string) string {
+	s = strings.TrimSpace(s)
+	s = strings.TrimRight(s, "/")
+	return strings.TrimSuffix(s, ".git")
 }

@@ -1,15 +1,17 @@
 package trust
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"reflect"
 	"sort"
 	"strings"
-	"unicode"
 	"unicode/utf8"
 
 	"github.com/ccshelf/ccshelf/internal/profile"
+	"github.com/ccshelf/ccshelf/internal/ui"
 )
 
 // ExitNeedsTrust is the process exit code for "needs trust" (cli.md).
@@ -70,9 +72,16 @@ type Change struct {
 	// Risky is true for registry entries, prompts, plugin includes and
 	// profiles that set environment names.
 	Risky bool
-	// Detail is a short human description of a registry entry (what it runs
-	// or connects to). It never contains environment values.
+	// Detail describes a registry entry: what it runs or connects to, shown
+	// verbatim (registry arguments are code, not secrets: secrets reach a
+	// server only through env_refs, which list names).
 	Detail string
+	// Fields lists, for a profile-controls item, each field that differs
+	// (environment variables added or removed, plugin includes and excludes,
+	// inherit_user_settings, account, ...), one plain-words line each.
+	Fields []string
+	// SetsEnv is true when the profile controls set environment variables.
+	SetsEnv bool
 }
 
 // Verdict is the result of Check.
@@ -85,8 +94,13 @@ type Verdict struct {
 	// Risky is true when any change is risky, or when nothing was accepted
 	// before and the closure contains risky items.
 	Risky bool
-	// Ref, OldCommit and NewCommit are set for TagMoved.
-	Ref, OldCommit, NewCommit string
+	// Hash is the closure hash this verdict describes: what a person reviews
+	// is what Accept must be given. It is empty only when the closure is
+	// inconsistent (Problem is set) or r was nil.
+	Hash string
+	// Ref, OldCommit and NewCommit are set for TagMoved; MovedSource names
+	// the source whose ref moved.
+	Ref, OldCommit, NewCommit, MovedSource string
 	// Problem explains an inconsistent closure (never trusted).
 	Problem string
 }
@@ -94,9 +108,11 @@ type Verdict struct {
 type identity struct {
 	needsEntry bool
 	project    bool
-	source     string
-	ref        string
-	commit     string
+	// source, ref and commit are those of the most specific shared source.
+	source  string
+	ref     string
+	commit  string
+	sources []SourceRecord // every shared source, most specific first
 }
 
 // locator is implemented by sources whose identity has a part that does not
@@ -109,8 +125,11 @@ type locator interface {
 // identify decides whether r needs a lockfile entry and under which key. Any
 // non-personal source in the chain needs one (a personal profile that extends
 // a shared one inherits its code), keyed by the most specific such source.
+// The ref and commit of every shared source are recorded, not only of the
+// key source, so a tag that moved in an inherited source is noticed as well.
 func identify(r *profile.Resolved) identity {
 	var id identity
+	seen := map[string]bool{}
 	for i := len(r.Chain) - 1; i >= 0; i-- {
 		src := r.Chain[i].Source
 		if src.Kind() == profile.KindPersonal {
@@ -119,18 +138,41 @@ func identify(r *profile.Resolved) identity {
 		if src.Kind() == profile.KindProject {
 			id.project = true
 		}
-		if id.needsEntry {
+		rec := SourceRecord{Commit: src.Commit()}
+		if l, ok := src.(locator); ok {
+			rec.Source, rec.Ref = l.Locator(), l.Ref()
+		} else {
+			rec.Source = profile.PortableSourceID(src)
+		}
+		if seen[rec.Source] {
 			continue
 		}
-		id.needsEntry = true
-		id.commit = src.Commit()
-		if l, ok := src.(locator); ok {
-			id.source, id.ref = l.Locator(), l.Ref()
-		} else {
-			id.source = profile.PortableSourceID(src)
+		seen[rec.Source] = true
+		if !id.needsEntry {
+			id.needsEntry = true
+			id.source, id.ref, id.commit = rec.Source, rec.Ref, rec.Commit
 		}
+		id.sources = append(id.sources, rec)
 	}
 	return id
+}
+
+// movedSource returns the first source (most specific first) that kept its
+// ref but now resolves to another commit.
+func movedSource(old *Entry, now []SourceRecord) (was, is SourceRecord, ok bool) {
+	recorded := old.Sources
+	if len(recorded) == 0 {
+		recorded = []SourceRecord{{Source: old.Source, Ref: old.Ref, Commit: old.Commit}}
+	}
+	for _, cur := range now {
+		for _, prev := range recorded {
+			if prev.Source == cur.Source && prev.Ref != "" && prev.Ref == cur.Ref &&
+				prev.Commit != "" && cur.Commit != "" && prev.Commit != cur.Commit {
+				return prev, cur, true
+			}
+		}
+	}
+	return SourceRecord{}, SourceRecord{}, false
 }
 
 // closureHash returns the hash of r's items, failing when r.Closure.Hash does
@@ -159,6 +201,11 @@ func (s *Store) CheckWithProject(r *profile.Resolved, projectTrusted bool) Verdi
 		return Verdict{State: New, Problem: "no resolved profile"}
 	}
 	v := Verdict{Profile: r.Name}
+	hash, err := closureHash(r)
+	if err != nil {
+		return Verdict{State: Changed, Profile: r.Name, Risky: true, Problem: err.Error()}
+	}
+	v.Hash = hash
 	id := identify(r)
 	if !id.needsEntry {
 		v.State = Trusted
@@ -166,13 +213,9 @@ func (s *Store) CheckWithProject(r *profile.Resolved, projectTrusted bool) Verdi
 	}
 	if id.project && !projectTrusted {
 		v.State = ProjectUntrusted
-		v.Changes = diff(nil, r)
+		v.Changes = diff(nil, nil, r)
 		v.Risky = anyRisky(v.Changes)
 		return v
-	}
-	hash, err := closureHash(r)
-	if err != nil {
-		return Verdict{State: Changed, Profile: r.Name, Risky: true, Problem: err.Error()}
 	}
 	s.mu.Lock()
 	var old *Entry
@@ -183,24 +226,25 @@ func (s *Store) CheckWithProject(r *profile.Resolved, projectTrusted bool) Verdi
 	s.mu.Unlock()
 	if old == nil {
 		v.State = New
-		v.Changes = diff(nil, r)
+		v.Changes = diff(nil, nil, r)
 		v.Risky = anyRisky(v.Changes)
 		return v
 	}
-	v.Changes = diff(old.Items, r)
+	v.Changes = diff(old.Items, old.Controls, r)
 	v.Risky = anyRisky(v.Changes)
-	switch {
-	case old.Ref != "" && old.Ref == id.ref && old.Commit != "" && id.commit != "" && old.Commit != id.commit:
+	if was, is, moved := movedSource(old, id.sources); moved {
 		v.State = TagMoved
-		v.Ref, v.OldCommit, v.NewCommit = id.ref, old.Commit, id.commit
+		v.MovedSource, v.Ref, v.OldCommit, v.NewCommit = is.Source, is.Ref, was.Commit, is.Commit
 		v.Risky = true
-	case old.ClosureHash == hash:
+		return v
+	}
+	if old.ClosureHash == hash {
 		v.State = Trusted
 		v.Changes = nil
 		v.Risky = false
-	default:
-		v.State = Changed
+		return v
 	}
+	v.State = Changed
 	return v
 }
 
@@ -215,30 +259,49 @@ func anyRisky(c []Change) bool {
 
 type itemKey struct{ kind, name string }
 
-// diff compares stored items with the current closure of r.
-func diff(old []profile.ClosureItem, r *profile.Resolved) []Change {
+// diff compares stored items (and the stored controls texts) with the
+// closure of r.
+func diff(old []profile.ClosureItem, oldControls map[string]string, r *profile.Resolved) []Change {
 	oldM := map[itemKey]profile.ClosureItem{}
 	for _, it := range old {
 		oldM[itemKey{it.Kind, it.Name}] = it
+	}
+	newControls := map[string]string{}
+	for _, f := range r.Chain {
+		if f != nil && f.Manifest != nil {
+			if b, err := profile.ControlsJSON(f.Manifest); err == nil {
+				newControls[f.Name] = string(b)
+			}
+		}
 	}
 	var out []Change
 	seen := map[itemKey]bool{}
 	for _, it := range r.Closure.Items {
 		k := itemKey{it.Kind, it.Name}
 		seen[k] = true
-		detail := ""
-		if it.Kind == profile.ItemRegistry {
-			if m, ok := r.MCP[it.Name]; ok {
-				detail = describeServer(m)
-			}
-		}
 		o, had := oldM[k]
-		switch {
-		case !had:
-			out = append(out, Change{Kind: Added, Item: it, New: it.Digest, Risky: it.Risky, Detail: detail})
-		case o.Digest != it.Digest || o.Risky != it.Risky:
-			out = append(out, Change{Kind: Altered, Item: it, Old: o.Digest, New: it.Digest, Risky: it.Risky || o.Risky, Detail: detail})
+		if had && o.Digest == it.Digest && o.Risky == it.Risky {
+			continue
 		}
+		c := Change{Kind: Altered, Item: it, Old: o.Digest, New: it.Digest, Risky: it.Risky || o.Risky}
+		if !had {
+			c.Kind = Added
+			c.Risky = it.Risky
+		}
+		switch it.Kind {
+		case profile.ItemRegistry:
+			if m, ok := r.MCP[it.Name]; ok {
+				c.Detail = describeServer(m)
+			}
+		case profile.ItemProfileControls:
+			oldText := ""
+			if had {
+				oldText = oldControls[it.Name]
+			}
+			c.Fields = controlLines(had, oldText, newControls[it.Name])
+			c.SetsEnv = setsEnv(newControls[it.Name])
+		}
+		out = append(out, c)
 	}
 	for _, it := range old {
 		if !seen[itemKey{it.Kind, it.Name}] {
@@ -258,46 +321,200 @@ func diff(old []profile.ClosureItem, r *profile.Resolved) []Change {
 	return out
 }
 
-// secretLike reports whether a name suggests that its value is a secret.
-func secretLike(s string) bool {
-	l := strings.ToLower(s)
-	for _, w := range []string{"token", "secret", "password", "passwd", "apikey", "api-key", "api_key", "auth", "bearer", "credential"} {
-		if strings.Contains(l, w) {
-			return true
-		}
+func decodeControls(text string) map[string]any {
+	m := map[string]any{}
+	if text == "" {
+		return m
+	}
+	if err := json.Unmarshal([]byte(text), &m); err != nil {
+		return map[string]any{}
+	}
+	return m
+}
+
+func setsEnv(text string) bool {
+	env, _ := decodeControls(text)["session.env"].(map[string]any)
+	return len(env) > 0
+}
+
+// isEmptyValue reports whether a decoded controls value says "nothing set".
+func isEmptyValue(v any) bool {
+	switch x := v.(type) {
+	case nil:
+		return true
+	case string:
+		return x == ""
+	case []any:
+		return len(x) == 0
+	case map[string]any:
+		return len(x) == 0
 	}
 	return false
 }
 
-// redactArgs masks arguments that look like they carry a secret: the value of
-// KEY=value pairs and of options whose name suggests a secret.
-func redactArgs(args []string) []string {
-	out := make([]string, len(args))
-	mask := false
-	for i, a := range args {
-		switch {
-		case mask:
-			out[i] = "<redacted>"
-			mask = false
-		case strings.HasPrefix(a, "-") && secretLike(a) && !strings.Contains(a, "="):
-			out[i] = a
-			mask = true
-		case strings.Contains(a, "=") && secretLike(a[:strings.Index(a, "=")]):
-			out[i] = a[:strings.Index(a, "=")+1] + "<redacted>"
-		default:
-			out[i] = a
+// valueText formats one decoded controls value for a person.
+func valueText(v any) string {
+	switch x := v.(type) {
+	case nil:
+		return "unset"
+	case string:
+		if x == "" {
+			return "unset"
 		}
+		return x
+	case bool:
+		return fmt.Sprint(x)
+	case []any:
+		if len(x) == 0 {
+			return "none"
+		}
+		parts := make([]string, len(x))
+		for i, e := range x {
+			parts[i] = valueText(e)
+		}
+		return strings.Join(parts, ", ")
 	}
-	return out
+	return fmt.Sprint(v)
 }
 
-// describeServer says what a registry entry runs or connects to. Environment
-// variable names are listed; values are never known here.
+func stringSet(v any) (set map[string]bool, order []string) {
+	set = map[string]bool{}
+	list, _ := v.([]any)
+	for _, e := range list {
+		str := valueText(e)
+		if !set[str] {
+			order = append(order, str)
+		}
+		set[str] = true
+	}
+	return set, order
+}
+
+// controlLines explains how a profile's controls differ: one line per field.
+// hadOld says whether an earlier version exists; when it does but its text was
+// not recorded (an older lockfile) the line says so instead of guessing.
+func controlLines(hadOld bool, oldText, newText string) []string {
+	var lines []string
+	if hadOld && oldText == "" {
+		lines = append(lines, "what changed is unknown: the earlier version of these settings was not recorded; they are now:")
+		hadOld = false
+	}
+	oldC, newC := decodeControls(oldText), decodeControls(newText)
+	keys := map[string]bool{}
+	for k := range oldC {
+		keys[k] = true
+	}
+	for k := range newC {
+		keys[k] = true
+	}
+	names := make([]string, 0, len(keys))
+	for k := range keys {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	for _, k := range names {
+		ov, nv := oldC[k], newC[k]
+		if isEmptyValue(ov) && isEmptyValue(nv) || reflect.DeepEqual(ov, nv) {
+			continue
+		}
+		if nvm, ok := nv.(map[string]any); ok {
+			lines = append(lines, envLines(ov, nvm)...)
+			continue
+		}
+		if ovm, ok := ov.(map[string]any); ok {
+			lines = append(lines, envLines(ovm, map[string]any{})...)
+			continue
+		}
+		_, isList := nv.([]any)
+		if _, oldList := ov.([]any); isList || oldList {
+			lines = append(lines, listLines(k, ov, nv)...)
+			continue
+		}
+		if !hadOld {
+			lines = append(lines, fmt.Sprintf("%s: %s", k, valueText(nv)))
+		} else {
+			lines = append(lines, fmt.Sprintf("%s: %s -> %s", k, valueText(ov), valueText(nv)))
+		}
+	}
+	return lines
+}
+
+func envLines(ov any, nv map[string]any) []string {
+	oldEnv, _ := ov.(map[string]any)
+	var names []string
+	seen := map[string]bool{}
+	for k := range nv {
+		names = append(names, k)
+		seen[k] = true
+	}
+	for k := range oldEnv {
+		if !seen[k] {
+			names = append(names, k)
+		}
+	}
+	sort.Strings(names)
+	var lines []string
+	for _, n := range names {
+		o, had := oldEnv[n]
+		nw, has := nv[n]
+		switch {
+		case has && !had:
+			lines = append(lines, fmt.Sprintf("environment variable %s added", envShown(n, nw)))
+		case had && !has:
+			lines = append(lines, fmt.Sprintf("environment variable %s removed", n))
+		case !reflect.DeepEqual(o, nw):
+			if isRefName(n) || secretLike(n) {
+				lines = append(lines, fmt.Sprintf("environment variable %s changed (the value changed; it is not shown)", n))
+			} else {
+				lines = append(lines, fmt.Sprintf("environment variable %s changed (was %s, now %s)", n, valueText(o), valueText(nw)))
+			}
+		}
+	}
+	return lines
+}
+
+// envShown formats a new environment variable: the name alone for a *_REF
+// (a reference to a secret store), NAME=<redacted> for a secret-looking name,
+// otherwise NAME=value.
+func envShown(name string, v any) string {
+	switch {
+	case isRefName(name):
+		return name
+	case secretLike(name):
+		return name + "=<redacted>"
+	}
+	return name + "=" + valueText(v)
+}
+
+func listLines(key string, ov, nv any) []string {
+	oldSet, oldOrder := stringSet(ov)
+	newSet, newOrder := stringSet(nv)
+	var lines []string
+	for _, e := range newOrder {
+		if !oldSet[e] {
+			lines = append(lines, fmt.Sprintf("%s: %s added", key, e))
+		}
+	}
+	for _, e := range oldOrder {
+		if !newSet[e] {
+			lines = append(lines, fmt.Sprintf("%s: %s removed", key, e))
+		}
+	}
+	if len(lines) == 0 && !reflect.DeepEqual(ov, nv) {
+		lines = append(lines, fmt.Sprintf("%s: order changed (now %s)", key, valueText(nv)))
+	}
+	return lines
+}
+
+// describeServer says what a registry entry runs or connects to, verbatim:
+// arguments and URLs are what a person must review, and secrets never appear
+// in a registry (they reach a server through env_refs, which list names).
+// Environment variable values are never known here.
 func describeServer(m profile.MCPServer) string {
 	var b strings.Builder
 	if m.Type == profile.MCPStdio || m.Type == "" || m.Command != "" {
 		b.WriteString("runs: ")
-		b.WriteString(strings.Join(append([]string{m.Command}, redactArgs(m.Args)...), " "))
+		b.WriteString(strings.Join(append([]string{m.Command}, m.Args...), " "))
 	} else {
 		b.WriteString("connects to: ")
 		b.WriteString(redactURL(m.URL))
@@ -307,7 +524,7 @@ func describeServer(m profile.MCPServer) string {
 		ov *profile.MCPOverride
 	}{{"windows", m.Windows}, {"macos", m.MacOS}, {"linux", m.Linux}} {
 		if o.ov != nil {
-			b.WriteString("; on " + o.os + " runs: " + strings.Join(append([]string{o.ov.Command}, redactArgs(o.ov.Args)...), " "))
+			b.WriteString("; on " + o.os + " runs: " + strings.Join(append([]string{o.ov.Command}, o.ov.Args...), " "))
 		}
 	}
 	if len(m.EnvRefs) > 0 {
@@ -316,37 +533,88 @@ func describeServer(m profile.MCPServer) string {
 	return b.String()
 }
 
-// redactURL drops credentials and the query string from a URL.
+// redactURL keeps the scheme, host and path of a URL and masks credentials,
+// the query string and the fragment. Registry validation already rejects
+// those parts; this is defense in depth for what is printed.
 func redactURL(u string) string {
+	tail := ""
 	if i := strings.IndexAny(u, "?#"); i >= 0 {
-		u = u[:i] + "?<redacted>"
+		u, tail = u[:i], "?<redacted>"
 	}
 	if i := strings.Index(u, "://"); i >= 0 {
 		rest := u[i+3:]
-		if at := strings.Index(rest, "@"); at >= 0 && !strings.Contains(rest[:at], "/") {
+		host := rest
+		if sl := strings.IndexByte(rest, '/'); sl >= 0 {
+			host = rest[:sl]
+		}
+		if at := strings.LastIndexByte(host, '@'); at >= 0 {
 			u = u[:i+3] + "<redacted>@" + rest[at+1:]
 		}
 	}
-	return u
+	return u + tail
 }
 
-// clean makes s safe to print: control characters (including escape
-// sequences) become "?" and very long text is shortened.
-func clean(s string) string {
-	var b strings.Builder
-	n := 0
-	for _, r := range s {
-		if n >= 240 {
-			b.WriteString("...")
-			break
+// secretLike reports whether an environment variable name suggests that its
+// value is a secret.
+func secretLike(name string) bool {
+	l := strings.ToLower(name)
+	for _, w := range []string{"token", "secret", "password", "passwd", "key", "credential", "auth", "bearer"} {
+		if strings.Contains(l, w) {
+			return true
 		}
-		if unicode.IsControl(r) || r == utf8.RuneError {
-			r = '?'
-		}
-		b.WriteRune(r)
-		n++
 	}
-	return b.String()
+	return false
+}
+
+// isRefName reports whether an environment variable name is a *_REF: its
+// value points into a secret store and is never shown.
+func isRefName(name string) bool { return strings.HasSuffix(strings.ToUpper(name), "_REF") }
+
+// clean makes s safe to print on one line: control characters (including
+// ESC, CR, backspace and the C1 range), invisible and bidirectional formatting
+// characters, line separators and invalid UTF-8 become U+FFFD. It never
+// shortens the text: a long value is wrapped by Describe, not cut, because
+// what is hidden cannot be reviewed.
+func clean(s string) string { return ui.SanitizeLine(s) }
+
+// wrapWidth is the column Describe wraps long lines at.
+const wrapWidth = 100
+
+// wrapText splits s into lines of at most width runes, preferring spaces and
+// breaking inside a word only when it is longer than a line. No character is
+// dropped except the single space a line is broken at.
+func wrapText(s string, width int) []string {
+	var lines []string
+	for utf8.RuneCountInString(s) > width {
+		cut := 0
+		n := 0
+		for i, r := range s {
+			if n == width {
+				break
+			}
+			if r == ' ' && n > 0 {
+				cut = i
+			}
+			n++
+		}
+		if cut == 0 {
+			// no space in the first width runes: break inside the word
+			n = 0
+			for i := range s {
+				if n == width {
+					cut = i
+					break
+				}
+				n++
+			}
+			lines = append(lines, s[:cut])
+			s = s[cut:]
+			continue
+		}
+		lines = append(lines, s[:cut])
+		s = s[cut+1:]
+	}
+	return append(lines, s)
 }
 
 func (c Change) describe() string {
@@ -373,8 +641,10 @@ func (c Change) describe() string {
 	case profile.ItemPlugin:
 		return fmt.Sprintf("plugin %s %s", name, c.Kind)
 	case profile.ItemProfile:
-		s := fmt.Sprintf("profile %s %s", name, c.Kind)
-		if c.Risky {
+		return fmt.Sprintf("profile %s %s", name, c.Kind)
+	case profile.ItemProfileControls:
+		s := fmt.Sprintf("profile %s controls %s", name, c.Kind)
+		if c.SetsEnv {
 			s += " (sets environment variables)"
 		}
 		return s
@@ -398,12 +668,12 @@ func (v Verdict) Describe(w io.Writer) {
 	case Changed:
 		p("Profile %q changed since you last trusted it.", name)
 	case TagMoved:
-		p("Profile %q: the ref %q now points to commit %s (you trusted %s). Treat this as an untrusted update.", name, clean(v.Ref), short(v.NewCommit), short(v.OldCommit))
+		p("Profile %q: the ref %q of %s now points to commit %s (you trusted %s). Treat this as an untrusted update.", name, clean(v.Ref), clean(v.MovedSource), clean(short(v.NewCommit)), clean(short(v.OldCommit)))
 	case ProjectUntrusted:
 		p("Profile %q comes from a project folder that has not been trusted.", name)
 	}
 	if v.Problem != "" {
-		p("Problem: %s", clean(v.Problem))
+		item(w, "Problem: ", clean(v.Problem))
 	}
 	var risky, other []Change
 	for _, c := range v.Changes {
@@ -416,14 +686,35 @@ func (v Verdict) Describe(w io.Writer) {
 	if len(risky) > 0 {
 		p("Needs your review (these run code or change what the model is told):")
 		for _, c := range risky {
-			p("  - %s", c.describe())
+			describeChange(w, c)
 		}
 	}
 	if len(other) > 0 {
 		p("Other changes:")
 		for _, c := range other {
-			p("  - %s", c.describe())
+			describeChange(w, c)
 		}
+	}
+}
+
+// item writes text wrapped to wrapWidth, the first line after first and the
+// others after the same number of spaces.
+func item(w io.Writer, first, text string) {
+	pad := strings.Repeat(" ", utf8.RuneCountInString(first))
+	for i, line := range wrapText(text, wrapWidth) {
+		lead := pad
+		if i == 0 {
+			lead = first
+		}
+		_, _ = fmt.Fprintf(w, "%s%s\n", lead, line)
+	}
+}
+
+// describeChange writes one change, then the fields of a controls change.
+func describeChange(w io.Writer, c Change) {
+	item(w, "  - ", c.describe())
+	for _, f := range c.Fields {
+		item(w, "      * ", clean(f))
 	}
 }
 
@@ -464,15 +755,19 @@ func (s *Store) Require(r *profile.Resolved) error { return s.RequireWithProject
 // RequireWithProject is Require for callers that know the project folder is
 // trusted.
 func (s *Store) RequireWithProject(r *profile.Resolved, projectTrusted bool) error {
+	if r == nil {
+		return &NeedsTrustError{Verdict: s.CheckWithProject(nil, projectTrusted)}
+	}
 	v := s.CheckWithProject(r, projectTrusted)
 	if v.State == Trusted {
 		return nil
 	}
-	name := v.Profile
-	if r != nil {
-		name = r.Name
+	if v.Problem != "" {
+		// A programming error or a tampered value, not something a person
+		// can review and accept: it is not a "needs trust" outcome.
+		return fmt.Errorf("profile %q: %w", clean(r.Name), ErrInconsistentClosure)
 	}
-	return &NeedsTrustError{Profile: name, Verdict: v}
+	return &NeedsTrustError{Profile: r.Name, Verdict: v}
 }
 
 // IsNeedsTrust reports whether err is or wraps a *NeedsTrustError.

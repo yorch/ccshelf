@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // maxStateFile bounds the lockfile and the project trust file.
@@ -20,6 +21,13 @@ func readStateFile(path string) ([]byte, error) {
 	fi, err := os.Lstat(path)
 	if err != nil {
 		return nil, err
+	}
+	// The directory must be ours and closed to others, like the file below
+	// (SR4). A missing directory means a missing file, handled above.
+	if di, derr := os.Stat(filepath.Dir(path)); derr == nil {
+		if err := checkDirOwner(di); err != nil {
+			return nil, fmt.Errorf("directory %s: %w", filepath.Dir(path), err)
+		}
 	}
 	if fi.Mode()&os.ModeSymlink != 0 {
 		return nil, fmt.Errorf("%s is a symlink; refusing to follow it", path)
@@ -38,6 +46,9 @@ func readStateFile(path string) ([]byte, error) {
 	}
 	if !st.Mode().IsRegular() {
 		return nil, fmt.Errorf("%s is not a regular file", path)
+	}
+	if err := checkFileOwner(st); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	b, err := io.ReadAll(io.LimitReader(f, maxStateFile+1))
 	if err != nil {
@@ -123,4 +134,55 @@ func writeStateFile(path string, data []byte) error {
 	}
 	ok = true
 	return nil
+}
+
+// lockWait is how long lockState waits for another process.
+const lockWait = 15 * time.Second
+
+// errLocked is returned by tryLock when another holder has the lock.
+var errLocked = errors.New("lock is held")
+
+// lockState takes an exclusive advisory lock next to path (path + ".lock",
+// mode 0600, never removed) so that two ccshelf processes cannot interleave
+// reload, modify and rename on the same state file. The lock is an operating
+// system lock (flock, or LockFileEx on Windows), so a crashed holder never
+// leaves a stale lock behind. The returned function releases it.
+func lockState(path string) (func(), error) {
+	if err := ensureStateDir(filepath.Dir(path)); err != nil {
+		return nil, err
+	}
+	lp := path + ".lock"
+	f, err := openNoFollow(lp, os.O_RDWR|os.O_CREATE, 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("opening lock file %s: %w", lp, err)
+	}
+	st, err := f.Stat()
+	if err != nil || !st.Mode().IsRegular() {
+		_ = f.Close()
+		return nil, fmt.Errorf("lock file %s is not a regular file", lp)
+	}
+	if err := checkFileOwner(st); err != nil {
+		_ = f.Close()
+		return nil, fmt.Errorf("lock file %s: %w", lp, err)
+	}
+	deadline := time.Now().Add(lockWait)
+	for {
+		err := tryLock(f)
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, errLocked) {
+			_ = f.Close()
+			return nil, fmt.Errorf("locking %s: %w", lp, err)
+		}
+		if time.Now().After(deadline) {
+			_ = f.Close()
+			return nil, fmt.Errorf("another ccshelf process holds %s; try again", lp)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	return func() {
+		_ = unlock(f)
+		_ = f.Close()
+	}, nil
 }

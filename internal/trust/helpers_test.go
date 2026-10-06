@@ -77,3 +77,6 @@ func newStore(t *testing.T) *Store {
 	}
 	return s
 }
+
+// accept records r the way a caller does after review: with its own hash.
+func accept(s *Store, r *profile.Resolved) error { return s.Accept(r, r.Closure.Hash) }

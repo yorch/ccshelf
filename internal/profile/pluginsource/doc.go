@@ -31,4 +31,18 @@
 //
 // ProtectedPluginIDs returns the plugin itself so the settings spec can never
 // mask the plugin that carries the org's profiles (SR3).
+//
+// # Scope, state and origin
+//
+// Prepare requires the plugin to be enabled and installed at user or managed
+// scope: a project or local plugin comes from the repository the session
+// starts in, which must never supply the shared profiles (SR3). The "@name"
+// of a plugin id is only a local alias of a marketplace, so Options may
+// supply MarketplaceSource (the real source the marketplace was added from)
+// and ExpectedMarketplace (what the organization requires). When the lookup
+// is given, the real source is bound into ID and Locator ("plugin:<id> from
+// <source>"), which keys the trust record to it; a mismatch with the expected
+// source fails Prepare. The profiles folder must be named "profiles", because
+// whether prompts/ and mcp/ sit next to it is decided from that name and a
+// wrapper cannot pass the decision on. Root is the directory source's root.
 package pluginsource
