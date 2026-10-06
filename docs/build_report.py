@@ -39,6 +39,8 @@ TABS = [
     ("landscape", "Research", "Landscape", "research/landscape.md", {}),
     ("options", "Research", "Options and reviews", "research/options-and-reviews.md", {}),
     ("stage0", "Research", "Stage 0", "research/stage0.md", {}),
+    ("adopt", "Research", "Adopt or build", "research/adopt-or-build.md", {}),
+    ("routing", "Research", "Routing eval protocol", "research/routing-eval-protocol.md", {}),
 ]
 # Markdown file (relative to docs/) -> tab id, used to rewrite links between notes
 FILE_TO_TAB = {}

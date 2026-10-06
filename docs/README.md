@@ -23,6 +23,8 @@
 | [research/landscape.md](research/landscape.md) | Evidence of the problems, native mechanisms, existing tools, naming findings |
 | [research/options-and-reviews.md](research/options-and-reviews.md) | Solution options and the adversarial reviews |
 | [research/stage0.md](research/stage0.md) | The macOS experiments and the corrections made after the review round |
+| [research/adopt-or-build.md](research/adopt-or-build.md) | Phase 0.2: evaluation of `fuzzyalej/claude-profile` and `edimuj/claude-rig`, and the build recommendation |
+| [research/routing-eval-protocol.md](research/routing-eval-protocol.md) | Phase 0.1: the fixed protocol and success criterion of the routing eval (harness template in `research/routing-eval/`) |
 
 `research/` holds dated findings that are updated only to correct them; `design/` holds the current design.
 

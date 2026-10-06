@@ -1,6 +1,6 @@
 # Platform: GitHub, GHE and cross-platform support
 
-Requirements R1 (macOS, Linux, Windows) and R2 (GHE Cloud and Server, GitHub Actions), with the design assessment for each. Only macOS has been tested.
+Requirements R1 (macOS, Linux, Windows) and R2 (GHE Cloud and Server, GitHub Actions), with the design assessment for each. Only macOS has run the real `claude` (Stage 0). The ccshelf test suite, which uses a fake `claude`, passes on macOS and, in Docker (`golang:1.27`), on Linux arm64 and amd64 (amd64 emulated), as root and as a normal user {V}. Windows code compiles and vets but has never run on Windows.
 
 ## Stack and platform decisions
 Decided by the user (2026-10-06): **Go** for the implementation; **GitHub / GitHub Enterprise (GHE) and GitHub Actions** for hosting and CI.

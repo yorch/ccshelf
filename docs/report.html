@@ -138,7 +138,7 @@ section>input[type=search]{display:block}
 <body>
 <div class="shell">
 <aside class="rail">
-<div class="brand"><h1>ccshelf</h1><p>Research and design notes. Claude Code 2.1.290. Generated from the Markdown in docs/ (source hash 638d7c0a).</p></div>
+<div class="brand"><h1>ccshelf</h1><p>Research and design notes. Claude Code 2.1.290. Generated from the Markdown in docs/ (source hash ef76c0a5).</p></div>
 <nav aria-label="Sections"><div id="tabs" role="tablist" aria-orientation="vertical"></div></nav>
 <div class="legend" aria-label="Confidence markers"><b>How sure we are</b><br><span class="lg gv" aria-hidden="true">&#9679;</span>verified in docs, gh or the CLI<br><span class="lg gr" aria-hidden="true">&#9680;</span>reported by a research agent<br><span class="lg gu" aria-hidden="true">&#9675;</span>unverified or inferred</div>
 <button class="themebtn" id="themebtn" type="button">Switch theme</button>
@@ -197,6 +197,8 @@ draw(false);
 <tr><td><a href="#landscape">research/landscape.md</a></td><td>Evidence of the problems, native mechanisms, existing tools, naming findings</td></tr>
 <tr><td><a href="#options">research/options-and-reviews.md</a></td><td>Solution options and the adversarial reviews</td></tr>
 <tr><td><a href="#stage0">research/stage0.md</a></td><td>The macOS experiments and the corrections made after the review round</td></tr>
+<tr><td><a href="#adopt">research/adopt-or-build.md</a></td><td>Phase 0.2: evaluation of <code>fuzzyalej/claude-profile</code> and <code>edimuj/claude-rig</code>, and the build recommendation</td></tr>
+<tr><td><a href="#routing">research/routing-eval-protocol.md</a></td><td>Phase 0.1: the fixed protocol and success criterion of the routing eval (harness template in <code>research/routing-eval/</code>)</td></tr>
 </tbody></table>
 <p><code>research/</code> holds dated findings that are updated only to correct them; <code>design/</code> holds the current design.</p>
 <h3 id="overview-how-to-read-the-confidence-labels">How to read the confidence labels</h3>
@@ -253,6 +255,7 @@ draw(false);
 <tr><td class="nw">D-30</td><td class="nw">2026-10-06</td><td><strong>Cached git checkouts are verified down to every tree object</strong> (replace refs disabled) before each use; when a source is unreachable the union of all pinned protect lists keeps being enforced and the newest verified cached checkout is used; plugins that own a protected MCP server are protected (all same-name candidates, with a warning).</td><td>Review Y: replace refs could swap a tree behind a pinned commit; an outage dropped protect lists of protect-only sources.</td><td>High</td><td>Next adversarial review</td></tr>
 <tr><td class="nw">D-31</td><td class="nw">2026-10-06</td><td><strong>Plugin sources are bound to their real marketplace source</strong> (from <code>claude plugin marketplace list --json</code>, <span class="V">V</span> for github, git and directory kinds) in the source id and trust key, with an optional <code>marketplace</code> check in the config; <code>search</code>, <code>recommend</code> and <code>doctor --policy</code> can use the cached org source offline; PRF002 is info for <code>cmd /c npx|node|uvx|bunx name@version</code> (the documented Windows launcher) and a warning for anything else.</td><td>Review X/Z2: the marketplace check was a dead hook; git-source users had no catalog; the starter failed <code>lint --strict</code>.</td><td>Medium</td><td>Review Z</td></tr>
 <tr><td class="nw">D-32</td><td class="nw">2026-10-06</td><td><strong>Marketplace identity is kind-tagged and host-neutral</strong> (<code>github:owner/repo</code>, <code>git:host/path</code>; ssh, https and scp forms of one repo are equal; directory sources are hashed, never a machine path). <strong>Git checkouts carry a layout version</strong> (bump <code>layoutVersion</code> when the watched file set changes). <strong>Catalog reads (<code>search</code>, <code>recommend</code>) use only a commit the user accepted</strong> (the lockfile commit, or the exact SHA when the ref is one). The <code>PRF002</code> downgrade is limited to the exact <code>cmd /c &lt;npx|uvx|bunx&gt; [-y] &lt;pinned name@x.y.z&gt;</code> shape.</td><td>Review Z: kind confusion, a hard-coded host, an upgrade that would report valid caches as tampered, catalog reads of untrusted commits, and a downgrade that hid <code>-c</code>/<code>-e</code>/UNC forms.</td><td>High</td><td>Next adversarial review</td></tr>
+<tr><td class="nw">D-33</td><td class="nw">2026-10-06</td><td><strong>Recommendation (for the user to review): build ccshelf; do not adopt either existing tool, and do not contribute structural changes; take specific ideas from both.</strong> Neither <code>fuzzyalej/claude-profile</code> (additive <code>--plugin-dir</code> vendoring, no masking of installed plugins, no managed-policy, trust or protected-plugin model, first-match profile search across project and personal sources) nor <code>edimuj/claude-rig</code> (separate <code>CLAUDE_CONFIG_DIR</code> and symlinks, free-form settings, Windows needs Developer Mode) does default-deny masking on one shared plugin store with R3 and SR1 to SR5. Both are single-author projects (10 and 9 stars; claude-rig quiet since 2026-06-08). Ideas to take: <code>find</code> index, multi-profile launch, <code>--frozen</code> lock check, statusline snippet, <code>--json</code> and <code>doctor --fix</code>. Kill and obsolescence rules are in the roadmap (Phase 0.6). Closes the Phase 0.2 part of O-04 (see D-22); Phase 0.1 (routing eval) still decides whether the launcher ships as a product.</td><td>Read-only review of both repositories on 2026-10-06 (README, docs, launch code, workflows, <code>gh</code> metadata); nothing was built or run, so run-time behavior is <span class="U">U</span>. See <a href="#adopt">adopt-or-build.md</a>.</td><td>Medium</td><td>Either project adds settings-based masking, managed-policy handling and trust pinning, or a maintainer asks for them; a new tool above 100 stars covers the gaps; the routing eval fails (then the answer becomes the alias recipe, K1)</td></tr>
 </tbody></table>
 <h3 id="decisions-superseded-or-corrected">Superseded or corrected</h3>
 <table><thead><tr><th>ID</th><th>Was</th><th>Replaced by</th></tr></thead><tbody>
@@ -271,8 +274,8 @@ draw(false);
 <tr><td class="nw">O-01</td><td>Which managed-settings keys does the org actually set? Answerable by <code>doctor --policy</code> on a managed machine once built.</td><td><a href="#security">security.md</a></td></tr>
 <tr><td class="nw">O-02</td><td>Minimum supported GHE Server version for the workflows; Pages visibility on GHE Server.</td><td><a href="#platform">platform.md</a></td></tr>
 <tr><td class="nw">O-03</td><td>Is <code>core/</code> a public Go library or internal packages? Leaning internal, no API promise.</td><td><a href="#architecture">architecture.md</a></td></tr>
-<tr><td class="nw">O-04</td><td>Build, adopt or contribute: evaluate <code>fuzzyalej/claude-profile</code> and <code>edimuj/claude-rig</code> against the gaps.</td><td><a href="#roadmap">roadmap.md</a> Phase 0.2</td></tr>
-<tr><td class="nw">O-05</td><td>Routing eval: success criterion and prompt set, fixed before running.</td><td><a href="#roadmap">roadmap.md</a> Phase 0.1</td></tr>
+<tr><td class="nw">O-04</td><td>Build, adopt or contribute: evaluate <code>fuzzyalej/claude-profile</code> and <code>edimuj/claude-rig</code> against the gaps. <strong>Evaluated 2026-10-06; recommendation is to build (D-33), pending user review.</strong> Reopens if a trigger in D-33 fires.</td><td><a href="#adopt">adopt-or-build.md</a>, <a href="#roadmap">roadmap.md</a> Phase 0.2</td></tr>
+<tr><td class="nw">O-05</td><td>Routing eval: success criterion and prompt set, fixed before running. <strong>Protocol fixed 2026-10-06; runs pending the org's plugin set.</strong></td><td><a href="#routing">routing-eval-protocol.md</a>, <a href="#roadmap">roadmap.md</a> Phase 0.1</td></tr>
 <tr><td class="nw">O-06</td><td>Bundle and masking interaction (T7); needs a second config directory and a login.</td><td><a href="#roadmap">roadmap.md</a> Phase 0.3</td></tr>
 <tr><td class="nw">O-07</td><td>Linux and Windows behavior: credential refresh under concurrency, MCP <code>npx</code> and <code>cmd /c</code>, managed-settings registry paths, masking parity.</td><td><a href="#platform">platform.md</a></td></tr>
 <tr><td class="nw">O-08</td><td>Name follow-ups: register the GitHub org <code>ccshelf</code>, trademark search (classes 9 and 42), winget and pkg.go.dev, the "unofficial, not affiliated" tagline.</td><td><a href="#project">project.md</a></td></tr>
@@ -307,6 +310,45 @@ draw(false);
 <p>Accounts (<code>--account</code>), the trust lockfile and <code>git</code> sources (SR2 must land first, and the closure hash must be built before any sharing), <code>compile</code> and committed bundles (pending T7), <code>recommend</code>, <code>shell-init</code> for four shells, the static catalog site, taxonomy, the Analytics join, the <code>plugin</code> source, a concierge, the OTel loop, and the interactive wizards beyond the picker.</p>
 <h4 id="roadmap-what-changed-from-the-earlier-roadmap">What changed from the earlier roadmap</h4>
 <p>Both tracks in parallel became evidence first. The shared <code>core/</code> is built only as far as the MVP needs. The catalog track starts with <code>CATALOG.md</code>, not the site. Open source remains the direction, but the scaffolding is gated on employer approval.</p>
+<h3 id="roadmap-kill-and-obsolescence-criteria-phase-0-6-written-2026-10-06">Kill and obsolescence criteria (Phase 0.6, written 2026-10-06)</h3>
+<p>Written down before the evidence is in, so that stopping or shrinking is a decision made against a rule and not against sunk cost. "Stop" means archive the launcher and keep nothing but a documented recipe; "shrink" means keep the smaller part that still earns its place (usually the catalog). Each trigger names how to check it. Claims about what Claude Code does today are <span class="V">V</span> only where <a href="#stage0">stage0.md</a> verified them; everything about future releases is <span class="U">U</span>.</p>
+<h4 id="roadmap-a-the-launcher-stops-being-worth-building-stop-or-shrink-to-an-alias-recipe">A. The launcher stops being worth building (stop or shrink to an alias recipe)</h4>
+<table><thead><tr><th>#</th><th>Condition</th><th>How to check</th><th>Action</th></tr></thead><tbody>
+<tr><td>K1</td><td>The routing eval fails its fixed criterion (<a href="#routing">routing-eval-protocol.md</a> section 5)</td><td><code>run_eval.py analyze</code> verdict on the org's frozen prompt set</td><td>Stop the launcher as a product; keep <code>dry-run</code> as a documented alias recipe</td></tr>
+<tr><td>K2</td><td>Claude Code ships a native allowlist or default-deny plugin mode (for example an "only these plugins" setting, or <code>enabledPlugins</code> with a deny-by-default switch)</td><td>Release notes and the settings reference for the words <code>allowlist</code>, <code>only</code>, <code>default deny</code>, <code>strict</code> near <code>enabledPlugins</code> or <code>plugins</code>; <code>claude --help</code> for a new <code>--plugins</code> or <code>--enable-plugin</code> style flag</td><td>Shrink: the launcher becomes a profile-to-settings generator, or stops if the native setting covers shared profiles</td></tr>
+<tr><td>K3</td><td>Claude Code ships native named, task-scoped profiles (a per-session choice of plugin, skill and MCP sets with inheritance). Not the account-profile request in anthropics/claude-code #91770</td><td><code>claude --help</code> and <code>claude config</code>/<code>/config</code> for <code>profile</code>; release notes for <code>profile</code>; the open issues listed in <a href="#landscape">landscape.md</a></td><td>Stop the launcher; migrate org profiles to the native format, keep the catalog</td></tr>
+<tr><td>K4</td><td>A managed-policy key or behavior blocks masking where the org needs it (for example <code>--settings</code> <code>enabledPlugins:false</code> ignored under managed settings, or <code>strictKnownMarketplaces</code>-style locks that remove the generated settings path) so that <code>doctor --policy</code> reports masking unavailable for most users</td><td><code>ccshelf doctor --policy</code> on a managed machine; the managed-settings page for new keys; a Stage 0 repeat (T1, T2) on each Claude Code minor release</td><td>Shrink to the paths policy still allows; stop if none is left</td></tr>
+<tr><td>K5</td><td>The mechanism breaks and cannot be restored without bypassing policy or guessing (init event shows <code>--settings</code> masks no longer applied, or <code>claude plugin list --json</code> changes shape) for more than 2 consecutive Claude Code minor releases</td><td>The real-<code>claude</code> nightly smoke test and the Stage 0 harness</td><td>Stop (never work around by weakening SR1 to SR5)</td></tr>
+<tr><td>K6</td><td>An existing tool covers the gaps found in <a href="#adopt">adopt-or-build.md</a>: default-deny masking on one shared store, managed-policy awareness, trusted shared profiles</td><td>Re-run the evaluation when a tool above 100 stars or an org-backed tool appears; <code>gh search repos</code> for the topic quarterly</td><td>Contribute or adopt (D-33 revisit)</td></tr>
+</tbody></table>
+<h4 id="roadmap-b-the-catalog-stops-being-worth-building">B. The catalog stops being worth building</h4>
+<table><thead><tr><th>#</th><th>Condition</th><th>How to check</th><th>Action</th></tr></thead><tbody>
+<tr><td>K7</td><td>Claude Code ships a native org-level catalog: faceted <code>/plugin</code> Discover over a private marketplace, with owner, status and when-to-use fields shown to users</td><td>Release notes for <code>/plugin</code> Discover, <code>marketplace.json</code> schema additions (<code>owner</code>, <code>status</code>, <code>relevance</code>, <code>tags</code>), plugin docs diff</td><td>Shrink to <code>lint</code> only, or stop if the native view needs no sidecar</td></tr>
+<tr><td>K8</td><td>Nobody reads <code>CATALOG.md</code>: no more than 5 views or searches per week after 3 months, measured where the org can see it (page views or <code>search</code> calls in an opted-in pilot; never telemetry in the tool, see AGENTS.md)</td><td>The org's own repository traffic or an agreed survey</td><td>Drop the static site and <code>recommend</code>; keep <code>lint</code></td></tr>
+</tbody></table>
+<h4 id="roadmap-c-adoption-and-maintenance-applies-to-the-whole-project">C. Adoption and maintenance (applies to the whole project)</h4>
+<table><thead><tr><th>#</th><th>Condition</th><th>How to check</th><th>Action</th></tr></thead><tbody>
+<tr><td>K9</td><td>Adoption: fewer than 5 people or teams use it weekly after 3 months of the first internal release, or fewer than 3 outside users or issues after 6 months of a public release</td><td>The org's own survey; GitHub stars, issues and releases downloads for the public repo</td><td>Move to maintenance only (security fixes), then archive at the next review</td></tr>
+<tr><td>K10</td><td>Maintenance burden: more than 25% of merged changes in two consecutive quarters are fixes for Claude Code changes (not our features), or the nightly smoke test is red for more than 14 days</td><td><code>git log</code> classification; the Actions history</td><td>Shrink scope (drop the least used command group) or stop</td></tr>
+<tr><td>K11</td><td>Security: an SR1 to SR5 weakness that cannot be fixed without removing a feature, or a security report unanswered for 30 days</td><td>The security policy and issue tracker</td><td>Remove the feature; if the core is affected, stop</td></tr>
+<tr><td>K12</td><td>The org's employer approval to open-source is refused (O-11)</td><td>The approval</td><td>Keep it private, do not publish; the kill rules above still apply</td></tr>
+</tbody></table>
+<h4 id="roadmap-what-to-watch-and-how">What to watch and how</h4>
+<p>Check at every Claude Code minor release, and at least monthly:</p>
+<ol>
+<li>Release notes (code.claude.com/docs changelog and the GitHub releases of anthropics/claude-code) for the keywords above: <code>profile</code>, <code>allowlist</code>, <code>default deny</code>, <code>enabledPlugins</code>, <code>skillOverrides</code>, <code>plugin enable</code>, <code>Discover</code>, <code>catalog</code>, <code>marketplace</code> owner or status fields, <code>managed</code>.</li>
+<li><code>claude --help</code> and <code>claude plugin --help</code>, diffed against the saved previous output (new flags such as <code>--plugins</code>, <code>--profile</code>, <code>--only-plugins</code>).</li>
+<li>The settings reference for new keys that affect plugin or skill loading, and the managed-settings reference for new keys that restrict <code>--settings</code>, <code>--plugin-dir</code> or <code>--mcp-config</code>.</li>
+<li>The <code>system/init</code> event of a Stage 0 run (counts of plugins, skills, agents, tools, MCP servers) after each upgrade; a count that changes for the same inputs means the mechanism moved.</li>
+<li><code>doctor --policy</code> on a managed machine (O-01).</li>
+<li>The tracker issues listed in <a href="#landscape">landscape.md</a> (the closed <code>not_planned</code> ones show demand without a plan; an open one with a milestone is the signal).</li>
+</ol>
+<h4 id="roadmap-review-cadence">Review cadence</h4>
+<ul>
+<li><strong>Every Claude Code minor release:</strong> items 1 to 4 above (15 minutes; record the result as one line in the decision log only when something changed).</li>
+<li><strong>Quarterly:</strong> K6 (tools), K8 to K11, and the adoption numbers; write one dated line in <a href="#decisions">DECISIONS.md</a> either way ("reviewed, no trigger" is a valid entry).</li>
+<li><strong>On the first trigger hit:</strong> open a decision row with the evidence and the action, discuss with the user before acting (stopping is the user's decision), and mark the superseded rows.</li>
+</ul>
 <h3 id="roadmap-non-goals-for-now">Non-goals (for now)</h3>
 <p>Accounts, the trust lockfile and git sources, <code>compile</code> and committed bundles, <code>recommend</code>, the static catalog site and taxonomy (all deferred to Phase 2); a registry server/DB, vector search, a full-screen TUI dashboard (interactive prompts and pickers are in scope, see R6), custom install path (bundles cover install), MCP gateway, config-dir-per-profile, a concierge search tool before there is usage data, anything that writes shared settings.</p>
 <h3 id="roadmap-checklist">Checklist</h3>
@@ -315,12 +357,12 @@ draw(false);
 <li class="task"><label><input type="checkbox" checked> Stage 0: launcher experiments on macOS (done 2026-10-06)</label></li>
 <li class="task"><label><input type="checkbox" checked> Adversarial review round absorbed and facts corrected (done 2026-10-06)</label></li>
 <li class="task"><label><input type="checkbox" checked> LICENSE added (MIT); docs reorganized and the report generated from the Markdown</label></li>
-<li class="task"><label><input type="checkbox"> Phase 0.1: routing eval on the real ~50 plugins, with the success criterion fixed first</label></li>
-<li class="task"><label><input type="checkbox"> Phase 0.2: adopt, build or contribute: evaluate fuzzyalej/claude-profile and edimuj/claude-rig</label></li>
+<li class="task"><label><input type="checkbox"> Phase 0.1: routing eval on the real ~50 plugins; protocol and success criterion fixed (2026-10-06, <a href="#routing">routing-eval-protocol.md</a>), runs pending the org's plugin set</label></li>
+<li class="task"><label><input type="checkbox" checked> Phase 0.2: adopt, build or contribute: evaluated fuzzyalej/claude-profile and edimuj/claude-rig; recommendation to build (D-33, <a href="#adopt">adopt-or-build.md</a>), pending user review</label></li>
 <li class="task"><label><input type="checkbox"> Phase 0.3: bundle and masking prototype (T7); needs a second config directory and a login</label></li>
 <li class="task"><label><input type="checkbox"> Phase 0.4: Stage 0 on Linux and Windows</label></li>
 <li class="task"><label><input type="checkbox"> Phase 0.5: measure MCP and connector removal through the settings keys</label></li>
-<li class="task"><label><input type="checkbox"> Phase 0.6: write kill and obsolescence criteria</label></li>
+<li class="task"><label><input type="checkbox" checked> Phase 0.6: write kill and obsolescence criteria (done 2026-10-06, section above)</label></li>
 <li class="task"><label><input type="checkbox"> Employer approval for open-sourcing (SECURITY.md and CONTRIBUTING.md are written)</label></li>
 <li class="task"><label><input type="checkbox" checked> MVP launcher: run, show, dry-run, ls, dir sources, extends, default-deny masking, closed schema, settings validation</label></li>
 <li class="task"><label><input type="checkbox" checked> MVP catalog: lint (owner, status, when_to_use) and a generated CATALOG.md</label></li>
@@ -854,7 +896,7 @@ mcp_registry = "mcp/registry.toml"</code></pre>
 
 <section id="platform">
 <h2>Platform: GitHub, GHE and cross-platform support</h2>
-<p>Requirements R1 (macOS, Linux, Windows) and R2 (GHE Cloud and Server, GitHub Actions), with the design assessment for each. Only macOS has been tested.</p>
+<p>Requirements R1 (macOS, Linux, Windows) and R2 (GHE Cloud and Server, GitHub Actions), with the design assessment for each. Only macOS has run the real <code>claude</code> (Stage 0). The ccshelf test suite, which uses a fake <code>claude</code>, passes on macOS and, in Docker (<code>golang:1.27</code>), on Linux arm64 and amd64 (amd64 emulated), as root and as a normal user <span class="V">V</span>. Windows code compiles and vets but has never run on Windows.</p>
 <h3 id="platform-stack-and-platform-decisions">Stack and platform decisions</h3>
 <p>Decided by the user (2026-10-06): <strong>Go</strong> for the implementation; <strong>GitHub / GitHub Enterprise (GHE) and GitHub Actions</strong> for hosting and CI.</p>
 <h4 id="platform-what-ghe-github-actions-imply-design-assessment-not-yet-tested-against-the-user-s-ghe">What GHE + GitHub Actions imply (design assessment; not yet tested against the user's GHE)</h4>
@@ -1401,11 +1443,212 @@ document.getElementById("nmsg").textContent=m}r.oninput=draw;draw()})();
 </tbody></table>
 </section>
 
+<section id="adopt">
+<h2>Adopt, build or contribute (Phase 0.2, O-04)</h2>
+<p>Evaluated 2026-10-06 against <code>fuzzyalej/claude-profile</code> and <code>edimuj/claude-rig</code>. Read-only: repository metadata through <code>gh</code>, and a shallow clone of each repository into a scratch directory, where I read the README, <code>docs/</code> and the launch code. I did not build or run either tool, and I did not run <code>claude</code>.</p>
+<p>Labels: <span class="V">V</span> read in the project's repository this session (or returned by <code>gh</code> this session); <span class="R">R</span> reported by a secondary source, not re-checked; <span class="U">U</span> inferred, not observed. A claim about what a tool does at run time is at best <span class="U">U</span>, because nothing was run.</p>
+<h3 id="adopt-1-the-two-candidates">1. The two candidates</h3>
+<table><thead><tr><th></th><th>fuzzyalej/claude-profile</th><th>edimuj/claude-rig</th></tr></thead><tbody>
+<tr><td>Language, license</td><td>Rust, MIT <span class="V">V</span></td><td>Go (standard library only, Go 1.25.7), MIT <span class="V">V</span></td></tr>
+<tr><td>Stars, forks</td><td>10 stars, 0 forks <span class="V">V</span></td><td>9 stars, 2 forks <span class="V">V</span></td></tr>
+<tr><td>Created, last push</td><td>2026-07-10, 2026-09-28 <span class="V">V</span></td><td>2026-02-10, 2026-06-08 <span class="V">V</span></td></tr>
+<tr><td>Releases</td><td>v0.6.0 on 2026-09-28; at least eight releases between 2026-07-15 and 2026-09-28 <span class="V">V</span></td><td>v0.31.0 on 2026-06-08; releases every one to three weeks from 2026-04-18 to 2026-06-08, none since <span class="V">V</span></td></tr>
+<tr><td>Open issues, PRs</td><td>0 issues, 0 PRs ever <span class="V">V</span></td><td>2 open issues (unknown flags silently ignored; <code>--help</code> read as a value), 10 in total, 0 PRs <span class="V">V</span></td></tr>
+<tr><td>People</td><td>one contributor (26 commits) <span class="V">V</span></td><td>one contributor (at least 30 commits; the API page I read was capped at 30) <span class="V">V</span></td></tr>
+<tr><td>CI</td><td>test matrix on Linux, macOS and Windows; <code>contents: read</code>; actions on major tags (<code>@v6</code>, <code>@v2</code>), not full SHAs <span class="V">V</span></td><td>no test workflow in the tree, only a tag-triggered release workflow with <code>contents: write</code> and actions on major tags (<code>@v4</code>, <code>@v5</code>, <code>@v6</code>) <span class="V">V</span></td></tr>
+<tr><td>Size</td><td>about 4,400 lines of Rust in <code>src/</code>, plus docs and 15 reference profiles <span class="V">V</span></td><td>about 8,000 lines of Go in <code>cmd/claude-rig/</code> (a 7,000 line <code>commands.go</code>) plus tests <span class="V">V</span></td></tr>
+</tbody></table>
+<p>Maintenance health: both are single-author projects with no external contributors or pull requests. claude-profile is active (a push eight days before this evaluation); claude-rig has been quiet for four months after a fast start. Neither has a security policy or a threat model in the tree <span class="V">V</span> (no <code>SECURITY.md</code> in either file list).</p>
+<h3 id="adopt-2-how-each-one-works">2. How each one works</h3>
+<h4 id="adopt-claude-profile">claude-profile</h4>
+<ul>
+<li>A profile is a JSON file with <code>marketplaces</code>, <code>plugins</code> (as <code>plugin@marketplace</code>), <code>pluginDirs</code>, <code>mcpServers</code>, <code>bare</code>, <code>extends</code> and <code>removePlugins</code>. The Rust struct uses <code>deny_unknown_fields</code>, so unknown keys are rejected <span class="V">V</span>. Inheritance is one level deep <span class="V">V</span>.</li>
+<li>Launch: each referenced plugin or skill is copied ("vendored") out of a commit-pinned marketplace clone into <code>~/.claude-profiles/store/&lt;profile&gt;/vendor/</code>, then it spawns <code>claude --strict-mcp-config --mcp-config &lt;json&gt; --plugin-dir &lt;each vendored dir&gt; [--bare]</code> and forwards the exit code <span class="V">V</span>.</li>
+<li>The code never passes <code>--settings</code> or <code>--setting-sources</code>, and never writes <code>enabledPlugins</code>; a unit test asserts that no <code>--settings</code> flag is emitted <span class="V">V</span>. The README says nothing else on the machine is "registered" <span class="V">V</span>. Whether plugins that are already installed and enabled in the user's <code>~/.claude/settings.json</code> still load alongside the <code>--plugin-dir</code> ones is therefore not something the tool's code prevents; I did not run it, so the effect is <span class="U">U</span>. Our Stage 0 result says <code>--plugin-dir</code> adds and does not subtract <span class="R">R</span> (this reading is consistent with the code, but it was not tested on this tool).</li>
+<li>It documents that global and project <code>CLAUDE.md</code> and auto-memory are not gated, and offers <code>bare</code> (API-key only, drops OAuth) as the only remedy <span class="V">V</span>.</li>
+<li>Pinning: a <code>&lt;profile&gt;.lock</code> records the marketplace commit SHA on first use; <code>update profiles --frozen</code> fails when a lock is stale <span class="V">V</span>. The lock pins marketplaces, not a hash of the resolved closure (the plugin contents are copied after resolution, with no content hash found in the docs I read) <span class="U">U</span>.</li>
+<li>Sharing: <code>install owner/repo</code> clones a "pack" of profiles from any repository; profile search order includes project-local <code>./profiles/</code> and <code>./.claude-profiles/</code> <span class="V">V</span>. There is no per-source trust state, no off-by-default switch for project profiles, and no rule that a project profile cannot shadow a personal one; the first match wins <span class="V">V</span>. That is the opposite of SR3.</li>
+<li>Extras: <code>find</code> (an offline cross-marketplace plugin index), combining several profiles in one launch, a <code>new</code> scaffold, a statusline snippet, shell completions for four shells <span class="V">V</span>.</li>
+<li>Platforms: macOS, Linux, Windows; Windows needs Git for Windows and <code>claude</code> on <code>PATH</code>; <code>.exe</code>, <code>.cmd</code>, <code>.bat</code> lookup is handled in <code>src/exe.rs</code> <span class="V">V</span>. Release tooling is <code>cargo-dist</code>-style installers and a Homebrew tap <span class="V">V</span>.</li>
+<li>GitHub hosts: marketplaces are <code>owner/repo</code> (GitHub.com shorthand) or a full <code>https://</code> or <code>git@</code> URL, so a GHE host is reachable by full URL <span class="V">V</span>; I found no GHE-specific documentation or test <span class="U">U</span>. No mention of managed settings or policy in the README, docs or source (grep for <code>managed</code>, <code>policy</code>, <code>enterprise</code>, <code>GHE</code> found only unrelated Windows lines) <span class="V">V</span>.</li>
+</ul>
+<h4 id="adopt-claude-rig">claude-rig</h4>
+<ul>
+<li>A "rig" is a separate config directory selected through <code>CLAUDE_CONFIG_DIR</code>, with per-rig <code>settings.json</code>, <code>CLAUDE.md</code>, <code>.claude.json</code>, plugins, skills, agents, hooks and MCP servers; everything else in <code>~/.claude/</code> is shared through symlinks, and "isolated" means the symlink is replaced by a local copy <span class="V">V</span>. Auth can be linked to the global login by symlink (<code>--link-auth</code>) <span class="V">V</span>.</li>
+<li>Plugins and MCP servers are synced from the global config into each rig (<code>sync</code>) <span class="V">V</span>. Rig-level blueprints can be exported and imported as <code>.tar.gz</code> (secrets redacted, paths templatized per its docs) <span class="V">V</span>.</li>
+<li>Launch: <code>syscall.Exec</code> on Unix, spawn-and-wait on Windows <span class="V">V</span>. That matches AGENTS.md.</li>
+<li>Windows requires Developer Mode because the design depends on symlinks; <code>init</code> fails fast otherwise <span class="V">V</span>. Session detection scans <code>/proc</code> and is not available on Windows <span class="V">V</span>.</li>
+<li>Pinning Claude Code versions per rig, project binding through a <code>.claude-rig</code> file, shell wrapper injection into the user's shell profile, and agents mode are features we do not plan <span class="V">V</span>.</li>
+<li>No profile schema with a closed set of keys: a rig's <code>settings.json</code> is the user's own settings file, so a rig can hold permissions, hooks and env by design <span class="V">V</span>. There is no trust model for shared rigs beyond <code>export</code> and <code>import</code> of archives <span class="V">V</span>.</li>
+<li>Nothing about managed policy, GHE or a catalog <span class="V">V</span> (searched the docs and source).</li>
+</ul>
+<h3 id="adopt-3-comparison-with-ccshelf-s-requirements">3. Comparison with ccshelf's requirements</h3>
+<p>Legend: yes / partial / no / unknown. Based on what I read; unrun, so "yes" means the design and code say so, not that I observed it.</p>
+<table><thead><tr><th>Requirement</th><th>claude-profile</th><th>claude-rig</th></tr></thead><tbody>
+<tr><td>R1 six targets (darwin, linux, windows; arm64, amd64)</td><td>partial: three OSes with CI; arm64 targets not checked <span class="U">U</span>; Windows needs Git for Windows</td><td>partial: releases for macOS, Linux and Windows; Windows needs Developer Mode (symlinks); no test CI</td></tr>
+<tr><td>R2 GitHub.com, GHE Cloud and Server, Actions</td><td>partial: full git URLs work, no GHE docs or tests; no Actions integration</td><td>no: not addressed</td></tr>
+<tr><td>R3 managed policy, never bypass</td><td>unknown: no mention; <code>--plugin-dir</code> and <code>--mcp-config</code> may be restricted by policy <span class="U">U</span>; no capability detection</td><td>no: its own config directory and settings file bypass the user layer by construction; behavior under managed policy untested <span class="U">U</span></td></tr>
+<tr><td>R4 open source, no org data</td><td>yes (MIT; ships fictional-looking public reference profiles)</td><td>yes (MIT)</td></tr>
+<tr><td>R5 profiles in an org's private repo, tool is public</td><td>partial: packs from any git repo work; nothing org-specific</td><td>no: blueprints are archives, not git-sourced shared profiles</td></tr>
+<tr><td>R6 flags alone, prompts optional</td><td>mostly: a confirm prompt before vendoring, with <code>--yes</code> to skip <span class="V">V</span></td><td>partial: init and shell wrapper are interactive <span class="U">U</span></td></tr>
+<tr><td>SR1 closed schema, no permissions, hooks, auth, endpoint</td><td>partial: closed keys (<code>deny_unknown_fields</code>) and no <code>--settings</code> use, so it cannot write permissions or hooks; but <code>mcpServers</code> is free-form JSON and plugin contents can carry hooks</td><td>no: a rig is a full settings file</td></tr>
+<tr><td>SR2 trust the resolved closure by commit SHA</td><td>partial: marketplace commit SHAs locked per profile; no closure hash, no trust prompt keyed to content</td><td>no</td></tr>
+<tr><td>SR3 project profiles off by default, no shadowing</td><td>no: project-local dirs are searched before personal and packs, first match wins</td><td>partial: <code>.claude-rig</code> names a rig but a rig is a local directory <span class="U">U</span></td></tr>
+<tr><td>SR4 protected plugins (org controls cannot be masked away)</td><td>no</td><td>no</td></tr>
+<tr><td>SR5 private cache files, re-hash before reuse</td><td>not found</td><td>not found; symlinks into <code>~/.claude/</code> are the design</td></tr>
+<tr><td>Default-deny masking over one shared plugin store</td><td>no (additive <code>--plugin-dir</code>; masking of installed plugins not done {V code})</td><td>no (a second config directory instead; plugin caches duplicated)</td></tr>
+<tr><td>Concurrency of two sessions</td><td>per-profile vendor dirs, so unshared mutable state <span class="V">V</span>; credentials untouched</td><td>separate <code>.claude.json</code> per rig <span class="V">V</span>; shared auth tokens reported to cause conflicts for Remote Control <span class="V">V</span></td></tr>
+<tr><td>Catalog (lint, generated CATALOG.md)</td><td>partial: <code>find</code> index, no lint or owner and status metadata</td><td>no</td></tr>
+<tr><td>Symlink-free, <code>$TMPDIR</code>-free</td><td>yes (copies) <span class="V">V</span></td><td>no (symlinks are central; Windows Developer Mode)</td></tr>
+</tbody></table>
+<h3 id="adopt-4-gaps-against-what-ccshelf-set-out-to-do">4. Gaps against what ccshelf set out to do</h3>
+<p>Neither tool does default-deny masking on one shared plugin store, so neither answers "load only these plugins" while sharing auth, history and plugin installs. The three decisions that make ccshelf different are all contradicted by one of them:</p>
+<ul>
+<li>D-02 (generated <code>--settings</code> mask, nothing shared written) versus claude-profile's vendored copies plus <code>--plugin-dir</code>, and claude-rig's separate config directories.</li>
+<li>"Profiles share auth, history and memory (no <code>CLAUDE_CONFIG_DIR</code> by default)" versus claude-rig's whole design.</li>
+<li>SR1 to SR5 (closed schema, trust closure, project off by default, protected plugins, private cache) have no counterpart in either project. They are the product for an organization that distributes profiles.</li>
+<li>R3 and R2 have no counterpart in either project, and the catalog part has none either.</li>
+</ul>
+<h3 id="adopt-5-recommendation">5. Recommendation</h3>
+<p><strong>Build; do not adopt; contribute nothing structural; take specific ideas.</strong> This is a recommendation for the user to review, recorded as D-33.</p>
+<p>Reasons:</p>
+<ol>
+<li>Adopting claude-rig would reverse D-02 and the shared-auth decision, and would bring symlinks, which AGENTS.md forbids as a design assumption (and which need Developer Mode on Windows).</li>
+<li>Adopting claude-profile is the closest fit, but it is a different mechanism (additive vendoring, no masking), in Rust where we chose Go, with no policy, trust, protected-plugin or catalog model. Adding those would change most of the code, which is a rewrite under someone else's repository, for a single-author project with ten stars. A contribution of that size is unlikely to be wanted or to land.</li>
+<li>Neither is a maintenance risk we would inherit by building: both are small, so the cost of a fourth tool is mostly our own scope, which is already bounded by the roadmap.</li>
+<li>The routing eval (Phase 0.1) still decides whether the launcher is worth shipping as a product at all; this evaluation only answers "does an existing tool already cover it". It does not, on what I read.</li>
+</ol>
+<p>What to take (ideas, not code; both are MIT, so code could be reused with attribution, but the languages differ):</p>
+<ul>
+<li>From claude-profile: the <code>find</code> offline cross-marketplace index (relevant to <code>search</code> and <code>recommend</code>), combining several profiles in one launch, <code>update --frozen</code> as a CI assertion for stale locks (compare our lockfile verification), a statusline snippet that shows the active profile, an explicit "what is not gated" section (CLAUDE.md and memory), and the fact that <code>bare</code> is unusable for subscription users.</li>
+<li>From claude-rig: <code>isolation</code> and <code>diff</code> style inspection output, <code>--json</code> on every read command, <code>doctor --fix</code>, the secret-redaction and path-templating rules of its blueprint export, and its lesson that two sessions with shared OAuth tokens can conflict (for Remote Control).</li>
+<li>Avoid: symlink-based sharing, <code>CLAUDE_CONFIG_DIR</code> by default, free-form settings in a shared artifact, first-match-wins profile search across project and personal sources, floating tags for CI actions.</li>
+</ul>
+<p>What would change the recommendation (revisit): claude-profile adds settings-based masking, a managed-policy mode and trust or closure pinning; either maintainer says they want those contributions; the routing eval shows no benefit (then the answer becomes "alias recipe", see the roadmap kill criteria); or a third tool appears that covers default-deny masking plus policy.</p>
+<h3 id="adopt-6-what-i-could-not-verify">6. What I could not verify</h3>
+<ul>
+<li>Run-time behavior of either tool (nothing was built or run). In particular, whether claude-profile's session still loads the user's installed plugins is <span class="U">U</span>.</li>
+<li>Whether either tool works under a managed policy; both are silent on it <span class="V">V</span> for the docs, <span class="U">U</span> for the behavior.</li>
+<li>GHE behavior of either tool.</li>
+<li>arm64 builds for Windows and Linux (release configs were not read in detail).</li>
+<li>Contributor responsiveness: there are no external issues or pull requests to judge by.</li>
+</ul>
+<h3 id="adopt-sources-read-2026-10-06">Sources (read 2026-10-06)</h3>
+<ul>
+<li>https://github.com/fuzzyalej/claude-profile (README, <code>docs/how-it-works.md</code>, <code>docs/profiles.md</code>, <code>docs/commands.md</code>, <code>src/launch.rs</code>, <code>src/profile.rs</code>, <code>.github/workflows/ci.yml</code>; <code>gh repo view</code>, <code>gh api</code> for releases, commits and issues)</li>
+<li>https://github.com/edimuj/claude-rig (README, <code>docs/isolation.md</code>, <code>docs/windows.md</code>, <code>cmd/claude-rig/*.go</code>, <code>.github/workflows/release.yml</code>; <code>gh</code> for releases and issues)</li>
+<li><a href="#landscape">landscape.md</a> section C for the earlier star and push-date table.</li>
+</ul>
+</section>
+
+<section id="routing">
+<h2>Routing eval protocol (Phase 0.1, O-05)</h2>
+<p>Status: <strong>protocol fixed 2026-10-06; runs pending the org's plugin set.</strong> The success criterion in section 5 is written before any run. Changing it after seeing data invalidates the eval; record any change as a new dated version of this file, with the reason, and rerun.</p>
+<p>Labels: <span class="V">V</span> verified (docs, <code>gh</code>, or ran it), <span class="R">R</span> reported, <span class="U">U</span> unverified. The stream-json event shape below is <span class="V">V</span> for the <code>system/init</code> event (see <a href="#stage0">stage0.md</a>) and <span class="U">U</span> for the <code>tool_use</code> and <code>usage</code> fields, until the pilot in step P0 confirms them.</p>
+<h3 id="routing-1-question-and-hypothesis">1. Question and hypothesis</h3>
+<p>Question: is the launcher worth building as a product?</p>
+<p>Hypothesis H1: with the same model, the same prompts and the same machine, a session whose active plugin set is limited to a role profile selects the intended skill more often on the first try, and activates a wrong skill less often, than a session with the full installed set. The reason to expect it: the skill listing is capped (about 1% of the context window) so descriptions of rarely used skills can be dropped, and many overlapping descriptions compete {V per landscape.md}. Token savings are not the hypothesis: Stage 0 measured about 9% when the whole user layer was dropped <span class="V">V</span>.</p>
+<p>Null H0: no measurable difference, or a regression on explicit prompts.</p>
+<p>If H1 is rejected, the launcher is documented as an alias recipe (<code>dry-run</code> prints the exact command) and is not shipped as a product, as the roadmap says.</p>
+<h3 id="routing-2-arms">2. Arms</h3>
+<table><thead><tr><th>Arm</th><th>What runs</th><th>Active set</th></tr></thead><tbody>
+<tr><td><code>control</code></td><td>plain <code>claude -p ...</code></td><td>everything installed and enabled on the eval machine</td></tr>
+<tr><td><code>profile</code></td><td>the same command through the launcher with one profile, or an equivalent generated <code>--settings</code> file (default-deny <code>enabledPlugins</code>, <code>skillOverrides</code>, MCP denies)</td><td>only the profile's closure</td></tr>
+</tbody></table>
+<p>Rules:</p>
+<ul>
+<li>One machine, one Claude Code version (record <code>claude --version</code>), one model (<code>--model</code> fixed, default a small fast model; repeat the whole eval once on the model people use daily if budget allows), same working directory for all runs: an empty scratch directory with no project settings or <code>CLAUDE.md</code>.</li>
+<li>The profile must contain every skill that a prompt expects. Prompts whose expected skill is outside the profile are <strong>out-of-scope</strong> and are analyzed separately (they measure the cost of a too-narrow profile, not the benefit).</li>
+<li>Run order is shuffled and the arms are interleaved (the harness does this with a fixed seed), so time drift and rate limits hit both arms alike.</li>
+<li>The harness only reads. It never installs, enables or disables a plugin, and never edits <code>~/.claude</code>. Because a run uses the person's real config as the control, a person or the org's CI runs it, not an agent session.</li>
+</ul>
+<h3 id="routing-3-dataset">3. Dataset</h3>
+<h4 id="routing-tiers">Tiers</h4>
+<table><thead><tr><th>Tier</th><th>Prompt type</th><th>Expected outcome</th><th>Minimum prompts</th></tr></thead><tbody>
+<tr><td>1</td><td>Explicit: the task clearly matches one skill and a person would name it</td><td>that skill fires first</td><td>30</td></tr>
+<tr><td>2</td><td>Ambiguous or overlapping: two or more installed skills could plausibly apply; the intended one is the best fit</td><td>an acceptable skill fires first (an explicit list, set before the run)</td><td>40</td></tr>
+<tr><td>3</td><td>No skill needed: ordinary coding or Q&amp;A</td><td>no skill fires</td><td>30</td></tr>
+</tbody></table>
+<p>Tier 2 carries the hypothesis, so it gets the most prompts. At 40 prompts and 5 repetitions the paired confidence interval on a +10 point effect is around plus or minus 9 points if per-prompt differences have a standard deviation near 0.3 (my estimate, <span class="U">U</span>); a smaller set cannot support the criterion.</p>
+<h4 id="routing-how-to-build-it-without-leaking-org-data">How to build it without leaking org data</h4>
+<ul>
+<li>The prompt file lives in the <strong>org data repo</strong>, never in this public repo. This repo holds only the format, the harness and a fictional example (<code>routing-eval/prompts.example.jsonl</code>).</li>
+<li>Derive prompts from real work: anonymized, paraphrased past session openings and ticket titles, written by people who did <strong>not</strong> read the plugin descriptions (to avoid copying their wording, which would inflate routing). Do not have a model generate prompts from the descriptions.</li>
+<li>For tier 2, list overlapping plugin pairs from the catalog (for example two review skills, or two deploy skills) and write a prompt for each side of the pair; two reviewers independently name the best skill, and a prompt is kept only if they agree. Disagreement means the case is too ambiguous to score.</li>
+<li>Remove names of customers, hosts, people, repositories and internal URLs. A prompt must make sense to a stranger.</li>
+<li><strong>Freeze before running:</strong> commit the prompt file and the expected-skill lists in the org data repo, record its SHA-256 (the harness prints it and stores it in every run record) and the commit hash in the results. Prompts are not edited after the first run.</li>
+<li>Split off about a quarter of tier 2 as a held-out set that is not used while tuning the profile; the verdict is read on the held-out set only if any profile tuning happened after seeing results.</li>
+</ul>
+<h4 id="routing-prompt-file-format">Prompt file format</h4>
+<p>JSON lines, one object per prompt: <code>id</code>, <code>tier</code> (1, 2 or 3), <code>prompt</code>, <code>expect</code> (<code>{"skills": [names]}</code> or <code>{"none": true}</code>). A name is a skill name or <code>plugin:&lt;plugin&gt;</code> to accept any skill of that plugin. The harness rejects unknown keys and duplicate ids. See <code>routing-eval/prompts.example.jsonl</code>.</p>
+<h3 id="routing-4-method-and-metrics">4. Method and metrics</h3>
+<h4 id="routing-run-command-one-run">Run command (one run)</h4>
+<pre><code>claude -p "&lt;prompt on stdin&gt;" --output-format stream-json --verbose --max-turns 1 --model &lt;model&gt;</code></pre>
+<p>The harness runs it in an empty scratch directory with the prompt piped to stdin (never on argv). <code>--max-turns 1</code> ends the run after the first model turn, so the first <code>tool_use</code> block, if any, is the choice under test and no tool actually runs to completion. In <code>-p</code> mode a skill call may be denied by the permission mode; the <code>tool_use</code> event is emitted before that, so the choice is still observed <span class="U">U</span>. The <code>profile</code> arm is the same command with the launcher or <code>--settings</code>; for example <code>ccshelf run &lt;profile&gt; -- -p ... --output-format stream-json --verbose --max-turns 1</code> (mockup: confirm the launcher's argument forwarding in the pilot).</p>
+<h4 id="routing-what-is-read-from-the-stream">What is read from the stream</h4>
+<ul>
+<li><code>system/init</code> event <span class="V">V</span>: counts of <code>plugins</code>, <code>skills</code>, <code>slash_commands</code>, <code>agents</code>, <code>tools</code>, <code>mcp_servers</code>. Recorded per run, to prove the arms differ as intended (a profile arm whose init counts equal the control's invalidates the pair).</li>
+<li>The first <code>assistant</code> event's <code>message.content</code> blocks of type <code>tool_use</code> <span class="U">U</span>: the name <code>Skill</code> and <code>input.skill</code> give the chosen skill; any other first tool name is recorded too. Skill names may carry a <code>plugin:</code> prefix, which the scorer handles.</li>
+<li>Context size: the first <code>assistant</code> event's <code>message.usage</code> <span class="U">U</span>, summed input, cache-creation and cache-read tokens.</li>
+<li>The final <code>result</code> event {V as in Stage 0 tests}: error flag, cost, turns. Errored or timed-out runs are excluded and counted in the report.</li>
+</ul>
+<h4 id="routing-step-p0-pilot-not-part-of-the-data">Step P0, pilot (not part of the data)</h4>
+<p>Before the frozen run, do 3 prompts in each arm by hand with <code>--output-format stream-json --verbose</code>, and confirm: the init counts differ between arms; a <code>tool_use</code> with name <code>Skill</code> appears for a prompt that should trigger one; <code>usage</code> is present. If the field names differ, fix <code>parse_stream</code> in the harness, record the change here and discard the pilot runs. This is the only allowed change after the freeze, and it concerns parsing only.</p>
+<h4 id="routing-metrics-per-run-then-per-prompt-as-the-mean-over-repetitions">Metrics (per run, then per prompt as the mean over repetitions)</h4>
+<table><thead><tr><th>Metric</th><th>Definition</th></tr></thead><tbody>
+<tr><td>Correct-first-try</td><td>tier 1 and 2: the first skill used matches <code>expect.skills</code>; tier 3: no skill used</td></tr>
+<tr><td>Wrong activation</td><td>a skill was used first and it is not acceptable (tier 3: any skill)</td></tr>
+<tr><td>Miss</td><td>tier 1 and 2: no skill used at all</td></tr>
+<tr><td>Context tokens</td><td>first-turn input tokens (secondary, descriptive only)</td></tr>
+</tbody></table>
+<p>Only the first skill choice counts. Later turns are not run.</p>
+<h3 id="routing-5-success-criterion-fixed">5. Success criterion (fixed)</h3>
+<p>The launcher is worth building as a product only if all of these hold on the in-scope prompts, using the paired difference <code>profile minus control</code> of per-prompt means and a 95% percentile bootstrap confidence interval over prompts (10,000 resamples, fixed seed):</p>
+<ol>
+<li><strong>Benefit</strong> (either one):
+<ul>
+<li>tier 2 correct-first-try rises by at least <strong>10 percentage points</strong> and the interval's lower bound is above 0; or</li>
+<li>wrong activation falls by at least <strong>5 percentage points</strong> on tier 2 or tier 3 and the interval's upper bound is below 0.</li>
+</ul></li>
+<li><strong>No harm:</strong> tier 1 correct-first-try does not drop by more than <strong>5 percentage points</strong> (interval lower bound at least -0.05).</li>
+<li><strong>Sanity:</strong> init counts differ between the arms in the intended direction in at least 95% of runs, and at least 95% of runs completed without error.</li>
+</ol>
+<p>If 1 holds but 2 or 3 fails, the result is "inconclusive": fix the cause (a too-narrow profile, a harness fault) and rerun on a fresh prompt set; do not reuse the data. If 1 fails, document the alias recipe and do not build the product. Context-token reduction and latency are reported but never decide the outcome.</p>
+<p>Machine check: <code>run_eval.py analyze</code> prints these three tests and the verdict. Thresholds are flags with these defaults; do not change them after the freeze.</p>
+<h3 id="routing-6-run-counts-statistics-and-stop-rules">6. Run counts, statistics and stop rules</h3>
+<ul>
+<li><strong>Repetitions:</strong> 5 per prompt per arm (the model is not deterministic). With 100 prompts, 2 arms and 5 repetitions that is 1,000 runs; the harness refuses more than <code>--max-runs</code> (default 2000).</li>
+<li><strong>Unit of analysis:</strong> the prompt, not the run (runs of one prompt are not independent). Differences are paired by prompt.</li>
+<li><strong>Tiers are reported separately</strong>, plus a pooled figure for context; the criterion uses tiers separately.</li>
+<li><strong>Out-of-scope prompts</strong> are reported as a separate table of the cost of narrowing.</li>
+<li><strong>Multiple comparisons:</strong> the criterion names its two benefit tests in advance, so no correction is applied, but any other metric or subgroup is exploratory and labeled so.</li>
+<li><strong>Futility stop:</strong> after 15 tier 2 prompts and 3 repetitions in both arms, if the tier 2 interval's upper bound for correct-first-try is below +5 points and for wrong activation the lower bound is above -2 points, stop and record "no benefit".</li>
+<li><strong>Harm stop:</strong> if tier 1 correct-first-try drops by more than 10 points with the interval's upper bound below 0 at any interim look, stop and investigate the profile.</li>
+<li><strong>Budget stop:</strong> the run cap above, plus a spend limit set by the org before the run. A rate-limit or outage stops the run; resume from <code>runs.jsonl</code> is not automatic (rerun the missing cells, keeping the same seed and freeze).</li>
+<li><strong>Looks:</strong> at most the two named interim looks and the final analysis; no peeking beyond that.</li>
+</ul>
+<h3 id="routing-7-reporting">7. Reporting</h3>
+<p>Write the result in the org data repo (it names real plugins), and put only the aggregate, anonymized numbers in <code>docs/research/</code> here: counts per tier, effect sizes and intervals, <code>claude --version</code>, model, dates, harness commit, prompt-file hash. Update O-05 and the Phase 0.1 checkbox only when the final analysis is done.</p>
+<h3 id="routing-8-threats-to-validity">8. Threats to validity</h3>
+<ul>
+<li>Small number of prompts from one org: the result generalizes to that org's plugin set only.</li>
+<li>The control is one particular machine's installed set; an org with fewer installed plugins sees a smaller effect.</li>
+<li>The model changes over time; record the version and rerun at each Claude Code minor release if the decision is close.</li>
+<li>First-turn selection is not task success: a wrong first skill may still lead to a good answer. The metric measures routing, which is the claim.</li>
+<li>A profile tuned on the same prompts overfits; use the held-out split.</li>
+</ul>
+<h3 id="routing-files">Files</h3>
+<ul>
+<li><code>routing-eval/run_eval.py</code>: harness template (Python 3, standard library only; <code>run</code> prints a plan unless <code>--execute</code> is given; <code>analyze</code> applies section 5). Parsing was checked only against a synthetic file; it has not been run against a real Claude Code stream.</li>
+<li><code>routing-eval/prompts.example.jsonl</code>: fictional format example.</li>
+</ul>
+</section>
+
 
 </main>
 </div>
 <script>
-const TABS=[{"id": "overview", "group": "Start", "label": "Overview"}, {"id": "decisions", "group": "Start", "label": "Decisions"}, {"id": "roadmap", "group": "Start", "label": "Roadmap"}, {"id": "glossary", "group": "Start", "label": "Glossary"}, {"id": "architecture", "group": "Design", "label": "Architecture"}, {"id": "launcher", "group": "Design", "label": "Launcher"}, {"id": "profiles", "group": "Design", "label": "Profiles"}, {"id": "cli", "group": "Design", "label": "CLI"}, {"id": "catalog", "group": "Design", "label": "Catalog and org repo"}, {"id": "security", "group": "Design", "label": "Security"}, {"id": "platform", "group": "Design", "label": "Platform"}, {"id": "project", "group": "Design", "label": "Project"}, {"id": "workflows", "group": "Design", "label": "Workflows"}, {"id": "context", "group": "Research", "label": "Context"}, {"id": "landscape", "group": "Research", "label": "Landscape"}, {"id": "options", "group": "Research", "label": "Options and reviews"}, {"id": "stage0", "group": "Research", "label": "Stage 0"}];
+const TABS=[{"id": "overview", "group": "Start", "label": "Overview"}, {"id": "decisions", "group": "Start", "label": "Decisions"}, {"id": "roadmap", "group": "Start", "label": "Roadmap"}, {"id": "glossary", "group": "Start", "label": "Glossary"}, {"id": "architecture", "group": "Design", "label": "Architecture"}, {"id": "launcher", "group": "Design", "label": "Launcher"}, {"id": "profiles", "group": "Design", "label": "Profiles"}, {"id": "cli", "group": "Design", "label": "CLI"}, {"id": "catalog", "group": "Design", "label": "Catalog and org repo"}, {"id": "security", "group": "Design", "label": "Security"}, {"id": "platform", "group": "Design", "label": "Platform"}, {"id": "project", "group": "Design", "label": "Project"}, {"id": "workflows", "group": "Design", "label": "Workflows"}, {"id": "context", "group": "Research", "label": "Context"}, {"id": "landscape", "group": "Research", "label": "Landscape"}, {"id": "options", "group": "Research", "label": "Options and reviews"}, {"id": "stage0", "group": "Research", "label": "Stage 0"}, {"id": "adopt", "group": "Research", "label": "Adopt or build"}, {"id": "routing", "group": "Research", "label": "Routing eval protocol"}];
 const tb=$("#tabs"),root=document.documentElement;
 let lastGroup="";
 TABS.forEach(t=>{if(t.group!==lastGroup){lastGroup=t.group;const g=document.createElement("div");g.className="grp";g.textContent=t.group;g.setAttribute("role","presentation");tb.appendChild(g)}

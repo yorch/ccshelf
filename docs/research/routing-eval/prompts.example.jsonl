@@ -1,0 +1,4 @@
+# Fictional format example only. The real prompt file lives in the org data repo, never here.
+{"id": "t1-001", "tier": 1, "prompt": "Combine these three PDF reports into one file.", "expect": {"skills": ["pdf"]}}
+{"id": "t2-001", "tier": 2, "prompt": "Our nightly job failed in staging, work out why and tell me what to roll back.", "expect": {"skills": ["plugin:example-oncall", "triage"]}}
+{"id": "t3-001", "tier": 3, "prompt": "What is the difference between a mutex and a semaphore?", "expect": {"none": true}}
