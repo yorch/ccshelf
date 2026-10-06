@@ -189,7 +189,8 @@ ul,ol{padding-left:22px}
 <table><thead><tr><th>Mechanism</th><th>What it does</th><th>Caveat</th></tr></thead><tbody>
 <tr><td><code>--settings</code></td><td>Per-session settings; carries <code>enabledPlugins</code>, <code>skillOverrides</code>, hooks, env. Merges per key.</td><td>Masking a user-level true with false: confirmed in Stage 0 on macOS (reported by a subagent).</td></tr>
 <tr><td><code>--setting-sources</code></td><td>Choose layers: user, project, local.</td><td>Dropping user also drops base prefs; launcher must re-add.</td></tr>
-<tr><td><code>--mcp-config --strict-mcp-config</code></td><td>Per-session MCP set only.</td><td>Blocked by <code>disableSideloadFlags</code> (non-SDK).</td></tr>
+<tr><td><code>--mcp-config</code> (optionally with <code>--strict-mcp-config</code>)</td><td>Adds MCP servers for the session; <code>--strict-mcp-config</code> alone yields zero servers.</td><td>Blocked by <code>disableSideloadFlags</code> (non-SDK <code>--mcp-config</code>).</td></tr>
+<tr><td><code>disableClaudeAiConnectors</code>, <code>deniedMcpServers</code> (settings keys)</td><td>Hide claude.ai connectors and specific MCP servers from a <code>--settings</code> file; valid in any settings file, so no sideload flags needed.</td><td><code>deniedMcpServers</code> needs full names (for example <code>plugin:context7:context7</code>); short names do not match. Docs verified; tests reported.</td></tr>
 <tr><td><code>--plugin-dir</code>, <code>CLAUDE_CODE_PLUGIN_DIRS</code></td><td>Session-only plugins.</td><td>Blocked by <code>disableSideloadFlags</code>.</td></tr>
 <tr><td><code>skillOverrides</code></td><td>Per-skill on / name-only / user-invocable-only / off.</td><td>Does not apply to plugin skills.</td></tr>
 <tr><td><code>--bare</code></td><td>Skips hooks, skills, plugins, MCP, memory and CLAUDE.md.</td><td>No OAuth/keychain: API key only, so unusable for subscription users.</td></tr>
@@ -285,7 +286,7 @@ catalog/   metadata lint + static site, run in CI (depends on core)</pre>
 <p class="small">Bridge: profile = bundle plugin, so catalog-published bundles become selectable profiles.</p></div>
 <h3>Principles</h3>
 <ul>
-<li>Never write shared state; write only content-addressed files in the launcher's own cache dir and start <code>claude</code> (spawn and wait, so it works on Windows).</li>
+<li>Never write shared state; write only content-addressed files in the launcher's own cache dir and start <code>claude</code> (<code>exec</code> on Unix; spawn and wait only on Windows).</li>
 <li>Respect org policy; report "blocked by policy".</li>
 <li>Prefer <code>--settings</code> masking + <code>skillOverrides</code> over sideload flags (<code>--plugin-dir</code>, <code>--agents</code>, <code>--mcp-config</code>), which policy can disable; use them only when allowed.</li>
 <li>Everything cheap to delete; launcher thin enough to drop if native profiles ship (#91770).</li>
@@ -306,11 +307,19 @@ catalog/   metadata lint + static site, run in CI (depends on core)</pre>
 <li><b>Resolve</b> the profile: sources, <code>extends</code>, one resolved profile.</li>
 <li><b>Look at the machine</b> (read-only): <code>claude --version</code>, <code>claude plugin list --json</code> (<code>--available</code> when the catalog needs uninstalled plugins), policy signals; report plugins not installed.</li>
 <li><b>Compile</b> content-addressed files in the launcher's cache dir: a settings file (<code>enabledPlugins</code> false for everything not in the profile, <code>skillOverrides</code>, env/model) and, if <code>strict</code>, an MCP config.</li>
-<li><b>Build the command line:</b> <code>claude --settings &lt;file&gt; [--strict-mcp-config --mcp-config &lt;file&gt;] [--model ...] &lt;your passthrough args&gt;</code>; <code>--setting-sources project,local</code> when <code>inherit_user_settings = false</code>.</li>
-<li><b>Spawn and step aside:</b> inherited TTY, launcher ignores Ctrl+C, forwards termination, returns Claude's exit code. It never proxies the conversation.</li>
+<li><b>Build the command line:</b> <code>claude --settings &lt;file&gt; [--mcp-config &lt;file&gt;] [--append-system-prompt-file &lt;path&gt;] [--model ...] &lt;your passthrough args&gt;</code>. Plugins, skills, connectors and other MCP servers are hidden inside the settings file, so the core path uses no sideload flags; the JSON is validated before every launch because Claude Code ignores an invalid settings file silently (exit 0, no message); <code>--setting-sources project,local</code> when <code>inherit_user_settings = false</code>.</li>
+<li><b>Start <code>claude</code> and step aside:</b> on Unix, <code>exec</code> (job control and exit codes behave exactly as for plain <code>claude</code>); on Windows, spawn a child with inherited stdio, ignore Ctrl+C in the launcher, forward termination and return the exit code. It never proxies the conversation.</li>
 <li><b>Write nothing shared</b> (<code>~/.claude</code>, <code>~/.claude.json</code>, plugin cache).</li>
 </ol>
-<p class="small">Also: <code>--effort</code> is passed when the profile sets it; the system-prompt addition is passed as text via <code>--append-system-prompt</code> (a file-based flag was not verified); if policy blocks a flag, behavior follows <code>[policy] on_blocked</code> (<code>warn</code> drops that part, <code>fail</code> refuses). Two terminals produce two command lines pointing at two immutable files (tested on macOS with three parallel sessions). What breaks if Claude Code changes: the design depends on <code>--settings</code> honoring <code>enabledPlugins</code> and <code>skillOverrides</code>, on <code>--strict-mcp-config</code> and on <code>claude plugin list --json</code>; gate on <code>claude --version</code> and run the real-claude init-event test in CI against new releases.</p>
+<p class="small">Also: <code>--effort</code> is passed when the profile sets it; the system-prompt addition is passed as text via <code>--append-system-prompt</code> (<code>--append-system-prompt-file</code> also exists and is preferred); if policy blocks a flag, behavior follows <code>[policy] on_blocked</code> (<code>warn</code> drops that part, <code>fail</code> refuses). Two terminals produce two command lines pointing at two immutable files (tested on macOS with three parallel sessions). What breaks if Claude Code changes: the design depends on <code>--settings</code> honoring <code>enabledPlugins</code> and <code>skillOverrides</code>, on <code>disableClaudeAiConnectors</code> and <code>deniedMcpServers</code>, and on <code>claude plugin list --json</code>; gate on <code>claude --version</code> and run the real-claude init-event test in CI against new releases.</p>
+<p><b>Hazards a profile does not remove</b> (from the review round; reported, not all tested):</p>
+<ul>
+<li>A profile session can change global state: <code>/plugin</code> enable and disable, and <code>claude plugin enable</code> (user scope by default), write the user's <code>enabledPlugins</code>; enabling a masked plugin inside the session does nothing there but turns it on everywhere else. <code>/skills</code> writes <code>.claude/settings.local.json</code>.</li>
+<li>Default-deny is not airtight mid-session: plugins installed or synced after launch load on <code>/reload-plugins</code> and are not in the mask.</li>
+<li><code>--resume</code> and <code>--continue</code> across profiles reuse the recorded system prompt and the old transcript lists the other profile's skills and agents; warn when the profile differs.</li>
+<li>Default-deny also masks plugins a repo enables in its own settings and <code>@skills-dir</code> plugins; build the installed list in the session's working directory and offer <code>project_plugins = keep|mask</code>.</li>
+<li>IDE extensions, the desktop app and probably agent-team teammates don't use the launcher and see everything (a VS Code <code>claudeCode.claudeProcessWrapper</code> setting might run it as a wrapper; unverified).</li>
+</ul>
 <h3>What profiles share, and combining with accounts</h3>
 <p>No <code>CLAUDE_CONFIG_DIR</code> is set, so all profiles share auth (tested), projects and trust, session history (mixed in <code>/resume</code>), auto memory and CLAUDE.md (decided: fine), user settings by default, the plugin cache, and claude.ai connector auth. A profile is a loading filter, not a security or identity boundary. A repo's own <code>.claude/</code> skills, agents and settings still apply, and so does its <code>.mcp.json</code> unless the profile uses <code>strict</code>.</p>
 <div class="callout"><b>Profiles and accounts are two axes.</b> A profile chooses what is active; an account (a separate <code>CLAUDE_CONFIG_DIR</code>) chooses the identity and data dir. Ways to combine:
@@ -392,9 +401,10 @@ name_only = ["docs-writer"]   # Name visible, description dropped (smaller listi
 [mcp]
 servers = ["figma"]           # Names resolved from an MCP registry file; become the per-session
                               # --mcp-config.
-claudeai_connectors = "none"  # none | keep. Connectors ignore enabledPlugins; "none" needs
-                              # --strict-mcp-config, which org policy can block.
-strict = true                 # Pass --strict-mcp-config so only the servers above load.
+claudeai_connectors = "none"  # none | keep. "none" writes disableClaudeAiConnectors: true into the generated
+                              # settings (valid under sideload policy; connectors ignore enabledPlugins).
+strict = true                 # Only the servers above load: every other known MCP server goes into
+                              # deniedMcpServers (full names), or --strict-mcp-config where allowed.
 
 # ---- Session defaults ----
 [session]
@@ -532,13 +542,14 @@ mcp_registry = "mcp/registry.toml"</pre>
 <p>The org enforces managed settings; the tool must also work with none or partial policy, and will be open source. The launcher is <b>capability-driven</b>: it probes each capability and degrades per feature.</p>
 <table><thead><tr><th>Capability</th><th>Needed for</th><th>If blocked</th></tr></thead><tbody>
 <tr><td><code>--settings</code> masking</td><td>plugin/skill filtering</td><td>Core. If this fails, refuse and explain.</td></tr>
-<tr><td><code>--strict-mcp-config</code> + <code>--mcp-config</code></td><td>hiding MCP servers and connectors</td><td>Skip MCP control; warn.</td></tr>
+<tr><td><code>disableClaudeAiConnectors</code> and <code>deniedMcpServers</code> in the generated settings</td><td>hiding connectors and MCP servers</td><td>Not sideload flags, so they work under <code>disableSideloadFlags</code>; <code>deniedMcpServers</code> needs full server names. If policy rejects a key, warn that those servers stay active.</td></tr>
+<tr><td><code>--mcp-config</code> (optionally with <code>--strict-mcp-config</code>)</td><td>adding servers the profile defines</td><td>Skip adding them; warn.</td></tr>
 <tr><td><code>--plugin-dir</code></td><td>session-only plugins (none generated by default)</td><td>Skip; suggest marketplace packaging.</td></tr>
 <tr><td><code>--agents</code></td><td>profile subagents</td><td>Skip.</td></tr>
 <tr><td><code>--setting-sources</code></td><td>dropping the user layer</td><td>Fall back to per-key masking.</td></tr>
 <tr><td>Force-enabled plugins</td><td>masking</td><td>Can't be masked; listed as "always on by policy".</td></tr>
 </tbody></table>
-<p class="small">Detection: managed-settings files per OS (best effort) plus detection by failure (exit 1 on a blocked flag); <code>doctor --policy</code> prints available / blocked / unknown. Never bypass policy in any mode. Test fixtures: no policy, permissive, sideload blocked, force-enabled, both. Open source: no org-specific names, URLs or defaults in code; project and command name decided (<code>ccshelf</code>), license MIT, contribution docs still to write. Each profile feature maps to a required capability; <code>[policy] on_blocked</code> (<code>warn</code> or <code>fail</code>) decides what happens.</p>
+<p class="small">Detection: managed-settings files per OS (best effort) plus the "required by your org" marker that <code>claude plugin list --json</code> reports for force-enabled plugins (detecting a blocked flag by its exit code is not feasible: stdio is inherited, exit 1 is ambiguous and a probe costs roughly 22 to 28k tokens; cache any probe per Claude Code version); <code>doctor --policy</code> prints available / blocked / unknown. Never bypass policy in any mode. Test fixtures: no policy, permissive, sideload blocked, force-enabled, both. Open source: no org-specific names, URLs or defaults in code; project and command name decided (<code>ccshelf</code>), license MIT, contribution docs still to write. Each profile feature maps to a required capability; <code>[policy] on_blocked</code> (<code>warn</code> or <code>fail</code>) decides what happens.</p>
 <h3>Stack decisions</h3>
 <p><b>Decided:</b> Go; GitHub / GitHub Enterprise and GitHub Actions. Implications (assessment, untested against your GHE):</p>
 <table><thead><tr><th>Area</th><th>Implication</th></tr></thead><tbody>
@@ -575,8 +586,8 @@ mcp_registry = "mcp/registry.toml"</pre>
 <li>Symlinks on Windows need Developer Mode or admin; WinGet upgrades can fail while <code>claude.exe</code> runs.</li>
 </ul>
 <table><thead><tr><th>Area</th><th>Change from the Unix-only draft</th></tr></thead><tbody>
-<tr><td>Starting claude</td><td>No <code>exec</code> on Windows: spawn a child, ignore Ctrl+C in the launcher, forward termination, return the exit code.</td></tr>
-<tr><td>Generated files</td><td>Content-addressed files in the launcher's cache dir (name = hash of the resolved config): concurrent runs never collide, no cleanup problem, no overwriting open files on Windows. Atomic write, GC at launch.</td></tr>
+<tr><td>Starting claude</td><td><b>Unix: <code>exec</code></b> (job control, Ctrl+Z, <code>fg</code>, resize, SIGHUP and exit codes behave as for plain <code>claude</code>; a spawn-and-wait parent would hang the terminal when Claude Code suspends itself). <b>Windows: no <code>exec</code></b>, so spawn a child, ignore Ctrl+C in the launcher, forward termination, return the exit code; map signal deaths to 128+n.</td></tr>
+<tr><td>Generated files</td><td>Content-addressed files in the launcher's cache dir (name = hash of the resolved config): concurrent runs never collide and Windows never overwrites an open file (skip the rename if the file exists). Garbage-collect by age only (weeks) and skip paths referenced by running sessions (<code>claude agents --json --all</code>), because <code>--settings</code> carries through to backgrounded, resumed and respawned sessions. Validate the JSON before launch.</td></tr>
 <tr><td>Finding claude</td><td>PATH lookup (<code>.exe</code>/<code>.cmd</code>), fallback <code>~/.local/bin</code>, override option.</td></tr>
 <tr><td>Paths</td><td>Accept <code>~</code> and forward slashes, normalize backslashes, write forward slashes into generated JSON. Launcher dirs: XDG or <code>~/.config</code> on Unix, <code>%APPDATA%</code> / <code>%LOCALAPPDATA%</code> on Windows.</td></tr>
 <tr><td>Shortcuts</td><td><code>shell-init</code> for bash, zsh, fish, pwsh; <code>.cmd</code> shims for cmd. Never depend on symlinks (Windows needs Developer Mode).</td></tr>
@@ -609,7 +620,7 @@ mcp_registry = "mcp/registry.toml"</pre>
 <tr><td>T2 <code>--setting-sources project,local</code></td><td>User layer dropped: plugins 3, skills 19, plugin MCP gone, synced skills gone. Auth still works. 9 claude.ai connectors remain.</td><td class="R">Confirmed</td></tr>
 <tr><td>T3 <code>skillOverrides</code></td><td>"off" removes standalone user skills; does NOT remove plugin skills (any key). Token effect within noise.</td><td class="R">Partly</td></tr>
 <tr><td>T4 Concurrency</td><td>3 parallel sessions with different masks, ~4,771 JSON parses of ~/.claude.json, 0 failures, no cross-contamination. The CLI itself rewrites that file.</td><td class="R">No issue seen (not a stress test)</td></tr>
-<tr><td>T5 <code>--strict-mcp-config</code> + empty config</td><td>All MCP servers gone, including claude.ai connectors; tools 157→29. Plugin skills still load.</td><td class="R">Confirmed</td></tr>
+<tr><td>T5 <code>--strict-mcp-config</code> + empty config</td><td>All MCP servers gone, including claude.ai connectors; tools 157→29. Plugin skills still load. (The review round found the same effect through settings keys, without sideload flags.)</td><td class="R">Confirmed</td></tr>
 <tr><td>T6 Managed settings</td><td>None on this machine (MDM/server-side not checked).</td><td class="R">No policy here</td></tr>
 <tr><td>T7 Bundles</td><td>Skipped (requires installing).</td><td class="U">Untested</td></tr>
 </tbody></table>
@@ -622,11 +633,22 @@ mcp_registry = "mcp/registry.toml"</pre>
 <ol>
 <li>Masking via <code>--settings</code> works and is per key, so subtracting plugins doesn't need <code>--setting-sources</code>. The launcher needs the installed list (<code>claude plugin list --json</code>) to build a default-deny map and must regenerate it each run.</li>
 <li><code>--setting-sources project,local</code> is a blunt but real default-deny for the user layer and keeps auth, but it also drops user model, hooks, statusline and synced-scope plugins, so the launcher must re-add what matters through <code>--settings</code>.</li>
-<li>claude.ai connectors ignore <code>enabledPlugins</code>; only <code>--strict-mcp-config</code> removes them, and that depends on <code>--mcp-config</code>, which <code>disableSideloadFlags</code> can block.</li>
+<li>claude.ai connectors ignore <code>enabledPlugins</code>. Corrected by the review round: <code>disableClaudeAiConnectors</code> and <code>deniedMcpServers</code> are valid in any settings file, so connectors and MCP servers can be hidden through <code>--settings</code> without sideload flags.</li>
 <li><code>skillOverrides</code> only helps for standalone skills; plugin skills are controlled per whole plugin.</li>
 <li>Concurrency looked safe for per-session generated settings; the launcher must never touch <code>~/.claude.json</code>.</li>
 <li>No managed policy on this machine, so locked-down behavior is unvalidated.</li>
 </ol>
+<h3>Corrections after the review round</h3>
+<table><thead><tr><th>Finding</th><th>Status</th></tr></thead><tbody>
+<tr><td>A <code>--settings</code> file can set <code>permissions.defaultMode: bypassPermissions</code> and the session starts in that mode (init event: <code>bypassPermissions</code> versus <code>default</code>). Hooks, <code>apiKeyHelper</code> and <code>env</code> are also settable from any file.</td><td class="V">Verified by me (2.1.291, macOS, no managed policy)</td></tr>
+<tr><td>An invalid settings file fails open and silently: invalid JSON gave exit 0 and empty stderr, and the mask was not applied. A missing path does fail (exit 1).</td><td class="V">Verified by me (invalid JSON); other bad inputs reported</td></tr>
+<tr><td><code>disableClaudeAiConnectors</code> and <code>deniedMcpServers</code> are any-file settings keys; <code>deniedMcpServers</code> needs full server names.</td><td class="V">Docs verified by me; tests reported</td></tr>
+<tr><td><code>--append-system-prompt-file</code> exists.</td><td class="V">Verified by me (<code>--help</code>)</td></tr>
+<tr><td>A project <code>false</code> is overridden by a <code>--settings</code> <code>true</code>, so <code>true</code> entries are needed; default-deny also masks project plugins and <code>@skills-dir</code> plugins; unknown plugin ids are ignored silently.</td><td class="R">Reported (experiment)</td></tr>
+<tr><td><code>claude plugin list --json</code> takes about 1.1 s and depends on the current directory.</td><td class="R">Reported</td></tr>
+<tr><td>Removing MCP servers and connectors measurably reduces context (27.7k to 22.1k tokens in one run that also masked two plugins), so "token savings are small" holds for plugin and skill masking only.</td><td class="R">Reported (single run)</td></tr>
+<tr><td>Bundles: disabling a dependency of an enabled bundle is refused, and a plugin whose dependency is off stays disabled with an error, so masking can break an installed bundle.</td><td class="R">Reported from docs; untested (T7)</td></tr>
+</tbody></table>
 <h3>Still untested</h3>
 <ul><li>Bundle enable/disable semantics</li><li>Behavior under <code>disableSideloadFlags</code> / managed force-enables</li><li>A real concurrency stress test; content diff of <code>~/.claude.json</code></li><li>Whether <code>name-only</code> reduces tokens</li><li>Routing quality with vs. without a profile (the actual benefit claim)</li></ul>
 </section>
@@ -710,12 +732,12 @@ const issues=[
 ["#26352","--enable-plugin/--disable-plugin flags","closed","1 thumb, stale bot"],
 ["#14843","Bulk plugin enable/disable","closed","5 thumbs, stale bot"],
 ["#62174","Per-project enabledPlugins","closed","0 thumbs, stale bot"],
-["#91770","Profiles within one account","open","1 thumb"],
+["#91770","Profiles within one account: separate history, memory and sign-in for client machines (account request, not task-scoped plugin sets)","open","1 thumb, 1 comment"],
 ["#92645","Machine-wide plugin scope (8 config-dir profiles)","open","symlinked plugins/ warns corrupted"],
 ["#90818","VSCode per-session settings profiles","open","0 thumbs"],
 ["#11461","Per-project plugin config and CLI init","closed","7 thumbs, closed completed; contradicts #62174"],
 ["#11596","Per-project plugin enable/disable","closed","0 thumbs, auto-closed"],
-["#86098","Overlapping plugins cause suggestion noise","closed","Anthropic shipped relevance suggestions"],
+["#86098","Overlapping plugins cause persistent suggestion noise (complaint about the relevance feature)","closed","closed not planned; not evidence Anthropic acted"],
 ["#54996","skillOverrides off did not free context","closed","fixed"]];
 const evb=$("#evtable tbody");
 function drawEv(){const q=$("#evq").value.toLowerCase();evb.innerHTML="";issues.filter(r=>r.join(" ").toLowerCase().includes(q)).forEach(r=>{const tr=document.createElement("tr");r.forEach(c=>{const td=document.createElement("td");td.textContent=c;tr.appendChild(td)});evb.appendChild(tr)})}
@@ -801,7 +823,7 @@ profile: sre (extends base)       plugins: 6 on / 10 masked  mcp: pagerduty, gra
 ["Each run writes a generated settings file (content-addressed, in the launcher's own cache dir) and starts claude --settings, passing back its exit code; same on macOS, Linux and Windows. Nothing shared is modified, so terminals can't affect each other (tested on macOS only).","Plugins not in the profile are masked with enabledPlugins:false, regenerated from claude plugin list --json on every launch so new installs don't leak (masking tested on macOS).","Extra args pass through: ccshelf run sre -- --model opus"]],
 ["Dry run / show","See exactly what will happen before running.",
 `$ ccshelf dry-run frontend
-claude --settings ~/.cache/ccshelf/settings-9f3a1c27.json --strict-mcp-config --mcp-config ~/.cache/ccshelf/mcp-5be02d41.json
+claude --settings ~/.cache/ccshelf/settings-9f3a1c27.json --mcp-config ~/.cache/ccshelf/mcp-5be02d41.json
 
 $ ccshelf show frontend
 resolved from: base -> frontend
@@ -861,7 +883,7 @@ policy:       none detected on this machine`,
 `$ ccshelf run frontend
 policy: disableSideloadFlags is set (managed). --mcp-config is blocked.
   - plugin masking via --settings: allowed
-  - claude.ai connectors: cannot be masked (needs --strict-mcp-config)
+  - claude.ai connectors and other MCP servers: hidden through settings keys (disableClaudeAiConnectors, deniedMcpServers)
   - force-enabled plugins cannot be masked: audit-logger@acme
 applied with limits (on_blocked = "warn"). Use "fail" to refuse instead.`,
 ["Design intent: policy detection is untested, and Stage 0 found no managed policy on the test machine."]],

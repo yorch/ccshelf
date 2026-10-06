@@ -28,17 +28,18 @@ The launcher is a compiler plus a process starter. It is never in the data path:
 4. **Build the command line**:
    ```
    claude --settings <cache>/settings-<hash>.json
-          --strict-mcp-config --mcp-config <cache>/mcp-<hash>.json   # if strict
+          --mcp-config <cache>/mcp-<hash>.json                       # only if the profile adds MCP servers
+          --append-system-prompt-file <path>                          # if the profile sets one
           --model opus --effort high                                  # if the profile sets them
           --resume                                                    # passthrough args
    ```
-   With `inherit_user_settings = false` it adds `--setting-sources project,local` (drops the user layer; the launcher re-adds only what the profile sets). If policy blocks a flag, behavior follows `[policy] on_blocked` (`warn` drops that part, `fail` refuses). The system-prompt addition is passed as text via `--append-system-prompt` (a file-based flag was not verified).
-5. **Start `claude` and step aside**: spawn with inherited stdin/stdout/stderr (a normal TTY), ignore Ctrl+C in the launcher (the child handles it), forward termination, wait, exit with Claude's exit code. Passthrough works for non-interactive use: `ccshelf run sre -- -p "summarize this repo"`.
+   Hiding plugins, skills, connectors and other MCP servers happens inside the generated settings file (`enabledPlugins`, `skillOverrides`, `disableClaudeAiConnectors`, `deniedMcpServers` with full server names), so the core path uses no sideload flags. The launcher **validates the generated JSON before every launch**, because Claude Code ignores an invalid settings file silently (exit 0, no message). With `inherit_user_settings = false` it adds `--setting-sources project,local` (drops the user layer; the launcher re-adds only what the profile sets). If policy blocks a flag or key, behavior follows `[policy] on_blocked` (`warn` drops that part, `fail` refuses).
+5. **Start `claude` and step aside**: on **Unix, `exec`** (the launcher process is replaced, so terminal job control and exit codes behave exactly as for plain `claude`); on **Windows, spawn** a child with inherited stdio, ignore Ctrl+C in the launcher, forward termination and return the child's exit code. Passthrough works for non-interactive use: `ccshelf run sre -- -p "summarize this repo"`.
 6. **Write nothing shared**: it never touches `~/.claude/settings.json`, `~/.claude.json` or the plugin cache (Claude Code rewrites its own state as usual).
 
 Concurrency: two terminals produce two command lines pointing at two immutable files, so neither reads anything the other wrote (tested on macOS with three parallel sessions).
 
-What breaks if Claude Code changes: the design depends on `--settings` honoring `enabledPlugins`/`skillOverrides`, on `--strict-mcp-config`, and on `claude plugin list --json`. Gate on `claude --version`, and run the real-`claude` init-event test in CI against new releases.
+What breaks if Claude Code changes: the design depends on `--settings` honoring `enabledPlugins`, `skillOverrides`, `disableClaudeAiConnectors` and `deniedMcpServers`, and on `claude plugin list --json`. Gate on `claude --version`, and run the real-`claude` init-event test in CI against new releases.
 
 ## 2. What is shared between profiles
 The launcher never sets `CLAUDE_CONFIG_DIR`, so all profiles use the same `~/.claude` and `~/.claude.json`. Auth and parallel runs were tested; the rest is inferred from how `CLAUDE_CONFIG_DIR` is documented.
@@ -93,3 +94,11 @@ An account switch isolates credentials, user settings, installed plugins and mar
 - Masking, `--strict-mcp-config` and `--setting-sources` behave the same under a second config dir.
 - Whether a second login is needed to run the test: a human has to do the interactive `/login` in the second dir (e.g. in the prompt: `! CLAUDE_CONFIG_DIR=~/.claude-test claude`), then Stage 0 tests can be repeated against it.
 - Seed-dir dedupe behavior.
+
+### Hazards a profile does not remove (from the review round; reported, not all tested)
+- **A profile session can change global state.** `/plugin` enable and disable, and `claude plugin enable` (user scope by default), write the user's `enabledPlugins`. Enabling a masked plugin inside a profile session does nothing there (the command-line settings win) but turns it on everywhere else. `/skills` writes `.claude/settings.local.json`.
+- **Default-deny is not airtight mid-session.** Plugins installed or synced after launch load on `/reload-plugins` (which closing the `/plugin` panel runs) and are not in the mask. Synced plugins also sync in the background after start.
+- **`--resume` and `--continue` across profiles.** The recorded system prompt, including an appended prompt, is reused on resume until compaction, and the old transcript lists the other profile's skills and agents. The launcher should warn when the profile differs from the one that started the session.
+- **Project plugins.** Default-deny also masks plugins a repo enables in its own `.claude/settings.json` and plugins under `.claude/skills/` (`@skills-dir`). The installed list must be built in the session's working directory, and a `project_plugins = keep|mask` option is needed.
+- **Sessions that don't use the launcher** (IDE extensions, the desktop app, and probably agent-team teammates) see everything. A VS Code setting, `claudeCode.claudeProcessWrapper`, could run the launcher as a wrapper (unverified).
+

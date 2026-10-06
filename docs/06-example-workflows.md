@@ -23,7 +23,7 @@ claude> ...
 ## 2. See exactly what will happen before running
 ```
 $ ccshelf dry-run frontend
-claude --settings ~/.cache/ccshelf/settings-9f3a1c27.json --strict-mcp-config --mcp-config ~/.cache/ccshelf/mcp-5be02d41.json
+claude --settings ~/.cache/ccshelf/settings-9f3a1c27.json --mcp-config ~/.cache/ccshelf/mcp-5be02d41.json
 
 $ ccshelf show frontend
 resolved from: base -> frontend
@@ -96,9 +96,9 @@ Usage counts need OTel (`OTEL_LOG_TOOL_DETAILS=1` for real names) or the Enterpr
 ## 9. Running under org policy
 ```
 $ ccshelf run frontend
-policy: disableSideloadFlags is set (managed). --mcp-config is blocked.
+policy: disableSideloadFlags is set (managed). --mcp-config is blocked, so servers a profile would add are skipped.
   - plugin masking via --settings: allowed
-  - claude.ai connectors: cannot be masked (needs --strict-mcp-config)
+  - claude.ai connectors and other MCP servers: hidden through settings keys (disableClaudeAiConnectors, deniedMcpServers)
   - managed force-enabled plugins cannot be masked: audit-logger@acme
 profile applied with limits (on_blocked = "warn"). Use on_blocked = "fail" to refuse instead.
 ```

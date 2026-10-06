@@ -12,7 +12,7 @@ Labels: **V** verified in docs/gh/CLI, **R** reported by subagent, **U** unverif
 | #43928 | Enable/disable individual skills (7 thumbs) | closed not_planned (stale bot) |
 | #14843 | Bulk plugin enable/disable | closed not_planned (stale), 5 thumbs |
 | #11596, #62174 | Per-project plugin enable | closed not_planned, 0 thumbs each (#11461, 7 thumbs, closed "completed"; contradictory) |
-| #91770 | Profiles within one account | OPEN, 1 thumb |
+| #91770 | Profiles within one account: separate history, memory and sign-in for client machines (an account/identity request, **not** task-scoped plugin sets) | OPEN, 1 thumb, 1 comment |
 | #92645 | Machine-wide plugin scope; author runs 8 `CLAUDE_CONFIG_DIR` profiles, symlinking `plugins/` triggers "corrupted" warnings (#82272, #85325) | OPEN |
 | #90818 | VSCode per-session settings profiles | OPEN, 0 thumbs |
 
@@ -63,7 +63,7 @@ Stars, language, license and last push are from `gh` on 2026-10-06 (verified). T
 ## D. Discoverability evidence
 - **#35319** (43 thumbs, closed): an org went from 67 to 183 skills in under a month, citing bloat/redundancy. Anthropic closed it pointing to OTel `claude_code.skill_activated` (needs `OTEL_LOG_TOOL_DETAILS=1`): telemetry, not a catalog.
 - **#9716** (75 thumbs, 69 comments, open): Claude unaware of available skills.
-- **#86098** (closed 2026-09-20): overlapping plugins cause persistent suggestion noise; Anthropic shipped plugin relevance suggestions.
+- **#86098** (closed, not planned): a complaint that overlapping plugins keep being suggested indefinitely, because relevance suggestions suppress per plugin. It shows the relevance feature exists and has noise; it is not evidence that Anthropic acted on the request (an earlier version of these notes misread it).
 - No issue found asking for plugin search/tags/enterprise catalog UI (search shallow; U).
 - Practitioner posts (Thoughtworks Radar "Trial", DEV.to, mpt.solutions) treat the marketplace as a governance layer (`strictKnownMarketplaces`, SHA pinning). One commenter: listings need rights/cost/verification metadata or shadow IT returns.
 
@@ -95,6 +95,11 @@ Stars and last push from `gh` on 2026-10-06 (verified) unless marked.
 - `/skill-doctor` does have text output with `-p`; "7-day usage" not in docs. (V)
 - "No ownership fields" is overstated (`author`, `repository`, etc. exist); only deprecation/status is missing. (V)
 - `disableSideloadFlags` is broader than first reported. (V)
+
+- A settings file can set permissions (including `bypassPermissions`), hooks and env, and an invalid file is ignored silently. **Verified by me** after the review round. (V)
+- `disableClaudeAiConnectors` and `deniedMcpServers` are valid in any settings file, so connectors and MCP servers need no sideload flags. (V in docs)
+- #91770 is an account request, not task-scoped plugin sets, so it is a weak obsolescence signal; #86098 was misread. (V)
+- `--append-system-prompt-file` exists. (V)
 
 ## H. Naming and brand findings (2026-10-06)
 - **Anthropic's guidance** (verified by an agent against the pages): the [trademark guidelines](https://www.anthropic.com/legal/trademark-guidelines) say its marks may only be used as permitted and not in a way that implies sponsorship or affiliation (questions: marketing@anthropic.com). The [Agent SDK docs](https://code.claude.com/docs/en/agent-sdk/overview) say a product may use "Claude Agent" or "{YourAgentName} Powered by Claude", must not use "Claude Code" or "Claude Code Agent" as its branding, and should not appear to be Claude Code or an Anthropic product. No rule specific to open-source tool names was found.

@@ -34,7 +34,7 @@ Dropping the entire user layer (20 plugins, 53→19 skills, plugin MCP servers) 
 ## Implications for the design
 1. **Masking via `--settings` works and is per-key**, so a launcher doesn't need `--setting-sources` to subtract plugins. It does need the **list of installed plugins** (`claude plugin list --json`) to build a default-deny map. Newly installed plugins would still slip through unless the launcher regenerates each run (it should).
 2. **`--setting-sources project,local` is a blunt but real "default-deny" for the user layer** and keeps auth; but it also drops user model/hooks/statusLine, so the launcher would have to re-add those through `--settings`. It also drops synced-scope plugins.
-3. **claude.ai connectors need `--strict-mcp-config`** (they ignore `enabledPlugins`). That flag depends on `--mcp-config`, which `disableSideloadFlags` can block (non-SDK). Under such policy, connectors can't be controlled per session.
+3. claude.ai connectors ignore `enabledPlugins`. This note originally concluded that only `--strict-mcp-config` removes them (and so depends on `--mcp-config`, which `disableSideloadFlags` can block). **Corrected by the review round:** `disableClaudeAiConnectors` and `deniedMcpServers` are valid in any settings file, so connectors and MCP servers can be hidden through `--settings` without sideload flags (see "Corrections after the review" below).
 4. **`skillOverrides` is only useful for standalone skills.** Plugin skills are controlled per whole plugin: another reason to package standalone skills as plugins.
 5. **Concurrency looked safe** for per-session generated settings; the CLI itself writes `~/.claude.json`, which is not something the launcher should touch.
 6. **No managed policy on this machine**, so sideload-dependent paths were testable here but remain unvalidated for a locked-down org. Open decision #1 in 04 stands.
@@ -45,3 +45,19 @@ Dropping the entire user layer (20 plugins, 53→19 skills, plugin MCP servers) 
 - A real stress test of concurrent writers; content diff of `~/.claude.json`.
 - Whether `name-only` reduces tokens (needs `/context`-level measurement or a larger skill set).
 - Description-routing quality with/without a profile (the actual benefit claim).
+
+## Corrections after the review round (2026-10-06)
+Facts the four adversary reviews corrected or added. "Verified by me" means I ran it or read the source after the review; "reported" means a reviewer found it and I did not re-check.
+| Finding | Status |
+|---|---|
+| A `--settings` file can set `permissions.defaultMode: bypassPermissions` and the session starts in that mode (init event showed `permissionMode = bypassPermissions`, versus `default` without it). Hooks, `apiKeyHelper` and `env` are also valid in any settings file. | **Verified by me** (2.1.291, macOS, no managed policy) |
+| An invalid settings file fails **open and silently**: invalid JSON gave exit 0 and empty stderr, and the mask was not applied. A missing file path does fail (exit 1). | **Verified by me** for invalid JSON; the reviewer also tested a wrong-type value and an invalid `skillOverrides` value (same result) and saw synced plugins disappear as a side effect |
+| `disableClaudeAiConnectors` and `deniedMcpServers` are "Any file" settings keys, so connectors and MCP servers can be hidden through `--settings`. | **Verified by me** in the docs; the reviewer's tests (all 9 connectors gone; `deniedMcpServers` needs full names such as `plugin:context7:context7`; `--strict-mcp-config` alone gave zero servers) are reported |
+| `--append-system-prompt-file` exists. | **Verified by me** (`claude --help`) |
+| Project `false` for a plugin is overridden by `--settings` `true`, so `true` entries for the profile's plugins are needed. Default-deny also masks project-scope plugins and `@skills-dir` plugins the repo enables. | Reported (experiment) |
+| Unknown plugin ids in `enabledPlugins` are silently ignored. | Reported (experiment) |
+| `claude plugin list --json` takes about 1.1 s and depends on the current directory. | Reported (3 runs) |
+| MCP and connector removal measurably reduces context (27.7k to 22.1k tokens in one run that also masked two plugins). | Reported (single run); the earlier "token savings are small" conclusion measured plugin and skill masking, not MCP removal |
+| A baseline run on the same machine later reported 186 tools where Stage 0 reported 157 (MCP connection timing). | Reported |
+| Bundle behavior: enabling a bundle enables its dependencies; disabling a dependency is refused while an enabled plugin needs it; a plugin whose dependency is off "stays disabled" with an error. So masking a plugin that an installed bundle depends on breaks the bundle. | Reported from the docs; **untested (T7)** |
+
