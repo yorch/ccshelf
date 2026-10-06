@@ -1,6 +1,9 @@
-# GitHub applies the LAST matching pattern, so the broad team rules come first
-# and the platform team's narrower rules for code that runs on developer machines
-# come after them and win.
+# GitHub applies the LAST matching pattern, so the catch-all comes first, the broad
+# team rules after it, and the platform team's narrower rules for code that runs on
+# developer machines come last and win.
+
+# Catch-all: anything not matched below (new top-level files, new directories) is the platform team's.
+*                                  @acme/platform
 
 # Each team owns its plugin source.
 /plugins/design-kit/               @acme/web
@@ -25,3 +28,5 @@
 # Hooks and MCP servers in plugins are code on developer machines (these come last on purpose).
 /plugins/*/hooks/                  @acme/platform
 /plugins/*/.mcp.json               @acme/platform
+# Plugin manifests can declare hooks and MCP servers inline, so they are platform-reviewed too (last on purpose).
+/plugins/*/.claude-plugin/         @acme/platform

@@ -84,7 +84,7 @@ Releases are cut by maintainers.
 1. Make sure `main` is green (`ci-ok`) and `docs/report.html` is current. Optionally run the `release` workflow manually with `dry-run` left on: it builds a snapshot without signing or publishing.
 2. Tag the commit on `main` and push the tag: `git tag -s v0.1.0 -m "v0.1.0" && git push origin v0.1.0`.
 3. The `release` workflow verifies that the tag is a semantic version, points at a commit on `main`, that `ci.yml` succeeded for it, that `go.mod` is tidy and the report is up to date.
-4. The `release` job waits for approval of the protected **`release` environment**, which must be configured to require **two maintainers** (with "prevent self-review") and to allow deployments only from `v*` tags.
+4. The `release` job waits for approval of the protected **`release` environment**, which must be configured to require **two maintainers** (with "prevent self-review") and to allow deployments only from `v*` tags (see "Required repository rulesets"). Dry runs use the separate `snapshot` job, which has no environment, no signing and a read-only token.
 5. goreleaser builds the six targets (`-trimpath`, `CGO_ENABLED=0`, commit-timestamped), writes `checksums.txt`, an SBOM per archive (syft), and the release notes from the conventional-commit history. The checksums file is signed keyless with cosign (`checksums.txt.sigstore.json`), and `actions/attest-build-provenance` attaches a SLSA build provenance attestation.
 6. **Optional publishers** run only if their secret exists on the `release` environment, and never for pre-releases. Each is skipped with a notice otherwise:
 
@@ -99,6 +99,20 @@ Releases are cut by maintainers.
 
 The repository owner appears in `.goreleaser.yaml`, `.github/ISSUE_TEMPLATE/config.yml`, `CODEOWNERS` (team handle), `SECURITY.md` and this file, each marked `OWNER`.
 
+## Required repository rulesets
+
+The release signature identity is `https://github.com/OWNER/REPO/.github/workflows/release.yml@refs/tags/<tag>`, so whoever can create a `v*` tag, or point one at an unreviewed commit, can mint a validly signed binary. Configure these rulesets (Settings > Rules) on the tool repository before the first release:
+
+- **Tags `v*`**: creation restricted to maintainers (bypass list: maintainers only); require signed tags (annotated and signed, `git tag -s`); block deletion; block updates (a tag never moves).
+- **Branch `main`**: required status check `ci-ok`; require pull requests with **code-owner review** and **two approvals**; block force pushes and deletion.
+- **Environment `release`**: deployment tags limited to `v*`; **two required reviewers** with **"prevent self-review"**; the optional publisher secrets live here and nowhere else.
+
+The release workflow also fails when the tagged commit is not an ancestor of `main` (`git merge-base --is-ancestor` after a full fetch, plus a GitHub compare API check), which backs up the rulesets but does not replace them. The `pins` job needs no environment; if you want CI on its pull request, add a repository secret `PINS_PR_TOKEN` (GitHub App token or fine-grained PAT scoped to this repository), because pull requests opened with `GITHUB_TOKEN` do not trigger workflows.
+
+## Embedded checksums for the Action
+
+After each release the `pins` job opens a pull request `chore: pin checksums for vX.Y.Z` that appends the six archive hashes to `action/pins.txt` (`<version> <os> <arch> <sha256>`). Review the lines against the signed `checksums.txt` and merge. Adopters pin the Action to a commit that contains the line for their version, which pins the binary without any signature service (see [action/README.md](action/README.md)).
+
 ## Nightly smoke test
 
 `.github/workflows/nightly.yml` installs Claude Code with npm and runs `go test -tags realclaude ./internal/e2e/...` in an empty `HOME`. It runs only if `ANTHROPIC_API_KEY` is set on the protected `nightly` environment (main only) and otherwise skips with a notice. A failure opens or updates one issue labeled `nightly-failure`.
@@ -107,9 +121,9 @@ The repository owner appears in `.goreleaser.yaml`, `.github/ISSUE_TEMPLATE/conf
 
 The tool and its workflows are designed to the lowest common denominator (R2): no hard-coded hosts in logic, CLI first and workflow second, and few third-party actions.
 
-- **Mirror the Action and the binary.** Mirror `ccshelf/ccshelf` (the repository with `action/`) onto your instance, for example with [`actions-sync`](https://github.com/actions/actions-sync), and pin it by full commit SHA. Mirror the release assets (`ccshelf_*` archives, `checksums.txt`, `checksums.txt.sigstore.json`) to an internal location; the Action must download from there and verify the SHA-256.
+- **Mirror the Action and the binary.** Mirror `ccshelf/ccshelf` (the repository with `action/`) onto your instance, for example with [`actions-sync`](https://github.com/actions/actions-sync), and pin it by full commit SHA. Mirror the release assets (`ccshelf_*` archives, `checksums.txt`, `checksums.txt.sigstore.json`) to an internal location; the Action must download from there (`base-url`) and verify the SHA-256. `cosign verify-blob` needs the Sigstore trusted root and is not offline; for an air-gapped instance use the `sha256` pin or `action/pins.txt`, or mirror the trusted root and pass it as `trusted-root`.
 - **Third-party actions.** The workflows here use `actions/checkout`, `actions/setup-go`, `actions/upload-artifact`, `actions/download-artifact` and a few others. GHE Server administrators must mirror or allow them (or use GitHub Connect). Where that is not possible, build the binary with plain `go build` and call it directly; every `ccshelf` command works outside Actions.
-- **Attestations.** Build provenance attestations have limited support on GHE Server; use the cosign bundle with `cosign verify-blob` offline instead (see [SECURITY.md](SECURITY.md)).
+- **Attestations.** Build provenance attestations have limited support on GHE Server; use the cosign bundle with `cosign verify-blob` and a mirrored trusted root (this is not offline without it) or the SHA-256 pin instead (see [SECURITY.md](SECURITY.md)).
 - **Version skew.** GHE Server lags github.com: avoid newer Actions syntax in the Action and the data repo templates, or make it optional. The minimum supported Server version is not yet known.
 - **Marketplace sources** for GHE hosts should use git URLs; see [docs/design/platform.md](docs/design/platform.md).
 

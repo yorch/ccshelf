@@ -5,7 +5,8 @@
 # (set GH_HOST for GitHub Enterprise Server).
 #
 # Usage: scripts/pin-actions.sh [file ...]
-# Default files: .github/workflows/*.yml, .github/workflows/*.yaml, action/action.yml
+# Default files: .github/workflows/*.yml, .github/workflows/*.yaml, action/action.yml and
+# examples/**/.github/workflows/*.yml
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -16,6 +17,9 @@ files=("$@")
 if [ ${#files[@]} -eq 0 ]; then
   shopt -s nullglob
   files=(.github/workflows/*.yml .github/workflows/*.yaml action/action.yml action/action.yaml)
+  while IFS= read -r f; do
+    files+=("$f")
+  done < <(find examples -path '*/.github/workflows/*' \( -name '*.yml' -o -name '*.yaml' \) -type f 2>/dev/null | sort)
 fi
 
 resolve() { # owner/repo ref -> sha

@@ -20,6 +20,7 @@ updates:
     directories:
       - /
       - /action
+      - /examples/org-data-repo
     schedule:
       interval: weekly
       day: monday

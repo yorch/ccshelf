@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
     timeout-minutes: 10
     permissions:
       contents: read
@@ -47,7 +47,16 @@ jobs:
           sha256: ${{ vars.CCSHELF_SHA256_LINUX_AMD64 }}
           args: catalog build --out dist/catalog
 
+      # Optional: set the repository variable UPLOAD_PREVIEW to 'false' where upload-artifact
+      # is not available (see "GitHub Enterprise Server" in the README).
+      # Optional: set the repository variable CLAUDE_VALIDATE to 'true' to also run the native
+      # validator. It needs Claude Code on the runner (GHES runners may not be able to install it).
+      - name: Validate the marketplace and plugins with Claude Code
+        if: vars.CLAUDE_VALIDATE == 'true'
+        run: claude plugin validate .
+
       - name: Upload the preview (not published)
+        if: vars.UPLOAD_PREVIEW != 'false'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: catalog-preview

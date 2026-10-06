@@ -1,0 +1,5 @@
+# Archive checksums embedded in this action, one line per release asset:
+#   <version> <os> <arch> <sha256 of the archive>
+# The release workflow opens a pull request that appends the six lines for each new
+# version. Pin the action by the commit SHA of a commit that contains the line for the
+# version you install and the binary is pinned too (see action/README.md).

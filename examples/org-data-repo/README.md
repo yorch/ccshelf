@@ -9,9 +9,9 @@ Everything here is invented: the `acme` org, the teams `@acme/platform`, `@acme/
 1. **Copy** this directory into a new private repository (GitHub.com, GHE Cloud or GHE Server).
 2. **Rename `acme`**: the marketplace `name` in `.claude-plugin/marketplace.json`, every `name@acme` plugin id in `profiles/*.toml` and `ccshelf.toml`, the teams in `.github/CODEOWNERS` and in `owner` fields, the title in `ccshelf.toml`, and the `*.example` URLs. Keep the marketplace name and the `@<marketplace>` suffix consistent.
 3. **Replace the example plugins** with your own (see `docs/CONTRIBUTING.md`) and delete the ones you do not need, with their sidecars, profile references and bundle entries.
-4. **Pin the tool.** The workflows call `ccshelf/ccshelf/action@0000000000000000000000000000000000000000`, an all-zero placeholder. Replace it in `validate.yml` and `catalog.yml` with the **full 40-character commit SHA** of the ccshelf release you chose (keep the tag in a comment), set `version:` to the same release, and set the repository variable `CCSHELF_SHA256_LINUX_AMD64` to the archive hash from that release's `checksums.txt`. Without the variable the action verifies the cosign signature instead, which needs `cosign` on the runner. See `action/README.md` in the tool repo, including the GHE Server mirror options.
+4. **Pin the tool.** The workflows call `ccshelf/ccshelf/action@0000000000000000000000000000000000000000`, an all-zero placeholder. Replace it in `validate.yml` and `catalog.yml` with the **full 40-character commit SHA** of the ccshelf release you chose (keep the tag in a comment), set `version:` to the same release, and set the repository variable `CCSHELF_SHA256_LINUX_AMD64` to the archive hash from that release's `checksums.txt` (archive names have no leading `v`: `ccshelf_0.1.0_linux_amd64.tar.gz`). Pick an action commit that already contains the `action/pins.txt` line for your version and the binary is pinned by the commit alone. Without the variable and a pins line the action verifies the cosign signature instead, which needs `cosign` on the runner and network access to the Sigstore trusted root (it is not offline). See `action/README.md` in the tool repo, including the GHE Server mirror options.
 5. **Configure the users' sources.** Each developer adds this repo as a `git` profile source in `~/.config/ccshelf/config.toml`, pinned to a tag created by `release.yml`, and adds the marketplace natively in Claude Code. The tool itself never learns about your org.
-6. **Protect the repo**: branch protection or a ruleset that requires code-owner review and at least two approvals, tag protection for `v*`, and the `github-pages` environment limited to `main`. `.github/` is owned by the platform team so plugin teams cannot edit workflows.
+6. **Protect the repo**: branch protection or a ruleset that requires code-owner review and at least two approvals, tag protection for `v*`, and the `github-pages` environment limited to `main`. `.github/` is owned by the platform team so plugin teams cannot edit workflows. Tag creation by `release.yml` needs the creating identity (`github-actions`, or your GitHub App) on the tag ruleset's bypass list; scheduled runs of that workflow work on the default branch only.
 
 ## Layout
 
@@ -29,7 +29,7 @@ ccshelf.toml                       org configuration: lint rules, catalog settin
 docs/CONTRIBUTING.md               how to add a plugin
 ```
 
-The example set: `design-kit` (web), `sre-kit` (SRE, with a hook), `seo-tools` (SEO, with an `.mcp.json`), `release-notes` (platform, **deprecated**, superseded by `docs-writer`), `docs-writer` (platform), `audit-logger` (platform, **protected**), `partner-linter` (external git source, no folder here) and the generated bundles `profile-frontend` and `profile-sre`.
+The example set: `design-kit` (web), `sre-kit` (SRE, with a hook), `seo-tools` (SEO, with an `.mcp.json`), `release-notes` (platform, **deprecated**, superseded by `docs-writer`), `docs-writer` (platform), `audit-logger` (platform, **protected**), `partner-linter` (external git source, no folder here) and the generated bundles `profile-frontend`, `profile-sre` and `profile-seo`.
 
 `audit-logger` is listed under `[protect]` in `ccshelf.toml`, so profiles can never mask it. Audit controls must not depend on what a profile proposes in a pull request.
 
@@ -44,7 +44,11 @@ The example set: `design-kit` (web), `sre-kit` (SRE, with a hook), `seo-tools` (
 | `bundles/profile-<name>/.claude-plugin/plugin.json` | `ccshelf compile` | Yes | `ccshelf compile --check` (drift) |
 | `dist/catalog` (site and `catalog.json`) | CI | No | built on every pull request, published on merge |
 
-Profiles `base` (an abstract parent) and `seo` have no bundle on purpose; bundles exist for `frontend` and `sre`.
+Profiles with no plugins get no bundle (the compiler skips them): `base` is an abstract parent with no plugins, so it has none. Bundles exist for `frontend`, `sre` and `seo`.
+
+A bare name in a bundle's `dependencies` resolves in the bundle's own marketplace. A plugin from another marketplace must be written as an object, `{"name": "...", "marketplace": "..."}`, and `marketplace.json` must list that marketplace in `allowCrossMarketplaceDependenciesOn`. The three bundles here only depend on `acme` plugins, so they need neither.
+
+`.gitattributes` forces LF for JSON, TOML, Markdown and YAML: the drift check compares bytes, so CRLF from a Windows `autocrlf` clone would otherwise count as drift.
 
 ### Bundle file format
 
@@ -73,5 +77,17 @@ For `profile-sre` that is:
 - The MCP registry has one `[servers.<name>]` table per server with `description`, `type` (`stdio` or `http`), and either `command` and `args` or `url`; `[servers.<name>.windows]` overrides `command` and `args` on Windows (`cmd /c npx`).
 - `ccshelf.toml` holds `platform_owners` at the top level and the protected plugin ids under `[protect] plugins`.
 - Generated bundles have no sidecar: their owner and status come from the profile. Plugins from external repositories (`partner-linter`) get a sidecar like any other.
-- `CODEOWNERS` uses last-match-wins: team rules first, then the platform rules for hooks and `.mcp.json`.
+- `CODEOWNERS` uses last-match-wins: a catch-all `* @acme/platform` first, then the team rules, then the platform rules for hooks, `.mcp.json` and plugin manifests (`/plugins/*/.claude-plugin/`, last, because a manifest can declare hooks and MCP servers inline). `ccshelf lint` is getting an inline-hooks rule that flags those declarations in manifests; keep the last rule so a plugin team cannot add them without platform review.
+- `partner-linter` is pinned with both `ref` and a `sha`. The 40-hex value in this template is fictional but well formed; replace it with the real commit.
 - Plugin repository tags `<plugin>--v<version>` are not created here: there is no `tag-plugins.yml` until you use dependency version ranges.
+
+## GitHub Enterprise Server
+
+The workflows are written for the lowest common denominator.
+
+- **Runners.** Set the repository variable `RUNNER_LABEL` to your runner label; it defaults to `ubuntu-latest`.
+- **Actions.** Mirror every action the workflows use (`actions/checkout`, `actions/upload-artifact`, `actions/upload-pages-artifact`, `actions/deploy-pages` and the ccshelf action) onto the instance with [`actions-sync`](https://github.com/actions/actions-sync), or enable GitHub Connect, and keep the SHA pins (re-pin them to the mirrored commits).
+- **`upload-artifact`.** GHES versions before 3.13 only support `actions/upload-artifact` v3.2.2 (the artifact backend differs). Either pin that mirrored version, or set the variable `UPLOAD_PREVIEW` to `false` to skip the optional preview upload in `validate.yml`.
+- **Pages.** `catalog.yml` publishes with GitHub Pages; where Pages or `deploy-pages` is unavailable, replace the two Pages steps with an upload of `dist/catalog` to any internal static host.
+- **Release assets.** Mirror the ccshelf release assets (archive, `checksums.txt`, `checksums.txt.sigstore.json`, under a `v<version>/` directory) to an internal URL and pass it as `base-url:` to the ccshelf action. Pin `sha256` or use a `pins.txt` commit so no Sigstore access is needed.
+- **Claude validation.** Set the variable `CLAUDE_VALIDATE` to `true` to run `claude plugin validate .` in `validate.yml`; GHES runners may not be able to install Claude Code, which is why it is off by default.

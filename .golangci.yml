@@ -40,8 +40,9 @@ linters:
     gosec:
       excludes:
         - G104 # unhandled errors: errcheck already reports these, with better control
-        - G304 # file inclusion via variable: reading user-chosen files is the job; confinement to the source root is enforced and tested in internal/catalog/safepath and internal/profile (SR4)
-        - G703 # path traversal taint: same reason as G304
+        # G304 (file inclusion via variable) and G703 (path traversal taint) are NOT excluded
+        # globally: they are excluded per path under exclusions.rules below, only for the
+        # packages whose job is reading user-chosen files with confinement (SR4).
 
     misspell:
       locale: US
@@ -76,6 +77,14 @@ linters:
           msg: return an error; only main may decide to exit
         - pattern: ^log\.Panic(f|ln)?$
           msg: return an error instead of panicking
+        # Starting a process is allowed only in internal/claude (the launcher) and cmd/ (excluded
+        # below). Everything else goes through those packages, or exec.Command in the git helpers.
+        - pattern: ^os\.StartProcess$
+          msg: only internal/claude and cmd/ may start a process
+        - pattern: ^syscall\.(Exec|ForkExec|StartProcess)$
+          msg: only internal/claude and cmd/ may exec or fork
+        - pattern: ^unix\.(Exec|ForkExec)$
+          msg: only internal/claude and cmd/ may exec or fork
 
     depguard:
       rules:
@@ -93,15 +102,33 @@ linters:
             - github.com/pelletier/go-toml/v2
             - golang.org/x/term
             - golang.org/x/sys
-        # Packages that must never start a process.
+        # Packages that must never start a process. The only allowed process runners are
+        # internal/claude (the launcher), the git helpers (internal/profile/gitsource and
+        # internal/catalog/gitdata) and policy's plutil runner (read.go, named below).
         no-exec:
           files:
             - "**/internal/profile/**"
+            - "!**/internal/profile/gitsource/**"
             - "**/internal/settings/**"
             - "**/internal/config/**"
             - "**/internal/envpolicy/**"
             - "**/internal/cache/**"
             - "**/internal/catalog/site/**"
+            - "**/internal/catalog/lint/**"
+            - "**/internal/catalog/codeowners/**"
+            - "**/internal/catalog/sidecar/**"
+            - "**/internal/catalog/safepath/**"
+            - "**/internal/orgconfig/**"
+            - "**/internal/marketplace/**"
+            - "**/internal/policy/**"
+            - "!**/internal/policy/read.go" # runs plutil on macOS: the one named exception
+            - "**/internal/trust/**"
+            - "**/internal/bundles/**"
+            - "**/internal/doctor/**"
+            - "**/internal/recommend/**"
+            - "**/internal/analytics/**"
+            - "**/internal/ui/**"
+            - "**/internal/shellinit/**"
             - "!$test"
           deny:
             - pkg: os/exec
@@ -114,13 +141,23 @@ linters:
     presets:
       - std-error-handling
     rules:
-      # fmt.Print* is allowed in main packages and the UI package.
-      - path: ^cmd/
+      # fmt.Print* and log.* are allowed in main packages and the UI package, but not the
+      # process-start rules.
+      - path: ^(cmd|internal/ui)/
+        text: 'fmt\.Print|log\.'
         linters: [forbidigo]
-      - path: ^internal/ui/
+      # Starting processes is the point of the launcher and of main.
+      - path: ^(cmd|internal/claude)/
+        text: 'os\.StartProcess|syscall\.|unix\.'
         linters: [forbidigo]
+      # Reading user-chosen files is the job of these packages; confinement to the source
+      # root is enforced and tested in internal/catalog/safepath and internal/profile (SR4).
+      # Scoped per path so that a new package does not inherit the exemption.
+      - path: ^internal/(bundles|cache|catalog/catalogtest|catalog/safepath|catalog/site|claude|config|policy|profile|recommend|testutil|trust)/
+        text: "G304|G703"
+        linters: [gosec]
       # Process execution is the point of these packages (arguments are an argv, never a shell string).
-      - path: ^internal/(launch|claude|git|exec)/
+      - path: ^internal/(claude|catalog/gitdata|profile/gitsource)/
         text: "G204"
         linters: [gosec]
       # Tests: relax what does not apply to throwaway fixtures.

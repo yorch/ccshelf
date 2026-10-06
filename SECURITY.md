@@ -49,19 +49,25 @@ We will not pursue or support legal action against anyone who, in good faith, re
 
 The summary lives in [docs/design/security.md](docs/design/security.md): the closed profile schema, trust of the resolved closure pinned by commit SHA, no shadowing, private verified local artifacts and hardened CI and releases (requirements SR1 to SR5). It also states what the tool does **not** enforce: only Claude Code managed settings (`allowManagedHooksOnly`, `allowManagedPermissionRulesOnly`, `disableBypassPermissionsMode`) are real enforcement; `ccshelf` profiles are convenience, not a security boundary.
 
+## What the signing identity relies on
+
+The exact identity `.../.github/workflows/release.yml@refs/tags/<version>` is only as trustworthy as who can create `v*` tags and what they point at. The tool repository must therefore keep the rulesets listed under "Required repository rulesets" in [CONTRIBUTING.md](CONTRIBUTING.md): tags `v*` creatable by maintainers only, signed tags, no tag deletion or update, `main` protected (required `ci-ok`, code-owner review, two approvals), and the `release` environment restricted to `v*` tags with two required reviewers and "prevent self-review". The release workflow additionally refuses a tag whose commit is not an ancestor of `main`.
+
 ## Verifying a release
 
 Every release publishes archives, `checksums.txt`, its keyless cosign bundle (`checksums.txt.sigstore.json`), an SBOM per archive, and a GitHub build provenance attestation. Replace `OWNER/REPO` with the repository the release came from (`ccshelf/ccshelf` for the public project). <!-- OWNER -->
 
-1. Verify the signature on the checksums file (needs [cosign](https://docs.sigstore.dev/cosign/)):
+1. Verify the signature on the checksums file (needs [cosign](https://docs.sigstore.dev/cosign/)). Use the **exact** identity of the release workflow at the tag you downloaded, not a prefix or regexp (a regexp also accepts a tag an attacker pushed):
 
    ```sh
    cosign verify-blob \
      --bundle checksums.txt.sigstore.json \
-     --certificate-identity-regexp '^https://github.com/OWNER/REPO/' \
+     --certificate-identity 'https://github.com/OWNER/REPO/.github/workflows/release.yml@refs/tags/vX.Y.Z' \
      --certificate-oidc-issuer https://token.actions.githubusercontent.com \
      checksums.txt
    ```
+
+   `cosign verify-blob` needs the Sigstore trusted root and therefore network access (or a mirrored copy passed with `--trusted-root`): it is **not** an offline check.
 
 2. Check the archive against the signed checksums:
 
@@ -75,6 +81,6 @@ Every release publishes archives, `checksums.txt`, its keyless cosign bundle (`c
    gh attestation verify ccshelf_<version>_<os>_<arch>.tar.gz --repo OWNER/REPO
    ```
 
-On GitHub Enterprise Server, where attestations may not be available, mirror the release assets together with `checksums.txt` and `checksums.txt.sigstore.json` and use step 1 and 2, which work offline with the bundle. Builds use `-trimpath` and `CGO_ENABLED=0` so they can be reproduced from the tagged source.
+On GitHub Enterprise Server, where attestations may not be available, mirror the release assets together with `checksums.txt` and `checksums.txt.sigstore.json` and use steps 1 and 2 with a mirrored Sigstore trusted root (`--trusted-root`). The fully offline path is a pinned SHA-256 of the archive: the `sha256` input of the Action, or the line for your version in `action/pins.txt` (pin the Action by a commit that contains it). Builds use `-trimpath` and `CGO_ENABLED=0` so they can be reproduced from the tagged source.
 
 Binaries are not yet notarized (macOS) or Authenticode-signed (Windows); until they are, the checks above are how you establish authenticity.

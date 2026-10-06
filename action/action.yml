@@ -18,21 +18,29 @@ inputs:
     required: false
     default: "."
   sha256:
-    description: SHA-256 of the release archive for this runner's OS and architecture, pinned by you. The strongest option; when set, the signature is not needed.
+    description: SHA-256 of the release archive for this runner's OS and architecture, pinned by you. The strongest option and fully offline; when set, the signature is not needed. Without it, a matching line in this action's own pins.txt is used before cosign.
     required: false
     default: ""
   base-url:
-    description: Directory that holds <version>/ release assets. Change it for a GHE Server or offline mirror. https:// or file:// only.
+    description: Directory that holds <version>/ release assets (the directory name keeps the leading v). Change it for a GHE Server or offline mirror. https:// or file:/// (absolute path) only.
     required: false
     default: https://github.com/ccshelf/ccshelf/releases/download
   verify-signature:
-    description: Verify the cosign signature of checksums.txt (needs cosign on PATH) when no sha256 is pinned. "false" is an explicit, loudly warned opt-out.
+    description: Verify the cosign signature of checksums.txt (needs cosign on PATH and the Sigstore trusted root, so it is not offline) when neither sha256 nor a pins.txt line applies. "false" is an explicit, loudly warned opt-out.
     required: false
     default: "true"
   cosign-identity:
-    description: Regular expression the signing certificate identity must match.
+    description: Exact certificate identity the signature must have. Empty means the tool repo's release workflow at the tag, https://github.com/ccshelf/ccshelf/.github/workflows/release.yml@refs/tags/<version>.
     required: false
-    default: ^https://github\.com/ccshelf/ccshelf/\.github/workflows/release\.yml@refs/tags/v.*$
+    default: ""
+  cosign-identity-regexp:
+    description: Regular expression the certificate identity must match instead of an exact identity (explicit opt-in; escape dots). Exclusive with cosign-identity.
+    required: false
+    default: ""
+  trusted-root:
+    description: Path to a Sigstore trusted root file that your organization mirrors, passed to cosign as --trusted-root. Empty means cosign fetches the root itself.
+    required: false
+    default: ""
   cosign-oidc-issuer:
     description: OIDC issuer the signing certificate must name.
     required: false
@@ -58,6 +66,8 @@ runs:
         INPUT_BASE_URL: ${{ inputs.base-url }}
         INPUT_VERIFY_SIGNATURE: ${{ inputs.verify-signature }}
         INPUT_COSIGN_IDENTITY: ${{ inputs.cosign-identity }}
+        INPUT_COSIGN_IDENTITY_REGEXP: ${{ inputs.cosign-identity-regexp }}
+        INPUT_TRUSTED_ROOT: ${{ inputs.trusted-root }}
         INPUT_COSIGN_OIDC_ISSUER: ${{ inputs.cosign-oidc-issuer }}
         INPUT_WORKING_DIRECTORY: ${{ inputs.working-directory }}
         ACTION_PATH: ${{ github.action_path }}

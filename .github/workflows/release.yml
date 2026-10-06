@@ -3,13 +3,20 @@
 # Triggers: pushing a tag vX.Y.Z[-pre], or a manual run. A manual run defaults
 # to a dry run (goreleaser --snapshot, no signing, no publishing).
 #
+# Jobs: `verify` (tag and CI checks), then either `snapshot` (dry runs only: no
+# environment, no signing, no publishing, read-only token) or `release` (real runs
+# only) and, after a successful release, `pins` (opens the pull request that adds
+# the new archive checksums to action/pins.txt).
+#
 # The `release` job uses the protected `release` environment. Configure that
 # environment (Settings > Environments) with required reviewers (two
-# maintainers), "prevent self-review", and a deployment branch/tag rule that
-# only allows tags matching v*. Secrets for the optional publishers
+# maintainers), "prevent self-review", and a deployment tag rule that only
+# allows tags matching v*. Secrets for the optional publishers
 # (HOMEBREW_TAP_TOKEN, SCOOP_BUCKET_TOKEN, WINGET_TOKEN) belong to that
 # environment, never to the repository, so forks and branch builds never see
-# them. See CONTRIBUTING.md, "Releasing".
+# them. The tool repo also needs the rulesets listed in CONTRIBUTING.md,
+# "Required repository rulesets": the signing identity below is only as
+# trustworthy as who can create v* tags. See CONTRIBUTING.md, "Releasing".
 #
 # This repository is public on github.com by definition, so the gh calls below
 # target the github.com instance of the workflow run.
@@ -57,6 +64,7 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          cache: false # a poisoned build cache must never reach a release
       - name: Decide the mode
         id: mode
         env:
@@ -87,18 +95,32 @@ jobs:
             echo "Tag is not a semantic version: $TAG" >&2
             exit 1
           fi
-          git fetch --no-tags origin main
-          if ! git merge-base --is-ancestor "$SHA" origin/main; then
-            echo "Tag $TAG does not point at a commit on main." >&2
+          # Full history of main (the checkout already has fetch-depth 0): the ancestry
+          # check below is only sound on a complete, non-shallow clone.
+          git fetch --no-tags --prune origin '+refs/heads/main:refs/remotes/origin/main'
+          if [ "$(git rev-parse --is-shallow-repository)" != "false" ]; then
+            git fetch --no-tags --unshallow origin
+          fi
+          if ! git merge-base --is-ancestor "$SHA" refs/remotes/origin/main; then
+            echo "Tag $TAG ($SHA) is not an ancestor of main (git merge-base --is-ancestor)." >&2
             exit 1
           fi
+          # Second opinion through the API (kept on purpose): compare main with the tag's commit.
+          status="$(gh api -X GET "repos/${REPO}/compare/${SHA}...main" --jq '.status')"
+          case "$status" in
+            identical | ahead) ;;
+            *)
+              echo "The GitHub compare API says main is '$status' relative to $SHA; the tag is not on main." >&2
+              exit 1
+              ;;
+          esac
           ok="$(gh api -X GET "repos/${REPO}/actions/workflows/ci.yml/runs" \
             -f head_sha="$SHA" -f status=success --jq '.total_count')"
           if [ "${ok:-0}" -lt 1 ]; then
             echo "ci.yml has no successful run for commit $SHA." >&2
             exit 1
           fi
-          echo "Tag $TAG verified: on main, CI green."
+          echo "Tag $TAG verified: ancestor of main, CI green."
       - name: go.mod is tidy
         run: |
           go mod tidy
@@ -108,19 +130,16 @@ jobs:
       - name: Actions are pinned by full commit SHA
         run: scripts/check-pins.sh
 
-  release:
-    name: release
+  # Dry runs: build a snapshot with the read-only token. No environment (so no approval
+  # and no secrets), no signing (it would write to the public transparency log), no publishing.
+  snapshot:
+    name: snapshot (dry run)
     needs: verify
+    if: needs.verify.outputs.dry-run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    # Requires approval from two maintainers (configured on the environment).
-    environment: release
     permissions:
-      contents: write # create the GitHub release and upload assets
-      id-token: write # keyless cosign signing and build provenance
-      attestations: write # store the build provenance attestation
-    env:
-      DRY_RUN: ${{ needs.verify.outputs.dry-run }}
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -129,6 +148,57 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          cache: false
+      - name: Install syft (pinned release, checksum verified) for SBOMs
+        run: |
+          set -euo pipefail
+          archive="syft_${SYFT_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL -o "${RUNNER_TEMP}/${archive}" \
+            "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/${archive}"
+          echo "${SYFT_SHA256}  ${RUNNER_TEMP}/${archive}" | sha256sum -c -
+          mkdir -p "${RUNNER_TEMP}/bin"
+          tar -xzf "${RUNNER_TEMP}/${archive}" -C "${RUNNER_TEMP}/bin" syft
+          echo "${RUNNER_TEMP}/bin" >> "$GITHUB_PATH"
+      - name: goreleaser (snapshot, no signing, no publishing)
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+        with:
+          distribution: goreleaser
+          version: ${{ env.GORELEASER_VERSION }}
+          args: release --snapshot --clean --skip=sign
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-dist-snapshot
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/checksums.txt
+            dist/*.sbom.json
+          if-no-files-found: warn
+          retention-days: 7
+
+  release:
+    name: release
+    needs: verify
+    if: needs.verify.outputs.dry-run == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # Requires approval from two maintainers (configured on the environment).
+    environment: release
+    permissions:
+      contents: write # create the GitHub release and upload assets
+      id-token: write # keyless cosign signing and build provenance
+      attestations: write # store the build provenance attestation
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # goreleaser builds the changelog from history
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false # a poisoned build cache must never reach a release
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         with:
           cosign-release: ${{ env.COSIGN_VERSION }}
@@ -164,21 +234,17 @@ jobs:
         with:
           distribution: goreleaser
           version: ${{ env.GORELEASER_VERSION }}
-          # Dry runs build a snapshot and never sign (that would write to the public
-          # transparency log) or publish.
-          args: ${{ env.DRY_RUN == 'true' && 'release --snapshot --clean --skip=sign' || 'release --clean' }}
+          args: release --clean
         env:
           GITHUB_TOKEN: ${{ github.token }}
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           SCOOP_BUCKET_TOKEN: ${{ secrets.SCOOP_BUCKET_TOKEN }}
           WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
       - name: Build provenance attestation (SLSA) for the archives
-        if: env.DRY_RUN == 'false'
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-checksums: dist/checksums.txt
       - name: Verify the signature we just produced
-        if: env.DRY_RUN == 'false'
         env:
           REPO: ${{ github.repository }}
           SERVER_URL: ${{ github.server_url }}
@@ -200,4 +266,73 @@ jobs:
             dist/checksums.txt.sigstore.json
             dist/*.sbom.json
           if-no-files-found: warn
-          retention-days: ${{ env.DRY_RUN == 'true' && 7 || 90 }}
+          retention-days: 90
+
+  # After a successful release: open a pull request that appends the six archive
+  # checksums of this version to action/pins.txt, so that pinning the Action by commit
+  # SHA pins the binary too. Minimal permissions; it only edits that one file through
+  # the API on a new branch and never touches main directly.
+  #
+  # Pull requests created with the default GITHUB_TOKEN do not trigger other workflows
+  # (so ci-ok will not run on this pull request). To get CI on it, add a repository
+  # secret PINS_PR_TOKEN (a GitHub App installation token or a fine-grained PAT with
+  # contents and pull requests write access on this repository only); it is used when
+  # present. Review the pull request against the signed checksums.txt before merging.
+  pins:
+    name: pins pull request
+    needs: [verify, release]
+    if: needs.verify.outputs.dry-run == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # create the branch and commit action/pins.txt
+      pull-requests: write # open the pull request
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-dist
+          path: dist
+      - name: Open the pull request that pins the checksums
+        env:
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.PINS_PR_TOKEN || github.token }}
+        run: |
+          set -euo pipefail
+          if ! printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "Tag is not a plain semantic version: $TAG" >&2
+            exit 1
+          fi
+          bare="${TAG#v}"
+          lines=""
+          for target in linux:amd64:tar.gz linux:arm64:tar.gz darwin:amd64:tar.gz darwin:arm64:tar.gz windows:amd64:zip windows:arm64:zip; do
+            IFS=: read -r os arch ext <<<"$target"
+            name="ccshelf_${bare}_${os}_${arch}.${ext}"
+            hash="$(awk -v n="$name" '$2 == n {print $1}' dist/checksums.txt)"
+            if ! printf '%s' "$hash" | grep -Eq '^[0-9a-f]{64}$'; then
+              echo "No unique SHA-256 for $name in checksums.txt" >&2
+              exit 1
+            fi
+            lines="${lines}${TAG} ${os} ${arch} ${hash}"$'\n'
+          done
+          current="$(gh api -X GET "repos/${REPO}/contents/action/pins.txt" -f ref=main)"
+          file_sha="$(printf '%s' "$current" | jq -r '.sha')"
+          printf '%s' "$current" | jq -r '.content' | base64 -d > pins.txt
+          if grep -q "^${TAG//./\\.} " pins.txt; then
+            echo "pins.txt already has lines for $TAG; nothing to do."
+            exit 0
+          fi
+          [ -z "$(tail -c1 pins.txt)" ] || echo >> pins.txt
+          printf '%s' "$lines" >> pins.txt
+          branch="chore/pin-checksums-${TAG}"
+          main_sha="$(gh api "repos/${REPO}/git/ref/heads/main" --jq '.object.sha')"
+          gh api --method POST "repos/${REPO}/git/refs" \
+            -f "ref=refs/heads/${branch}" -f "sha=${main_sha}" >/dev/null
+          gh api --method PUT "repos/${REPO}/contents/action/pins.txt" \
+            -f "message=chore: pin checksums for ${TAG}" \
+            -f "content=$(base64 -w0 pins.txt)" \
+            -f "sha=${file_sha}" \
+            -f "branch=${branch}" >/dev/null
+          gh pr create --repo "$REPO" --base main --head "$branch" \
+            --title "chore: pin checksums for ${TAG}" \
+            --body "Appends the SHA-256 of the six ${TAG} archives to action/pins.txt so that pinning the Action by commit SHA pins the binary. Compare the lines with the signed checksums.txt of the release before merging."

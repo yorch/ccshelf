@@ -1,7 +1,10 @@
 name: release
 
 # Creates a repository tag vYYYY.MM.N that consumers pin their profile source to.
-# Run it manually, or let the monthly schedule do it. Protect the v* tags with a ruleset.
+# Run it manually, or let the monthly schedule do it. Protect the v* tags with a ruleset
+# and add the identity that creates the tag to the ruleset's bypass list: this workflow
+# pushes the tag with the workflow token (actor "github-actions"), or with a GitHub App
+# token if you prefer; without that bypass the tag creation is rejected.
 on:
   workflow_dispatch:
   schedule:
@@ -15,9 +18,10 @@ concurrency:
 
 jobs:
   tag:
-    # Scheduled runs always use the default branch; refuse manual runs from other branches.
-    if: github.ref_name == github.event.repository.default_branch
-    runs-on: ubuntu-latest
+    # Scheduled runs always use the default branch (and github.event.repository is not
+    # available on them), so only manual runs are checked against it.
+    if: github.event_name == 'schedule' || github.ref_name == github.event.repository.default_branch
+    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
     timeout-minutes: 5
     permissions:
       contents: write

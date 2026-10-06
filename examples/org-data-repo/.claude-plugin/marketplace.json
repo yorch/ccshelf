@@ -94,7 +94,8 @@
       "source": {
         "source": "url",
         "url": "https://git.partner.example/linters/partner-linter.git",
-        "ref": "v1.4.0"
+        "ref": "v1.4.0",
+        "sha": "0123456789abcdef0123456789abcdef01234567"
       },
       "displayName": "Partner Linter",
       "description": "Style and policy linter maintained by a partner in an external repository.",
@@ -119,6 +120,14 @@
       "description": "Generated bundle: installs the plugins of the sre profile in one step.",
       "category": "profile",
       "tags": ["profile", "sre"],
+      "author": { "name": "Acme Platform Team" }
+    },
+    {
+      "name": "profile-seo",
+      "source": "./bundles/profile-seo",
+      "description": "Generated bundle: installs the plugins of the seo profile in one step.",
+      "category": "profile",
+      "tags": ["profile", "seo"],
       "author": { "name": "Acme Platform Team" }
     }
   ]
