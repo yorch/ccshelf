@@ -9,7 +9,7 @@ Guidance for AI coding agents (and humans) working in this repo, the public **to
 
 **Status:** research and design only. There is no code yet. Everything lives in `docs/`. Start with `docs/README.md`, then `docs/04-recommendation-and-roadmap.md` (decisions and requirements).
 
-## Decided requirements (do not relitigate without the user)
+## Decided requirements (decided by the user; reopen when evidence changes, and record why in the notes)
 - **R1:** macOS, Linux and native Windows; six targets (darwin, linux and windows, each arm64 and amd64). WSL counts as Linux.
 - **R2:** works with GitHub.com, GHE Cloud and GHE Server, and GitHub Actions. No hard-coded hosts.
 - **R3:** works with no, partial or strict Claude Code managed policy. Capability-driven; **never bypass policy**.
@@ -17,7 +17,7 @@ Guidance for AI coding agents (and humans) working in this repo, the public **to
 - **SR1 to SR5:** closed profile schema (a profile can never write permissions, hooks, auth or endpoint settings); trust the resolved closure pinned by commit SHA; project profiles off by default and never shadow another source; protected plugins; private cache files (0700/0600, re-hash before reuse); Actions pinned by full SHA, least-privilege workflows. Never add a feature that weakens these without discussing it first; see `docs/04` "Security requirements".
 - **R6:** every command works with flags alone; interactive prompts, pickers and wizards are an optional front-end used only on a TTY; trust is never auto-accepted; see `docs/04` "Interaction model".
 - **R5:** this public repo holds the tool. Adopting orgs keep profiles and catalog data in their own private repo. Never put real org data here; examples (including the starter template under `examples/`) are fictional. No built-in default profiles: roles are org choices and examples only show the format.
-- Language: **Go**. Build order: shared `core/` first, then a thin slice of launcher and catalog in parallel.
+- Language: **Go**. Build order: **evidence first, then trimmed scope** (routing eval, adopt-or-build evaluation, bundle prototype and a Linux/Windows Stage 0 before product code; then an MVP launcher and catalog lint with `CATALOG.md`). See `docs/04` "Staged roadmap".
 - Profile sources in the first release: `dir` and `git`. The `plugin` source comes later.
 - Profiles share auth, history and memory (no `CLAUDE_CONFIG_DIR` by default). Accounts are a separate axis (see `docs/07-how-it-invokes-claude.md`).
 

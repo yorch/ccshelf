@@ -15,7 +15,7 @@ Inside a company with many internal Claude Code plugins in a git-based marketpla
 - The user is both **platform owner** and **consumer** of the internal registry.
 - Registry is **git-based**, roughly **50 plugins**.
 - Must support **macOS, Linux and Windows** (requirement R1); both GHE Cloud and Server (R2); none/partial/strict managed policy (R3); open source (R4).
-- Build order: **both tracks in parallel**. Name: **`ccshelf`** for both the project and the command (decided 2026-10-06; it replaced the working names `claude-profile` and `ccprofiles`, see 04 "Name").
+- Build order: **evidence first, then trimmed scope** (this superseded "both tracks in parallel" after the adversarial review; see 04 "Staged roadmap"). Name: **`ccshelf`** for both the project and the command (decided 2026-10-06; it replaced the working names `claude-profile` and `ccprofiles`, see 04 "Name").
 - Implementation language: **Go**. Hosting/CI: **GitHub / GitHub Enterprise and GitHub Actions** (both GHE Cloud and Server, R2).
 - "Catalog" = a generated, browsable view of the marketplace (static site built in CI), not a server (see 04).
 - Process: research the use cases without anchoring on the proposed solution, assess, then assess solutions including the wrapper, then discuss. Opus subagents are used as adversary and brainstormer.

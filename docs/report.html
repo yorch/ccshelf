@@ -267,6 +267,14 @@ ul,ol{padding-left:22px}
 <li>Adversary: mostly a rationalization; lifecycles differ (local ephemeral per-terminal vs org-published, versioned, reviewed), trust models conflict, and bundles are install-side, not per-session subtraction.</li>
 <li><b>Adopted:</b> one repo, independent modules sharing a small <code>core/</code>; a profile bundle is the bridge, so catalog-published bundles become selectable profiles.</li>
 </ul>
+<h3>Review round (2026-10-06): four adversarial reviews</h3>
+<p>Independent Opus reviews of product and scope, technical design, security and trust, and the org repo, catalog and operability.</p>
+<ul>
+<li><b>Verdict:</b> the core mechanism is sound; the plan was wider than its evidence, had real security gaps, and several recorded facts were wrong. The product reviewer put the chance the plan should proceed unchanged at about 10%.</li>
+<li><b>Converged:</b> scope exceeds evidence; the routing benefit is unmeasured; several "decided" items rest on unverified claims; two sources of truth in the docs; the sidecar rationale doesn't hold as stated.</li>
+<li><b>Tensions resolved:</b> product wanted trust, git sources and open source cut while security called the trust model unacceptable, so shrink the surface (closed schema, <code>dir</code> sources only for the MVP, no implicit project profiles); product wanted one track while the others wanted slices of both, so sequence them behind evidence; product wanted internal-first, so keep open source as the direction and gate the scaffolding on employer approval.</li>
+<li><b>Outcome:</b> evidence first, then trimmed scope (Plan tab); security requirements SR1 to SR5 (Platform tab); facts corrected (Stage 0 tab); decisions reopened (Decisions tab).</li>
+</ul>
 <h3>When is a custom catalog worth it?</h3>
 <p class="small">Reference points from the adversary: about 20 plugins needs nothing beyond native features plus a generated README table; about 100 makes a static page with facets worth building; about 500 needs a governed registry. The custom-catalog threshold is roughly 50 to 80 plugins, or more than one publishing team. Your ~50 is at the threshold.</p>
 <div class="card">
@@ -293,10 +301,23 @@ catalog/   metadata lint + static site, run in CI (depends on core)</pre>
 <li>The catalog is derived, never a second source of truth: <code>marketplace.json</code> + per-plugin sidecar files + git data.</li>
 <li>Lead the pitch with routing quality and clutter, not tokens.</li>
 </ul>
+<h3>Direction: evidence first, then trimmed scope</h3>
+<p>Decided 2026-10-06 after the adversarial review; it supersedes "both tracks in parallel". The mechanism is sound, but the plan was wider than its evidence and the benefit it rests on (better routing, less clutter) was never measured.</p>
+<p><b>Phase 0: evidence, before product code</b></p>
+<ol>
+<li><b>Routing eval:</b> 20 or more realistic prompts on your ~50 plugins, full set versus masked profile, recording which skill or plugin fires and whether it was the intended one. Fix the success criterion first. If masking doesn't measurably help, the launcher becomes an alias recipe (<code>dry-run</code> prints the command), not a product.</li>
+<li><b>Adopt, build or contribute:</b> evaluate <code>fuzzyalej/claude-profile</code> and <code>edimuj/claude-rig</code> against our gaps (default-deny on one shared plugin store, managed policy, concurrency, shared profiles from a private repo).</li>
+<li><b>Bundle and masking prototype (T7):</b> does masking a plugin an installed bundle depends on break the bundle? Needs a second config directory and your login. Also settles whether "profile = bundle" stays the bridge.</li>
+<li><b>Stage 0 on Linux and Windows</b> (T1, T2, concurrency, MCP <code>cmd /c</code>).</li>
+<li><b>Measure MCP and connector removal</b> through the settings keys.</li>
+<li><b>Write down kill and obsolescence criteria:</b> a native allowlist or default-deny <code>enabledPlugins</code>, a native task-scoped profiles feature (not #91770), a faceted <code>/plugin</code> Discover, or an existing tool covering the gaps.</li>
+</ol>
+<p><b>Phase 1: MVP, if Phase 0 supports it.</b> Launcher: <code>run</code>, <code>show</code>, <code>dry-run</code>, <code>ls</code>, <code>dir</code> sources, <code>extends</code>, default-deny masking regenerated on every launch, settings validation, <code>exec</code> on Unix and spawn on Windows, closed schema (SR1); macOS and Linux first. Catalog: <code>lint</code> (marketplace fields plus a minimal sidecar: owner, status, when_to_use) and a generated <code>CATALOG.md</code>, with "when to use" pushed into native <code>description</code> and <code>relevance</code>; a static site only if people use the Markdown. Project setup: LICENSE once the employer approves, SECURITY.md, threat model, CONTRIBUTING.md. Release gates are staged: github.com and GHE Cloud first, GHE Server and Windows arm64 best-effort until tested, and a nightly real-<code>claude</code> smoke test before any release.</p>
+<p><b>Phase 2: deferred until someone asks.</b> Accounts, the trust lockfile and git sources (SR2 must land first), <code>compile</code> and committed bundles (pending T7), <code>recommend</code>, <code>shell-init</code> for four shells, the static site, taxonomy, the Analytics join, the <code>plugin</code> source, a concierge, the OTel loop, and interactive wizards beyond the picker.</p>
 <h3>Roadmap (tick to track; saved in this browser)</h3>
 <div class="card" id="roadmap"></div>
 <h3>Do not build (yet)</h3>
-<p>Registry server/DB, vector search, TUI, custom install path, MCP gateway, config-dir-per-profile, concierge before there is usage data, anything that writes shared settings.</p>
+<p>Phase 2 items above (accounts, trust lockfile and git sources, compiled bundles, recommend, the static site and taxonomy); a registry server or database, vector search, a full-screen TUI dashboard (prompts and pickers are in scope, R6), a custom install path, an MCP gateway, config-dir-per-profile, a concierge before there is usage data, and anything that writes shared settings.</p>
 </section>
 
 <section id="design">
@@ -674,7 +695,7 @@ mcp_registry = "mcp/registry.toml"</pre>
 <h3>Decided (all 2026-10-06)</h3>
 <table><thead><tr><th>Decision</th><th>Result</th></tr></thead><tbody>
 <tr><td>Managed policy</td><td>The org enforces it; the tool works across none, partial and strict policy (R3)</td></tr>
-<tr><td>Build order</td><td>Both tracks in parallel, shared <code>core/</code> first</td></tr>
+<tr><td>Build order</td><td>Superseded 2026-10-06: <b>evidence first, then trimmed scope</b> (earlier: both tracks in parallel). See the Plan tab.</td></tr>
 <tr><td>Language</td><td>Go</td></tr>
 <tr><td>Hosting and CI</td><td>GitHub.com, GHE Cloud and GHE Server, with GitHub Actions (R2)</td></tr>
 <tr><td>Name</td><td><code>ccshelf</code> for both the project and the command. History: <code>claude-profile</code> (three existing tools share it), then <code>ccprofiles</code> (GitHub user taken, near-identical names exist, names only the launcher half). Free for <code>ccshelf</code> on GitHub, npm, PyPI, crates.io, Homebrew, the Go proxy and the domains checked. Unofficial and unaffiliated tagline needed; a proper trademark search is still advised.</td></tr>
@@ -691,6 +712,15 @@ mcp_registry = "mcp/registry.toml"</pre>
 <tr><td>Interaction</td><td>R6: interactive mode and flag-based mode; flags are the contract; prompts only on a TTY; trust never auto-accepted</td></tr>
 <tr><td>License</td><td>MIT (LICENSE file still to add; confirm employer approval first)</td></tr>
 </tbody></table>
+<h3>Reopened by the review round</h3>
+<ul>
+<li>"Profile = bundle" as the bridge between the launcher and the catalog, until T7.</li>
+<li>The sidecar location and rationale: the reviewers noted <code>CODEOWNERS</code> can route <code>plugins/*/catalog.toml</code> as well as a central folder, that adding a plugin touches four or five files, and that <code>owner</code> duplicates <code>CODEOWNERS</code>. The sidecar may stay, for the real reasons (fewer merge conflicts, easier editing) and with <code>owner</code> derived from <code>CODEOWNERS</code>.</li>
+<li>Six targets and both GHE flavors as first-release gates (now staged).</li>
+<li>Generated bundles and <code>tag-plugins.yml</code>: leave <code>version</code> out of bundles so the commit SHA is the version, and drop tagging until someone uses version ranges.</li>
+<li>The "do not relitigate" wording: now, reopen when evidence changes and record why.</li>
+<li>Docs structure (suggested, not decided): a README with the glossary, one <code>DECISIONS.md</code> log (date, evidence, confidence, revisit trigger), design notes, frozen research, and a generated or snapshot report instead of a hand-maintained mirror.</li>
+</ul>
 <h3>Still open</h3>
 <ul>
 <li><b>Build, adopt or contribute:</b> evaluate <a href="https://github.com/fuzzyalej/claude-profile">fuzzyalej/claude-profile</a> and <a href="https://github.com/edimuj/claude-rig">edimuj/claude-rig</a> before building the launcher (do they handle default-deny masking against one shared plugin store, concurrency, managed policy and the org data repo flow? could the gaps be contributed upstream?). The catalog track is not covered by any of them.</li>
@@ -938,21 +968,19 @@ function draw(i){c.querySelectorAll("button").forEach((x,j)=>x.classList.toggle(
 const h=document.createElement("h3");h.style.marginTop="0";h.textContent=t;const p=document.createElement("p");p.textContent=d;const pre=document.createElement("pre");pre.textContent=code;const ul=document.createElement("ul");notes.forEach(n=>{const li=document.createElement("li");li.textContent=n;ul.appendChild(li)});b.append(h,p,pre,ul)}
 wf.forEach((w,i)=>{const x=document.createElement("button");x.textContent=w[0];x.onclick=()=>draw(i);c.appendChild(x)});draw(0)})();
 const road=[
-"Stage 0: launcher experiments (done 2026-10-06, see Stage 0 tab)",
-"Decided: build both tracks in parallel, shared core/ first",
-"Project setup: add LICENSE (MIT), confirm employer approval, SECURITY.md, CONTRIBUTING.md",
-"Core: read marketplace.json and installed state, resolve sets, capability probe",
-"Catalog 1: sidecar metadata convention (owner, status, superseded_by, when_to_use, avoid_when, overlaps_with, review_by, support)",
-"Catalog 2: CI lint requiring author/category/tags and sidecar fields",
-"Catalog 3: static catalog generator (facets, overlap, new-since diff, owner/status)",
-"Catalog 4: relevance blocks and profile bundles (bundles/) in marketplace.json",
-"Profiles 1: manifest + resolver + run/show/ls/dry-run with policy detection",
-"Profiles 2: extends, diff, doctor",
-"Profiles 3: compile profile bundles into bundles/ (with --check)",
-"Trust and lockfile for shared profiles",
-"Reusable GitHub Action, goreleaser packaging (Homebrew, Scoop, WinGet), starter template data repo",
-"shell-init and the --account option",
-"Later: OTel importer + recommend; concierge only if data shows need"];
+"Stage 0: launcher experiments on macOS (done 2026-10-06, see Stage 0 tab)",
+"Review round and fact corrections recorded (done 2026-10-06)",
+"Phase 0.1: routing eval on the real ~50 plugins, with the success criterion fixed first",
+"Phase 0.2: adopt, build or contribute: evaluate fuzzyalej/claude-profile and edimuj/claude-rig",
+"Phase 0.3: bundle and masking prototype (T7), needs a second config dir and login",
+"Phase 0.4: Stage 0 on Linux and Windows",
+"Phase 0.5: measure MCP and connector removal via settings keys",
+"Phase 0.6: write kill and obsolescence criteria",
+"Employer approval for open-sourcing; then LICENSE, SECURITY.md, threat model, CONTRIBUTING.md",
+"MVP launcher: run, show, dry-run, ls, dir sources, extends, default-deny masking, closed schema, settings validation",
+"MVP catalog: lint (owner, status, when_to_use) and generated CATALOG.md",
+"Nightly real-claude smoke test before any release",
+"Deferred: accounts, trust lockfile and git sources, compiled bundles, recommend, shell-init, static site, taxonomy, Analytics join"];
 const rm=$("#roadmap");let st={0:true,1:true};try{const x=localStorage.getItem("cp-road");if(x)st=JSON.parse(x)}catch(e){}
 road.forEach((t,i)=>{const l=document.createElement("label");l.className="task";const c=document.createElement("input");c.type="checkbox";c.checked=!!st[i];c.onchange=()=>{st[i]=c.checked;try{localStorage.setItem("cp-road",JSON.stringify(st))}catch(e){}};l.appendChild(c);l.appendChild(document.createTextNode(t));rm.appendChild(l)});
 

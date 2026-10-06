@@ -51,7 +51,7 @@ These terms are used the same way in every document and in the report.
 | Decision | Result |
 |---|---|
 | Managed policy | The user's org enforces it; the tool works across none, partial and strict policy |
-| Build order | Both tracks in parallel, shared `core/` first |
+| Build order | Superseded 2026-10-06: **evidence first, then trimmed scope** (earlier: both tracks in parallel); see `04` "Staged roadmap" |
 | Language | Go |
 | Name | `ccshelf` for both the project and the command. History: `claude-profile` (three existing tools share it) then `ccprofiles` (GitHub user taken, near-identical names exist, names only the launcher half). Free on the registries and domains checked; see `04` "Name" |
 | Catalog hosting | The adopter's choice; the tool outputs a static directory |
