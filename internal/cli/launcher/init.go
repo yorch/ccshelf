@@ -69,6 +69,12 @@ func (l *launcher) initConfig(ctx context.Context, cc *clicore.Context, f *initF
 	if f.ref != "" && f.gitURL == "" {
 		return ui.Usage(errors.New("--ref needs --git-url"))
 	}
+	if f.gitURL != "" {
+		if err := config.ValidateGitURL(f.gitURL); err != nil {
+			return ui.Usage(withHint(fmt.Errorf("--git-url: %w", err),
+				"use a remote URL (https://, ssh:// or git@host:path); for a local folder of profiles use --dir <absolute path>"))
+		}
+	}
 	cfg := config.Default()
 	if f.gitURL != "" {
 		cfg.Sources = append(cfg.Sources, config.SourceConfig{Type: config.SourceGit, URL: f.gitURL, Ref: f.ref, Path: f.path})

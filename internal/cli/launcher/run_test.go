@@ -58,8 +58,8 @@ func TestRunDashPassthrough(t *testing.T) {
 	if h.startArgs[n-2] != "-p" || h.startArgs[n-1] != "summarize this" {
 		t.Errorf("args %v", h.startArgs)
 	}
-	h.mustRun("run", "--no-interactive", "mine", "--json")
-	if h.startArgs[len(h.startArgs)-1] != "--json" {
+	h.mustRun("run", "--no-interactive", "mine", "--verbose")
+	if h.startArgs[len(h.startArgs)-1] != "--verbose" {
 		t.Errorf("flags after the profile belong to claude: %v", h.startArgs)
 	}
 }

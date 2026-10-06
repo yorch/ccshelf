@@ -130,6 +130,16 @@ func (l *launcher) newProfile(ctx context.Context, cc *clicore.Context, name str
 		asked = true
 	}
 
+	for _, c := range []struct {
+		flag string
+		ids  []string
+	}{{"--plugin", f.plugins}, {"--exclude-plugin", f.exclude}} {
+		for _, id := range c.ids {
+			if !validPluginID(id) {
+				return ui.Usage(fmt.Errorf("%s: %q is not a plugin id of the form name@marketplace (letters, digits, '.', '_' and '-', not starting with '-')", c.flag, ui.SanitizeLine(id)))
+			}
+		}
+	}
 	m := profile.Manifest{
 		Name: name, Description: f.description, Owner: f.owner, Extends: f.from,
 		Plugins: profile.Plugins{Include: f.plugins, Exclude: f.exclude},

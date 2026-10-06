@@ -30,6 +30,10 @@
 //     `plugin list` is best effort), can never be masked by a settings file,
 //     so they are never written (neither true nor false) and all of them are
 //     listed in Locked.
+//   - UserLayerDropped (the session runs with --setting-sources
+//     project,local, so the user layer that enables plugins is gone): installed
+//     protected and locked plugins are written true, because omitting them
+//     would leave them disabled. They are never written false.
 //   - An empty Installed list in allow-only mode adds the warning "no
 //     installed plugins were found; nothing will be masked": it usually means
 //     the plugin listing was run in the wrong place.

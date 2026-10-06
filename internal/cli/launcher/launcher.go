@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -210,6 +211,9 @@ func splitRunArgs(cmd *cobra.Command, args []string) (name string, pass []string
 		return "", nil, nil
 	}
 	pass = args[1:]
+	if err := checkPassthrough(pass); err != nil {
+		return "", nil, err
+	}
 	// With flag parsing stopped at the profile name, pflag leaves a literal
 	// "--" in place; it is the separator, not an argument for claude.
 	if len(pass) > 0 && pass[0] == "--" {
@@ -217,6 +221,38 @@ func splitRunArgs(cmd *cobra.Command, args []string) (name string, pass []string
 	}
 	return args[0], pass, nil
 }
+
+// ownFlags are the flags of ccshelf itself. After the profile name they would
+// go to claude, which does not know them.
+var ownFlags = map[string]bool{
+	"--account": true, "--yes": true, "--claude": true, "--config": true, "--root": true,
+	"--no-interactive": true, "--no-color": true, "--plain": true, "--json": true,
+}
+
+// checkPassthrough fails (exit code 2) when a flag of ccshelf appears among the
+// arguments passed to claude, before any literal "--", because it would not do
+// what the user meant.
+func checkPassthrough(pass []string) error {
+	for _, a := range pass {
+		if a == "--" {
+			return nil
+		}
+		name, _, _ := strings.Cut(a, "=")
+		if ownFlags[name] {
+			return ui.Usage(withHint(fmt.Errorf("%s comes after the profile name, so it would be passed to claude, which does not know it", ui.SanitizeLine(name)),
+				"flags of ccshelf go before the profile name: ccshelf run %s <profile> ...", ui.SanitizeLine(name)))
+		}
+	}
+	return nil
+}
+
+// pluginIDRe is the plugin id form accepted anywhere ccshelf prints or passes
+// it on: name@marketplace, each part starting with a letter or digit so that
+// an id can never read as a command-line flag.
+var pluginIDRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9._-]*$`)
+
+// validPluginID reports whether id is a well-formed plugin id.
+func validPluginID(id string) bool { return len(id) <= 256 && pluginIDRe.MatchString(id) }
 
 // safeBase returns the base name of path for messages.
 func safeBase(p string) string { return filepath.Base(p) }

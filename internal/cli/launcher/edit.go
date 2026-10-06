@@ -61,6 +61,12 @@ you start yourself.`,
 		if picked {
 			printEquivalent(cc, ui.NewRecorder("edit", name))
 		}
+		if !canPrompt(cc) {
+			// An editor needs a terminal. Do not start one for a script or a
+			// pipe: it could hang or write into the wrong stream.
+			return ui.Usage(withHint(errors.New("edit opens an editor and needs a terminal; none is available"),
+				"use: ccshelf edit %s --path, and open the printed file yourself", name))
+		}
 		editor := cc.Getenv("VISUAL")
 		if editor == "" {
 			editor = cc.Getenv("EDITOR")

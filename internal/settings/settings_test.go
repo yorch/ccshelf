@@ -578,3 +578,48 @@ func mustList(t *testing.T, list func(map[string]string) ([]claude.Plugin, error
 	}
 	return p
 }
+
+func TestUserLayerDropped(t *testing.T) {
+	inst := []claude.Plugin{plug("a@m"), plug("audit@m", required), plug("guard@m"), plug("c@m"), plug("forced@m")}
+	for _, mode := range []string{ModeAllowOnly, ModeAdditive} {
+		t.Run(mode, func(t *testing.T) {
+			spec := Spec{
+				Installed: inst, Mode: mode, Include: []string{"a@m"},
+				Protected:    []string{"guard@m", "uninstalled@m"},
+				PolicyLocked: []string{"forced@m"}, UserLayerDropped: true,
+			}
+			res, err := Build(spec)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, id := range []string{"a@m", "audit@m", "guard@m", "forced@m"} {
+				if v, ok := res.Doc.EnabledPlugins[id]; !ok || !v {
+					t.Errorf("%s = %v, %v; want true", id, v, ok)
+				}
+			}
+			if _, ok := res.Doc.EnabledPlugins["uninstalled@m"]; ok {
+				t.Error("an uninstalled protected plugin was written")
+			}
+			for id, v := range res.Doc.EnabledPlugins {
+				if !v && (id == "guard@m" || id == "audit@m" || id == "forced@m") {
+					t.Errorf("%s written false", id)
+				}
+			}
+			eq(t, res.Locked, []string{"audit@m", "forced@m"})
+			if mode == ModeAllowOnly {
+				eq(t, res.Masked, []string{"c@m"})
+				eq(t, res.Protected, []string{"guard@m"})
+			} else if len(res.Masked) != 0 {
+				t.Errorf("additive masked %v", res.Masked)
+			}
+		})
+	}
+	// Without the flag nothing changes: protected is omitted.
+	res, err := Build(Spec{Installed: inst, Include: []string{"a@m"}, Protected: []string{"guard@m"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := res.Doc.EnabledPlugins["guard@m"]; ok {
+		t.Error("protected plugin written without UserLayerDropped")
+	}
+}

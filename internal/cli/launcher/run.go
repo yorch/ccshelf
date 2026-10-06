@@ -30,6 +30,10 @@ type launch struct {
 	// Env is the complete child environment.
 	Env []string
 
+	// PassFrom is the index in Args where the arguments the user passed
+	// through to claude start.
+	PassFrom int
+
 	Settings, MCPConfig, PromptFile string
 	Account                         string
 	Warnings                        []string
@@ -123,7 +127,7 @@ func (l *launcher) runProfile(ctx context.Context, cc *clicore.Context, name str
 		eq = append(eq, name)
 		if len(pass) > 0 {
 			eq = append(eq, "--")
-			eq = append(eq, ui.RedactArgs(pass)...)
+			eq = append(eq, redactPass(pass)...)
 		}
 		if err := ui.Equivalent(cc.Streams.Err, cc.GOOS, eq); err != nil {
 			warnf(cc, "cannot print the equivalent command: %v", err)
@@ -209,7 +213,7 @@ func (s *session) buildLaunch(ctx context.Context, name string, pass []string, y
 		warnings = append(warnings, msg)
 		warnf(cc, "%s", msg)
 	}
-	for _, w := range r.Warnings {
+	for _, w := range warningsForGOOS(cc.GOOS, r.Warnings) {
 		warn("%s", w)
 	}
 	if m.Status == profile.StatusDeprecated {
@@ -252,17 +256,28 @@ func (s *session) buildLaunch(ctx context.Context, name string, pass []string, y
 	matrix := policy.Evaluate(pol, installed)
 	strict := m.MCP.Strict != nil && *m.MCP.Strict
 	hide := m.MCP.ClaudeAIConnectors == profile.ConnectorsNone
-	if strict && len(s.protectedMCP) > 0 {
-		return nil, ui.Failure(withHint(
-			fmt.Errorf("profile %q sets mcp.strict, which would also remove the protected MCP servers: %s", r.Name, strings.Join(s.protectedMCP, ", ")),
-			"the org protects these servers (SR3); remove mcp.strict from the profile"))
+
+	// mcp.strict: --strict-mcp-config removes every server but the profile's,
+	// protected ones included, and managed policy can block the flag. Where the
+	// flag cannot be used, deniedMcpServers names the known plugin servers
+	// instead (protected ones excluded), and the profile degrades with a note.
+	strictFlag, denyRoute, strictWhy := strict, false, ""
+	if strict {
+		if gone := missingFrom(s.protectedMCP, r.MCP); gone != "" {
+			strictFlag, denyRoute = false, true
+			strictWhy = fmt.Sprintf("it would also remove the protected MCP server %s", ui.SanitizeLine(gone))
+		} else if f := matrix.Features[policy.StrictMCPConfig]; f.State == policy.Blocked && m.Policy.OnBlocked != profile.OnBlockedFail {
+			strictFlag, denyRoute = false, true
+			strictWhy = "managed policy blocks it: " + f.Reason
+		}
 	}
 	needs := policy.Needs{
-		ExtraMCPServers:        strict || len(r.MCP) > 0,
-		StrictMCPConfig:        strict,
+		ExtraMCPServers:        strictFlag || len(r.MCP) > 0,
+		StrictMCPConfig:        strictFlag,
 		DropUserSettingSources: !m.InheritsUserSettings(),
 		AppendSystemPromptFile: len(r.Prompt) > 0,
 		HideConnectors:         hide,
+		DenyMCPServers:         denyRoute,
 	}
 	applied, err := matrix.Plan(needs, m.Policy.OnBlocked)
 	if err != nil {
@@ -275,11 +290,13 @@ func (s *session) buildLaunch(ctx context.Context, name string, pass []string, y
 	for _, w := range matrix.Warnings {
 		warn("policy: %s", w)
 	}
+	// The resolver already warned that inherit_user_settings = false drops the
+	// user layer; applied.Warnings adds only what policy changes about that.
 	for _, w := range applied.Warnings {
 		warn("%s", w)
 	}
-	if !m.InheritsUserSettings() && applied.DropUserSettingSources {
-		warn("inherit_user_settings = false: your user settings (permissions, hooks, MCP servers, model) are not loaded in this session")
+	if denyRoute {
+		warn("mcp.strict: --strict-mcp-config is not used (%s); the known plugin MCP servers outside the profile are denied instead, while MCP servers from your own settings or project files stay available", strictWhy)
 	}
 
 	// Settings: build, validate, write, re-read, validate again.
@@ -297,17 +314,32 @@ func (s *session) buildLaunch(ctx context.Context, name string, pass []string, y
 		Model:          m.Session.Model,
 		Env:            m.Session.Env,
 		Profile:        r.Name,
+
+		UserLayerDropped: applied.DropUserSettingSources,
+	}
+	if denyRoute && applied.DenyMCPServers {
+		spec.DenyMCP = deniableMCP(installed, m.Plugins.Include, s.protectedPlugins, matrix.LockedPlugins(), s.protectedMCP)
 	}
 	res, err := settings.Build(spec)
 	if err != nil {
 		return nil, ui.Failure(fmt.Errorf("building settings: %w", err))
 	}
+	notInstalled := map[string]bool{}
+	for _, id := range res.Missing {
+		notInstalled[fmt.Sprintf("plugin %s is not installed and was not written", id)] = true
+	}
 	for _, w := range res.Warnings {
-		warn("%s", w)
+		if !notInstalled[w] { // reported once, with the install hint, below
+			warn("%s", w)
+		}
 	}
 	if len(res.Missing) > 0 {
 		for _, id := range res.Missing {
-			warn("plugin %s is in the profile but not installed; install it inside Claude Code with: /plugin install %s", id, id)
+			if validPluginID(id) {
+				warn("plugin %s is in the profile but not installed; install it inside Claude Code with: /plugin install %s", id, id)
+			} else {
+				warn("plugin %q is in the profile but not installed (and is not a valid plugin id)", ui.SanitizeLine(id))
+			}
 		}
 		if canPrompt(cc) && !yes {
 			ok, err := cc.Prompt.Confirm(ctx, "Some plugins of the profile are not installed. Start anyway?", true)
@@ -394,6 +426,7 @@ func (s *session) buildLaunch(ctx context.Context, name string, pass []string, y
 			warn("%s resumes a session that may have been started under another profile; its recorded prompt and skill list are reused", name)
 		}
 	}
+	ln.PassFrom = len(ln.Args)
 	ln.Args = append(ln.Args, pass...)
 	ln.Env = s.env
 	ln.Warnings = warnings
@@ -473,13 +506,13 @@ func printDryRun(cc *clicore.Context, ln *launch) error {
 		}
 		return ui.WriteJSON(cc.Streams.Out, "dry-run", out{
 			Profile: ln.Resolved.Name, Account: ln.Account,
-			Command:  append([]string{ln.Bin}, ui.RedactArgs(ln.Args)...),
+			Command:  append([]string{ln.Bin}, ln.redactedArgs()...),
 			Env:      emptyToNil(env),
 			Settings: ln.Settings, MCPConfig: ln.MCPConfig, PromptFile: ln.PromptFile, Warnings: w,
 		})
 	}
 	sh := shell(cc)
-	words := append([]string{ln.Bin}, ui.RedactArgs(ln.Args)...)
+	words := append([]string{ln.Bin}, ln.redactedArgs()...)
 	joined, err := ui.Join(sh, words)
 	if err != nil {
 		return ui.Failure(fmt.Errorf("printing the command: %w", err))
@@ -513,4 +546,102 @@ func emptyToNil(m map[string]string) map[string]string {
 		return nil
 	}
 	return m
+}
+
+// redactedArgs returns Args for display: the generated part as it is and the
+// passthrough part through [redactPass].
+func (l *launch) redactedArgs() []string {
+	i := l.PassFrom
+	if i < 0 || i > len(l.Args) {
+		i = 0
+	}
+	return append(append([]string(nil), l.Args[:i]...), redactPass(l.Args[i:])...)
+}
+
+// redactPass redacts the arguments passed through to claude for display. A
+// literal "--" does not end the redaction: every segment between "--"
+// separators is redacted on its own, so "-- --api-key sk-abc" cannot leak.
+func redactPass(pass []string) []string {
+	out := make([]string, 0, len(pass))
+	start := 0
+	for i := 0; i <= len(pass); i++ {
+		if i < len(pass) && pass[i] != "--" {
+			continue
+		}
+		out = append(out, ui.RedactArgs(pass[start:i])...)
+		if i < len(pass) {
+			out = append(out, "--")
+		}
+		start = i + 1
+	}
+	return out
+}
+
+// missingFrom returns the first label of protected that is not a server the
+// profile itself provides, or "" when every protected server is one of them.
+func missingFrom(protected []string, servers map[string]profile.MCPServer) string {
+	for _, l := range protected {
+		if _, ok := servers[l]; !ok {
+			return l
+		}
+	}
+	return ""
+}
+
+// deniableMCP lists the full labels (plugin:<plugin>:<server>) of the MCP
+// servers of installed plugins that the profile does not include, leaving out
+// protected plugins, plugins that policy keeps on and protected servers.
+func deniableMCP(installed []claude.Plugin, include, protectedPlugins, locked, protectedMCP []string) []string {
+	skip := map[string]bool{}
+	for _, l := range [][]string{include, protectedPlugins, locked} {
+		for _, id := range l {
+			skip[id] = true
+		}
+	}
+	keep := map[string]bool{}
+	for _, l := range protectedMCP {
+		keep[l] = true
+	}
+	seen := map[string]bool{}
+	var out []string
+	for _, p := range installed {
+		if p.Name == "" || skip[p.ID] || p.RequiredByOrg {
+			continue
+		}
+		for server := range p.MCPServers {
+			label := "plugin:" + p.Name + ":" + server
+			if !keep[label] && !seen[label] {
+				seen[label] = true
+				out = append(out, label)
+			}
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// warningsForGOOS drops the profile warnings about a per-OS override of an MCP
+// server ("... on windows") when goos is another system: they describe a
+// command that does not run here.
+func warningsForGOOS(goos string, ws []string) []string {
+	name := goos
+	if goos == "darwin" {
+		name = "macos"
+	}
+	var out []string
+	for _, w := range ws {
+		if strings.HasPrefix(w, "MCP server ") {
+			skip := false
+			for _, o := range []string{"windows", "macos", "linux"} {
+				if strings.HasSuffix(w, " on "+o) && o != name {
+					skip = true
+				}
+			}
+			if skip {
+				continue
+			}
+		}
+		out = append(out, w)
+	}
+	return out
 }

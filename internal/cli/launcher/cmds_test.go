@@ -178,6 +178,7 @@ func TestNewWizard(t *testing.T) {
 
 func TestEdit(t *testing.T) {
 	h := newHarness(t)
+	h.prompt = ui.NewScripted(0) // a terminal: edit starts an editor only on one
 	h.writeProfile("mine", personalMine)
 	p := filepath.Join(h.configDir(), "profiles", "mine.toml")
 	h.mustRun("edit", "mine", "--path")
@@ -215,6 +216,7 @@ func TestEdit(t *testing.T) {
 	if code := h.run("edit", "../x"); code != ui.ExitUsage {
 		t.Errorf("traversal: %d", code)
 	}
+	h.prompt = nil
 	if code := h.run("edit"); code != ui.ExitUsage {
 		t.Errorf("missing: %d", code)
 	}

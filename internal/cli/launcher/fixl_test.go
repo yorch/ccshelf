@@ -4,12 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
 
+	"github.com/ccshelf/ccshelf/internal/claude"
 	"github.com/ccshelf/ccshelf/internal/cli/clicore"
 	"github.com/ccshelf/ccshelf/internal/config"
 	"github.com/ccshelf/ccshelf/internal/policy"
@@ -23,6 +26,7 @@ import (
 
 func TestEditRunsEditorOnUncancelableContext(t *testing.T) {
 	h := newHarness(t)
+	h.prompt = ui.NewScripted(0)
 	h.writeProfile("mine", personalMine)
 	t.Setenv("VISUAL", "")
 	t.Setenv("EDITOR", "myedit")
@@ -234,6 +238,7 @@ func TestParseEditor(t *testing.T) {
 
 func TestEditEditorPathWithSpaces(t *testing.T) {
 	h := newHarness(t)
+	h.prompt = ui.NewScripted(0)
 	h.writeProfile("mine", personalMine)
 	dir := filepath.Join(t.TempDir(), "My Editor")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -375,6 +380,7 @@ func TestInitRefWithoutURLDoesNotOpenTheWizard(t *testing.T) {
 
 func TestEditWarnsWhenTheEditedProfileDoesNotResolve(t *testing.T) {
 	h := newHarness(t)
+	h.prompt = ui.NewScripted(0)
 	h.writeProfile("mine", personalMine)
 	p := filepath.Join(h.configDir(), "profiles", "mine.toml")
 	t.Setenv("VISUAL", "")
@@ -504,19 +510,188 @@ func TestRunPluginSourceAccountMismatch(t *testing.T) {
 	}
 }
 
-func TestRunStrictProfileRefusedWithProtectedMCP(t *testing.T) {
+// pluginsWithMCP writes a plugin list where each id maps to its MCP server names.
+func pluginsWithMCP(t *testing.T, plugins map[string][]string) string {
+	t.Helper()
+	var list []map[string]any
+	for id, servers := range plugins {
+		m := map[string]any{}
+		for _, n := range servers {
+			m[n] = map[string]any{"command": "x"}
+		}
+		e := map[string]any{"id": id, "version": "1.0.0", "scope": "user", "enabled": true, "installPath": "/fake/" + id}
+		if len(m) > 0 {
+			e["mcpServers"] = m
+		}
+		list = append(list, e)
+	}
+	b, _ := json.Marshal(list)
+	pl := filepath.Join(t.TempDir(), "plugins.json")
+	testutil.WriteFile(t, pl, string(b))
+	return pl
+}
+
+func TestRunStrictWithProtectedMCPDeniesKnownServers(t *testing.T) {
 	h := newHarness(t)
 	org := h.exampleOrg()
 	if err := os.WriteFile(filepath.Join(org, "ccshelf.toml"), []byte("[protect]\nmcp = [\"audit\"]\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	h.useOrg(org)
-	hash := orgHash(t, h, "sre") // sre sets mcp.strict = true
+	t.Setenv("FAKE_CLAUDE_PLUGINS", pluginsWithMCP(t, map[string][]string{
+		"sre-kit@acme": {"runbooks"}, "design-kit@acme": {"figma", "tokens"}, "seo-tools@acme": {"crawler"},
+	}))
+	hash := orgHash(t, h, "sre") // sre sets mcp.strict = true and includes sre-kit
 	h.mustRun("trust", "sre", "--accept", hash)
-	if code := h.run("run", "sre"); code != ui.ExitFailure || h.started != 0 {
+	if code := h.run("run", "sre"); code != 0 || h.started != 1 {
 		t.Fatalf("code %d started %d\n%s", code, h.started, h.errb)
 	}
-	if !strings.Contains(h.errb.String(), "protected MCP servers: audit") {
+	if hasArg(h.startArgs, "--strict-mcp-config") {
+		t.Errorf("--strict-mcp-config would remove the protected server: %v", h.startArgs)
+	}
+	if !strings.Contains(h.errb.String(), "protected MCP server audit") {
+		t.Errorf("stderr: %s", h.errb)
+	}
+	got := fmt.Sprint(h.settingsOf(h.startArgs)["deniedMcpServers"])
+	for _, want := range []string{"plugin:design-kit:figma", "plugin:design-kit:tokens", "plugin:seo-tools:crawler"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("%s not denied: %s", want, got)
+		}
+	}
+	if strings.Contains(got, "plugin:sre-kit") || strings.Contains(got, "audit") {
+		t.Errorf("an included or protected server is denied: %s", got)
+	}
+}
+
+func TestRunStrictDeniesInsteadWhenPolicyBlocksTheFlag(t *testing.T) {
+	h := newHarness(t)
+	h.writeProfile("strict", "name = \"strict\"\n[plugins]\ninclude = [\"sre-kit@acme\"]\n[mcp]\nstrict = true\n")
+	h.writeManaged(`{"disableSideloadFlags": true}`)
+	t.Setenv("FAKE_CLAUDE_PLUGINS", pluginsWithMCP(t, map[string][]string{
+		"sre-kit@acme": {"runbooks"}, "design-kit@acme": {"figma"},
+	}))
+	if code := h.run("run", "strict"); code != 0 || h.started != 1 {
+		t.Fatalf("code %d started %d\n%s", code, h.started, h.errb)
+	}
+	if hasArg(h.startArgs, "--strict-mcp-config") || hasArg(h.startArgs, "--mcp-config") {
+		t.Errorf("blocked sideload flags used: %v", h.startArgs)
+	}
+	if got := fmt.Sprint(h.settingsOf(h.startArgs)["deniedMcpServers"]); !strings.Contains(got, "plugin:design-kit:figma") || strings.Contains(got, "sre-kit") {
+		t.Errorf("deniedMcpServers = %s", got)
+	}
+	if !strings.Contains(h.errb.String(), "managed policy blocks it") {
+		t.Errorf("stderr: %s", h.errb)
+	}
+	// on_blocked = "fail" keeps failing instead of degrading.
+	h.writeProfile("strictfail", "name = \"strictfail\"\n[mcp]\nstrict = true\n[policy]\non_blocked = \"fail\"\n")
+	h.started = 0
+	if code := h.run("run", "strictfail"); code != ui.ExitPolicy || h.started != 0 {
+		t.Errorf("on_blocked fail: code %d started %d\n%s", code, h.started, h.errb)
+	}
+}
+
+func TestDeniableMCP(t *testing.T) {
+	mk := func(id string, servers ...string) claude.Plugin {
+		name, _ := claude.SplitID(id)
+		p := claude.Plugin{ID: id, Name: name, MCPServers: map[string]json.RawMessage{}}
+		for _, s := range servers {
+			p.MCPServers[s] = json.RawMessage("{}")
+		}
+		return p
+	}
+	forced := mk("forced@m", "f")
+	forced.RequiredByOrg = true
+	got := deniableMCP(
+		[]claude.Plugin{mk("in@m", "a"), mk("prot@m", "b"), mk("lock@m", "c"), mk("x@m", "s2", "s1"), forced, mk("keep@m", "k")},
+		[]string{"in@m"}, []string{"prot@m"}, []string{"lock@m"}, []string{"plugin:keep:k", "other"})
+	if want := []string{"plugin:x:s1", "plugin:x:s2"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("deniableMCP = %v, want %v", got, want)
+	}
+}
+
+func TestRedactPass(t *testing.T) {
+	for _, c := range []struct{ in, want []string }{
+		{[]string{"-p", "hi", "--", "--api-key", "sk-abc"}, []string{"-p", "hi", "--", "--api-key", "<redacted>"}},
+		{[]string{"--", "--token=zzz", "--", "--password", "p"}, []string{"--", "--token=<redacted>", "--", "--password", "<redacted>"}},
+		{[]string{"--resume"}, []string{"--resume"}},
+		{nil, []string{}},
+	} {
+		if got := redactPass(c.in); !reflect.DeepEqual(got, c.want) {
+			t.Errorf("redactPass(%v) = %v, want %v", c.in, got, c.want)
+		}
+	}
+}
+
+func TestDryRunRedactsAfterDoubleDash(t *testing.T) {
+	h := newHarness(t)
+	h.writeProfile("mine", personalMine)
+	h.mustRun("dry-run", "mine", "-p", "x", "--", "--api-key", "sk-abc")
+	if strings.Contains(h.out.String(), "sk-abc") {
+		t.Errorf("secret printed: %s", h.out)
+	}
+}
+
+func TestWarningsForGOOS(t *testing.T) {
+	ws := []string{`MCP server "figma" runs "cmd", a shell or command launcher on windows`, `MCP server "x" runs "sh", a shell on linux`, "other"}
+	if got := warningsForGOOS("darwin", ws); !reflect.DeepEqual(got, []string{"other"}) {
+		t.Errorf("darwin: %v", got)
+	}
+	if got := warningsForGOOS("windows", ws); len(got) != 2 || !strings.Contains(got[0], "figma") {
+		t.Errorf("windows: %v", got)
+	}
+}
+
+func TestRunRejectsOwnFlagsAfterTheProfile(t *testing.T) {
+	h := newHarness(t)
+	h.writeProfile("mine", personalMine)
+	for _, args := range [][]string{
+		{"run", "mine", "--account", "personal"},
+		{"run", "mine", "--yes"},
+		{"run", "mine", "--config=x"},
+		{"dry-run", "mine", "--json"},
+		{"run", "mine", "--no-interactive"},
+	} {
+		h.started = 0
+		if code := h.run(args...); code != ui.ExitUsage || h.started != 0 {
+			t.Errorf("%v: code %d started %d", args, code, h.started)
+		}
+		if !strings.Contains(h.errb.String(), "before the profile name") {
+			t.Errorf("%v: stderr %s", args, h.errb)
+		}
+	}
+	// After a literal "--" the arguments belong to claude.
+	h.mustRun("run", "mine", "--", "--json")
+}
+
+func TestEditNeedsATerminal(t *testing.T) {
+	h := newHarness(t)
+	h.writeProfile("mine", personalMine)
+	t.Setenv("EDITOR", "myedit")
+	if code := h.run("edit", "mine"); code != ui.ExitUsage || len(h.spawned) != 0 {
+		t.Fatalf("code %d spawned %v", code, h.spawned)
+	}
+	if !strings.Contains(h.errb.String(), "needs a terminal") {
+		t.Errorf("stderr: %s", h.errb)
+	}
+}
+
+func TestInitGitURLLocalPath(t *testing.T) {
+	h := newHarness(t)
+	if code := h.run("init", "--git-url", "/some/local/dir"); code != ui.ExitUsage {
+		t.Fatalf("code %d", code)
+	}
+	e := h.errb.String()
+	if !strings.Contains(e, "--git-url") || strings.Contains(e, "needs --ref") || !strings.Contains(e, "--dir") {
+		t.Errorf("stderr: %s", e)
+	}
+}
+
+func TestNewRejectsFlagLikePluginID(t *testing.T) {
+	h := newHarness(t)
+	if code := h.run("new", "x1", "--plugin", "--x@y"); code != ui.ExitUsage {
+		t.Fatalf("code %d\n%s", code, h.errb)
+	}
+	if !strings.Contains(h.errb.String(), "not a plugin id") {
 		t.Errorf("stderr: %s", h.errb)
 	}
 }

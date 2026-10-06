@@ -43,7 +43,7 @@ const connectorPrefix = "claude.ai "
 
 var (
 	modelPattern    = regexp.MustCompile(`^[A-Za-z0-9._:/\[\]-]+$`)
-	pluginIDPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+@[A-Za-z0-9._-]+$`)
+	pluginIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9._-]*$`)
 	skillPattern    = regexp.MustCompile(`^[A-Za-z0-9._:-]+$`)
 	skillValues     = map[string]bool{"on": true, "name-only": true, "user-invocable-only": true, "off": true}
 )
@@ -87,6 +87,13 @@ type Spec struct {
 	// Profile, when non-empty, adds CCSHELF_PROFILE to env. It is the only
 	// way to set that variable: Env must not contain it.
 	Profile string
+	// UserLayerDropped says the session runs without the user settings layer
+	// (--setting-sources project,local), which is where the installed plugins
+	// are normally enabled. Build then writes every installed protected plugin
+	// (and every installed policy-locked one, which is harmless) as true, so a
+	// protected plugin stays enabled instead of silently going dark. Nothing
+	// is ever written false for them.
+	UserLayerDropped bool
 }
 
 // DeniedServer is one deniedMcpServers entry.
@@ -337,6 +344,12 @@ func buildPlugins(spec Spec, mode string, include, exclude, protected map[string
 	for _, id := range ids {
 		if locked[id] {
 			res.Locked = append(res.Locked, id)
+			if spec.UserLayerDropped {
+				// Managed policy still applies, but the marker that says a
+				// plugin is forced is best effort: enable it explicitly.
+				plugins[id] = true
+				continue
+			}
 			if exclude[id] || (mode == ModeAllowOnly && !include[id]) {
 				res.Warnings = append(res.Warnings, fmt.Sprintf("plugin %s is required by org policy and cannot be masked", id))
 			}
@@ -347,6 +360,9 @@ func buildPlugins(spec Spec, mode string, include, exclude, protected map[string
 			continue
 		}
 		wouldMask := exclude[id] || mode == ModeAllowOnly
+		if spec.UserLayerDropped && protected[id] {
+			plugins[id] = true
+		}
 		if !wouldMask {
 			continue
 		}

@@ -309,6 +309,32 @@ func TestRunProtectedPluginsUntouched(t *testing.T) {
 	}
 }
 
+// With inherit_user_settings = false the user layer, which enables plugins, is
+// dropped (--setting-sources project,local): a protected plugin must then be
+// written true, never omitted, or it would silently be off.
+func TestRunProtectedPluginsEnabledWhenUserLayerDropped(t *testing.T) {
+	s := newSandbox(t)
+	org := exampleOrg(t)
+	s.Setenv("FAKE_CLAUDE_PLUGINS", pluginsFile(t, "audit-logger@acme", "sre-kit@acme", "design-kit@acme"))
+	s.addDirSource(filepath.Join(org, "profiles"))
+	s.writeProfile("isolated", "name = \"isolated\"\n[plugins]\ninclude = [\"design-kit@acme\"]\n[session]\ninherit_user_settings = false\n")
+	r := s.mustRun("run", "isolated")
+	argv := s.launches()[0].Argv
+	if argAfter(argv, "--setting-sources") != "project,local" {
+		t.Fatalf("user layer not dropped: %v", argv)
+	}
+	ep := enabledPlugins(t, settingsOf(t, s.launches()[0]))
+	if v, ok := ep["audit-logger@acme"]; !ok || !v {
+		t.Errorf("protected plugin must be written true when the user layer is dropped: %v", ep)
+	}
+	if !ep["design-kit@acme"] || ep["sre-kit@acme"] {
+		t.Errorf("enabledPlugins = %v", ep)
+	}
+	if n := strings.Count(r.Stderr, "inherit_user_settings = false"); n != 1 {
+		t.Errorf("the inherit warning appears %d times:\n%s", n, r.Stderr)
+	}
+}
+
 func pluginsFile(t *testing.T, ids ...string) string {
 	t.Helper()
 	var list []map[string]any
