@@ -80,6 +80,7 @@ jobs:
           home="$(mktemp -d "${RUNNER_TEMP}/home.XXXXXX")"
           export HOME="$home" XDG_CONFIG_HOME="$home/.config" XDG_CACHE_HOME="$home/.cache"
           export PATH="${GITHUB_WORKSPACE}/dist:${PATH}"
+          export CCSHELF_REAL_CLAUDE=1
           go test -tags realclaude -count=1 -timeout 20m ./internal/e2e/...
 
   report:

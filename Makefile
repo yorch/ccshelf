@@ -28,7 +28,7 @@ ACTIONLINT_VERSION    := v1.7.12
 TARGETS := darwin/amd64 darwin/arm64 linux/amd64 linux/arm64 windows/amd64 windows/arm64
 
 .PHONY: help build test test-race cover lint fmt fmt-check vet vuln cross docs docs-check \
-        examples-check action-test pins-check links-check eol-check snapshot tools clean ci
+        examples-check e2e action-test pins-check links-check eol-check snapshot tools clean ci
 
 help: ## List the targets
 	@awk 'BEGIN { FS = ":.*## " } /^[a-zA-Z_-]+:.*## / { printf "  %-16s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
@@ -80,6 +80,9 @@ docs-check: ## Fail if docs/report.html is out of date
 
 examples-check: build ## Run lint, compile --check and catalog build on examples/org-data-repo
 	scripts/check-examples.sh $(BIN)
+
+e2e: ## Run the end-to-end tests of the built binary against a fake claude
+	go test -race -count=1 ./internal/e2e/...
 
 action-test: ## Run the offline tests of the Action installer
 	bash action/test/run.sh
