@@ -1,4 +1,4 @@
-# 03. Solution options and adversarial review
+# Options and adversarial reviews
 
 ## Profiles: solution space (Opus brainstorm)
 IDs are prefixed `P-` here; catalog options below use `C-`. The report uses the same IDs.
@@ -13,7 +13,7 @@ IDs are prefixed `P-` here; catalog options below use `C-`. The report uses the 
 | P-F | Subagent profiles (`--agent`, `--agents`, scoped skills/mcpServers) | Yes | S | Low | Complement; scopes behavior, not necessarily context cost |
 | P-G | TUI/config manager (mcpick-style) | No, if it edits shared config | M | Medium | Fine only as a front-end that writes profile files |
 | P-H | Upstream comment (#14882, #91770) | n/a | n/a | n/a | Parallel track, not a plan |
-| P-I | Profile workspace directories | Yes | S | Medium | Experiment; `--add-dir` may not load `.claude/` settings or skills (U) |
+| P-I | Profile workspace directories | Yes | S | Medium | Experiment; `--add-dir` may not load `.claude/` settings or skills {U} |
 | P-J | Composition/inheritance (`frontend = base + react`) | n/a | n/a | n/a | Resolver feature, orthogonal |
 | P-K | Overlay filesystem sandbox | n/a | Heavy | n/a | Reject |
 
@@ -60,8 +60,8 @@ IDs are prefixed `P-` here; catalog options below use `C-`. The report uses the 
 ## Review round (2026-10-06): four adversarial reviews
 Four independent Opus reviews attacked the whole plan: product and scope, technical design, security and trust, and the org repo, catalog and operability. Outcome:
 - **Verdict:** the core mechanism (a generated `--settings` file that masks plugins) is sound. The plan was wider than its evidence, had real security gaps, and several recorded facts were wrong. The product reviewer put the chance that the plan should proceed unchanged at about 10%.
-- **Facts corrected** (details and verification status in 05): a settings file can set `bypassPermissions`, hooks and env (verified); an invalid settings file is ignored silently (verified); connectors and MCP servers can be hidden through settings keys, so the core path needs no sideload flags; `--append-system-prompt-file` exists (verified); #91770 is an account request and #86098 was misread (verified); use `exec` on Unix; clean the cache by age; drop exit-code policy probing; bundles and masking can conflict (untested).
+- **Facts corrected** (details and verification status in [stage0.md](stage0.md)): a settings file can set `bypassPermissions`, hooks and env (verified); an invalid settings file is ignored silently (verified); connectors and MCP servers can be hidden through settings keys, so the core path needs no sideload flags; `--append-system-prompt-file` exists (verified); #91770 is an account request and #86098 was misread (verified); use `exec` on Unix; clean the cache by age; drop exit-code policy probing; bundles and masking can conflict (untested).
 - **Where the reviewers converged:** scope exceeds evidence; the routing benefit is unmeasured; several "decided" items rest on unverified claims; two sources of truth in the docs; the sidecar rationale does not hold as stated.
 - **Tensions, and the resolution adopted:** product wanted trust, git sources and open source cut while security called the trust model unacceptable, so shrink the surface (closed schema, `dir` sources only for the MVP, no implicit project profiles) and the trust problem mostly disappears; product wanted one track while technical and ops wanted slices of both, so sequence them behind evidence checks; product wanted internal-first while the notes decided open source, so keep open source as the direction and gate the scaffolding on employer approval.
-- **Outcome:** direction changed to evidence first, then trimmed scope (see 04 "Staged roadmap"); security requirements SR1 to SR5 added (04); decisions reopened (04 open decisions, item 9).
+- **Outcome:** direction changed to evidence first, then trimmed scope (see [roadmap.md](../design/roadmap.md)); security requirements SR1 to SR5 added ([security.md](../design/security.md)); decisions reopened ([DECISIONS.md](../DECISIONS.md)).
 

@@ -1,4 +1,4 @@
-# 07. How the launcher invokes Claude Code, what is shared, and combining with accounts
+# Launcher: invocation, shared state and accounts
 
 Design description. Stage 0 (macOS only) tested masking via `--settings`, `--setting-sources`, `--strict-mcp-config`, auth under those flags, and parallel runs. Everything else here is design intent or inference from the docs, marked as such. `ccshelf` is the chosen command name.
 

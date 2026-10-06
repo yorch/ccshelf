@@ -1,0 +1,43 @@
+# Security and policy
+
+Security requirements SR1 to SR5 (added after the security review) and the managed-policy model (R3).
+
+## Security requirements (SR1 to SR5)
+Added 2026-10-06 after the security review, whose verdict was that the trust model was "not acceptable as written". SR1 to SR3 are required before a first release; SR4 and SR5 before anyone runs the tool in corporate CI. A written threat model and a `SECURITY.md` are also required before the repo goes public. The settings-file claim underneath SR1 was verified by me (see [stage0.md](../research/stage0.md)): a `--settings` file can switch a session to `bypassPermissions`.
+
+**SR1: closed profile schema.** The generator writes only an allowlist of settings keys: `enabledPlugins`, `skillOverrides`, `disableClaudeAiConnectors`, `deniedMcpServers`, `model`, `effort` and allowlisted env names. A profile can never write `permissions`, `hooks`, `apiKeyHelper`, `*McpServers` allow lists, `disableAllHooks`, or env names matching `ANTHROPIC_*`, `*_PROXY`, `NODE_*`, `OTEL_*` or `CLAUDE_CODE_*` (a profile's env alone could otherwise redirect every prompt and file to another endpoint). MCP server definitions are not part of a profile: a profile names servers, and the definitions live in a reviewed registry in the org data repo. A golden test proves that no profile, however crafted, produces a key outside the allowlist.
+
+**SR2: trust the resolved closure, pinned by commit SHA.**
+- Every non-personal source needs explicit trust; project sources (a `.ccshelf/` folder in a cloned repo) are **off by default**, are trusted per repo (path plus hash, like direnv `allow`), cannot shadow a name from another source (a collision is an error), and can never define MCP commands, env or prompt text. Otherwise a malicious repository could run code through the launcher while skipping Claude Code's own workspace trust and per-server MCP approval.
+- The lockfile hashes the **fully resolved closure**: the profile, its `extends` parents, the MCP registry entries it references, the prompt file bytes and the source commit SHA. A change to `mcp/registry.toml` that alters what `figma` runs changes the hash. New `plugins.include` entries are treated as risky too (plugins carry hooks and MCP).
+- A tag is resolved to a commit SHA when trust is granted and stored in the lockfile; a tag that later points elsewhere is an untrusted update. Recommend tag-protection rulesets on the data repo.
+- Compile from the same in-memory bytes that were hashed (no re-read), to close the gap between accepting and running.
+- Non-interactive and CI runs fail closed; `--yes` never accepts trust (R6).
+
+**SR3: no shadowing, protected controls.** Profile names cannot collide across sources. The org config can declare `protected_plugins` and `protected_mcp` (audit, secret-scanning or required servers) that are never masked. Shared profiles cannot set `inherit_user_settings = false`, because that drops the user's deny rules, hooks and MCP; personal profiles can, with a warning that lists what is dropped. Only managed settings with `allowManagedHooksOnly`, `allowManagedPermissionRulesOnly` and `disableBypassPermissionsMode` are real enforcement; the docs must say so.
+
+**SR4: private, verified local artifacts.** Cache directory mode 0700 (owner-only ACL on Windows) and files 0600, created with exclusive-create and no-follow; re-hash a content-addressed file before reuse; refuse a cache directory owned by another user or reached through a symlink; never write resolved secrets to disk or argv (prefer `--append-system-prompt-file`, which keeps prompt text off the process list); redact values (key names only) in `dry-run`, `show` and `doctor` output, which people paste into issues; confine every path a profile names (prompt files, parents) to its source root, with no `..` and no symlinks.
+
+**SR5: hardened CI and releases.** The reusable Action is pinned by **full commit SHA**, and the Action embeds the expected SHA-256 of the binary it downloads. Releases carry keyless signatures (cosign) and SLSA provenance on github.com, with offline-verifiable bundles for GHE Server mirrors; plus an SBOM, `-trimpath` builds, `govulncheck`, Dependabot, minimal dependencies (standard library plus one TOML library), branch protection and two-maintainer release approval on the public repo, and an OpenSSF Scorecard. Data repo workflows use `permissions: {}` at the top level and grant per job (`contents: write` only for tagging; `pages` and `id-token` only for the catalog), keep secrets in a protected environment deployable only from `main`, pass values through `env:` and validate them (for example against semver) instead of interpolating `${{ }}` into shell, and do not send secrets to fork pull requests. The catalog site uses `textContent` and a strict CSP, renders Markdown with raw HTML off and only `http` and `https` links, and the publish step fails unless Pages visibility is private or internal. Add `/.github/` to `CODEOWNERS`.
+
+**Smaller items to track:** trust fatigue (show a risk-only summary); `ccshelf init --org <url>` must only write source entries and never trust anything; an account must be a name, never a path; employer approval and `SECURITY.md` before the repo goes public; outside contributors' code running in corporate CI is why SHA pinning is mandatory.
+
+## Policy spectrum and open source (R3, R4)
+Decided 2026-10-06. The user's org **does enforce managed settings** (exact keys not yet known), and the tool must also work with no policy and with partial policy. It will be used inside the org and released as **open source**.
+
+**R3: the launcher is capability-driven, not tier-driven.** Instead of hard-coding "strict" and "loose" modes, it probes each capability and degrades per feature:
+
+| Capability | Needed for | If blocked |
+|---|---|---|
+| `--settings` masking (`enabledPlugins`, `skillOverrides`, env) | plugin/skill filtering | Core feature. If even this fails, refuse and explain. |
+| `disableClaudeAiConnectors` and `deniedMcpServers` in the generated settings (valid in any settings file) | hiding claude.ai connectors and MCP servers | Not sideload flags, so they work under `disableSideloadFlags`. `deniedMcpServers` needs full server names (for example `plugin:context7:context7`, `claude.ai Shopify`); short names do not match. If policy rejects a key, warn that those servers stay active. |
+| `--mcp-config` (optionally with `--strict-mcp-config`) | adding servers the profile defines | Skip adding them; warn. (`--strict-mcp-config` alone, without `--mcp-config`, also yields zero MCP servers.) |
+| `--plugin-dir` / `CLAUDE_CODE_PLUGIN_DIRS` | session-only plugins (none are generated by default, per the standalone-skills decision) | Skip those plugins; suggest packaging them in the marketplace. |
+| `--agents` | profile-defined subagents | Skip. |
+| `--setting-sources` | dropping the user layer | Fall back to per-key masking (`inherit_user_settings = true` behavior). |
+| Force-enabled plugins (managed `enabledPlugins: true`) | masking | Can't be masked; list them in `show`/`doctor` as "always on by policy". |
+
+- Each profile feature maps to a required capability, and `[policy] on_blocked` (`warn` or `fail`) decides what happens.
+- **Detection:** read managed-settings sources per OS (files, and the Windows registry policy location documented for Claude Code) as best-effort, plus the "required by your org" marker that `claude plugin list --json` reports for force-enabled plugins. Detecting a blocked flag by its exit code is **not feasible** (the launcher runs `claude` with inherited stdio and cannot read its error, exit 1 is ambiguous, and a `-p` probe costs roughly 22-28k tokens); where a probe is unavoidable, cache the result per Claude Code version. The core path needs no sideload flags, so most of the matrix never has to be probed. `ccshelf doctor --policy` prints the capability matrix (available / blocked / unknown); "unknown" is a valid state, since server-managed settings can't be read reliably.
+- **Never bypass policy.** This holds in every mode, including open-source use.
+- **Cases to test:** no policy; permissive policy (e.g. only `strictKnownMarketplaces`); sideload blocked; force-enabled plugins; both. Each needs a fixture (a fake managed-settings file plus the fake `claude` that mimics the exit-1 behavior).

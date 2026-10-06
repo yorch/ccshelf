@@ -1,4 +1,4 @@
-# 05. Stage 0 results (empirical)
+# Stage 0 results (empirical)
 
 Run 2026-10-06 on Claude Code 2.1.291 (earlier research used 2.1.290; the local CLI probably auto-updated in between), macOS, `--model haiku`, cwd = a scratch dir (no project settings). Harness: `claude -p "reply with the single word ok" --output-format stream-json --verbose --max-turns 1 --model haiku <args>`; the `system/init` event lists plugins, skills, slash commands, agents, tools and MCP servers. Raw outputs and scripts live in the session scratchpad (`.../scratchpad/stage0/`), not in the repo. Reported by a subagent; the numbers below are its measurements.
 
@@ -37,7 +37,7 @@ Dropping the entire user layer (20 plugins, 53→19 skills, plugin MCP servers) 
 3. claude.ai connectors ignore `enabledPlugins`. This note originally concluded that only `--strict-mcp-config` removes them (and so depends on `--mcp-config`, which `disableSideloadFlags` can block). **Corrected by the review round:** `disableClaudeAiConnectors` and `deniedMcpServers` are valid in any settings file, so connectors and MCP servers can be hidden through `--settings` without sideload flags (see "Corrections after the review" below).
 4. **`skillOverrides` is only useful for standalone skills.** Plugin skills are controlled per whole plugin: another reason to package standalone skills as plugins.
 5. **Concurrency looked safe** for per-session generated settings; the CLI itself writes `~/.claude.json`, which is not something the launcher should touch.
-6. **No managed policy on this machine**, so sideload-dependent paths were testable here but remain unvalidated for a locked-down org. Open decision #1 in 04 stands.
+6. **No managed policy on this machine**, so sideload-dependent paths were testable here but remain unvalidated for a locked-down org. The open question about policy in [DECISIONS.md](../DECISIONS.md) stands.
 
 ## Not yet tested
 - Bundle (dependency) enable/disable semantics.

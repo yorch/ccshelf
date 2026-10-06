@@ -1,18 +1,30 @@
-# ccshelf: research & design notes
+# ccshelf: research and design notes
 
-Status: research and Stage 0 experiments complete (2026-10-06). Masking via `--settings` confirmed, concurrency looked safe, token savings small on the test machine (see `05-stage0-results.md`). No code yet. `report.html` is the interactive version of these notes and must say the same thing (see "Keeping the report in sync" in `AGENTS.md`).
+**Status (2026-10-06):** research and design only; no product code yet. The mechanism is confirmed on macOS (Stage 0), four adversarial reviews have been absorbed, and the plan is **evidence first, then a trimmed MVP**. See the [roadmap](design/roadmap.md) and the [decision log](DECISIONS.md).
+
+`ccshelf` is an open-source Go tool for Claude Code with two parts: a **launcher** that starts `claude` with a named profile of plugins, skills and MCP servers per terminal, and a **catalog** that lints and publishes an org's plugin marketplace. The interactive report, [report.html](report.html), is **generated from these files** by `build_report.py`; never edit it by hand.
+
+## Where things are
 
 | File | What it holds |
 |---|---|
-| [01-context-and-problem.md](01-context-and-problem.md) | The two use cases, user context, how the research was run |
-| [02-research-findings.md](02-research-findings.md) | Evidence of the problems, native Claude Code mechanisms, existing tools |
-| [03-solution-options-and-review.md](03-solution-options-and-review.md) | Solution space (brainstorm) and the adversarial review, conflicts resolved |
-| [04-recommendation-and-roadmap.md](04-recommendation-and-roadmap.md) | Recommended architecture, requirements, staged roadmap, manifest + CLI sketch, open decisions |
-| [05-stage0-results.md](05-stage0-results.md) | Empirical tests of the launcher assumptions |
-| [06-example-workflows.md](06-example-workflows.md) | Example workflows showing how profiles and the catalog would be used (mockups) |
-| [07-how-it-invokes-claude.md](07-how-it-invokes-claude.md) | How the launcher invokes `claude`, what is shared between profiles, combining profiles with accounts |
-| [08-org-data-repo-structure.md](08-org-data-repo-structure.md) | How an adopting org's private repo should be structured (layout, sidecar metadata, CODEOWNERS, CI) |
-| [report.html](report.html) | Interactive single-file version of all of the above |
+| [DECISIONS.md](DECISIONS.md) | The decision log: what was decided, why, with what confidence, when to revisit; superseded decisions; open questions |
+| [design/architecture.md](design/architecture.md) | Code layout of the tool repo, design principles, the Go stack |
+| [design/launcher.md](design/launcher.md) | How the launcher invokes `claude`, what profiles share, accounts, hazards |
+| [design/profiles.md](design/profiles.md) | Profile sources, the trust model for shared profiles, the manifest format |
+| [design/cli.md](design/cli.md) | The command set and the interactive and flag-based interaction model (R6) |
+| [design/catalog-and-org-repo.md](design/catalog-and-org-repo.md) | Tool repo versus org data repo (R5), and how the org data repo is structured |
+| [design/security.md](design/security.md) | Security requirements SR1 to SR5 and the managed-policy model (R3) |
+| [design/platform.md](design/platform.md) | GitHub, GHE and cross-platform support (R1, R2) |
+| [design/project.md](design/project.md) | Open source (R4), license and the project name |
+| [design/workflows.md](design/workflows.md) | Example workflows (mockups) |
+| [design/roadmap.md](design/roadmap.md) | Phase 0 evidence, the MVP, deferred work and non-goals |
+| [research/context.md](research/context.md) | The two use cases and how the research was run |
+| [research/landscape.md](research/landscape.md) | Evidence of the problems, native mechanisms, existing tools, naming findings |
+| [research/options-and-reviews.md](research/options-and-reviews.md) | Solution options and the adversarial reviews |
+| [research/stage0.md](research/stage0.md) | The macOS experiments and the corrections made after the review round |
+
+`research/` holds dated findings that are updated only to correct them; `design/` holds the current design.
 
 ## Glossary
 These terms are used the same way in every document and in the report.
@@ -27,44 +39,23 @@ These terms are used the same way in every document and in the report.
 | **Tool repo** | This public repo: the Go source, schemas, docs, releases, the reusable Action and a starter template. Never holds org data. |
 | **Org data repo** | An adopting org's private repo (GHE Cloud or Server) holding its marketplace, plugins, profiles, sidecars, org config and CI. Also called the "profile catalog repo" in conversation. |
 | **Account** | A Claude Code identity and data directory (a separate `CLAUDE_CONFIG_DIR`). An independent axis from profiles: a profile chooses what is active, an account chooses who you are. |
-| **Profile source** | Where profile files come from: `dir`, `git` (both first release) and later `plugin`. Config key `[[sources]]` in the user's `config.toml`. |
+| **Profile source** | Where profile files come from: `dir` (the MVP), then `git` (after SR2), then `plugin`. Config key `[[sources]]` in the user's `config.toml`. |
 | **Masking** | Setting `enabledPlugins: false` (per plugin) in a generated `--settings` file for every installed plugin the profile doesn't list. |
 | **Capability** | One thing the launcher needs from Claude Code (settings masking, strict MCP config, `--plugin-dir`, ...). It probes each one and degrades per feature when managed policy blocks it. |
 | **Launcher, `core`, catalog (modules)** | The three Go packages in the tool repo: `profiles/` (launcher), `core/` (shared parsing and resolution) and `catalog/`. |
 
 ## How to read the confidence labels
-- **Verified** (●): confirmed in official docs (code.claude.com/docs), via `gh`, or by running the local CLI.
-- **Reported** (◐): stated by a research subagent and not independently re-checked. This includes the Stage 0 experiments, which a subagent ran and reported with raw outputs kept; they are labeled "reported" for that reason.
-- **Unverified** (○): snippet-only, or inferred.
-- `02` uses V, R and U; `05` uses Confirmed, Partly and No issue seen with the same meaning; `04` to `08` state "tested", "untested" or "unverified" in prose; `report.html` uses the ●, ◐ and ○ markers. The report's loadout demo on the Overview uses fictional plugin names and shows design intent; only the masking mechanism itself was tested.
+Claims about Claude Code behavior carry a marker: {V} verified in official docs (code.claude.com/docs), via `gh`, or by running the local CLI; {R} reported by a research agent and not independently re-checked (this includes the Stage 0 experiments, which a subagent ran with raw outputs kept); {U} unverified, snippet-only or inferred. Stage 0 uses the words Confirmed, Partly and No issue seen with the same meaning. The report's loadout demo on the Overview uses fictional plugin names and shows design intent; only the masking mechanism itself was tested.
 
 ## Requirements
-- **R1:** macOS, Linux and native Windows; six targets: darwin/arm64, darwin/amd64, linux/amd64, linux/arm64, windows/amd64, windows/arm64 (WSL counts as Linux). Design assessment in 04; only macOS tested.
-- **R2:** GitHub.com, GHE Cloud and GHE Server, with GitHub Actions; no hard-coded hosts (decided 2026-10-06; untested).
-- **R3:** works with no, partial and strict managed policy; capability-driven; never bypasses policy.
-- **R4:** open source (MIT); no org-specific assumptions in code, schemas, defaults or examples.
-- **R5:** the tool lives in a public GitHub repo; adopting companies keep profiles and catalog data in their own private GHE repo.
-- **SR1 to SR5 (security, 2026-10-06):** closed profile schema; trust the resolved closure pinned by commit SHA (project profiles off by default); no shadowing and protected controls; private, verified local artifacts; hardened CI and releases (SHA-pinned Action, signed releases). SR1 to SR3 before a first release, SR4 and SR5 before corporate CI. Details in `04`.
-- **R6:** the CLI supports both an interactive mode (prompts, pickers, wizards) and a flag and option based mode; flags are the contract and interactive is a front-end over the same commands.
-
-## Decisions so far (all 2026-10-06; details in 04)
-| Decision | Result |
-|---|---|
-| Managed policy | The user's org enforces it; the tool works across none, partial and strict policy |
-| Build order | Superseded 2026-10-06: **evidence first, then trimmed scope** (earlier: both tracks in parallel); see `04` "Staged roadmap" |
-| Language | Go |
-| Name | `ccshelf` for both the project and the command. History: `claude-profile` (three existing tools share it) then `ccprofiles` (GitHub user taken, near-identical names exist, names only the launcher half). Free on the registries and domains checked; see `04` "Name" |
-| Catalog hosting | The adopter's choice; the tool outputs a static directory |
-| Profile sources | `dir` and `git` first, `plugin` later |
-| Standalone skills | Explicit off-list via `skillOverrides`, plus guidance to package skills as plugins |
-| Metadata ownership | Hybrid: authors write, the platform team reviews |
-| Metadata home | One sidecar file per plugin (single-file mode for small registries) |
-| Generated bundles | Committed in `bundles/`, checked for drift in CI |
-| Shared state across profiles | Auth, history and memory shared; profiles combine with accounts via `CLAUDE_CONFIG_DIR` |
-| Targets | All six listed in R1 |
-| Security | SR1 to SR5 added after the security review (closed schema, closure trust by SHA, project profiles off by default, protected controls, private cache, hardened CI) |
-| Interaction | R6: interactive mode and flag-based mode, flags are the contract; prompts only on a TTY; trust never auto-accepted |
-| License | MIT; `LICENSE` file added (holder Jorge Barnaby, 2026); confirm employer approval before going public |
+Full text and reasoning are in the design files; each has a row in the [decision log](DECISIONS.md).
+- **R1** macOS, Linux and native Windows, six targets ([platform.md](design/platform.md)).
+- **R2** GitHub.com, GHE Cloud and GHE Server with GitHub Actions ([platform.md](design/platform.md)).
+- **R3** works with no, partial and strict managed policy; never bypasses it ([security.md](design/security.md)).
+- **R4** open source, MIT ([project.md](design/project.md)).
+- **R5** a public tool repo and each adopter's private org data repo ([catalog-and-org-repo.md](design/catalog-and-org-repo.md)).
+- **R6** an interactive mode and a flag-based mode; flags are the contract ([cli.md](design/cli.md)).
+- **SR1 to SR5** security requirements ([security.md](design/security.md)).
 
 ## Versions
 Research ran against Claude Code 2.1.290. The local CLI reported 2.1.291 when Stage 0 ran, probably because it auto-updated in between. Claude Code changes fast; re-verify flag and field behavior before relying on it.

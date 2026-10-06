@@ -1,6 +1,6 @@
-# 06. Example workflows
+# Example workflows
 
-Illustrative only. Nothing is built yet: the command is `ccshelf`, the outputs are mockups, and plugin names are fictional (`@official` stands for the official marketplace) of the intended behavior. Behavior marked *(tested)* was confirmed in Stage 0 (see 05); the rest is design intent. The manifest fields used below are explained in 04.
+Illustrative only. Nothing is built yet: the command is `ccshelf`, the outputs are mockups, and plugin names are fictional (`@official` stands for the official marketplace) of the intended behavior. Behavior marked *(tested)* was confirmed in Stage 0 (see [stage0.md](../research/stage0.md)); the rest is design intent. The manifest fields used below are explained in [profiles.md](profiles.md).
 
 ## 1. Daily use: two terminals, two profiles
 You work on a React app in the morning and debug production in the afternoon, and sometimes both at once.
@@ -131,7 +131,7 @@ sre changed since you last accepted it:
   + mcp.servers: pagerduty-ro (command: npx -y @acme/pagerduty-mcp)
 accept? [y/N]
 ```
-The launcher only loads org profiles from sources the org already trusts (an allowlisted marketplace, or a pinned git ref). See "Profile sources and sharing" in 04.
+The launcher only loads org profiles from sources the org already trusts (an allowlisted marketplace, or a pinned git ref). See "Profile sources and sharing" in [profiles.md](profiles.md).
 
 ## 12. Interactive and scripted use of the same command
 In a terminal, with no arguments, `ccshelf` offers a picker; with flags it never asks anything.

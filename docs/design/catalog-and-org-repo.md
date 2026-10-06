@@ -1,4 +1,48 @@
-# 08. Structure of the org data repo (profiles and catalog)
+# Catalog and the org data repo
+
+How the tool repo and an adopting org's private data repo relate (R5), what each contains, and how the data repo is structured. The org data repo is called the "profile catalog repo" in conversation.
+
+## Tool repo vs data repo (R5)
+Decided 2026-10-06: the **tool is hosted in a public GitHub repo** (this one), and an adopting company stores its **profiles and catalog data in its own private GHE repo**. The tool never assumes the two live together.
+
+| | Tool repo (public, github.com) | Org data repo (private, GHE Cloud or Server) |
+|---|---|---|
+| Holds | Go source, schemas, docs, release binaries, a reusable GitHub Action, example/fictional profiles, a starter template | The org's `marketplace.json`, plugins, `profiles/*.toml`, generated profile bundles (`bundles/`), org config. The built catalog (`catalog.json`, site) is produced in CI and not committed |
+| Contains org data? | Never. Examples are fictional. | Yes |
+| Released how | Public GitHub Releases (goreleaser); package managers; adopters may mirror internally | Not released; consumed by the tool |
+| Changes by | Open-source contributors | The org's platform team |
+
+Consequences:
+- **Reusable CI:** the data repo's workflow calls the public tool, either `uses: <owner>/ccshelf/action@<full commit SHA>` or a step that downloads a pinned release binary. GHE Cloud can use public actions directly; **GHE Server needs GitHub Connect or a mirror** (e.g. `actions-sync`), or the binary-download variant (also mirrorable to an internal registry). Both variants must be documented; the logic stays in the binary (R2).
+- **Pin everything (SR5).** The data repo pins the tool by full commit SHA (never a moving tag), the Action embeds the expected SHA-256 of the binary it downloads, and releases are signed with provenance, because the tool runs in the org's CI and on developers' machines.
+- **Starter template** (layout below): ship a template/example data repo (`examples/org-data-repo/`, possibly also a GitHub template repository) with a sample `marketplace.json`, `profiles/`, a CI workflow and a catalog publish recipe, so adopting takes minutes.
+- **Configuration lives with the adopter, not in the tool:** profile sources (`dir`/`git`, later `plugin`), the catalog metadata schema location and lint rules come from the org's `ccshelf.toml` in the data repo and the user's own `~/.config/ccshelf/config.toml`, with sane defaults. The tool repo never needs to know about a particular org.
+- **Catalog hosting is the adopter's choice** (R2): the tool outputs a plain static directory; the starter template shows GitHub Pages and an internal static host. We don't pick one for the org.
+- **Telemetry:** none by default. An open-source tool that runs in corporate CI must not phone home.
+- **Security reporting, license and contribution docs** live in the public repo (R4).
+
+
+
+
+
+### What the tool repo contains
+The tool repo holds **no real org definitions**, but it does hold **fictional example ones**.
+- **Code:** the Go source for `core/`, `profiles/` and `catalog/`, built into one binary.
+- **Schemas:** JSON Schemas for profiles, sidecars and the org config (they define what is valid, not any actual profile or sidecar).
+- **Catalog site templates:** the HTML, CSS and JS that render a catalog from data.
+- **Reusable GitHub Action** and the release and packaging config (goreleaser, Homebrew, Scoop, WinGet).
+- **Tests and fixtures:** the fake `claude` test double, golden files, and fixtures that simulate managed policy.
+- **Docs:** the research notes, `AGENTS.md`, the license, security policy and contribution guide.
+- **Starter template** (`examples/org-data-repo/`): a complete but fictional org data repo (sample `marketplace.json`, a couple of example plugins, profiles such as `frontend` and `sre`, sidecars, org config and CI workflows). Adopters copy it to start, and it doubles as a test fixture.
+
+Never in the tool repo: a real org's plugins, profiles, sidecars, marketplace, taxonomy or MCP server definitions; org-specific URLs, team names or secrets.
+
+Two choices: (1) **no built-in default profiles**: roles like "frontend" are org choices and a shipped default invites arguments about what belongs in it, so the examples show the format and nothing more; (2) a **public demo catalog** built from the fictional starter data and published (for example on GitHub Pages) is optional, to show what the catalog looks like.
+
+---
+
+## Structure of the org data repo
+
 
 This describes the **private repo an adopting organization keeps** (R5): its marketplace, profiles and catalog data. The public tool repo (this one) ships a starter template of it in `examples/org-data-repo/` once code starts. Everything here is a design proposal except where marked decided; names are provisional. The `ccshelf` commands shown don't exist yet.
 
@@ -23,7 +67,7 @@ acme-claude-marketplace/                 # private repo on GHE (Cloud or Server)
 ├── bundles/                             # GENERATED, committed: one dependency-only plugin per profile
 │   ├── profile-frontend/.claude-plugin/plugin.json
 │   └── profile-sre/.claude-plugin/plugin.json
-├── profiles/                            # hand-written profile manifests (see 04 for the format)
+├── profiles/                            # hand-written profile manifests (see [profiles.md](profiles.md) for the format)
 │   ├── base.toml
 │   ├── frontend.toml
 │   └── sre.toml
@@ -138,7 +182,7 @@ All steps call the same pinned binary from the public tool repo (R2, R5): `uses:
 
 ## Consumption
 - **Plugins:** users add the marketplace natively (`extraKnownMarketplaces` or `/plugin marketplace add <git URL>`), and bundles install profile plugin sets in one step.
-- **Profiles:** users configure a `git` source pointing at this org data repo at a pinned tag, or a local clone as a `dir` source (see 04, "Profile sources and sharing"). The `plugin` source (profiles shipped inside a plugin) comes later.
+- **Profiles:** users configure a `git` source pointing at this org data repo at a pinned tag, or a local clone as a `dir` source (see [profiles.md](profiles.md), "Profile sources and sharing"). The `plugin` source (profiles shipped inside a plugin) comes later.
 - **Catalog:** the published site, and `ccshelf search` or `ccshelf doctor` reading the same data locally.
 
 ## Variants
