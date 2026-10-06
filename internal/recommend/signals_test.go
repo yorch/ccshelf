@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func write(t *testing.T, root, rel, content string) {
@@ -185,6 +186,9 @@ func TestCollectSkipsSymlinksAndHostileNames(t *testing.T) {
 	hostile := []string{"bad\x1bname.txt", "bidi\u202ename.txt", "\xff\xfe.txt"}
 	created := 0
 	for _, n := range hostile {
+		if runtime.GOOS == "windows" && !utf8.ValidString(n) {
+			continue // Windows file names are UTF-16: the bytes would be stored as U+FFFD, a valid name
+		}
 		if err := os.WriteFile(filepath.Join(root, n), nil, 0o600); err == nil {
 			created++
 		}

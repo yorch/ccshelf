@@ -65,8 +65,8 @@ func TestDetectModeWithHooks(t *testing.T) {
 	}
 	defer f2.Close()
 
-	oldT, oldW := isTerminal, terminalWidth
-	t.Cleanup(func() { isTerminal, terminalWidth = oldT, oldW })
+	oldT, oldW, oldV := isTerminal, terminalWidth, enableVT
+	t.Cleanup(func() { isTerminal, terminalWidth, enableVT = oldT, oldW, oldV })
 
 	// Real files are not terminals.
 	if m := DetectMode(envOf(nil), f1, f2, ModeFlags{}); m.Interactive || m.Color || m.Width != 0 {
@@ -77,6 +77,7 @@ func TestDetectModeWithHooks(t *testing.T) {
 	}
 
 	isTerminal = func(uintptr) bool { return true }
+	enableVT = func(*os.File) bool { return true } // the fake files are not consoles
 	terminalWidth = func(uintptr) int { return 100 }
 	m := DetectMode(envOf(nil), f1, f2, ModeFlags{})
 	if !m.Interactive || !m.Color || m.Width != 100 {

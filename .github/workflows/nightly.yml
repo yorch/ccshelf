@@ -90,7 +90,9 @@ jobs:
           set -euo pipefail
           # Keep Go's caches where they are, then point HOME at an empty directory so
           # the test never sees a real user configuration.
-          export GOCACHE="$(go env GOCACHE)" GOMODCACHE="$(go env GOMODCACHE)"
+          GOCACHE="$(go env GOCACHE)"
+          GOMODCACHE="$(go env GOMODCACHE)"
+          export GOCACHE GOMODCACHE
           home="$(mktemp -d "${RUNNER_TEMP}/home.XXXXXX")"
           export HOME="$home" XDG_CONFIG_HOME="$home/.config" XDG_CACHE_HOME="$home/.cache"
           export PATH="${GITHUB_WORKSPACE}/dist:${PATH}"

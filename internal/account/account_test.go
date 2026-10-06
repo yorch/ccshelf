@@ -91,6 +91,7 @@ func TestAddPersistDefaultConfigPath(t *testing.T) {
 	if _, err := os.Stat(p); err != nil {
 		t.Errorf("config not written at default path %s: %v", p, err)
 	}
+	// IsolatedEnv puts the config directory below the home directory.
 	if !strings.HasPrefix(p, home) {
 		t.Errorf("config path %s escaped the isolated home %s", p, home)
 	}

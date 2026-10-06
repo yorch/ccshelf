@@ -139,7 +139,9 @@ func (h *harness) build() *cobra.Command {
 			if h.goos == "windows" {
 				return `C:\tools\ccshelf.exe`, nil
 			}
-			return filepath.Join(h.dirs["HOME"], "bin", "ccshelf"), nil
+			// A POSIX path regardless of the host: the harness GOOS is "linux",
+			// for which a drive-letter path is not absolute.
+			return "/opt/ccshelf/bin/ccshelf", nil
 		},
 		Policy: policy.Options{GOOS: "linux", ManagedDir: h.managed, WSL: &no},
 		NewGit: h.newGit,

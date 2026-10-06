@@ -28,6 +28,11 @@ func TestInsideFoldsCase(t *testing.T) {
 	home := t.TempDir()
 	def := filepath.Join(home, ".claude") // does not exist, so only names count
 	for goos, want := range map[string]bool{"darwin": true, "windows": true, "linux": false} {
+		if goos == "linux" && runtime.GOOS == "windows" {
+			// filepath.Rel compares case-insensitively on a Windows host
+			// whatever goos says, so the case-sensitive rule cannot be shown.
+			continue
+		}
 		if got := inside(goos, def, filepath.Join(home, ".Claude", "work")); got != want {
 			t.Errorf("inside(%s) = %v, want %v", goos, got, want)
 		}

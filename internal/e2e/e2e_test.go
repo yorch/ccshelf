@@ -154,8 +154,8 @@ func (s *sandbox) env() []string {
 		"USERPROFILE":         s.Home,
 		"XDG_CONFIG_HOME":     s.Config,
 		"XDG_CACHE_HOME":      s.Cache,
-		"APPDATA":             filepath.Join(s.root, "appdata"),
-		"LOCALAPPDATA":        filepath.Join(s.root, "localappdata"),
+		"APPDATA":             s.Config, // Windows: the config and cache bases
+		"LOCALAPPDATA":        s.Cache,
 		"GIT_CONFIG_GLOBAL":   os.DevNull,
 		"GIT_CONFIG_SYSTEM":   os.DevNull,
 		"GIT_CONFIG_NOSYSTEM": "1",

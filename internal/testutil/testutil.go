@@ -92,9 +92,12 @@ func IsolatedEnv(t testing.TB) map[string]string {
 		"HOME":            filepath.Join(root, "home"),
 		"XDG_CONFIG_HOME": filepath.Join(root, "home", ".config"),
 		"XDG_CACHE_HOME":  filepath.Join(root, "home", ".cache"),
-		"APPDATA":         filepath.Join(root, "appdata"),
-		"LOCALAPPDATA":    filepath.Join(root, "localappdata"),
-		"WORK":            filepath.Join(root, "work"),
+		// On Windows the config and cache directories come from APPDATA and
+		// LOCALAPPDATA; pointing them at the same places as the XDG variables
+		// (all below HOME) lets tests locate them the same way on every OS.
+		"APPDATA":      filepath.Join(root, "home", ".config"),
+		"LOCALAPPDATA": filepath.Join(root, "home", ".cache"),
+		"WORK":         filepath.Join(root, "work"),
 	}
 	for _, p := range d {
 		if err := os.MkdirAll(p, 0o700); err != nil {

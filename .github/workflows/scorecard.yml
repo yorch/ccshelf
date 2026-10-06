@@ -18,6 +18,9 @@ concurrency:
 jobs:
   analysis:
     name: scorecard
+    # Code scanning (and Scorecard's results publishing) need a public repository or GitHub
+    # Advanced Security; on a private repository without it the job fails. Skip it there.
+    if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

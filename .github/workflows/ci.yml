@@ -356,9 +356,11 @@ jobs:
             tar -czf "${relroot}/${CCSHELF_E2E_VERSION}/${archive}" -C "$stage" ccshelf
           fi
           if command -v sha256sum >/dev/null 2>&1; then
-            sum="$(sha256sum "${relroot}/${CCSHELF_E2E_VERSION}/${archive}" | cut -d' ' -f1)"
+            # Read the file on stdin: given a path with backslashes (Windows), sha256sum prefixes
+            # the digest with a backslash.
+            sum="$(sha256sum <"${relroot}/${CCSHELF_E2E_VERSION}/${archive}" | cut -d' ' -f1)"
           else
-            sum="$(shasum -a 256 "${relroot}/${CCSHELF_E2E_VERSION}/${archive}" | cut -d' ' -f1)"
+            sum="$(shasum -a 256 <"${relroot}/${CCSHELF_E2E_VERSION}/${archive}" | cut -d' ' -f1)"
           fi
           # file:/// with a drive letter on Windows (file://D:/...), file:///abs/path elsewhere.
           if command -v cygpath >/dev/null 2>&1; then

@@ -59,6 +59,10 @@ type ModeFlags struct {
 // code never reassigns it.
 var isTerminal = func(fd uintptr) bool { return term.IsTerminal(int(fd)) } //nolint:gosec // fd fits in int
 
+// enableVT turns on virtual-terminal processing for a console. It is a test
+// hook; production code never reassigns it.
+var enableVT = enableVirtualTerminal
+
 // terminalWidth returns the width of the terminal on fd, or 0.
 var terminalWidth = func(fd uintptr) int {
 	w, _, err := term.GetSize(int(fd)) //nolint:gosec // fd fits in int
@@ -90,7 +94,7 @@ func DetectMode(env func(string) string, in, out *os.File, flags ModeFlags) Mode
 	outTerm := out != nil && isTerminal(out.Fd())
 	vtOK := true
 	if outTerm {
-		vtOK = enableVirtualTerminal(out)
+		vtOK = enableVT(out)
 	}
 	m := computeMode(env, inTerm, outTerm, vtOK, flags)
 	if outTerm && !m.JSON {
