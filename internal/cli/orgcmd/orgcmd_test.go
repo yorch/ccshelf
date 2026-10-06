@@ -93,7 +93,7 @@ func TestLintFormats(t *testing.T) {
 	}
 
 	gh := h.run("lint", "--format", "github")
-	if gh.code != 0 || !strings.Contains(gh.out, "::warning ") || !strings.Contains(gh.out, "title=CAT046") {
+	if gh.code != 0 || !strings.Contains(gh.out, "::warning ") || !strings.Contains(gh.out, "title=PRF002") {
 		t.Errorf("github format:\n%s", gh.out)
 	}
 
