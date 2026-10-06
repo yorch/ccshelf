@@ -7,7 +7,7 @@ Claude Code has no native concept of a profile repo: marketplaces distribute plu
 
 | Source type | How it works | Notes |
 |---|---|---|
-| `plugin` (**planned after `dir` and `git`**; not in the first release) | The marketplace publishes a data-only plugin (e.g. `org-profiles@acme`) containing `profiles/*.toml`. The launcher locates it via `claude plugin list --json` (install path). | Reuses native auth, version pinning, `autoUpdate` and `strictKnownMarketplaces`; no second fetch path for IT to approve. The plugin must be installed, and the launcher must never mask it. Profile versions follow the plugin version. |
+| `plugin` (implemented, but newer than `dir` and `git`) | The marketplace publishes a data-only plugin (e.g. `org-profiles@acme`) containing `profiles/*.toml`. The launcher locates it via `claude plugin list --json` (install path) and binds it to the real marketplace source reported by `claude plugin marketplace list --json` {V}: the source is part of the trust key, so a different marketplace needs trust again, and a `marketplace` value in the config makes a mismatch an error. Other source kinds than github, git and directory in that list are {U}. | Reuses native auth, version pinning, `autoUpdate` and `strictKnownMarketplaces`; no second fetch path for IT to approve. The plugin must be installed, and the launcher must never mask it. Profile versions follow the plugin version. |
 | `git` | The launcher clones/pulls a repo into `~/.cache/ccshelf/<name>` at a pinned `ref`. | Works for a profiles-only repo. Adds an auth and fetch path of its own. |
 | `dir` | A local directory, e.g. `~/.config/ccshelf/profiles/` (personal) or `.ccshelf/profiles/` in a project repo (per-project defaults). | Always available. |
 
@@ -30,9 +30,10 @@ url = "git@ghe.example.com:acme/claude-marketplace.git"   # the org data repo (u
 ref = "v2026.10.1"                              # pinned tag or commit, not a moving branch
 path = "profiles"                               # folder inside the repo
 
-# [[sources]]                                   # planned for a later release, after testing under policy
+# [[sources]]                                   # org profiles shipped as a data-only plugin
 # type = "plugin"
-# plugin = "org-profiles@acme"                  # org profiles shipped as a data-only plugin
+# plugin = "org-profiles@acme"
+# marketplace = "acme/claude-marketplace"        # expected marketplace source (owner/repo or git URL); a mismatch is refused
 # path = "profiles"
 
 [trust]

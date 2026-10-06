@@ -65,6 +65,8 @@ postmortem-lite@acme deprecated -> sre-kit    (superseded_by)
 $ ccshelf recommend            # rule-based: cwd, files, relevance signals; no LLM
 In ./infra (terraform files found): sre, platform
 ```
+
+`search` and `recommend` read the org repo in the current directory (or `--root`); otherwise they read, offline, the commit of the configured org git source that the trust lockfile pins (or the newest verified cached checkout) and say so. `doctor --policy` works without an org repo and then checks only the policy.
 The same data renders on the catalog page: facets by category/tag/team/status, an overlap view built from `overlaps_with`, and a "new or changed since last tag" list.
 
 ## 6. Publishing a plugin to the internal marketplace (platform owner)
@@ -79,7 +81,7 @@ The same data renders on the catalog page: facets by category/tag/team/status, a
 ## 7. Retiring a plugin
 1. In the plugin's sidecar, set `status = "deprecated"` and `superseded_by = "new-plugin"`.
 2. CI flags every profile that still includes it (`ccshelf doctor`) so owners can migrate.
-3. The catalog shows a deprecated badge and the replacement. Runs of an affected profile print a warning (planned; `doctor` reports it today, `run` does not yet).
+3. The catalog shows a deprecated badge and the replacement. Runs of an affected profile print a warning (`run`, `show` and `dry-run` warn once per deprecated plugin, with the replacement; sidecars are read from the org repo or from the pinned git source).
 4. After the grace period, remove it from `marketplace.json`, using the native `renames` mapping where applicable.
 
 ## 8. Housekeeping with `doctor`
