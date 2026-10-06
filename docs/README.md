@@ -44,6 +44,7 @@ These terms are used the same way in every document and in the report.
 - **R3:** works with no, partial and strict managed policy; capability-driven; never bypasses policy.
 - **R4:** open source (MIT); no org-specific assumptions in code, schemas, defaults or examples.
 - **R5:** the tool lives in a public GitHub repo; adopting companies keep profiles and catalog data in their own private GHE repo.
+- **SR1 to SR5 (security, 2026-10-06):** closed profile schema; trust the resolved closure pinned by commit SHA (project profiles off by default); no shadowing and protected controls; private, verified local artifacts; hardened CI and releases (SHA-pinned Action, signed releases). SR1 to SR3 before a first release, SR4 and SR5 before corporate CI. Details in `04`.
 - **R6:** the CLI supports both an interactive mode (prompts, pickers, wizards) and a flag and option based mode; flags are the contract and interactive is a front-end over the same commands.
 
 ## Decisions so far (all 2026-10-06; details in 04)
@@ -61,6 +62,7 @@ These terms are used the same way in every document and in the report.
 | Generated bundles | Committed in `bundles/`, checked for drift in CI |
 | Shared state across profiles | Auth, history and memory shared; profiles combine with accounts via `CLAUDE_CONFIG_DIR` |
 | Targets | All six listed in R1 |
+| Security | SR1 to SR5 added after the security review (closed schema, closure trust by SHA, project profiles off by default, protected controls, private cache, hardened CI) |
 | Interaction | R6: interactive mode and flag-based mode, flags are the contract; prompts only on a TTY; trust never auto-accepted |
 | License | MIT (LICENSE file still to add; confirm employer approval first) |
 

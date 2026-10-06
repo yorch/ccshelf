@@ -24,14 +24,14 @@ Decided by the user (2026-10-06): **Go** for the implementation; **GitHub / GitH
 | Area | Implication |
 |---|---|
 | Which GHE | **Both GHE Cloud and GHE Server must be supported (R2).** The flavor matters for Actions availability, Pages and egress, so the design assumes the lowest common denominator (see R2 below). |
-| CI lint/catalog action | Provide a **composite action** in this repo. Two ways to get the binary: download a pinned release asset from the tool's public GitHub Releases (or from an internal mirror of them, which GHE Server without internet access needs), or build from source with `actions/setup-go` (slower; works where release downloads are restricted). On GHE Server, third-party actions such as `setup-go` must be mirrored or allowed by the admin. Pin by tag or SHA. |
+| CI lint/catalog action | Provide a **composite action** in this repo. Two ways to get the binary: download a pinned release asset from the tool's public GitHub Releases (or from an internal mirror of them, which GHE Server without internet access needs), or build from source with `actions/setup-go` (slower; works where release downloads are restricted). On GHE Server, third-party actions such as `setup-go` must be mirrored or allowed by the admin. Pin by full commit SHA (SR5). |
 | Releases | `goreleaser` supports GitHub Enterprise endpoints (`github_urls`). Publish binaries for all six targets to the public tool repo's GitHub Releases; adopters can mirror them to an internal package registry, Homebrew tap or Scoop bucket. A mirror that lives in a private repo needs a token for downloads, which affects `brew`/`scoop` install steps. |
 | Catalog hosting | GitHub Pages (access-controlled on GHE Cloud; available on GHE Server if enabled), or any internal static host. The CI job publishes `catalog.json` + HTML as a Pages artifact. Pages visibility must match who may see the plugin list. |
 | Marketplace source type | Claude Code marketplace sources of type `github` target github.com; for GHE hosts a **git URL** source is likely required (`git@ghe.example.com:org/marketplace.git` or https). Needs verification against the marketplace docs and the user's auth (SSH keys/credential helper). Also affects `strictKnownMarketplaces` patterns. |
 | Profile `git` source | Same: use git URLs for GHE; honor the user's existing git credential helper/SSH config rather than storing tokens. |
 | Tags and bundles | Native bundle resolution uses git tags `<plugin>--v<version>`; CI should create them (`claude plugin tag`), which needs write permission for `GITHUB_TOKEN` on tags. |
 | Usage data | Enterprise Analytics API / OTel exist independently of GitHub; the catalog job needs a secret for the Analytics API key if used. |
-| Provenance | Artifact attestations / Sigstore signing of releases are desirable; support on GHE Server is limited. Treat as optional. |
+| Provenance | **Required on github.com releases (SR5):** keyless signatures (cosign), SLSA provenance and an SBOM. Artifact attestations have limited support on GHE Server, so ship offline-verifiable bundles for GHE Server mirrors. |
 
 ### Requirement R2: support both GHE Cloud and GHE Server (decided 2026-10-06)
 Design to the lowest common denominator, so nothing assumes github.com or the newest Actions features.
@@ -150,6 +150,26 @@ Interactive: a profile picker when `ccshelf run` or bare `ccshelf` is run in a t
 - **Cross-platform:** raw-mode terminal handling differs per OS; the picker must restore the terminal before spawning or replacing the process, which interacts with the Windows spawn-and-wait versus Unix `exec` choice.
 - **Security:** prompts must not echo secrets, and an interactive default must never be less safe than the flag default.
 
+## Security requirements (SR1 to SR5)
+Added 2026-10-06 after the security review, whose verdict was that the trust model was "not acceptable as written". SR1 to SR3 are required before a first release; SR4 and SR5 before anyone runs the tool in corporate CI. A written threat model and a `SECURITY.md` are also required before the repo goes public. The settings-file claim underneath SR1 was verified by me (see 05): a `--settings` file can switch a session to `bypassPermissions`.
+
+**SR1: closed profile schema.** The generator writes only an allowlist of settings keys: `enabledPlugins`, `skillOverrides`, `disableClaudeAiConnectors`, `deniedMcpServers`, `model`, `effort` and allowlisted env names. A profile can never write `permissions`, `hooks`, `apiKeyHelper`, `*McpServers` allow lists, `disableAllHooks`, or env names matching `ANTHROPIC_*`, `*_PROXY`, `NODE_*`, `OTEL_*` or `CLAUDE_CODE_*` (a profile's env alone could otherwise redirect every prompt and file to another endpoint). MCP server definitions are not part of a profile: a profile names servers, and the definitions live in a reviewed registry in the org data repo. A golden test proves that no profile, however crafted, produces a key outside the allowlist.
+
+**SR2: trust the resolved closure, pinned by commit SHA.**
+- Every non-personal source needs explicit trust; project sources (a `.ccshelf/` folder in a cloned repo) are **off by default**, are trusted per repo (path plus hash, like direnv `allow`), cannot shadow a name from another source (a collision is an error), and can never define MCP commands, env or prompt text. Otherwise a malicious repository could run code through the launcher while skipping Claude Code's own workspace trust and per-server MCP approval.
+- The lockfile hashes the **fully resolved closure**: the profile, its `extends` parents, the MCP registry entries it references, the prompt file bytes and the source commit SHA. A change to `mcp/registry.toml` that alters what `figma` runs changes the hash. New `plugins.include` entries are treated as risky too (plugins carry hooks and MCP).
+- A tag is resolved to a commit SHA when trust is granted and stored in the lockfile; a tag that later points elsewhere is an untrusted update. Recommend tag-protection rulesets on the data repo.
+- Compile from the same in-memory bytes that were hashed (no re-read), to close the gap between accepting and running.
+- Non-interactive and CI runs fail closed; `--yes` never accepts trust (R6).
+
+**SR3: no shadowing, protected controls.** Profile names cannot collide across sources. The org config can declare `protected_plugins` and `protected_mcp` (audit, secret-scanning or required servers) that are never masked. Shared profiles cannot set `inherit_user_settings = false`, because that drops the user's deny rules, hooks and MCP; personal profiles can, with a warning that lists what is dropped. Only managed settings with `allowManagedHooksOnly`, `allowManagedPermissionRulesOnly` and `disableBypassPermissionsMode` are real enforcement; the docs must say so.
+
+**SR4: private, verified local artifacts.** Cache directory mode 0700 (owner-only ACL on Windows) and files 0600, created with exclusive-create and no-follow; re-hash a content-addressed file before reuse; refuse a cache directory owned by another user or reached through a symlink; never write resolved secrets to disk or argv (prefer `--append-system-prompt-file`, which keeps prompt text off the process list); redact values (key names only) in `dry-run`, `show` and `doctor` output, which people paste into issues; confine every path a profile names (prompt files, parents) to its source root, with no `..` and no symlinks.
+
+**SR5: hardened CI and releases.** The reusable Action is pinned by **full commit SHA**, and the Action embeds the expected SHA-256 of the binary it downloads. Releases carry keyless signatures (cosign) and SLSA provenance on github.com, with offline-verifiable bundles for GHE Server mirrors; plus an SBOM, `-trimpath` builds, `govulncheck`, Dependabot, minimal dependencies (standard library plus one TOML library), branch protection and two-maintainer release approval on the public repo, and an OpenSSF Scorecard. Data repo workflows use `permissions: {}` at the top level and grant per job (`contents: write` only for tagging; `pages` and `id-token` only for the catalog), keep secrets in a protected environment deployable only from `main`, pass values through `env:` and validate them (for example against semver) instead of interpolating `${{ }}` into shell, and do not send secrets to fork pull requests. The catalog site uses `textContent` and a strict CSP, renders Markdown with raw HTML off and only `http` and `https` links, and the publish step fails unless Pages visibility is private or internal. Add `/.github/` to `CODEOWNERS`.
+
+**Smaller items to track:** trust fatigue (show a risk-only summary); `ccshelf init --org <url>` must only write source entries and never trust anything; an account must be a name, never a path; employer approval and `SECURITY.md` before the repo goes public; outside contributors' code running in corporate CI is why SHA pinning is mandatory.
+
 ## Tool repo vs data repo (R5)
 Decided 2026-10-06: the **tool is hosted in a public GitHub repo** (this one), and an adopting company stores its **profiles and catalog data in its own private GHE repo**. The tool never assumes the two live together.
 
@@ -161,8 +181,8 @@ Decided 2026-10-06: the **tool is hosted in a public GitHub repo** (this one), a
 | Changes by | Open-source contributors | The org's platform team |
 
 Consequences:
-- **Reusable CI:** the data repo's workflow calls the public tool, either `uses: <owner>/ccshelf/action@<pinned tag or SHA>` or a step that downloads a pinned release binary. GHE Cloud can use public actions directly; **GHE Server needs GitHub Connect or a mirror** (e.g. `actions-sync`), or the binary-download variant (also mirrorable to an internal registry). Both variants must be documented; the logic stays in the binary (R2).
-- **Pin everything.** The data repo pins the tool version and (where supported) verifies a checksum, since the tool runs in the org's CI and on developers' machines.
+- **Reusable CI:** the data repo's workflow calls the public tool, either `uses: <owner>/ccshelf/action@<full commit SHA>` or a step that downloads a pinned release binary. GHE Cloud can use public actions directly; **GHE Server needs GitHub Connect or a mirror** (e.g. `actions-sync`), or the binary-download variant (also mirrorable to an internal registry). Both variants must be documented; the logic stays in the binary (R2).
+- **Pin everything (SR5).** The data repo pins the tool by full commit SHA (never a moving tag), the Action embeds the expected SHA-256 of the binary it downloads, and releases are signed with provenance, because the tool runs in the org's CI and on developers' machines.
 - **Starter template** (layout in `08-org-data-repo-structure.md`): ship a template/example data repo (`examples/org-data-repo/`, possibly also a GitHub template repository) with a sample `marketplace.json`, `profiles/`, a CI workflow and a catalog publish recipe, so adopting takes minutes.
 - **Configuration lives with the adopter, not in the tool:** profile sources (`dir`/`git`, later `plugin`), the catalog metadata schema location and lint rules come from the org's `ccshelf.toml` in the data repo and the user's own `~/.config/ccshelf/config.toml`, with sane defaults. The tool repo never needs to know about a particular org.
 - **Catalog hosting is the adopter's choice** (R2): the tool outputs a plain static directory; the starter template shows GitHub Pages and an internal static host. We don't pick one for the org.
@@ -242,9 +262,9 @@ Config sketch (`~/.config/ccshelf/config.toml`):
 type = "dir"
 path = "~/.config/ccshelf/profiles"      # personal profiles
 
-[[sources]]
-type = "dir"
-path = ".ccshelf/profiles"               # per-project defaults, relative to the repo root
+# [[sources]]                                   # OFF by default (SR2): a cloned repo must not be able to add profiles
+# type = "dir"
+# path = ".ccshelf/profiles"                    # per-project defaults; needs explicit per-repo trust
 
 [[sources]]
 type = "git"
@@ -258,16 +278,17 @@ path = "profiles"                               # folder inside the repo
 # path = "profiles"
 
 [trust]
-require_pin = true            # refuse git sources without a pinned ref
+require_pin = true            # refuse git sources without a pinned ref (the tag is resolved to a commit SHA)
+trust_project_profiles = false # project .ccshelf/ folders are ignored unless trusted per repo
 on_change = "prompt"          # prompt | fail | allow. What to do when an accepted profile changes
                               # in a way that adds MCP commands, env values or system-prompt text.
 ```
-**Precedence:** personal, then project, then org. A personal profile with the same name overrides the org one, and `extends` can still pull in org profiles.
+**Precedence:** personal, then org. A personal profile with the same name overrides the org one, and `extends` can still pull in org profiles. **Project profiles (a `.ccshelf/` folder in a repository) are off by default** (SR2): when explicitly trusted per repo they can never shadow a name from another source and can never define MCP commands, env or prompt text.
 
-**Trust model.** A shared profile can define MCP server commands, environment and system-prompt additions, so loading one is effectively running code from that source. The launcher therefore:
-1. loads org profiles only from sources already trusted by the org (an allowlisted marketplace, or a pinned git ref);
-2. records a hash of each accepted profile in a lockfile (`~/.config/ccshelf/lock.json`);
-3. when a profile changes in a risky way (new MCP command, new env, new system-prompt text), shows the diff and asks before accepting (`ccshelf trust <profile>`);
+**Trust model (SR1 and SR2).** A shared profile is a closed schema (it cannot carry permissions, hooks, auth or endpoint settings, and MCP definitions live in a reviewed registry), but it still selects plugins and MCP servers that run code, so loading one is effectively running code from that source. The launcher therefore:
+1. loads org profiles only from sources already trusted by the org (a pinned git ref, later an allowlisted marketplace), and project profiles only after explicit per-repo trust;
+2. records, in a lockfile (`~/.config/ccshelf/lock.json`), a hash of the **resolved closure** (profile, parents, referenced registry entries, prompt bytes) plus the **commit SHA** the tag resolved to;
+3. when the closure changes in a risky way (a new MCP command, env name, prompt text or plugin), shows a diff and asks before accepting (`ccshelf trust <profile>`); a tag that now resolves to a different SHA is an untrusted update; non-interactive runs fail closed;
 4. never bypasses org policy (unchanged principle).
 
 Still undecided: whether the data-only plugin approach works smoothly when `strictKnownMarketplaces` or other policy applies (untested), and how a profile that lists a plugin the user hasn't installed should be reported (current design: report and print the install command, never install silently).
@@ -329,13 +350,17 @@ strict = true                 # Only the servers above load: every other known M
 [session]
 model = "opus"                # Passed to claude as the model for this profile (optional).
 effort = "high"               # low | medium | high | xhigh | max (optional).
-append_system_prompt_file = "prompts/frontend.md"   # Extra instructions appended to the system prompt.
+append_system_prompt_file = "prompts/frontend.md"   # Appended via --append-system-prompt-file. The path must stay inside the
+                              # profile's source root (no .., no symlinks).
 inherit_user_settings = true  # true: keep your ~/.claude/settings.json and mask plugins per key.
                               # false: use --setting-sources project,local (drops user plugins,
                               # skills, MCP, hooks, model) and re-add only what the profile sets.
+                              # Personal profiles only: a shared profile may not set false (SR3), because
+                              # it would drop the user's deny rules and hooks.
 [session.env]
-FIGMA_TOKEN_REF = "op://dev/figma/token"   # Environment for the session; prefer references to a
-                              # secret store over raw values. Never commit secrets.
+FIGMA_TOKEN_REF = "op://dev/figma/token"   # Allowlisted names only (never ANTHROPIC_*, *_PROXY, NODE_*, OTEL_*,
+                              # CLAUDE_CODE_*). Values are references passed to the MCP server at spawn;
+                              # the launcher never resolves secrets to disk or argv. Never commit secrets.
 
 # ---- Policy behavior ----
 [policy]

@@ -114,6 +114,9 @@ mcp_registry = "mcp/registry.toml"
 /mcp/                              @acme/platform
 /ccshelf.toml               @acme/platform
 /bundles/                          @acme/platform
+/.github/                          @acme/platform   # workflows and CODEOWNERS themselves; without this a plugin team can edit them
+/plugins/*/hooks/                  @acme/platform   # hooks and MCP in plugins are code on developer machines
+/plugins/*/.mcp.json               @acme/platform
 
 # each team owns its plugin source
 /plugins/design-kit/               @acme/web
@@ -129,7 +132,9 @@ mcp_registry = "mcp/registry.toml"
 | `catalog.yml` | merge to main | `ccshelf catalog build`; publish to the org's chosen host (Pages or any static host) |
 | `release.yml` | manual or scheduled | create a repo tag (for example `v2026.10.1`); consumers pin profile sources to it |
 
-All steps call the same pinned binary from the public tool repo (R2, R5): `uses: <owner>/ccshelf/action@<pin>` or a pinned release download.
+All steps call the same pinned binary from the public tool repo (R2, R5): `uses: <owner>/ccshelf/action@<full commit SHA>` or a pinned release download whose SHA-256 is verified (SR5).
+
+**Workflow security (SR5).** `permissions: {}` at the top of every workflow, granted per job (`contents: write` only for tagging; `pages` and `id-token` only for the catalog). Secrets (for example an Analytics API key) live in a protected environment deployable only from `main`, and are not sent to pull requests from forks. Never interpolate `${{ }}` values from plugin names, versions, descriptions or sidecars into shell: pass them through `env:` and validate (for example a semver pattern). Require code-owner review and at least two approvals through a ruleset, and dismiss stale reviews. The catalog build renders sidecar and marketplace text with `textContent` and a strict CSP, Markdown with raw HTML off and only `http` and `https` links, and the publish step fails unless Pages visibility is private or internal. PR preview artifacts are built from untrusted content and are not published.
 
 ## Consumption
 - **Plugins:** users add the marketplace natively (`extraKnownMarketplaces` or `/plugin marketplace add <git URL>`), and bundles install profile plugin sets in one step.

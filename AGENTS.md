@@ -14,6 +14,7 @@ Guidance for AI coding agents (and humans) working in this repo, the public **to
 - **R2:** works with GitHub.com, GHE Cloud and GHE Server, and GitHub Actions. No hard-coded hosts.
 - **R3:** works with no, partial or strict Claude Code managed policy. Capability-driven; **never bypass policy**.
 - **R4:** open source (MIT). No org-specific names, URLs or data in code, schemas, defaults or examples.
+- **SR1 to SR5:** closed profile schema (a profile can never write permissions, hooks, auth or endpoint settings); trust the resolved closure pinned by commit SHA; project profiles off by default and never shadow another source; protected plugins; private cache files (0700/0600, re-hash before reuse); Actions pinned by full SHA, least-privilege workflows. Never add a feature that weakens these without discussing it first; see `docs/04` "Security requirements".
 - **R6:** every command works with flags alone; interactive prompts, pickers and wizards are an optional front-end used only on a TTY; trust is never auto-accepted; see `docs/04` "Interaction model".
 - **R5:** this public repo holds the tool. Adopting orgs keep profiles and catalog data in their own private repo. Never put real org data here; examples (including the starter template under `examples/`) are fictional. No built-in default profiles: roles are org choices and examples only show the format.
 - Language: **Go**. Build order: shared `core/` first, then a thin slice of launcher and catalog in parallel.

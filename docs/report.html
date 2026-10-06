@@ -334,7 +334,7 @@ Per account: plugins and marketplaces are installed separately, the plugin cache
 <tr><td><code>git</code></td><td>Launcher clones a repo at a pinned ref into a cache.</td><td>Works for a profiles-only repo; adds its own fetch/auth path.</td></tr>
 <tr><td><code>dir</code></td><td>Personal dir or <code>.ccshelf/</code> in a project repo.</td><td>Always available.</td></tr>
 </tbody></table>
-<p><b>Precedence:</b> personal, then project, then org; <code>extends</code> can still pull in org profiles.</p>
+<p><b>Precedence:</b> personal, then org; <code>extends</code> can still pull in org profiles. <b>Project profiles (a <code>.ccshelf/</code> folder in a repository) are off by default</b> (SR2): when explicitly trusted per repo they can never shadow a name from another source and can never define MCP commands, env or prompt text.</p>
 <pre># ~/.config/ccshelf/config.toml (first match wins; list the most specific first)
 [[sources]]
 type = "dir"
@@ -352,9 +352,10 @@ path = "profiles"
 # path = "profiles"
 
 [trust]
-require_pin = true     # refuse git sources without a pinned ref
+require_pin = true     # refuse git sources without a pinned ref (the tag is resolved to a commit SHA)
+trust_project_profiles = false   # project .ccshelf/ folders are ignored unless trusted per repo
 on_change = "prompt"   # prompt | fail | allow, when a profile adds MCP commands, env or prompt text</pre>
-<div class="callout"><b>Trust.</b> A shared profile can define MCP commands, env and system-prompt text, so loading one is effectively running code from that source. The launcher loads org profiles only from sources the org already trusts, records hashes in a lockfile, shows a diff and asks before accepting risky changes (<code>ccshelf trust</code>), and never bypasses org policy.</div>
+<div class="callout"><b>Trust (SR1 and SR2).</b> A shared profile is a closed schema (no permissions, hooks, auth or endpoint settings; MCP definitions live in a reviewed registry), but it still selects plugins and MCP servers that run code, so loading one is effectively running code from that source. The launcher loads org profiles only from trusted sources (a pinned git ref, later an allowlisted marketplace) and project profiles only after explicit per-repo trust; it records a hash of the <b>resolved closure</b> (profile, parents, referenced registry entries, prompt bytes) plus the <b>commit SHA</b> the tag resolved to in a lockfile; it shows a diff and asks before accepting a risky change (a tag now pointing at a different SHA counts as one); non-interactive runs fail closed; and it never bypasses org policy.</div>
 <p class="small">Still undecided: whether the data-only plugin approach works smoothly under <code>strictKnownMarketplaces</code> or other policy (untested), and how a profile that lists an uninstalled plugin is reported (current design: report it and print the install command; never install silently).</p>
 <h3>Manifest sketch (annotated)</h3>
 <p class="small">Design proposal; field names are not final. One file per profile; the file name must match <code>name</code>.</p>
@@ -410,13 +411,16 @@ strict = true                 # Only the servers above load: every other known M
 [session]
 model = "opus"                # Model for this profile (optional).
 effort = "high"               # low | medium | high | xhigh | max (optional).
-append_system_prompt_file = "prompts/frontend.md"   # Appended to the system prompt.
+append_system_prompt_file = "prompts/frontend.md"   # Appended via --append-system-prompt-file; the path must stay
+                              # inside the profile's source root (no .., no symlinks).
 inherit_user_settings = true  # true: keep ~/.claude/settings.json, mask plugins per key.
                               # false: --setting-sources project,local (drops user plugins,
                               # skills, MCP, hooks, model); re-add only what the profile sets.
+                              # Personal profiles only: a shared profile may not set false (SR3).
 [session.env]
-FIGMA_TOKEN_REF = "op://dev/figma/token"   # Prefer secret-store references over raw values.
-                              # Never commit secrets.
+FIGMA_TOKEN_REF = "op://dev/figma/token"   # Allowlisted names only (never ANTHROPIC_*, *_PROXY, NODE_*,
+                              # OTEL_*, CLAUDE_CODE_*). Values are references passed to the MCP server
+                              # at spawn; never resolved to disk or argv. Never commit secrets.
 
 # ---- Policy behavior ----
 [policy]
@@ -440,8 +444,8 @@ search &lt;q&gt;   recommend   doctor [--policy]</pre>
 <tr><td>Changed by</td><td>Open-source contributors</td><td>The org's platform team</td></tr>
 </tbody></table>
 <ul>
-<li>The data repo's workflow calls the public tool via <code>uses: owner/ccshelf/action@&lt;pin&gt;</code> or by downloading a pinned release binary. GHE Server needs GitHub Connect or a mirror (e.g. actions-sync) for the first; the binary variant can be mirrored to an internal registry.</li>
-<li>Pin the tool version (and verify a checksum where possible): it runs in the org's CI and on developers' machines.</li>
+<li>The data repo's workflow calls the public tool via <code>uses: owner/ccshelf/action@&lt;full commit SHA&gt;</code> or by downloading a pinned release binary. GHE Server needs GitHub Connect or a mirror (e.g. actions-sync) for the first; the binary variant can be mirrored to an internal registry.</li>
+<li>Pin the tool by full commit SHA (never a moving tag); the Action embeds the expected SHA-256 of the binary it downloads and releases are signed with provenance (SR5): the tool runs in the org's CI and on developers' machines.</li>
 <li>Ship a starter template data repo (sample marketplace, profiles, CI workflow, publish recipes for Pages and a static host).</li>
 <li>Configuration lives with the adopter, not in the tool: profile sources, the catalog schema location and lint rules come from the org's <code>ccshelf.toml</code> and the user's own <code>config.toml</code>, with sane defaults.</li>
 <li>No telemetry by default. Security reporting, license and contribution docs live in the public repo.</li>
@@ -519,6 +523,9 @@ mcp_registry = "mcp/registry.toml"</pre>
 /mcp/                              @acme/platform
 /ccshelf.toml               @acme/platform
 /bundles/                          @acme/platform
+/.github/                          @acme/platform   # workflows and CODEOWNERS themselves
+/plugins/*/hooks/                  @acme/platform   # hooks and MCP in plugins are code
+/plugins/*/.mcp.json               @acme/platform
 /plugins/design-kit/               @acme/web
 /plugins/sre-kit/                  @acme/sre</pre>
 <p class="small">Listing several owners on one CODEOWNERS line requires approval from any one of them; requiring both teams needs branch protection or rulesets. <code>lint</code> can check that every plugin folder has a CODEOWNERS line and that the sidecar <code>owner</code> matches it.</p>
@@ -538,6 +545,15 @@ mcp_registry = "mcp/registry.toml"</pre>
 <li><b>First release scope:</b> a profile picker (bare command), a <code>new</code> wizard, an <code>init</code> wizard, the <code>trust</code> diff-and-confirm, <code>edit</code> via <code>$EDITOR</code>. Not a full-screen dashboard.</li>
 </ul>
 <p class="small">Implications: one command tree feeds flags, help, completion and prompts; a thin <code>Prompter</code> interface so flows can be tested with scripted answers; library choice deferred (static binary, no cgo, Windows consoles with a plain fallback, minimal dependencies); golden tests for non-interactive behavior plus a pty smoke test per OS (ConPTY on Windows); prompts must not echo secrets.</p>
+<h3>Security requirements (SR1 to SR5)</h3>
+<p>Added 2026-10-06 after the security review, whose verdict was that the trust model was "not acceptable as written". SR1 to SR3 are required before a first release; SR4 and SR5 before anyone runs the tool in corporate CI. A threat model and <code>SECURITY.md</code> are also required before the repo goes public. The settings-file claim under SR1 was verified by me: a <code>--settings</code> file can switch a session to <code>bypassPermissions</code>. <span class="V">V</span></p>
+<table><thead><tr><th>Requirement</th><th>What it means</th></tr></thead><tbody>
+<tr><td><b>SR1</b> closed profile schema</td><td>The generator writes only an allowlist of keys (<code>enabledPlugins</code>, <code>skillOverrides</code>, <code>disableClaudeAiConnectors</code>, <code>deniedMcpServers</code>, <code>model</code>, <code>effort</code>, allowlisted env names). Never <code>permissions</code>, <code>hooks</code>, <code>apiKeyHelper</code>, allow-lists for MCP, <code>disableAllHooks</code>, or env matching <code>ANTHROPIC_*</code>, <code>*_PROXY</code>, <code>NODE_*</code>, <code>OTEL_*</code>, <code>CLAUDE_CODE_*</code>. MCP server definitions live in a reviewed registry; profiles only name servers. A golden test proves no profile produces a key outside the allowlist.</td></tr>
+<tr><td><b>SR2</b> trust the closure, pinned by SHA</td><td>Every non-personal source needs explicit trust; project sources are off by default, trusted per repo, never shadow another source's name and never define MCP commands, env or prompt text. The lockfile hashes the fully resolved closure (parents, registry entries, prompt bytes, plugin list) and the commit SHA; a moved tag is an untrusted update. Compile from the bytes that were hashed. CI and non-interactive runs fail closed.</td></tr>
+<tr><td><b>SR3</b> no shadowing, protected controls</td><td>Profile names can't collide across sources. The org config can declare <code>protected_plugins</code> and <code>protected_mcp</code> that are never masked. Shared profiles can't set <code>inherit_user_settings = false</code> (it drops the user's deny rules and hooks); personal ones can, with a warning listing what is dropped. Only managed settings are real enforcement, and the docs say so.</td></tr>
+<tr><td><b>SR4</b> private, verified local artifacts</td><td>Cache directory 0700 (owner-only ACL on Windows), files 0600 with exclusive-create and no-follow; re-hash before reuse; refuse another user's or a symlinked cache dir; never put secrets on disk or argv; redact values in <code>dry-run</code>, <code>show</code> and <code>doctor</code>; confine every named path to its source root.</td></tr>
+<tr><td><b>SR5</b> hardened CI and releases</td><td>Action pinned by full SHA with an embedded binary checksum; signed releases with provenance, SBOM, <code>-trimpath</code>, <code>govulncheck</code>, Dependabot, two-maintainer release approval, OpenSSF Scorecard. Data repo workflows: <code>permissions: {}</code> granted per job, secrets in a protected environment, no <code>${{ }}</code> interpolation of data, no secrets to fork PRs, <code>/.github/</code> owned by the platform team. Catalog site: <code>textContent</code>, strict CSP, Markdown with raw HTML off, publish fails unless Pages visibility is private or internal.</td></tr>
+</tbody></table>
 <h3>Policy spectrum and open source (R3, R4)</h3>
 <p>The org enforces managed settings; the tool must also work with none or partial policy, and will be open source. The launcher is <b>capability-driven</b>: it probes each capability and degrades per feature.</p>
 <table><thead><tr><th>Capability</th><th>Needed for</th><th>If blocked</th></tr></thead><tbody>
@@ -557,7 +573,7 @@ mcp_registry = "mcp/registry.toml"</pre>
 <tr><td>CI action</td><td>Composite action in the tool repo; fetch a pinned release binary from the tool's public Releases (or an internal mirror, which GHE Server without internet access needs), or build with setup-go. On GHE Server, third-party actions must be mirrored or allowed.</td></tr>
 <tr><td>Releases</td><td>goreleaser; publish all six targets to the public repo's Releases; adopters can mirror them to an internal registry, Homebrew tap or Scoop bucket (a mirror in a private repo needs a token for downloads).</td></tr>
 <tr><td>Usage data</td><td>Enterprise Analytics API and OTel exist independently of GitHub; the catalog job needs a secret for the Analytics API key if used.</td></tr>
-<tr><td>Provenance</td><td>Artifact attestations or Sigstore signing of releases are desirable; support on GHE Server is limited, so optional.</td></tr>
+<tr><td>Provenance</td><td>Required on github.com releases (keyless signatures and SLSA provenance, SBOM); offline-verifiable bundles for GHE Server mirrors (SR5).</td></tr>
 <tr><td>Catalog hosting</td><td>GitHub Pages (access-controlled) or an internal static host; visibility must match who may see the plugin list.</td></tr>
 <tr><td>Marketplace and profile git sources</td><td>GHE likely needs git URL sources rather than the <code>github</code> source type (verify); use the user's git credential helper/SSH config, never stored tokens. Affects <code>strictKnownMarketplaces</code> patterns.</td></tr>
 <tr><td>Bundle tags</td><td>CI creates <code>&lt;plugin&gt;--v&lt;version&gt;</code> tags (<code>claude plugin tag</code>); needs tag-write permission.</td></tr>
@@ -671,6 +687,7 @@ mcp_registry = "mcp/registry.toml"</pre>
 <tr><td>Generated bundles</td><td>Committed in <code>bundles/</code>, checked for drift in CI</td></tr>
 <tr><td>Shared state</td><td>Auth, history and memory shared across profiles; accounts are a separate axis</td></tr>
 <tr><td>Targets</td><td>darwin, linux and windows, each arm64 and amd64 (R1)</td></tr>
+<tr><td>Security</td><td>SR1 to SR5 added after the security review: closed schema, closure trust by SHA with project profiles off by default, protected controls, private cache, hardened CI and releases</td></tr>
 <tr><td>Interaction</td><td>R6: interactive mode and flag-based mode; flags are the contract; prompts only on a TTY; trust never auto-accepted</td></tr>
 <tr><td>License</td><td>MIT (LICENSE file still to add; confirm employer approval first)</td></tr>
 </tbody></table>
