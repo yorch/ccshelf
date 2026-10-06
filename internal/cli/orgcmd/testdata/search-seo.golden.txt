@@ -1,0 +1,3 @@
+PLUGIN          STATUS        DESCRIPTION
+──────────────  ────────────  ──────────────────────────────────────────────────────────────────────────────
+seo-tools@acme  experimental  Search audit skill and a read-only Search Console MCP server for the SEO team.

@@ -1,0 +1,6 @@
+catalog: 7 plugins, 4 profiles, written to <out>
+  CATALOG.md
+  app.js
+  catalog.json
+  index.html
+  style.css

@@ -1,0 +1,2 @@
+bundles are up to date (3 bundles)
+skipped (no plugins): base

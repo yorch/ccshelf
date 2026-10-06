@@ -1,0 +1,15 @@
+DOC001 warning overlap: partner-linter@acme and sre-kit@acme list each other in overlaps_with
+DOC002 info    unused: audit-logger@acme is in no profile (no usage data to confirm it is unused)
+DOC011 warning protected-masked: profile base would mask audit-logger@acme, which the org config protects
+       hint: add "audit-logger@acme" to plugins.include of profile base
+DOC011 warning protected-masked: profile frontend would mask audit-logger@acme, which the org config protects
+       hint: add "audit-logger@acme" to plugins.include of profile frontend
+DOC011 warning protected-masked: profile seo would mask audit-logger@acme, which the org config protects
+       hint: add "audit-logger@acme" to plugins.include of profile seo
+DOC011 warning protected-masked: profile sre would mask audit-logger@acme, which the org config protects
+       hint: add "audit-logger@acme" to plugins.include of profile sre
+skipped DOC006 standalone-skills: the skills directory was not read
+skipped DOC007 missing-upstream: installed plugins were not read
+skipped DOC008 not-installed: installed plugins were not read
+skipped DOC009 forced-by-policy: installed plugins were not read
+doctor: 0 error(s), 5 warning(s), 1 info
