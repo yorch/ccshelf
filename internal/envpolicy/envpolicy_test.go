@@ -32,3 +32,39 @@ func TestCheck(t *testing.T) {
 		t.Fatal("expected an error for NODE_OPTIONS")
 	}
 }
+
+func TestCIAndGitHubNames(t *testing.T) {
+	for _, n := range []string{"CI", "GITHUB_REF", "GITHUB_TOKEN_REF", "RUNNER_TEMP", "ACTIONS_RUNTIME_TOKEN", "RUNNER_REF", "ACTIONS_ID_REF"} {
+		if Allowed(n) {
+			t.Errorf("Allowed(%q) = true, want false", n)
+		}
+	}
+	if !Allowed("CIRCLE_TOKEN_REF") {
+		t.Error("CIRCLE_TOKEN_REF should stay allowed")
+	}
+}
+
+// TestDenylistDirect exercises the denylist without the allowlist, so the
+// defense in depth is not hidden behind it.
+func TestDenylistDirect(t *testing.T) {
+	for n := range deniedExact {
+		if denylistReason(n) == "" {
+			t.Errorf("denylistReason(%q) is empty", n)
+		}
+	}
+	// Names that no prefix or suffix catches, so only deniedExact or the
+	// _PROXY check can refuse them.
+	for _, n := range []string{"PATH", "HOME", "CI", "EDITOR", "PAGER", "IFS", "SSLKEYLOGFILE", "MY_PROXY_URL", "FOO_PROXY", "X_PROXY_Y"} {
+		if denylistReason(n) == "" {
+			t.Errorf("denylistReason(%q) is empty", n)
+		}
+	}
+	for _, n := range []string{"CCSHELF_VAR_X", "FOO_REF", "SOMETHING"} {
+		if r := denylistReason(n); r != "" {
+			t.Errorf("denylistReason(%q) = %q, want empty", n, r)
+		}
+	}
+	if DeniedReason("SOMETHING") == "" {
+		t.Error("the allowlist must still refuse SOMETHING")
+	}
+}

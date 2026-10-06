@@ -3,10 +3,12 @@ package settings
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/ccshelf/ccshelf/internal/claude"
 	"github.com/ccshelf/ccshelf/internal/envpolicy"
@@ -27,7 +29,20 @@ const (
 	SkillNameOnly = "name-only"
 )
 
+// ErrProtectedMCP is matched (errors.Is) by the error Build returns when
+// DenyMCP names a protected MCP server (security requirement SR3).
+var ErrProtectedMCP = errors.New("a protected MCP server cannot be denied")
+
+// ErrProtectedConnector is matched (errors.Is) by the error Build returns
+// when HideConnectors is set while a protected MCP server is a claude.ai
+// connector, which hiding all connectors would remove.
+var ErrProtectedConnector = errors.New("hiding claude.ai connectors would remove a protected MCP server")
+
+// connectorPrefix starts the label of every claude.ai connector.
+const connectorPrefix = "claude.ai "
+
 var (
+	modelPattern    = regexp.MustCompile(`^[A-Za-z0-9._:/\[\]-]+$`)
 	pluginIDPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+@[A-Za-z0-9._-]+$`)
 	skillPattern    = regexp.MustCompile(`^[A-Za-z0-9._:-]+$`)
 	skillValues     = map[string]bool{"on": true, "name-only": true, "user-invocable-only": true, "off": true}
@@ -36,6 +51,7 @@ var (
 const (
 	maxNameLen  = 256
 	maxEnvValue = 4096
+	maxModelLen = 128
 )
 
 // Spec is everything Build needs.
@@ -48,6 +64,16 @@ type Spec struct {
 	Include, Exclude []string
 	// Protected lists plugin ids that must never be masked.
 	Protected []string
+	// PolicyLocked lists plugin ids the caller learned are forced on by
+	// managed policy (for example policy.Matrix.LockedPlugins()). They are
+	// merged with the installed plugins that report RequiredByOrg into
+	// Result.Locked and are never written, true or false.
+	PolicyLocked []string
+	// ProtectedMCP lists MCP server labels that must keep working (SR3).
+	// Build fails with [ErrProtectedMCP] when DenyMCP names one, and with
+	// [ErrProtectedConnector] when HideConnectors is set while one is a
+	// "claude.ai " connector.
+	ProtectedMCP []string
 	// OffSkills and NameOnlySkills list standalone skill names.
 	OffSkills, NameOnlySkills []string
 	// HideConnectors writes disableClaudeAiConnectors: true.
@@ -58,7 +84,8 @@ type Spec struct {
 	Model string
 	// Env is written as "env"; names must pass envpolicy.
 	Env map[string]string
-	// Profile, when non-empty, adds CCSHELF_PROFILE to env.
+	// Profile, when non-empty, adds CCSHELF_PROFILE to env. It is the only
+	// way to set that variable: Env must not contain it.
 	Profile string
 }
 
@@ -170,7 +197,7 @@ func Build(spec Spec) (*Result, error) {
 	for _, c := range []struct {
 		what string
 		ids  []string
-	}{{"include", spec.Include}, {"exclude", spec.Exclude}, {"protected", spec.Protected}} {
+	}{{"include", spec.Include}, {"exclude", spec.Exclude}, {"protected", spec.Protected}, {"policy-locked", spec.PolicyLocked}} {
 		if err := checkIDs(c.what, c.ids); err != nil {
 			return nil, err
 		}
@@ -188,16 +215,12 @@ func Build(spec Spec) (*Result, error) {
 	if err := buildSkills(spec, res); err != nil {
 		return nil, err
 	}
-	for _, label := range sortedUnique(spec.DenyMCP) {
-		if label == "" || label != strings.TrimSpace(label) || len(label) > maxNameLen || !plainString(label) {
-			return nil, fmt.Errorf("deny MCP: invalid server label %q", label)
-		}
-		doc.DeniedMcpServers = append(doc.DeniedMcpServers, DeniedServer{ServerName: label})
+	if err := buildMCP(spec, doc); err != nil {
+		return nil, err
 	}
-	doc.DisableClaudeAiConnectors = spec.HideConnectors
 	if spec.Model != "" {
-		if len(spec.Model) > maxNameLen || strings.ContainsAny(spec.Model, " \t") || !plainString(spec.Model) {
-			return nil, fmt.Errorf("model %q is not a valid model name", spec.Model)
+		if err := checkModel(spec.Model); err != nil {
+			return nil, err
 		}
 		doc.Model = spec.Model
 	}
@@ -205,10 +228,10 @@ func Build(spec Spec) (*Result, error) {
 	for k, v := range spec.Env {
 		env[k] = v
 	}
+	if _, ok := env[envpolicy.Profile]; ok {
+		return nil, fmt.Errorf("env %s is set by the launcher from the profile name and cannot appear in Env", envpolicy.Profile)
+	}
 	if spec.Profile != "" {
-		if prev, ok := env[envpolicy.Profile]; ok && prev != spec.Profile {
-			return nil, fmt.Errorf("env %s conflicts with the profile name", envpolicy.Profile)
-		}
 		if len(spec.Profile) > maxNameLen || !plainString(spec.Profile) {
 			return nil, fmt.Errorf("invalid profile name %q", spec.Profile)
 		}
@@ -224,8 +247,8 @@ func Build(spec Spec) (*Result, error) {
 			return nil, err
 		}
 		for _, k := range keys {
-			if len(env[k]) > maxEnvValue || strings.ContainsRune(env[k], 0) {
-				return nil, fmt.Errorf("env %s: value is too long or contains NUL", k)
+			if err := checkEnvValue(k, env[k]); err != nil {
+				return nil, err
 			}
 		}
 		doc.Env = env
@@ -233,9 +256,64 @@ func Build(spec Spec) (*Result, error) {
 	return res, nil
 }
 
+// checkModel applies the model-name rule shared by Build and Validate.
+func checkModel(m string) error {
+	if len(m) > maxModelLen || !modelPattern.MatchString(m) {
+		return fmt.Errorf("model %q is not a valid model name (at most %d characters matching %s)", m, maxModelLen, modelPattern)
+	}
+	return nil
+}
+
+// checkEnvValue applies the env-value rule shared by Build and Validate.
+func checkEnvValue(name, v string) error {
+	if len(v) > maxEnvValue || !utf8.ValidString(v) || !plainString(v) {
+		return fmt.Errorf("env %s: value is too long (limit %d bytes) or contains control characters or invalid UTF-8", name, maxEnvValue)
+	}
+	if name == envpolicy.Profile && len(v) > maxNameLen {
+		return fmt.Errorf("env %s: value is longer than %d bytes", name, maxNameLen)
+	}
+	return nil
+}
+
+// checkServerLabel applies the deniedMcpServers label rule shared by Build and
+// Validate.
+func checkServerLabel(label string) bool {
+	return label != "" && label == strings.TrimSpace(label) && len(label) <= maxNameLen && utf8.ValidString(label) && plainString(label)
+}
+
+// buildMCP fills deniedMcpServers and disableClaudeAiConnectors, refusing
+// anything that would take down a protected MCP server (SR3).
+func buildMCP(spec Spec, doc *Doc) error {
+	protected := map[string]bool{}
+	for _, l := range spec.ProtectedMCP {
+		if !checkServerLabel(l) {
+			return fmt.Errorf("protected MCP: invalid server label %q", l)
+		}
+		protected[l] = true
+	}
+	for _, label := range sortedUnique(spec.DenyMCP) {
+		if !checkServerLabel(label) {
+			return fmt.Errorf("deny MCP: invalid server label %q", label)
+		}
+		if protected[label] {
+			return fmt.Errorf("%w: %q", ErrProtectedMCP, label)
+		}
+		doc.DeniedMcpServers = append(doc.DeniedMcpServers, DeniedServer{ServerName: label})
+	}
+	if spec.HideConnectors {
+		for _, l := range sortedUnique(spec.ProtectedMCP) {
+			if strings.HasPrefix(l, connectorPrefix) {
+				return fmt.Errorf("%w: %q", ErrProtectedConnector, l)
+			}
+		}
+	}
+	doc.DisableClaudeAiConnectors = spec.HideConnectors
+	return nil
+}
+
 func buildPlugins(spec Spec, mode string, include, exclude, protected map[string]bool, res *Result) {
 	installed := map[string]claude.Plugin{}
-	locked := map[string]bool{}
+	locked := set(spec.PolicyLocked)
 	var ids []string
 	for _, p := range spec.Installed {
 		if !pluginIDPattern.MatchString(p.ID) {
@@ -251,6 +329,9 @@ func buildPlugins(spec Spec, mode string, include, exclude, protected map[string
 		}
 	}
 	sort.Strings(ids)
+	if len(spec.Installed) == 0 && mode == ModeAllowOnly {
+		res.Warnings = append(res.Warnings, "no installed plugins were found; nothing will be masked")
+	}
 	plugins := map[string]bool{}
 	var spared []string
 	for _, id := range ids {

@@ -11,14 +11,26 @@
 //	FAKE_CLAUDE_PLUGINS           file with the installed-plugin JSON array
 //	                              (default: a built-in set of five). Entries may
 //	                              carry extra "skills": [names] used by init.
+//	                              A file holding valid JSON that is not an
+//	                              array (null, {}, a string, ...) is printed
+//	                              verbatim by `plugin list`, to test callers
+//	                              against malformed output.
 //	FAKE_CLAUDE_AVAILABLE         file with the "available" array
 //	FAKE_CLAUDE_PLUGIN_LIST_FAIL  1: plugin list exits 1 with a stderr message
 //	FAKE_CLAUDE_AGENTS_JSON       stdout of `agents --json --all` (default [])
 //	FAKE_CLAUDE_USER_ENABLED      user-layer settings (inline JSON or file);
-//	                              a plain {"id": bool} map is also accepted
+//	                              a plain {"id": bool} map is accepted HERE
+//	                              ONLY, never inside a --settings value or any
+//	                              other layer (real Claude ignores unknown keys)
 //	FAKE_CLAUDE_PROJECT_SETTINGS  project-layer settings (inline JSON or file)
-//	FAKE_CLAUDE_MANAGED           managed settings JSON: enabledPlugins forces,
-//	                              disableSideloadFlags
+//	FAKE_CLAUDE_PROJECT_DIR       when set, the project layer applies only when
+//	                              the working directory is this directory, and
+//	                              `plugin list` reflects the layer's
+//	                              enabledPlugins in "enabled" and
+//	                              "projectEnabled" (output depends on cwd)
+//	FAKE_CLAUDE_MANAGED           managed settings JSON: enabledPlugins forces
+//	                              (a plugin forced true is listed with
+//	                              "requiredByOrg": true), disableSideloadFlags
 //	FAKE_CLAUDE_SKILLS            JSON array (inline or file) of standalone
 //	                              skill names (default ["pdf","legacy-helper"])
 //	FAKE_CLAUDE_CONNECTORS        JSON array of claude.ai connector labels
@@ -29,7 +41,12 @@
 //
 // An invalid --settings file (bad JSON or failing basic validation) is
 // ignored with exit 0 and empty stderr, as real Claude Code does; a missing
-// file exits 1 with "Settings file not found".
+// file exits 1 with "Settings file not found". Unknown options exit 1 with
+// "error: unknown option '<x>'" (an explicit allowlist, see knownFlags), and
+// a missing or invalid --mcp-config or --append-system-prompt-file exits 1.
+// The init event always lists the three harness plugins cc-plugin-agents-md,
+// cc-plugin-plugin-authoring and cc-plugin-telemetry. The fake is meant to be
+// stricter than real Claude Code, never more forgiving.
 package main
 
 import (
@@ -37,6 +54,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -147,6 +165,78 @@ func installedPlugins(getenv func(string) string) ([]map[string]json.RawMessage,
 	return list, nil
 }
 
+// nonArrayPlugins reports the content of FAKE_CLAUDE_PLUGINS when it is valid
+// JSON that is not an array, so `plugin list` can print it verbatim.
+func nonArrayPlugins(getenv func(string) string) (string, bool) {
+	p := getenv("FAKE_CLAUDE_PLUGINS")
+	if p == "" {
+		return "", false
+	}
+	b, err := os.ReadFile(p)
+	if err != nil || !json.Valid(b) {
+		return "", false
+	}
+	t := strings.TrimSpace(string(b))
+	if strings.HasPrefix(t, "[") {
+		return "", false
+	}
+	return t, true
+}
+
+func sameDir(a, b string) bool {
+	norm := func(p string) string {
+		if r, err := filepath.EvalSymlinks(p); err == nil {
+			p = r
+		}
+		return filepath.Clean(p)
+	}
+	return a != "" && b != "" && norm(a) == norm(b)
+}
+
+// projectLayerApplies reports whether the project layer is in force for the
+// current working directory: always when FAKE_CLAUDE_PROJECT_DIR is unset.
+func projectLayerApplies(getenv func(string) string) bool {
+	dir := getenv("FAKE_CLAUDE_PROJECT_DIR")
+	return dir == "" || sameDir(dir, cwd())
+}
+
+// applyListState makes `plugin list --json` reflect what real Claude Code
+// reports: the output depends on the working directory (project layer) and
+// on managed policy (plugins forced on are marked requiredByOrg).
+func applyListState(list []map[string]json.RawMessage, getenv func(string) string) {
+	var forced map[string]bool
+	if m := getenv("FAKE_CLAUDE_MANAGED"); m != "" {
+		if l, ok := parseLayer([]byte(m), false); ok {
+			_ = json.Unmarshal(l["enabledPlugins"], &forced)
+		}
+	}
+	var project map[string]bool
+	if v := getenv("FAKE_CLAUDE_PROJECT_SETTINGS"); v != "" && getenv("FAKE_CLAUDE_PROJECT_DIR") != "" && projectLayerApplies(getenv) {
+		if b, err := readJSONSource(v); err == nil {
+			if l, ok := parseLayer(b, false); ok {
+				_ = json.Unmarshal(l["enabledPlugins"], &project)
+			}
+		}
+	}
+	for _, p := range list {
+		var id string
+		_ = json.Unmarshal(p["id"], &id)
+		if v, ok := project[id]; ok {
+			p["enabled"], p["projectEnabled"] = boolRaw(v), boolRaw(v)
+		}
+		if forced[id] {
+			p["requiredByOrg"] = boolRaw(true)
+		}
+	}
+}
+
+func boolRaw(b bool) json.RawMessage {
+	if b {
+		return json.RawMessage("true")
+	}
+	return json.RawMessage("false")
+}
+
 func pluginList(args []string, getenv func(string) string, stdout, stderr io.Writer) int {
 	if getenv("FAKE_CLAUDE_PLUGIN_LIST_FAIL") == "1" {
 		fmt.Fprintln(stderr, "Error: failed to list plugins (fake failure)")
@@ -159,13 +249,23 @@ func pluginList(args []string, getenv func(string) string, stdout, stderr io.Wri
 			asJSON = true
 		case "--available":
 			available = true
+		default:
+			if strings.HasPrefix(a, "-") {
+				fmt.Fprintf(stderr, "error: unknown option '%s'\n", a)
+				return 1
+			}
 		}
+	}
+	if raw, ok := nonArrayPlugins(getenv); ok {
+		fmt.Fprintln(stdout, raw)
+		return 0
 	}
 	list, err := installedPlugins(getenv)
 	if err != nil {
 		fmt.Fprintln(stderr, "Error: cannot read plugin list:", err)
 		return 1
 	}
+	applyListState(list, getenv)
 	if !asJSON {
 		for _, p := range list {
 			var id string
@@ -203,18 +303,36 @@ type options struct {
 	mcpConfig      []string
 	model          string
 	sideload       []string
+	promptFiles    []string
 }
 
-var valueFlags = map[string]bool{
-	"-p": false, "--print": false, // -p takes the prompt, handled below
-	"--output-format": true, "--settings": true, "--setting-sources": true,
-	"--mcp-config": true, "--model": true, "--effort": true, "--max-turns": true,
-	"--append-system-prompt-file": true, "--append-system-prompt": true,
-	"--plugin-dir": true, "--plugin-url": true, "--agents": true, "--resume": false,
-	"--permission-mode": true, "--input-format": true,
+type flagKind int
+
+const (
+	noValue  flagKind = iota // a switch
+	reqValue                 // takes a value, which may start with "-"
+	optValue                 // takes an optional value that does not start with "-"
+)
+
+// knownFlags is the explicit allowlist of every option the launcher is
+// expected to pass. Anything else is an unknown option and exits 1, as in real
+// Claude Code, so a typo in the launcher cannot pass a test.
+var knownFlags = map[string]flagKind{
+	"--settings": reqValue, "--setting-sources": reqValue, "--mcp-config": reqValue,
+	"--strict-mcp-config": noValue, "--model": reqValue, "--effort": reqValue,
+	"--append-system-prompt": reqValue, "--append-system-prompt-file": reqValue,
+	"--resume": optValue, "-r": optValue, "--continue": noValue, "-c": noValue,
+	"-p": noValue, "--print": noValue, "--output-format": reqValue, "--input-format": reqValue,
+	"--verbose": noValue, "--max-turns": reqValue, "--version": noValue, "--help": noValue,
+	"--add-dir": reqValue, "--plugin-dir": reqValue, "--plugin-url": reqValue, "--agents": reqValue,
+	"--permission-mode": reqValue, "--session-id": reqValue, "--name": reqValue, "-n": reqValue,
+	"--debug": optValue, "--json": noValue, "--available": noValue,
 }
 
-func parseArgs(args []string) options {
+// parseArgs reads the command line. A non-empty second result is the
+// complete error message (without "error: ") for an unknown option or a
+// missing option value.
+func parseArgs(args []string) (options, string) {
 	var o options
 	for i := 0; i < len(args); i++ {
 		a := args[i]
@@ -224,13 +342,31 @@ func parseArgs(args []string) options {
 				name, val, hasVal = k, v, true
 			}
 		}
+		if !strings.HasPrefix(a, "-") || a == "-" {
+			continue // a positional argument (a prompt or session id)
+		}
+		kind, known := knownFlags[name]
+		if !known {
+			return o, fmt.Sprintf("unknown option '%s'", a)
+		}
+		var missing bool
 		next := func() string {
 			if hasVal {
 				return val
 			}
-			if i+1 < len(args) {
-				i++
-				return args[i]
+			switch kind {
+			case reqValue:
+				if i+1 < len(args) {
+					i++
+					return args[i]
+				}
+				missing = true
+			case optValue:
+				if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+					i++
+					return args[i]
+				}
+			case noValue:
 			}
 			return ""
 		}
@@ -252,29 +388,35 @@ func parseArgs(args []string) options {
 		case "--mcp-config":
 			o.mcpConfig = append(o.mcpConfig, next())
 			o.sideload = append(o.sideload, name)
+		case "--append-system-prompt-file":
+			o.promptFiles = append(o.promptFiles, next())
 		case "--model":
 			o.model = next()
 		case "--plugin-dir", "--plugin-url", "--agents":
 			next()
 			o.sideload = append(o.sideload, name)
 		default:
-			if valueFlags[name] {
-				next()
-			}
+			next()
+		}
+		if missing {
+			return o, fmt.Sprintf("option '%s' argument missing", name)
 		}
 	}
-	return o
+	return o, ""
 }
 
 // layer is a parsed settings object.
 type layer map[string]json.RawMessage
 
-func parseLayer(data []byte) (layer, bool) {
+// parseLayer parses one settings layer. With bare true (only the
+// FAKE_CLAUDE_USER_ENABLED variable) a plain {"id@market": bool} map counts as
+// enabledPlugins; everywhere else unknown keys are ignored, as real Claude
+// Code does.
+func parseLayer(data []byte, bare bool) (layer, bool) {
 	var l layer
 	if err := json.Unmarshal(data, &l); err != nil || l == nil {
 		return nil, false
 	}
-	// A plain {"id@market": bool} map counts as enabledPlugins.
 	known := false
 	for k := range l {
 		switch k {
@@ -282,7 +424,7 @@ func parseLayer(data []byte) (layer, bool) {
 			known = true
 		}
 	}
-	if !known && len(l) > 0 {
+	if bare && !known && len(l) > 0 {
 		m := map[string]bool{}
 		for k, v := range l {
 			var b bool
@@ -411,16 +553,40 @@ func hasSource(o options, name string) bool {
 }
 
 func generic(args []string, getenv func(string) string, stdout, stderr io.Writer) int {
-	o := parseArgs(args)
+	o, perr := parseArgs(args)
+	if perr != "" {
+		fmt.Fprintf(stderr, "error: %s\n", perr)
+		return 1
+	}
 	var managed layer
 	if m := getenv("FAKE_CLAUDE_MANAGED"); m != "" {
-		managed, _ = parseLayer([]byte(m))
+		managed, _ = parseLayer([]byte(m), false)
 	}
 	var disableSideload bool
 	_ = json.Unmarshal(managed["disableSideloadFlags"], &disableSideload)
 	if disableSideload && len(o.sideload) > 0 {
 		fmt.Fprintf(stderr, "error: %s is blocked by managed policy (disableSideloadFlags)\n", o.sideload[0])
 		return 1
+	}
+	for _, f := range o.mcpConfig {
+		b, err := readJSONSource(f)
+		if err != nil {
+			fmt.Fprintf(stderr, "error: MCP config file not found: %s\n", f)
+			return 1
+		}
+		var cfg struct {
+			MCPServers map[string]json.RawMessage `json:"mcpServers"`
+		}
+		if err := json.Unmarshal(b, &cfg); err != nil {
+			fmt.Fprintf(stderr, "error: invalid MCP configuration: %v\n", err)
+			return 1
+		}
+	}
+	for _, f := range o.promptFiles {
+		if _, err := os.ReadFile(f); err != nil {
+			fmt.Fprintf(stderr, "error: system prompt file not found: %s\n", f)
+			return 1
+		}
 	}
 	if ms := getenv("FAKE_CLAUDE_SLEEP"); ms != "" {
 		if n, err := strconv.Atoi(ms); err == nil && n > 0 {
@@ -446,16 +612,16 @@ func generic(args []string, getenv func(string) string, stdout, stderr io.Writer
 		}
 		if v := getenv("FAKE_CLAUDE_USER_ENABLED"); v != "" {
 			if b, err := readJSONSource(v); err == nil {
-				if l, ok := parseLayer(b); ok {
+				if l, ok := parseLayer(b, true); ok {
 					st.apply(l)
 				}
 			}
 		}
 	}
 	// Layer 2: project/local settings.
-	if v := getenv("FAKE_CLAUDE_PROJECT_SETTINGS"); v != "" && hasSource(o, "project") {
+	if v := getenv("FAKE_CLAUDE_PROJECT_SETTINGS"); v != "" && hasSource(o, "project") && projectLayerApplies(getenv) {
 		if b, err := readJSONSource(v); err == nil {
-			if l, ok := parseLayer(b); ok {
+			if l, ok := parseLayer(b, false); ok {
 				st.apply(l)
 			}
 		}
@@ -473,7 +639,7 @@ func generic(args []string, getenv func(string) string, stdout, stderr io.Writer
 				return 1
 			}
 		}
-		if l, ok := parseLayer(b); ok {
+		if l, ok := parseLayer(b, false); ok {
 			st.apply(l)
 		}
 	}
@@ -518,6 +684,10 @@ func jsonList(v string, def []string) []string {
 	return out
 }
 
+// harnessPlugins are entries the Claude Code harness always adds to the init
+// plugin list, whatever the settings say.
+var harnessPlugins = []string{"cc-plugin-agents-md", "cc-plugin-plugin-authoring", "cc-plugin-telemetry"}
+
 func emitInit(o options, st *state, plugins []map[string]json.RawMessage, getenv func(string) string, stdout io.Writer) {
 	type pluginOut struct {
 		Name   string `json:"name"`
@@ -525,6 +695,9 @@ func emitInit(o options, st *state, plugins []map[string]json.RawMessage, getenv
 		Source string `json:"source"`
 	}
 	var pluginsOut []pluginOut
+	for _, h := range harnessPlugins {
+		pluginsOut = append(pluginsOut, pluginOut{h, "", "harness"})
+	}
 	var skills, slash []string
 	mcp := []map[string]string{}
 	servers := map[string]bool{}
@@ -623,16 +796,19 @@ func cwd() string {
 	return d
 }
 
-// overrideFor looks a standalone skill up by its name or a namespaced alias
-// such as anthropic-skills:pdf (both keys worked in Stage 0).
+// skillAliasNamespace is the only namespace under which a standalone skill
+// can also be addressed (anthropic-skills:pdf for pdf, as seen in Stage 0).
+const skillAliasNamespace = "anthropic-skills:"
+
+// overrideFor looks a standalone skill up by its name or its
+// anthropic-skills: alias. Other namespaced keys never match a standalone
+// skill, so the result does not depend on map iteration order.
 func overrideFor(overrides map[string]string, name string) string {
 	if v, ok := overrides[name]; ok {
 		return v
 	}
-	for k, v := range overrides {
-		if strings.HasSuffix(k, ":"+name) {
-			return v
-		}
+	if v, ok := overrides[skillAliasNamespace+name]; ok {
+		return v
 	}
 	return "on"
 }

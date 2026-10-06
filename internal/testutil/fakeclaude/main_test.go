@@ -163,8 +163,8 @@ func TestLog(t *testing.T) {
 
 func TestInitBaseline(t *testing.T) {
 	info := initOf(t, nil)
-	if len(info.Plugins) != 5 || !has(info.Plugins, "sre-kit") {
-		t.Fatalf("plugins %v", info.Plugins)
+	if len(userPlugins(info)) != 5 || !has(userPlugins(info), "sre-kit") {
+		t.Fatalf("plugins %v", userPlugins(info))
 	}
 	if info.PermissionMode != "default" || info.Model != "fake-model" {
 		t.Fatalf("%+v", info)
@@ -187,16 +187,16 @@ func TestInitBaseline(t *testing.T) {
 func TestInitMasking(t *testing.T) {
 	file := write(t, "s.json", `{"enabledPlugins":{"sre-kit@acme":false,"design-kit@acme":false}}`)
 	info := initOf(t, nil, "--settings", file)
-	if has(info.Plugins, "sre-kit") || has(info.Plugins, "design-kit") || !has(info.Plugins, "seo-tools") {
-		t.Fatalf("per-key merge broken: %v", info.Plugins)
+	if has(userPlugins(info), "sre-kit") || has(userPlugins(info), "design-kit") || !has(userPlugins(info), "seo-tools") {
+		t.Fatalf("per-key merge broken: %v", userPlugins(info))
 	}
 	if has(info.Skills, "sre-kit:runbook") {
 		t.Fatalf("skills of masked plugin remain: %v", info.Skills)
 	}
 	// Inline JSON works the same.
 	info = initOf(t, nil, "--settings", `{"enabledPlugins":{"sre-kit@acme":false}}`)
-	if has(info.Plugins, "sre-kit") {
-		t.Fatalf("inline: %v", info.Plugins)
+	if has(userPlugins(info), "sre-kit") {
+		t.Fatalf("inline: %v", userPlugins(info))
 	}
 	// Masking the MCP plugin removes its server.
 	info = initOf(t, nil, "--settings", `{"enabledPlugins":{"context7@claude-plugins-official":false}}`)
@@ -205,8 +205,8 @@ func TestInitMasking(t *testing.T) {
 	}
 	// Unknown ids are silently ignored.
 	info = initOf(t, nil, "--settings", `{"enabledPlugins":{"ghost@x":true}}`)
-	if len(info.Plugins) != 5 {
-		t.Fatalf("%v", info.Plugins)
+	if len(userPlugins(info)) != 5 {
+		t.Fatalf("%v", userPlugins(info))
 	}
 }
 
@@ -215,24 +215,24 @@ func TestInitLayers(t *testing.T) {
 	project := write(t, "project.json", `{"enabledPlugins":{"design-kit@acme":false}}`)
 	env := map[string]string{"FAKE_CLAUDE_USER_ENABLED": user, "FAKE_CLAUDE_PROJECT_SETTINGS": project}
 	info := initOf(t, env)
-	if has(info.Plugins, "seo-tools") || has(info.Plugins, "design-kit") || info.PermissionMode != "plan" {
+	if has(userPlugins(info), "seo-tools") || has(userPlugins(info), "design-kit") || info.PermissionMode != "plan" {
 		t.Fatalf("%+v", info)
 	}
 	// --settings beats the project layer.
 	info = initOf(t, env, "--settings", `{"enabledPlugins":{"design-kit@acme":true}}`)
-	if !has(info.Plugins, "design-kit") {
-		t.Fatalf("command line should win: %v", info.Plugins)
+	if !has(userPlugins(info), "design-kit") {
+		t.Fatalf("command line should win: %v", userPlugins(info))
 	}
 	// Project-enabled: a plugin disabled at user scope can be enabled by project.
 	f := write(t, "p.json", `[{"id":"a@m","scope":"user","enabled":false},{"id":"b@m","scope":"user","enabled":true}]`)
 	env = map[string]string{"FAKE_CLAUDE_PLUGINS": f, "FAKE_CLAUDE_PROJECT_SETTINGS": `{"enabledPlugins":{"a@m":true}}`}
-	if info := initOf(t, env); !slices.Equal(info.Plugins, []string{"a", "b"}) {
-		t.Fatalf("%v", info.Plugins)
+	if info := initOf(t, env); !slices.Equal(userPlugins(info), []string{"a", "b"}) {
+		t.Fatalf("%v", userPlugins(info))
 	}
 	// A plain map is accepted as the user layer.
 	env = map[string]string{"FAKE_CLAUDE_USER_ENABLED": `{"b@m":false}`, "FAKE_CLAUDE_PLUGINS": f}
-	if info := initOf(t, env); len(info.Plugins) != 0 {
-		t.Fatalf("%v", info.Plugins)
+	if info := initOf(t, env); len(userPlugins(info)) != 0 {
+		t.Fatalf("%v", userPlugins(info))
 	}
 }
 
@@ -241,16 +241,16 @@ func TestSettingSources(t *testing.T) {
 	env := map[string]string{"FAKE_CLAUDE_PROJECT_SETTINGS": project}
 	for _, src := range []string{"project,local", ""} {
 		info := initOf(t, env, "--setting-sources", src)
-		if src == "" && len(info.Plugins) != 0 {
-			t.Fatalf("empty sources should drop everything: %v", info.Plugins)
+		if src == "" && len(userPlugins(info)) != 0 {
+			t.Fatalf("empty sources should drop everything: %v", userPlugins(info))
 		}
-		if src != "" && !slices.Equal(info.Plugins, []string{"design-kit"}) {
-			t.Fatalf("project,local: %v", info.Plugins)
+		if src != "" && !slices.Equal(userPlugins(info), []string{"design-kit"}) {
+			t.Fatalf("project,local: %v", userPlugins(info))
 		}
 	}
 	info := initOf(t, env, "--setting-sources=user")
-	if len(info.Plugins) != 5 {
-		t.Fatalf("user only: %v", info.Plugins)
+	if len(userPlugins(info)) != 5 {
+		t.Fatalf("user only: %v", userPlugins(info))
 	}
 }
 
@@ -270,7 +270,7 @@ func TestSilentIgnoreAndMissing(t *testing.T) {
 			t.Fatalf("%q: code %d stderr %q", b, code, errb.String())
 		}
 		info, err := claude.ParseInit(&out)
-		if err != nil || len(info.Plugins) != 5 {
+		if err != nil || len(userPlugins(info)) != 5 {
 			t.Fatalf("%q: mask applied from invalid file: %v %v", b, err, info)
 		}
 	}
@@ -297,7 +297,7 @@ func TestConnectorsAndMCP(t *testing.T) {
 	}
 	// --strict-mcp-config alone: zero servers; plugins unchanged.
 	info = initOf(t, nil, "--strict-mcp-config")
-	if len(info.MCPServers) != 0 || len(info.Plugins) != 5 {
+	if len(info.MCPServers) != 0 || len(userPlugins(info)) != 5 {
 		t.Fatalf("%+v", info)
 	}
 	cfg := write(t, "mcp.json", `{"mcpServers":{"mine":{"command":"x"}}}`)
@@ -341,8 +341,8 @@ func TestPermissionMode(t *testing.T) {
 func TestManaged(t *testing.T) {
 	env := map[string]string{"FAKE_CLAUDE_MANAGED": `{"enabledPlugins":{"sre-kit@acme":true,"seo-tools@acme":false}}`}
 	info := initOf(t, env, "--settings", `{"enabledPlugins":{"sre-kit@acme":false,"seo-tools@acme":true}}`)
-	if !has(info.Plugins, "sre-kit") || has(info.Plugins, "seo-tools") {
-		t.Fatalf("managed must win: %v", info.Plugins)
+	if !has(userPlugins(info), "sre-kit") || has(userPlugins(info), "seo-tools") {
+		t.Fatalf("managed must win: %v", userPlugins(info))
 	}
 	env = map[string]string{"FAKE_CLAUDE_MANAGED": `{"disableSideloadFlags":true}`}
 	for _, flag := range [][]string{{"--plugin-dir", "x"}, {"--plugin-url", "u"}, {"--agents", "{}"}, {"--mcp-config", "{}"}} {
@@ -356,5 +356,214 @@ func TestManaged(t *testing.T) {
 	}
 	if r := do(t, env, "--plugin-dir=x"); r.code != 1 {
 		t.Fatalf("=form: %+v", r)
+	}
+}
+
+// userPlugins drops the always-present harness entries.
+func userPlugins(i *claude.InitInfo) []string {
+	var out []string
+	for _, p := range i.Plugins {
+		if !strings.HasPrefix(p, "cc-plugin-") {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func TestHarnessPluginsAlwaysListed(t *testing.T) {
+	for _, extra := range [][]string{nil, {"--setting-sources", ""}, {"--settings", `{"enabledPlugins":{"sre-kit@acme":false}}`}} {
+		info := initOf(t, nil, extra...)
+		for _, h := range []string{"cc-plugin-agents-md", "cc-plugin-plugin-authoring", "cc-plugin-telemetry"} {
+			if !has(info.Plugins, h) {
+				t.Errorf("%v: missing harness plugin %s in %v", extra, h, info.Plugins)
+			}
+		}
+	}
+}
+
+func TestBareMapOnlyInUserEnabled(t *testing.T) {
+	f := write(t, "p.json", `[{"id":"a@m","scope":"user","enabled":true},{"id":"b@m","scope":"user","enabled":true}]`)
+	// Through its own variable the bare map works.
+	env := map[string]string{"FAKE_CLAUDE_PLUGINS": f, "FAKE_CLAUDE_USER_ENABLED": `{"b@m":false}`}
+	if got := userPlugins(initOf(t, env)); !slices.Equal(got, []string{"a"}) {
+		t.Fatalf("user layer: %v", got)
+	}
+	// Inside --settings, a project layer or the managed layer it is just
+	// unknown keys, which real Claude Code ignores.
+	env = map[string]string{"FAKE_CLAUDE_PLUGINS": f}
+	if got := userPlugins(initOf(t, env, "--settings", `{"b@m":false}`)); !slices.Equal(got, []string{"a", "b"}) {
+		t.Fatalf("--settings bare map applied: %v", got)
+	}
+	env["FAKE_CLAUDE_PROJECT_SETTINGS"] = `{"b@m":false}`
+	if got := userPlugins(initOf(t, env)); !slices.Equal(got, []string{"a", "b"}) {
+		t.Fatalf("project bare map applied: %v", got)
+	}
+	env = map[string]string{"FAKE_CLAUDE_PLUGINS": f, "FAKE_CLAUDE_MANAGED": `{"b@m":true}`}
+	if got := userPlugins(initOf(t, env, "--settings", `{"enabledPlugins":{"b@m":false}}`)); !slices.Equal(got, []string{"a"}) {
+		t.Fatalf("managed bare map applied: %v", got)
+	}
+}
+
+func TestUnknownOptionsRejected(t *testing.T) {
+	for _, args := range [][]string{
+		{"--bogus"}, {"-p", "x", "--setings", "{}"}, {"--model=x", "--nope=1"}, {"-z"}, {"plugin", "list", "--json", "--bogus"},
+	} {
+		r := do(t, nil, args...)
+		bad := ""
+		for _, a := range args {
+			if strings.HasPrefix(a, "--bogus") || a == "--setings" || strings.HasPrefix(a, "--nope") || a == "-z" {
+				bad = a
+			}
+		}
+		if r.code != 1 || r.stdout != "" || !strings.Contains(r.stderr, "error: unknown option '"+bad+"'") {
+			t.Errorf("%v: %+v", args, r)
+		}
+	}
+	// Every allowlisted flag the launcher uses is accepted.
+	ok := [][]string{
+		{"--settings", "{}"},
+		{"--setting-sources", "user"},
+		{"--mcp-config", `{"mcpServers":{}}`},
+		{"--strict-mcp-config"},
+		{"--model", "m"},
+		{"--effort", "high"},
+		{"--append-system-prompt", "x"},
+		{"--resume"},
+		{"--resume", "id"},
+		{"-r", "id"},
+		{"--continue"},
+		{"-c"},
+		{"-p", "x"},
+		{"--print", "x"},
+		{"--output-format", "json"},
+		{"--verbose"},
+		{"--max-turns", "2"},
+		{"--add-dir", "d"},
+		{"--plugin-dir", "d"},
+		{"--agents", "{}"},
+		{"--permission-mode", "plan"},
+		{"--session-id", "s"},
+		{"--name", "n"},
+		{"-n", "n"},
+		{"--debug"},
+		{"--json"},
+		{"--available"},
+	}
+	for _, args := range ok {
+		if r := do(t, nil, args...); r.code != 0 {
+			t.Errorf("%v rejected: %+v", args, r)
+		}
+	}
+	if r := do(t, nil, "--help"); r.code != 0 {
+		t.Errorf("--help: %+v", r)
+	}
+	// A missing value for a value option is an error.
+	if r := do(t, nil, "--model"); r.code != 1 || !strings.Contains(r.stderr, "argument missing") {
+		t.Errorf("%+v", r)
+	}
+}
+
+func TestMissingFilesExit1(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "missing.json")
+	for _, args := range [][]string{
+		{"-p", "x", "--mcp-config", missing},
+		{"-p", "x", "--append-system-prompt-file", missing},
+		{"-p", "x", "--settings", missing},
+		{"-p", "x", "--mcp-config", `{"mcpServers": 5}`},
+		{"-p", "x", "--mcp-config", `{bad`},
+	} {
+		if r := do(t, nil, args...); r.code != 1 || r.stderr == "" {
+			t.Errorf("%v: %+v", args, r)
+		}
+	}
+	good := write(t, "prompt.txt", "hello")
+	if r := do(t, nil, "-p", "x", "--append-system-prompt-file", good); r.code != 0 {
+		t.Errorf("existing prompt file rejected: %+v", r)
+	}
+}
+
+func TestSkillAliasOnlyAnthropicSkills(t *testing.T) {
+	// Another namespace never matches a standalone skill.
+	info := initOf(t, nil, "--settings", `{"skillOverrides":{"evil:pdf":"off","zzz:pdf":"off"}}`)
+	if !has(info.Skills, "pdf") {
+		t.Fatalf("a foreign namespace matched: %v", info.Skills)
+	}
+	info = initOf(t, nil, "--settings", `{"skillOverrides":{"anthropic-skills:pdf":"off"}}`)
+	if has(info.Skills, "pdf") {
+		t.Fatalf("alias ignored: %v", info.Skills)
+	}
+	// Deterministic: the exact name wins over the alias, every time.
+	for i := 0; i < 20; i++ {
+		info = initOf(t, nil, "--settings", `{"skillOverrides":{"anthropic-skills:pdf":"off","pdf":"on","evil:pdf":"off"}}`)
+		if !has(info.Skills, "pdf") {
+			t.Fatalf("round %d: %v", i, info.Skills)
+		}
+	}
+	if got := overrideFor(map[string]string{"a:x": "off", "b:x": "name-only"}, "x"); got != "on" {
+		t.Fatalf("%q", got)
+	}
+}
+
+func TestPluginListManagedAndCwd(t *testing.T) {
+	type entry struct {
+		ID             string `json:"id"`
+		Enabled        bool   `json:"enabled"`
+		ProjectEnabled bool   `json:"projectEnabled"`
+		RequiredByOrg  bool   `json:"requiredByOrg"`
+	}
+	list := func(env map[string]string) map[string]entry {
+		t.Helper()
+		r := do(t, env, "plugin", "list", "--json")
+		var es []entry
+		if err := json.Unmarshal([]byte(r.stdout), &es); err != nil {
+			t.Fatalf("%v: %s", err, r.stdout)
+		}
+		m := map[string]entry{}
+		for _, e := range es {
+			m[e.ID] = e
+		}
+		return m
+	}
+	// Managed: only plugins forced true are required by org.
+	got := list(map[string]string{"FAKE_CLAUDE_MANAGED": `{"enabledPlugins":{"sre-kit@acme":true,"seo-tools@acme":false}}`})
+	if !got["sre-kit@acme"].RequiredByOrg || got["seo-tools@acme"].RequiredByOrg || got["design-kit@acme"].RequiredByOrg {
+		t.Fatalf("%+v", got)
+	}
+	// cwd dependence.
+	dir := t.TempDir()
+	cwdNow, _ := os.Getwd()
+	env := map[string]string{
+		"FAKE_CLAUDE_PROJECT_SETTINGS": `{"enabledPlugins":{"design-kit@acme":false,"seo-tools@acme":true}}`,
+		"FAKE_CLAUDE_PROJECT_DIR":      dir,
+	}
+	got = list(env)
+	if !got["design-kit@acme"].Enabled || got["design-kit@acme"].ProjectEnabled {
+		t.Fatalf("applied outside the project dir (cwd %s): %+v", cwdNow, got["design-kit@acme"])
+	}
+	env["FAKE_CLAUDE_PROJECT_DIR"] = cwdNow
+	got = list(env)
+	if got["design-kit@acme"].Enabled || got["design-kit@acme"].ProjectEnabled || !got["seo-tools@acme"].Enabled || !got["seo-tools@acme"].ProjectEnabled {
+		t.Fatalf("not applied in the project dir: %+v", got)
+	}
+	// Init follows the same rule.
+	env["FAKE_CLAUDE_PROJECT_DIR"] = dir
+	if info := initOf(t, env); !has(info.Plugins, "design-kit") {
+		t.Fatalf("init applied the project layer outside its directory: %v", info.Plugins)
+	}
+	env["FAKE_CLAUDE_PROJECT_DIR"] = cwdNow
+	if info := initOf(t, env); has(info.Plugins, "design-kit") {
+		t.Fatalf("init ignored the project layer inside its directory: %v", info.Plugins)
+	}
+}
+
+func TestPluginListBadShapesVerbatim(t *testing.T) {
+	for _, shape := range []string{`null`, `{}`, `{"installed":null}`, `{"plugins":[]}`, `"oops"`, `5`} {
+		f := write(t, "p.json", shape)
+		for _, args := range [][]string{{"plugin", "list", "--json"}, {"plugin", "list", "--json", "--available"}} {
+			r := do(t, map[string]string{"FAKE_CLAUDE_PLUGINS": f}, args...)
+			if r.code != 0 || strings.TrimSpace(r.stdout) != shape {
+				t.Errorf("%s %v: %+v", shape, args, r)
+			}
+		}
 	}
 }

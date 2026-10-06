@@ -9,13 +9,17 @@
 //
 //   - names in its own namespace, CCSHELF_VAR_<NAME>;
 //   - reference variables whose name ends in _REF (for example
-//     FIGMA_TOKEN_REF): operating systems and runtimes never interpret a
-//     name that ends in _REF, and the value is a reference passed to tools by
-//     name, never resolved or logged here; and
+//     FIGMA_TOKEN_REF): the value is a reference passed to tools by name,
+//     never resolved or logged here; and
 //   - CCSHELF_PROFILE, which the launcher itself sets.
 //
-// A denylist of known-dangerous prefixes, suffixes and exact names is still
-// applied first, as defense in depth and to give clearer error messages.
+// A _REF suffix is NOT a guarantee that nothing interprets the name:
+// GITHUB_REF is read by GitHub Actions tooling, for example. The allowlist
+// and the denylist together are the policy. The denylist (known-dangerous
+// prefixes such as ANTHROPIC_, GITHUB_, RUNNER_ and ACTIONS_, suffixes such as
+// _OPTIONS, any name containing _PROXY, and exact names such as PATH and CI)
+// is applied first, so GITHUB_REF is refused even though it ends in _REF, and
+// it gives clearer error messages.
 package envpolicy
 
 import (
@@ -38,6 +42,7 @@ var deniedPrefixes = []string{
 	"GIT_", "SSH_", "AWS_", "AZURE_", "GOOGLE_", "NPM_",
 	"PYTHON", "PERL", "RUBY", "JAVA_", "_JAVA", "JDK_", "BUN_", "DENO_", "ELECTRON_",
 	"DOCKER_", "KUBE", "PIP_", "CARGO_", "YARN_", "GEM_", "BASH", "ZSH",
+	"GITHUB_", "RUNNER_", "ACTIONS_",
 }
 
 var deniedSuffixes = []string{"_OPTIONS", "_OPTS"}
@@ -52,6 +57,7 @@ var deniedExact = map[string]bool{
 	"GCONV_PATH": true, "SHELLOPTS": true, "BASHOPTS": true, "PS4": true, "PROMPT_COMMAND": true,
 	"ZDOTDIR": true, "EDITOR": true, "VISUAL": true, "PAGER": true, "BROWSER": true,
 	"LESSOPEN": true, "LESSCLOSE": true, "SSLKEYLOGFILE": true, "KUBECONFIG": true,
+	"CI": true,
 }
 
 // DeniedReason returns why name may not be set by a profile, or "" when it is
@@ -63,6 +69,19 @@ func DeniedReason(name string) string {
 	if !namePattern.MatchString(name) {
 		return "must match ^[A-Z][A-Z0-9_]{0,63}$"
 	}
+	if r := denylistReason(name); r != "" {
+		return r
+	}
+	if !allowPattern.MatchString(name) {
+		return "profile variables must be named CCSHELF_VAR_<NAME> or end in _REF (allowlist)"
+	}
+	return ""
+}
+
+// denylistReason applies only the denylist (prefixes, suffixes, _PROXY and
+// exact names), skipping the allowlist, so tests can exercise the defense in
+// depth directly.
+func denylistReason(name string) string {
 	for _, p := range deniedPrefixes {
 		if strings.HasPrefix(name, p) {
 			return fmt.Sprintf("names starting with %s can redirect or reconfigure Claude Code", p)
@@ -78,9 +97,6 @@ func DeniedReason(name string) string {
 	}
 	if deniedExact[name] {
 		return "this variable changes how processes start or where traffic goes"
-	}
-	if !allowPattern.MatchString(name) {
-		return "profile variables must be named CCSHELF_VAR_<NAME> or end in _REF (allowlist)"
 	}
 	return ""
 }

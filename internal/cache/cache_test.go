@@ -70,16 +70,21 @@ func TestEnsureRefusals(t *testing.T) {
 		t.Skip("mode and symlink checks are Unix behavior")
 	}
 	base := t.TempDir()
-	t.Run("group writable", func(t *testing.T) {
-		d := filepath.Join(base, "gw")
-		if err := os.Mkdir(d, 0o700); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.Chmod(d, 0o770); err != nil {
-			t.Fatal(err)
-		}
-		if err := Ensure(d); err == nil || !strings.Contains(err.Error(), "writable") {
-			t.Fatalf("err = %v", err)
+	t.Run("wide modes are repaired", func(t *testing.T) {
+		for _, mode := range []os.FileMode{0o755, 0o777, 0o770, 0o702, 0o707, 0o750, 0o500, 0o600} {
+			d := filepath.Join(base, fmt.Sprintf("wide-%o", mode))
+			if err := os.Mkdir(d, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Chmod(d, mode); err != nil {
+				t.Fatal(err)
+			}
+			if err := Ensure(d); err != nil {
+				t.Fatalf("mode %o: %v", mode, err)
+			}
+			if fi, err := os.Stat(d); err != nil || fi.Mode().Perm() != 0o700 {
+				t.Fatalf("mode %o was not repaired to 0700: %v %v", mode, fi, err)
+			}
 		}
 	})
 	t.Run("symlink", func(t *testing.T) {
@@ -258,7 +263,7 @@ func TestConcurrentProcesses(t *testing.T) {
 
 func TestWriteReplaceAndRead(t *testing.T) {
 	dir := newDir(t)
-	name := "plugins-0123456789abcdef.json"
+	name := "plugins-0123456789abcdef0123456789abcdef.json"
 	if _, err := ReadFile(dir, name); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("err = %v", err)
 	}
@@ -284,7 +289,7 @@ func TestWriteReplaceAndRead(t *testing.T) {
 
 func TestReadFileTooLarge(t *testing.T) {
 	dir := newDir(t)
-	p := filepath.Join(dir, "x-0123456789abcdef.bin")
+	p := filepath.Join(dir, "x-0123456789abcdef0123456789abcdef.bin")
 	if err := os.WriteFile(p, make([]byte, 100), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -304,12 +309,12 @@ func TestGC(t *testing.T) {
 		_ = os.Chtimes(p, age, age)
 		return p
 	}
-	oldFile := mk("settings-aaaaaaaaaaaaaaaa.json", old)
-	busy := mk("settings-bbbbbbbbbbbbbbbb.json", old)
-	fresh := mk("settings-cccccccccccccccc.json", time.Now())
+	oldFile := mk("settings-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.json", old)
+	busy := mk("settings-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.json", old)
+	fresh := mk("settings-cccccccccccccccccccccccccccccccc.json", time.Now())
 	other := mk("notes.txt", old)
 	tmp := mk(".ccshelf-tmp-0123456789abcdef", old)
-	_ = os.Mkdir(filepath.Join(dir, "sub-dddddddddddddddd.json"), 0o700)
+	_ = os.Mkdir(filepath.Join(dir, "sub-dddddddddddddddddddddddddddddddd.json"), 0o700)
 	removed, err := GC(dir, 0, func(p string) bool { return p == busy })
 	if err != nil {
 		t.Fatal(err)
@@ -322,7 +327,7 @@ func TestGC(t *testing.T) {
 			t.Errorf("%s survived", p)
 		}
 	}
-	for _, p := range []string{busy, fresh, other, filepath.Join(dir, "sub-dddddddddddddddd.json")} {
+	for _, p := range []string{busy, fresh, other, filepath.Join(dir, "sub-dddddddddddddddddddddddddddddddd.json")} {
 		if _, err := os.Lstat(p); err != nil {
 			t.Errorf("%s removed", p)
 		}
@@ -336,7 +341,7 @@ func TestGCSkipsSymlink(t *testing.T) {
 	dir := newDir(t)
 	target := filepath.Join(t.TempDir(), "t")
 	_ = os.WriteFile(target, []byte("x"), 0o600)
-	link := filepath.Join(dir, "s-eeeeeeeeeeeeeeee.json")
+	link := filepath.Join(dir, "s-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee.json")
 	if err := os.Symlink(target, link); err != nil {
 		t.Skip("symlinks unavailable")
 	}
@@ -375,7 +380,7 @@ func TestDirError(t *testing.T) {
 
 func TestWriteReplaceOverDirectoryFails(t *testing.T) {
 	dir := newDir(t)
-	name := "plugins-0123456789abcdef.json"
+	name := "plugins-0123456789abcdef0123456789abcdef.json"
 	if err := os.Mkdir(filepath.Join(dir, name), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -422,5 +427,53 @@ func TestPathFor(t *testing.T) {
 	}
 	if p, _ := pathFor("darwin", env(nil), home, ok); p != filepath.Join(abs, "home", ".cache", "ccshelf") {
 		t.Errorf("%q", p)
+	}
+}
+
+func TestNameUses128Bits(t *testing.T) {
+	name, err := Name("settings", "json", []byte("x"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	hexPart := strings.TrimSuffix(strings.TrimPrefix(name, "settings-"), ".json")
+	if len(hexPart) != 32 {
+		t.Fatalf("%q has %d hex chars, want 32", name, len(hexPart))
+	}
+	if !namePattern.MatchString(name) {
+		t.Fatalf("%q does not match namePattern", name)
+	}
+	if namePattern.MatchString("settings-0123456789abcdef.json") {
+		t.Fatal("a 64-bit name must not match")
+	}
+}
+
+func TestWriteTouchesOnReuse(t *testing.T) {
+	dir := newDir(t)
+	p, err := Write(dir, "s", "json", []byte("live"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-90 * 24 * time.Hour)
+	if err := os.Chtimes(p, old, old); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Write(dir, "s", "json", []byte("live")); err != nil {
+		t.Fatal(err)
+	}
+	removed, err := GC(dir, DefaultMaxAge, nil)
+	if err != nil || len(removed) != 0 {
+		t.Fatalf("GC removed a reused file: %v %v", removed, err)
+	}
+	if fi, err := os.Stat(p); err != nil || time.Since(fi.ModTime()) > time.Hour {
+		t.Fatalf("mtime not refreshed: %v %v", fi, err)
+	}
+}
+
+func TestPublishVerifiesAfterRename(t *testing.T) {
+	dir := newDir(t)
+	testAfterRename = func(path string) { _ = os.WriteFile(path, []byte("evil"), 0o600) }
+	defer func() { testAfterRename = nil }()
+	if _, err := Write(dir, "s", "json", []byte("good")); !errors.Is(err, ErrTampered) {
+		t.Fatalf("err = %v, want ErrTampered", err)
 	}
 }

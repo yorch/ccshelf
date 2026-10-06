@@ -8,10 +8,13 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -170,6 +173,14 @@ func TestVersion(t *testing.T) {
 	if !AtLeast("2.1.291", "2.1.290") || AtLeast("2.1.289", "2.1.290") || AtLeast("", "0.0.1") || !AtLeast("2.1.290", "2.1.290") {
 		t.Error("AtLeast")
 	}
+	// An unparsable version is never at least anything, not even zero.
+	for _, have := range []string{"", "garbage", "v", "-beta"} {
+		for _, want := range []string{"0", "0.0.0", "", "0.0.1"} {
+			if AtLeast(have, want) {
+				t.Errorf("AtLeast(%q, %q) = true", have, want)
+			}
+		}
+	}
 }
 
 func TestVersionCommand(t *testing.T) {
@@ -238,8 +249,11 @@ func TestPluginJSON(t *testing.T) {
 	if _, err := parseInstalled([]byte(`oops`)); err == nil {
 		t.Error("garbage accepted")
 	}
-	if l, err := parseInstalled([]byte(`{"installed":[{"id":"a@b"}],"available":[]}`)); err != nil || len(l) != 1 {
-		t.Errorf("object form: %v %v", l, err)
+	if _, err := parseInstalled([]byte(`{"installed":[{"id":"a@b"}],"available":[]}`)); err == nil {
+		t.Error("object form accepted by parseInstalled")
+	}
+	if l, err := parseInstalled([]byte(" []\n")); err != nil || len(l) != 0 {
+		t.Errorf("empty array is valid: %v %v", l, err)
 	}
 	ab, _ := os.ReadFile("testdata/plugin-list-available.json")
 	inst, avail, err := parseAvailable(ab)
@@ -411,6 +425,22 @@ func TestInstalledCacheCorruption(t *testing.T) {
 	badBin, badEnv := fakeEnv(t, map[string]string{"FAKE_CLAUDE_PLUGIN_LIST_FAIL": "1"})
 	if _, _, err := c.List(context.Background(), badBin, t.TempDir(), badEnv); err == nil {
 		t.Error("expected failure")
+	}
+}
+
+func TestEnvMergeWindows(t *testing.T) {
+	base := []string{`=C:=C:\work`, `=D:=D:\data`, "Path=C:\\bin", "ComSpec=x", "=nonsense", "=:", "noequals"}
+	got := mergeEnv("windows", base, map[string]string{"PATH": "C:\\new", "Extra": "1"})
+	want := []string{`=C:=C:\work`, `=D:=D:\data`, "Path=C:\\new", "ComSpec=x", "Extra=1"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("%q, want %q", got, want)
+	}
+	// Elsewhere a leading "=" has no name and is dropped.
+	if got := mergeEnv("linux", []string{`=C:=C:\work`, "A=1"}, nil); !slices.Equal(got, []string{"A=1"}) {
+		t.Fatalf("%q", got)
+	}
+	if k, v, ok := splitEnv("windows", `=C:=C:\w=x`); k != "=C:" || v != `C:\w=x` || !ok {
+		t.Fatalf("%q %q %v", k, v, ok)
 	}
 }
 
@@ -601,5 +631,506 @@ func TestExcerpt(t *testing.T) {
 	}
 	if got := excerpt(strings.Repeat("x", 50), 10); got != strings.Repeat("x", 10)+"..." {
 		t.Error(got)
+	}
+}
+
+func TestPluginListBadShapesFailClosed(t *testing.T) {
+	cases := []struct{ shape, want string }{
+		{`null`, "null"},
+		{`{}`, "empty object"},
+		{`{"installed":null}`, "installed"},
+		{`{"plugins":[{"id":"a@b"}]}`, "plugins"},
+		{`"oops"`, "a string"},
+		{`5`, "a number"},
+		{`true`, "a boolean"},
+	}
+	bin, _ := fakeEnv(t, nil)
+	for _, c := range cases {
+		f := filepath.Join(t.TempDir(), "p.json")
+		testutil.WriteFile(t, f, c.shape)
+		env := testutil.Environ(map[string]string{"FAKE_CLAUDE_PLUGINS": f})
+		_, err := ListInstalled(context.Background(), bin, "", env)
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("ListInstalled(%s) = %v, want error containing %q", c.shape, err, c.want)
+		}
+		if _, _, err := ListAvailable(context.Background(), bin, "", env); err == nil {
+			t.Errorf("ListAvailable(%s) accepted", c.shape)
+		}
+		cdir := filepath.Join(t.TempDir(), "cache")
+		if err := cache.Ensure(cdir); err != nil {
+			t.Fatal(err)
+		}
+		ic := &InstalledCache{Dir: cdir}
+		if _, _, err := ic.List(context.Background(), bin, t.TempDir(), env); err == nil {
+			t.Errorf("InstalledCache accepted %s", c.shape)
+		}
+		if entries, _ := os.ReadDir(cdir); len(entries) != 0 {
+			t.Errorf("a bad shape was cached: %v", entries)
+		}
+	}
+	// An empty array is a valid answer.
+	f := filepath.Join(t.TempDir(), "p.json")
+	testutil.WriteFile(t, f, "[]")
+	env := testutil.Environ(map[string]string{"FAKE_CLAUDE_PLUGINS": f})
+	if l, err := ListInstalled(context.Background(), bin, "", env); err != nil || len(l) != 0 {
+		t.Fatalf("%v %v", l, err)
+	}
+	inst, avail, err := ListAvailable(context.Background(), bin, "", env)
+	if err != nil || len(inst) != 0 || len(avail) != 2 {
+		t.Fatalf("%v %v %v", inst, avail, err)
+	}
+}
+
+func TestParseAvailableShapes(t *testing.T) {
+	for _, in := range []string{``, `[]`, `null`, `{}`, `{"installed":{}}`, `{"installed":"x"}`, `{"installed":null,"available":[]}`, `{"installed":[],"available":5}`, `{"installed":[{"id":1}]}`} {
+		if _, _, err := parseAvailable([]byte(in)); err == nil {
+			t.Errorf("parseAvailable(%q) accepted", in)
+		}
+	}
+	inst, avail, err := parseAvailable([]byte(`{"installed":[],"available":null}`))
+	if err != nil || len(inst) != 0 || len(avail) != 0 {
+		t.Errorf("%v %v %v", inst, avail, err)
+	}
+	if got := shapeOf([]byte(`{oops`)); got != "malformed JSON" {
+		t.Errorf("%q", got)
+	}
+}
+
+func TestRequiredByOrgFromManagedPolicy(t *testing.T) {
+	bin, env := fakeEnv(t, map[string]string{"FAKE_CLAUDE_MANAGED": `{"enabledPlugins":{"sre-kit@acme":true,"seo-tools@acme":false}}`})
+	list, err := ListInstalled(context.Background(), bin, "", env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range list {
+		if want := p.ID == "sre-kit@acme"; p.RequiredByOrg != want {
+			t.Errorf("%s RequiredByOrg = %v, want %v", p.ID, p.RequiredByOrg, want)
+		}
+	}
+}
+
+func TestListOutputLimit(t *testing.T) {
+	bin, env := fakeEnv(t, nil)
+	old := maxListOutput
+	maxListOutput = 512
+	defer func() { maxListOutput = old }()
+	_, err := ListInstalled(context.Background(), bin, "", env)
+	if err == nil || !strings.Contains(err.Error(), "more than 512 bytes") {
+		t.Fatalf("%v", err)
+	}
+	var b limitedBuffer
+	if _, err := b.Write(make([]byte, 400)); err != nil || b.over {
+		t.Fatal("under the limit")
+	}
+	if n, err := b.Write(make([]byte, 400)); err != nil || n != 400 || !b.over || b.Len() != 400 {
+		t.Fatalf("over the limit: %d %v %v %d", n, err, b.over, b.Len())
+	}
+}
+
+func TestCwdDependentList(t *testing.T) {
+	work := t.TempDir()
+	bin, env := fakeEnv(t, map[string]string{
+		"FAKE_CLAUDE_PROJECT_SETTINGS": `{"enabledPlugins":{"design-kit@acme":false}}`,
+		"FAKE_CLAUDE_PROJECT_DIR":      work,
+	})
+	find := func(dir string) Plugin {
+		list, err := ListInstalled(context.Background(), bin, dir, env)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, p := range list {
+			if p.ID == "design-kit@acme" {
+				return p
+			}
+		}
+		t.Fatal("design-kit missing")
+		return Plugin{}
+	}
+	if p := find(t.TempDir()); !p.Enabled {
+		t.Errorf("elsewhere: %+v", p)
+	}
+	if p := find(work); p.Enabled || p.ProjectEnabled {
+		t.Errorf("in the project: %+v", p)
+	}
+}
+
+func copyFile(t *testing.T, src, dst string) {
+	t.Helper()
+	b, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(dst, b, 0o700); err != nil { //nolint:gosec // a test copy of the fake binary must be executable
+		t.Fatal(err)
+	}
+}
+
+// cacheHarness runs List and reports whether it was served from the cache.
+type cacheHarness struct {
+	t    *testing.T
+	c    *InstalledCache
+	bin  string
+	work string
+	env  []string
+	home string
+}
+
+func newCacheHarness(t *testing.T) *cacheHarness {
+	t.Helper()
+	home := t.TempDir()
+	fake, env := fakeEnv(t, map[string]string{"HOME": home, "USERPROFILE": home})
+	bin := filepath.Join(t.TempDir(), filepath.Base(fake))
+	copyFile(t, fake, bin)
+	cdir := filepath.Join(t.TempDir(), "cache")
+	if err := cache.Ensure(cdir); err != nil {
+		t.Fatal(err)
+	}
+	h := &cacheHarness{
+		t: t, bin: bin, work: t.TempDir(), env: env, home: home,
+		c: &InstalledCache{Dir: cdir, ManagedFiles: []string{}},
+	}
+	if _, cached, err := h.c.List(context.Background(), bin, h.work, env); err != nil || cached {
+		t.Fatalf("prime: %v %v", err, cached)
+	}
+	if _, cached, _ := h.c.List(context.Background(), bin, h.work, env); !cached {
+		t.Fatal("second call should hit")
+	}
+	return h
+}
+
+func (h *cacheHarness) cached() bool {
+	h.t.Helper()
+	_, cached, err := h.c.List(context.Background(), h.bin, h.work, h.env)
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	return cached
+}
+
+func TestInstalledCacheFingerprintStamps(t *testing.T) {
+	t.Run("user settings.json", func(t *testing.T) {
+		h := newCacheHarness(t)
+		testutil.WriteFile(t, filepath.Join(h.home, ".claude", "settings.json"), "{}")
+		if h.cached() {
+			t.Error("user settings creation ignored")
+		}
+		if !h.cached() {
+			t.Error("expected a hit after refresh")
+		}
+		testutil.WriteFile(t, filepath.Join(h.home, ".claude", "settings.json"), `{"a":1}`)
+		if h.cached() {
+			t.Error("user settings edit ignored")
+		}
+	})
+	t.Run("settings.local.json", func(t *testing.T) {
+		h := newCacheHarness(t)
+		testutil.WriteFile(t, filepath.Join(h.work, ".claude", "settings.local.json"), "{}")
+		if h.cached() {
+			t.Error("settings.local.json creation ignored")
+		}
+	})
+	t.Run("project settings.json", func(t *testing.T) {
+		h := newCacheHarness(t)
+		testutil.WriteFile(t, filepath.Join(h.work, ".claude", "settings.json"), "{}")
+		if h.cached() {
+			t.Error("project settings creation ignored")
+		}
+	})
+	t.Run("claude binary", func(t *testing.T) {
+		h := newCacheHarness(t)
+		later := time.Now().Add(time.Hour)
+		if err := os.Chtimes(h.bin, later, later); err != nil {
+			t.Fatal(err)
+		}
+		if h.cached() {
+			t.Error("claude binary mtime ignored")
+		}
+		if !h.cached() {
+			t.Error("expected a hit after refresh")
+		}
+	})
+	t.Run("registry", func(t *testing.T) {
+		h := newCacheHarness(t)
+		testutil.WriteFile(t, filepath.Join(h.home, ".claude", "plugins", "installed_plugins.json"), "{}")
+		if h.cached() {
+			t.Error("registry ignored")
+		}
+	})
+	t.Run("same size and mtime, different content", func(t *testing.T) {
+		h := newCacheHarness(t)
+		p := filepath.Join(h.home, ".claude", "settings.json")
+		testutil.WriteFile(t, p, `{"a":1}`)
+		h.cached() // refresh
+		fi, err := os.Stat(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !h.cached() {
+			t.Fatal("expected a hit")
+		}
+		testutil.WriteFile(t, p, `{"a":2}`)
+		if err := os.Chtimes(p, fi.ModTime(), fi.ModTime()); err != nil {
+			t.Fatal(err)
+		}
+		if h.cached() {
+			t.Error("an edit that kept size and mtime was missed")
+		}
+	})
+	t.Run("sub-second mtime", func(t *testing.T) {
+		h := newCacheHarness(t)
+		p := filepath.Join(h.work, ".claude", "settings.json")
+		testutil.WriteFile(t, p, "{}")
+		base := time.Unix(1_700_000_000, 0)
+		if err := os.Chtimes(p, base, base); err != nil {
+			t.Fatal(err)
+		}
+		h.cached()
+		if !h.cached() {
+			t.Fatal("expected a hit")
+		}
+		if err := os.Chtimes(p, base.Add(50*time.Millisecond), base.Add(50*time.Millisecond)); err != nil {
+			t.Fatal(err)
+		}
+		if h.cached() {
+			t.Error("a 50 ms mtime change was missed")
+		}
+	})
+}
+
+func TestInstalledCacheManagedFiles(t *testing.T) {
+	h := newCacheHarness(t)
+	managed := filepath.Join(t.TempDir(), "managed-settings.json")
+	h.c.ManagedFiles = []string{managed}
+	if h.cached() {
+		t.Fatal("a new key should miss")
+	}
+	if !h.cached() {
+		t.Fatal("expected a hit")
+	}
+	testutil.WriteFile(t, managed, `{"enabledPlugins":{"a@b":true}}`)
+	if h.cached() {
+		t.Error("managed settings creation ignored")
+	}
+	testutil.WriteFile(t, managed, `{"enabledPlugins":{"a@b":false}}`)
+	if h.cached() {
+		t.Error("managed settings edit ignored")
+	}
+}
+
+func TestManagedLocations(t *testing.T) {
+	cases := []struct {
+		goos      string
+		file, dir string
+	}{
+		{"linux", "/etc/claude-code/managed-settings.json", "/etc/claude-code/managed-settings.d"},
+		{"linux", "/mnt/c/Program Files/ClaudeCode/managed-settings.json", "/mnt/c/Program Files/ClaudeCode/managed-settings.d"},
+		{"darwin", "/Library/Application Support/ClaudeCode/managed-settings.json", "/Library/Application Support/ClaudeCode/managed-settings.d"},
+		{"darwin", "/Library/Managed Preferences/com.anthropic.claudecode.plist", ""},
+		{"windows", `C:\Program Files\ClaudeCode\managed-settings.json`, `C:\Program Files\ClaudeCode\managed-settings.d`},
+	}
+	for _, c := range cases {
+		files, dirs := ManagedLocations(c.goos)
+		if !slices.Contains(files, c.file) || (c.dir != "" && !slices.Contains(dirs, c.dir)) {
+			t.Errorf("%s: %v %v", c.goos, files, dirs)
+		}
+	}
+	// The default fingerprint of the running OS covers them (no ManagedFiles).
+	var c InstalledCache
+	if _, err := c.fingerprint("x", t.TempDir(), nil); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestInstalledCacheDropIn(t *testing.T) {
+	dir := t.TempDir()
+	if s := dirStamp(filepath.Join(dir, "missing")); !strings.Contains(s, "absent") {
+		t.Fatal(s)
+	}
+	a := dirStamp(dir)
+	testutil.WriteFile(t, filepath.Join(dir, "10-a.json"), "{}")
+	b := dirStamp(dir)
+	testutil.WriteFile(t, filepath.Join(dir, "notes.txt"), "x")
+	if a == b || dirStamp(dir) != b {
+		t.Fatalf("%q %q", a, b)
+	}
+	testutil.WriteFile(t, filepath.Join(dir, "10-a.json"), `{"x":1}`)
+	if dirStamp(dir) == b {
+		t.Fatal("drop-in edit missed")
+	}
+}
+
+func TestInstalledCacheStoresOnlyNeededFields(t *testing.T) {
+	plugins := filepath.Join(t.TempDir(), "p.json")
+	testutil.WriteFile(t, plugins, `[{"id":"ctx@m","version":"1","scope":"user","enabled":true,"installPath":"/p","requiredByOrg":true,
+	  "mcpServers":{"srv":{"command":"npx","env":{"TOKEN":"supersecret"}},"other":{}},"hooks":{"x":"secret-hook"},"surprise":42}]`)
+	bin, env := fakeEnv(t, map[string]string{"FAKE_CLAUDE_PLUGINS": plugins})
+	cdir := filepath.Join(t.TempDir(), "cache")
+	if err := cache.Ensure(cdir); err != nil {
+		t.Fatal(err)
+	}
+	c := &InstalledCache{Dir: cdir, ManagedFiles: []string{}}
+	work := t.TempDir()
+	fresh, cached, err := c.List(context.Background(), bin, work, env)
+	if err != nil || cached || len(fresh) != 1 || len(fresh[0].MCPServers) != 2 || fresh[0].Extra == nil {
+		t.Fatalf("%v %v %+v", err, cached, fresh)
+	}
+	entries, _ := os.ReadDir(cdir)
+	if len(entries) != 1 {
+		t.Fatal(entries)
+	}
+	raw, _ := os.ReadFile(filepath.Join(cdir, entries[0].Name()))
+	for _, leak := range []string{"supersecret", "npx", "secret-hook", "surprise"} {
+		if strings.Contains(string(raw), leak) {
+			t.Errorf("the cache file contains %q: %s", leak, raw)
+		}
+	}
+	got, cached, err := c.List(context.Background(), bin, work, env)
+	if err != nil || !cached || len(got) != 1 {
+		t.Fatalf("%v %v", err, cached)
+	}
+	p := got[0]
+	if p.ID != "ctx@m" || p.Name != "ctx" || p.Marketplace != "m" || p.Version != "1" || p.Scope != "user" || !p.Enabled || p.InstallPath != "/p" || !p.RequiredByOrg {
+		t.Errorf("%+v", p)
+	}
+	names := make([]string, 0, len(p.MCPServers))
+	for n := range p.MCPServers {
+		names = append(names, n)
+	}
+	slices.Sort(names)
+	if !slices.Equal(names, []string{"other", "srv"}) {
+		t.Errorf("mcp server names %v", names)
+	}
+	// An entry with a bad plugin is doubt, not a hit.
+	bad := bytes.Replace(raw, []byte(`"id":"ctx@m"`), []byte(`"id":""`), 1)
+	if _, ok := fromCached([]cachedPlugin{{}}); ok {
+		t.Error("a cached plugin without an id was accepted")
+	}
+	if err := os.WriteFile(filepath.Join(cdir, entries[0].Name()), bad, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, cached, _ := c.List(context.Background(), bin, work, env); cached {
+		t.Error("a tampered entry was used")
+	}
+}
+
+func TestInstalledCacheNameIs128Bits(t *testing.T) {
+	bin, env := fakeEnv(t, nil)
+	cdir := filepath.Join(t.TempDir(), "cache")
+	if err := cache.Ensure(cdir); err != nil {
+		t.Fatal(err)
+	}
+	c := &InstalledCache{Dir: cdir, ManagedFiles: []string{}}
+	if _, _, err := c.List(context.Background(), bin, t.TempDir(), env); err != nil {
+		t.Fatal(err)
+	}
+	entries, _ := os.ReadDir(cdir)
+	if len(entries) != 1 || !regexp.MustCompile(`^installed-[0-9a-f]{32}\.json$`).MatchString(entries[0].Name()) {
+		t.Fatalf("%v", entries)
+	}
+}
+
+// TestForegroundHelper is re-executed by the foreground tests as the child.
+func TestForegroundHelper(t *testing.T) {
+	mode := os.Getenv("CCSHELF_FG_MODE")
+	if mode == "" {
+		t.Skip("helper for the spawnForeground tests")
+	}
+	if mode == "ignore" {
+		signal.Ignore(syscall.SIGTERM)
+	}
+	if ready := os.Getenv("CCSHELF_FG_READY"); ready != "" {
+		_ = os.WriteFile(ready, []byte("ok"), 0o600)
+	}
+	time.Sleep(30 * time.Second)
+	os.Exit(0)
+}
+
+func runForegroundChild(t *testing.T, mode string, grace time.Duration, send func(chan<- os.Signal, string)) (code int, elapsed time.Duration) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix signal semantics")
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		t.Skip("no executable")
+	}
+	ready := filepath.Join(t.TempDir(), "ready")
+	env := testutil.Environ(map[string]string{"CCSHELF_FG_MODE": mode, "CCSHELF_FG_READY": ready})
+	sigs := make(chan os.Signal, 4)
+	type result struct {
+		code int
+		err  error
+	}
+	res := make(chan result, 1)
+	start := time.Now()
+	go func() {
+		c, err := runForeground(exe, []string{"-test.run=^TestForegroundHelper$"}, env, sigs, grace)
+		res <- result{c, err}
+	}()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		if _, err := os.Stat(ready); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the helper child never became ready")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	send(sigs, mode)
+	select {
+	case r := <-res:
+		if r.err != nil {
+			t.Fatal(r.err)
+		}
+		return r.code, time.Since(start)
+	case <-time.After(15 * time.Second):
+		t.Fatal("runForeground did not return: the child was never killed")
+		return 0, 0
+	}
+}
+
+func TestForegroundTermIsDeliveredToChild(t *testing.T) {
+	// A child that handles SIGTERM by default dies from it, long before the
+	// grace period: the termination was delivered, not turned into a kill.
+	code, elapsed := runForegroundChild(t, "default", time.Hour, func(sigs chan<- os.Signal, _ string) {
+		sigs <- os.Interrupt // ignored by the launcher
+		time.Sleep(100 * time.Millisecond)
+		sigs <- syscall.SIGTERM
+	})
+	if code != 128+int(syscall.SIGTERM) {
+		t.Fatalf("exit code %d, want %d (SIGTERM), so the child did not get SIGTERM", code, 128+int(syscall.SIGTERM))
+	}
+	if elapsed > 10*time.Second {
+		t.Fatalf("took %v", elapsed)
+	}
+}
+
+func TestForegroundKillsAfterGrace(t *testing.T) {
+	grace := 400 * time.Millisecond
+	code, elapsed := runForegroundChild(t, "ignore", grace, func(sigs chan<- os.Signal, _ string) {
+		sigs <- syscall.SIGTERM
+		sigs <- syscall.SIGTERM // a repeated request must not restart the clock
+	})
+	if code != 128+int(syscall.SIGKILL) {
+		t.Fatalf("exit code %d, want %d (SIGKILL)", code, 128+int(syscall.SIGKILL))
+	}
+	if elapsed < grace {
+		t.Fatalf("the child was killed after %v, before the %v grace period", elapsed, grace)
+	}
+}
+
+func TestForegroundInterruptIsIgnored(t *testing.T) {
+	// Ctrl+C reaches the child itself; the launcher must neither die nor
+	// kill the child. The child is ended with a TERM afterwards.
+	code, _ := runForegroundChild(t, "default", time.Hour, func(sigs chan<- os.Signal, _ string) {
+		for i := 0; i < 3; i++ {
+			sigs <- os.Interrupt
+		}
+		time.Sleep(200 * time.Millisecond)
+		sigs <- syscall.SIGTERM
+	})
+	if code != 128+int(syscall.SIGTERM) {
+		t.Fatalf("exit code %d", code)
 	}
 }

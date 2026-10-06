@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
-	"strings"
+	"unicode/utf8"
 
 	"github.com/ccshelf/ccshelf/internal/envpolicy"
 )
@@ -17,12 +17,20 @@ const MaxSize = 1 << 20
 
 // Validate strictly checks raw settings JSON against the closed schema. It
 // is the guard that must run before every launch. All problems found are
-// reported together, each naming its key.
+// reported together, each naming its key. It applies the same rules as
+// [Build] (model names, env values, server labels), and in addition rejects a
+// UTF-8 byte order mark and invalid UTF-8. Being stricter than Claude Code is
+// safe: Claude Code silently ignores a file it cannot parse.
 func Validate(raw []byte) error {
 	if len(raw) > MaxSize {
 		return fmt.Errorf("settings: %d bytes exceeds the %d byte limit", len(raw), MaxSize)
 	}
-	raw = bytes.TrimPrefix(raw, []byte("\xef\xbb\xbf"))
+	if bytes.HasPrefix(raw, []byte("\xef\xbb\xbf")) {
+		return errors.New("settings: starts with a UTF-8 byte order mark, which is not allowed")
+	}
+	if !utf8.Valid(raw) {
+		return errors.New("settings: not valid UTF-8")
+	}
 	if err := checkNoDuplicates(raw); err != nil {
 		return fmt.Errorf("settings: %w", err)
 	}
@@ -54,8 +62,11 @@ func Validate(raw []byte) error {
 		case "model":
 			var s string
 			err = strict(top[k], &s, "a string")
-			if err == nil && (s == "" || !plainString(s)) {
-				err = errors.New("must be a non-empty string without control characters")
+			if err == nil && s == "" {
+				err = errors.New("must be a non-empty string")
+			}
+			if err == nil {
+				err = checkModel(s)
 			}
 		case "env":
 			err = validEnv(top[k])
@@ -152,8 +163,8 @@ func validDenied(raw json.RawMessage) error {
 		switch k {
 		case "serverName", "serverUrl":
 			var s string
-			if strict(m[k], &s, "a string") != nil || s == "" || s != strings.TrimSpace(s) || !plainString(s) {
-				errs = append(errs, fmt.Errorf("entry %d: %s must be a non-empty string without surrounding whitespace", i, k))
+			if strict(m[k], &s, "a string") != nil || !checkServerLabel(s) {
+				errs = append(errs, fmt.Errorf("entry %d: %s must be a non-empty string of at most %d characters without surrounding whitespace or control characters", i, k, maxNameLen))
 			}
 		case "serverCommand":
 			var cmd []string
@@ -181,8 +192,8 @@ func validEnv(raw json.RawMessage) error {
 		var s string
 		if strict(m[k], &s, "a string") != nil {
 			errs = append(errs, fmt.Errorf("variable %q: value must be a string", k))
-		} else if len(s) > maxEnvValue {
-			errs = append(errs, fmt.Errorf("variable %q: value is too long", k))
+		} else if err := checkEnvValue(k, s); err != nil {
+			errs = append(errs, fmt.Errorf("variable %q: %w", k, err))
 		}
 	}
 	return errors.Join(errs...)

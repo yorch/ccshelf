@@ -1,17 +1,29 @@
 package settings
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"math/rand"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/ccshelf/ccshelf/internal/claude"
+	"github.com/ccshelf/ccshelf/internal/testutil"
 )
+
+func TestMain(m *testing.M) {
+	code := m.Run()
+	testutil.Cleanup()
+	os.Exit(code)
+}
 
 var update = flag.Bool("update", false, "rewrite golden files")
 
@@ -182,9 +194,15 @@ func TestBuildErrors(t *testing.T) {
 		{"env denied", Spec{Env: map[string]string{"ANTHROPIC_BASE_URL": "x"}}, "ANTHROPIC_BASE_URL"},
 		{"env not allowlisted", Spec{Env: map[string]string{"FOO": "x"}}, "FOO"},
 		{"env path", Spec{Env: map[string]string{"PATH": "x"}}, "PATH"},
-		{"env nul", Spec{Env: map[string]string{"FIGMA_TOKEN_REF": "a\x00b"}}, "NUL"},
+		{"env nul", Spec{Env: map[string]string{"FIGMA_TOKEN_REF": "a\x00b"}}, "control characters"},
+		{"env newline", Spec{Env: map[string]string{"FIGMA_TOKEN_REF": "a\nb"}}, "control characters"},
+		{"env invalid utf8", Spec{Env: map[string]string{"FIGMA_TOKEN_REF": "a\xffb"}}, "UTF-8"},
+		{"model control", Spec{Model: "a\x00b"}, "model"},
+		{"model long", Spec{Model: strings.Repeat("m", 129)}, "model"},
+		{"model odd chars", Spec{Model: "opus;rm"}, "model"},
 		{"env long", Spec{Env: map[string]string{"FIGMA_TOKEN_REF": strings.Repeat("a", 5000)}}, "too long"},
-		{"profile conflict", Spec{Profile: "a", Env: map[string]string{"CCSHELF_PROFILE": "b"}}, "conflicts"},
+		{"profile in env", Spec{Profile: "a", Env: map[string]string{"CCSHELF_PROFILE": "b"}}, "set by the launcher"},
+		{"profile in env alone", Spec{Env: map[string]string{"CCSHELF_PROFILE": "b"}}, "set by the launcher"},
 		{"profile control", Spec{Profile: "a\nb"}, "profile"},
 	}
 	for _, c := range cases {
@@ -195,8 +213,14 @@ func TestBuildErrors(t *testing.T) {
 			}
 		})
 	}
-	if _, err := Build(Spec{Profile: "p", Env: map[string]string{"CCSHELF_PROFILE": "p"}}); err != nil {
-		t.Errorf("same profile value should be fine: %v", err)
+	if _, err := Build(Spec{Profile: "p", Env: map[string]string{"CCSHELF_PROFILE": "p"}}); err == nil {
+		t.Error("CCSHELF_PROFILE in Env must be rejected even when it equals the profile")
+	}
+	if _, err := Build(Spec{Model: strings.Repeat("m", 128)}); err != nil {
+		t.Errorf("128 characters is fine: %v", err)
+	}
+	if _, err := Build(Spec{Model: "claude-opus-4.5:thinking[1m]"}); err != nil {
+		t.Errorf("usual model names are fine: %v", err)
 	}
 }
 
@@ -208,7 +232,6 @@ func TestValidate(t *testing.T) {
 		`{"disableClaudeAiConnectors":true,"model":"opus"}`,
 		`{"deniedMcpServers":[{"serverName":"claude.ai Slack"},{"serverUrl":"https://*.example.com/*"},{"serverCommand":["npx","x"]}]}`,
 		`{"env":{"CCSHELF_PROFILE":"sre","FIGMA_TOKEN_REF":"env:X","CCSHELF_VAR_A":"1"}}`,
-		"\xef\xbb\xbf{}",
 		" {\"model\": \"x\"}\n",
 	}
 	for _, g := range good {
@@ -258,6 +281,21 @@ func TestValidate(t *testing.T) {
 		{`{"env":{"FIGMA_TOKEN_REF":1}}`, "must be a string"},
 		{`{"env":[]}`, "object"},
 		{`{"env":{"FIGMA_TOKEN_REF":"` + strings.Repeat("a", 5000) + `"}}`, "too long"},
+		{"\xef\xbb\xbf{}", "byte order mark"},
+		{"{\"model\":\"a\xffb\"}", "UTF-8"},
+		{"\xff{}", "UTF-8"},
+		{`{"env":{"FIGMA_TOKEN_REF":"a\u0000b"}}`, "control characters"},
+		{`{"env":{"FIGMA_TOKEN_REF":"a\nb"}}`, "control characters"},
+		{`{"env":{"FIGMA_TOKEN_REF":"a\u007fb"}}`, "control characters"},
+		{`{"env":{"CCSHELF_PROFILE":"a\nb"}}`, "control characters"},
+		{`{"env":{"CCSHELF_PROFILE":"` + strings.Repeat("p", 300) + `"}}`, "longer than"},
+		{`{"model":"a\u0000b"}`, "model"},
+		{`{"model":"a\nb"}`, "model"},
+		{`{"model":"a b"}`, "model"},
+		{`{"model":"` + strings.Repeat("m", 129) + `"}`, "model"},
+		{`{"model":"op;us"}`, "model"},
+		{`{"deniedMcpServers":[{"serverName":"` + strings.Repeat("s", 257) + `"}]}`, "serverName"},
+		{`{"deniedMcpServers":[{"serverName":"a\u0000b"}]}`, "serverName"},
 	}
 	for _, b := range bad {
 		err := Validate([]byte(b.in))
@@ -374,4 +412,169 @@ func FuzzValidate(f *testing.F) {
 
 func trimBOM(b []byte) []byte {
 	return []byte(strings.TrimPrefix(string(b), "\xef\xbb\xbf"))
+}
+
+func TestEmptyInstalledWarns(t *testing.T) {
+	const want = "no installed plugins were found; nothing will be masked"
+	res, err := Build(Spec{})
+	if err != nil || !slices.Contains(res.Warnings, want) {
+		t.Fatalf("allow-only: %v %v", err, res)
+	}
+	res, err = Build(Spec{Mode: ModeAllowOnly, Include: []string{"a@b"}})
+	if err != nil || !slices.Contains(res.Warnings, want) {
+		t.Fatalf("allow-only with include: %v %v", err, res.Warnings)
+	}
+	for _, spec := range []Spec{{Mode: ModeAdditive}, {Installed: installed}} {
+		res, err := Build(spec)
+		if err != nil || slices.Contains(res.Warnings, want) {
+			t.Fatalf("unexpected warning for %+v: %v %v", spec.Mode, err, res.Warnings)
+		}
+	}
+}
+
+func TestPolicyLocked(t *testing.T) {
+	inst := []claude.Plugin{plug("a@m"), plug("b@m"), plug("c@m")}
+	res, err := Build(Spec{Installed: inst, PolicyLocked: []string{"b@m", "ghost@m"}, Include: []string{"a@m"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	eq(t, res.Locked, []string{"b@m"})
+	eq(t, res.Masked, []string{"c@m"})
+	eq(t, res.Enabled, []string{"a@m"})
+	if v, ok := res.Doc.EnabledPlugins["b@m"]; ok {
+		t.Fatalf("a policy-locked plugin was written (%v)", v)
+	}
+	if !strings.Contains(strings.Join(res.Warnings, "\n"), "b@m is required by org policy") {
+		t.Errorf("warnings: %v", res.Warnings)
+	}
+	// Merged with the plugins that report RequiredByOrg themselves.
+	inst = append(inst, plug("d@m", required))
+	res, err = Build(Spec{Installed: inst, PolicyLocked: []string{"b@m"}, Mode: ModeAdditive, Exclude: []string{"b@m", "d@m", "c@m"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	eq(t, res.Locked, []string{"b@m", "d@m"})
+	eq(t, res.Masked, []string{"c@m"})
+	if _, err := Build(Spec{PolicyLocked: []string{"nomarket"}}); err == nil || !strings.Contains(err.Error(), "policy-locked") {
+		t.Errorf("bad id: %v", err)
+	}
+}
+
+func TestProtectedMCP(t *testing.T) {
+	_, err := Build(Spec{DenyMCP: []string{"plugin:sec:scan", "claude.ai Slack"}, ProtectedMCP: []string{"claude.ai Slack"}})
+	if !errors.Is(err, ErrProtectedMCP) || !strings.Contains(err.Error(), "claude.ai Slack") {
+		t.Fatalf("deny of a protected server: %v", err)
+	}
+	// A deny that names something else is fine.
+	res, err := Build(Spec{DenyMCP: []string{"plugin:other:x"}, ProtectedMCP: []string{"claude.ai Slack"}})
+	if err != nil || len(res.Doc.DeniedMcpServers) != 1 {
+		t.Fatalf("%v %+v", err, res)
+	}
+	// Hiding all connectors removes a protected connector.
+	_, err = Build(Spec{HideConnectors: true, ProtectedMCP: []string{"plugin:sec:scan", "claude.ai Slack"}})
+	if !errors.Is(err, ErrProtectedConnector) || !strings.Contains(err.Error(), "claude.ai Slack") {
+		t.Fatalf("hide with a protected connector: %v", err)
+	}
+	// A protected non-connector server does not conflict with hiding.
+	if res, err := Build(Spec{HideConnectors: true, ProtectedMCP: []string{"plugin:sec:scan"}}); err != nil || !res.Doc.DisableClaudeAiConnectors {
+		t.Fatalf("%v %+v", err, res)
+	}
+	// Protected connectors do not conflict when connectors are not hidden.
+	if _, err := Build(Spec{ProtectedMCP: []string{"claude.ai Slack"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Build(Spec{ProtectedMCP: []string{" bad"}}); err == nil {
+		t.Error("invalid protected label accepted")
+	}
+}
+
+// TestEndToEndThroughFake drives claude.ListInstalled against the fake and
+// feeds the result to Build.
+func TestEndToEndThroughFake(t *testing.T) {
+	testutil.IsolatedEnv(t)
+	bin := testutil.BuildFakeClaude(t)
+	list := func(env map[string]string) ([]claude.Plugin, error) {
+		return claude.ListInstalled(context.Background(), bin, t.TempDir(), testutil.Environ(env))
+	}
+	t.Run("empty list warns", func(t *testing.T) {
+		f := testutil.PluginsFile(t)
+		plugins, err := list(map[string]string{"FAKE_CLAUDE_PLUGINS": f})
+		if err != nil || len(plugins) != 0 {
+			t.Fatalf("%v %v", plugins, err)
+		}
+		res, err := Build(Spec{Installed: plugins, Include: []string{"a@b"}})
+		if err != nil || !slices.Contains(res.Warnings, "no installed plugins were found; nothing will be masked") {
+			t.Fatalf("%v %v", err, res.Warnings)
+		}
+	})
+	t.Run("bad shapes never reach Build", func(t *testing.T) {
+		for _, shape := range []string{`null`, `{}`, `{"installed":null}`, `{"plugins":[]}`, `"x"`} {
+			f := filepath.Join(t.TempDir(), "p.json")
+			testutil.WriteFile(t, f, shape)
+			if plugins, err := list(map[string]string{"FAKE_CLAUDE_PLUGINS": f}); err == nil {
+				t.Errorf("%s accepted: %v", shape, plugins)
+			}
+		}
+	})
+	t.Run("forced by policy is never masked", func(t *testing.T) {
+		plugins, err := list(map[string]string{"FAKE_CLAUDE_MANAGED": `{"enabledPlugins":{"sre-kit@acme":true}}`})
+		if err != nil {
+			t.Fatal(err)
+		}
+		res, err := Build(Spec{Installed: plugins, Include: []string{"design-kit@acme"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		eq(t, res.Locked, []string{"sre-kit@acme"})
+		if _, ok := res.Doc.EnabledPlugins["sre-kit@acme"]; ok {
+			t.Fatalf("sre-kit was written: %v", res.Doc.EnabledPlugins)
+		}
+		if res.Doc.EnabledPlugins["seo-tools@acme"] != false || len(res.Masked) != 3 {
+			t.Fatalf("%+v", res)
+		}
+	})
+	t.Run("policy-locked ids work when the listing hides the marker", func(t *testing.T) {
+		plugins, err := list(nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res, err := Build(Spec{Installed: plugins, PolicyLocked: []string{"sre-kit@acme"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		eq(t, res.Locked, []string{"sre-kit@acme"})
+		if _, ok := res.Doc.EnabledPlugins["sre-kit@acme"]; ok {
+			t.Fatal("sre-kit was written")
+		}
+	})
+	t.Run("generated settings take effect in the fake", func(t *testing.T) {
+		res, err := Build(Spec{Installed: mustList(t, list), Include: []string{"design-kit@acme"}, Profile: "p"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, err := res.JSON()
+		if err != nil {
+			t.Fatal(err)
+		}
+		out, err := exec.Command(bin, "-p", "x", "--output-format", "stream-json", "--verbose", "--settings", string(raw)).Output() //nolint:gosec // the fake claude built for this test
+		if err != nil {
+			t.Fatal(err)
+		}
+		info, err := claude.ParseInit(bytes.NewReader(out))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !slices.Contains(info.Plugins, "design-kit") || slices.Contains(info.Plugins, "sre-kit") {
+			t.Fatalf("%v", info.Plugins)
+		}
+	})
+}
+
+func mustList(t *testing.T, list func(map[string]string) ([]claude.Plugin, error)) []claude.Plugin {
+	t.Helper()
+	p, err := list(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p
 }

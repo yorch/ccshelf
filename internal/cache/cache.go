@@ -30,7 +30,7 @@ var (
 	partPattern = regexp.MustCompile(`^[A-Za-z0-9_]+(-[A-Za-z0-9_]+)*$`)
 	extPattern  = regexp.MustCompile(`^[A-Za-z0-9]{1,16}$`)
 	// namePattern matches names created by this package.
-	namePattern = regexp.MustCompile(`^[A-Za-z0-9_]+(-[A-Za-z0-9_]+)*-[0-9a-f]{16}\.[A-Za-z0-9]{1,16}$`)
+	namePattern = regexp.MustCompile(`^[A-Za-z0-9_]+(-[A-Za-z0-9_]+)*-[0-9a-f]{32}\.[A-Za-z0-9]{1,16}$`)
 	tmpPattern  = regexp.MustCompile(`^\.ccshelf-tmp-[0-9a-f]{16}$`)
 )
 
@@ -76,9 +76,12 @@ func Dir() (string, error) {
 }
 
 // Ensure creates dir (and missing parents) with mode 0700 and verifies that
-// the final component is a real directory owned by the current user and not
-// writable by group or others. Parent components may be symlinks (for
-// example /tmp on macOS); only the cache directory itself may not be.
+// the final component is a real directory owned by the current user. A
+// directory the user owns whose mode is wider than 0700 is repaired with
+// chmod 0700 (Unix) or given an owner-only protected DACL (Windows) and
+// accepted; a directory owned by someone else, or a symlink, is refused.
+// Parent components may be symlinks (for example /tmp on macOS); only the
+// cache directory itself may not be.
 func Ensure(dir string) error {
 	if err := os.MkdirAll(filepath.Dir(dir), 0o700); err != nil {
 		return fmt.Errorf("create cache parent: %w", err)
@@ -96,11 +99,8 @@ func Ensure(dir string) error {
 	if !fi.IsDir() {
 		return fmt.Errorf("cache path %s is not a directory", dir)
 	}
-	if err := checkOwner(fi); err != nil {
+	if err := secureDir(dir, fi); err != nil {
 		return fmt.Errorf("cache directory %s: %w", dir, err)
-	}
-	if runtime.GOOS != "windows" && fi.Mode().Perm()&0o022 != 0 {
-		return fmt.Errorf("cache directory %s is writable by group or others (mode %o); run chmod 700 on it", dir, fi.Mode().Perm())
 	}
 	return nil
 }
@@ -114,7 +114,7 @@ func Name(prefix, ext string, content []byte) (string, error) {
 		return "", fmt.Errorf("invalid cache extension %q", ext)
 	}
 	sum := sha256.Sum256(content)
-	return prefix + "-" + hex.EncodeToString(sum[:8]) + "." + ext, nil
+	return prefix + "-" + hex.EncodeToString(sum[:16]) + "." + ext, nil
 }
 
 // Write stores content in dir under its content-addressed name and returns
@@ -141,7 +141,7 @@ func Write(dir, prefix, ext string, content []byte) (string, error) {
 
 // WriteReplace atomically writes content to the file called name in dir,
 // replacing any previous regular file of that name. name must match the
-// pattern <prefix>-<16 hex>.<ext> so that [GC] can age it out. Use it for
+// pattern <prefix>-<32 hex>.<ext> so that [GC] can age it out. Use it for
 // small mutable records; use [Write] for immutable content-addressed files.
 func WriteReplace(dir, name string, content []byte) error {
 	if !namePattern.MatchString(name) {
@@ -263,11 +263,19 @@ func publish(dir, path string, content []byte, replace bool) error {
 		}
 		return fmt.Errorf("publish cache file: %w", err)
 	}
+	if testAfterRename != nil {
+		testAfterRename(path)
+	}
 	if !replace {
 		return verify(path, content)
 	}
 	return nil
 }
+
+// testAfterRename is a test hook called after publish renamed the temporary
+// file into place and before the final verification. Production code never
+// sets it.
+var testAfterRename func(path string)
 
 func touch(path string) {
 	now := time.Now()

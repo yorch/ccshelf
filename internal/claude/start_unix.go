@@ -24,3 +24,11 @@ func exitCode(ps *os.ProcessState) int {
 	}
 	return ps.ExitCode()
 }
+
+// terminateChild asks the child to terminate (SIGTERM).
+func terminateChild(p *os.Process) error { return p.Signal(syscall.SIGTERM) }
+
+// adoptChild is a no-op on Unix: the launcher replaces itself with claude
+// (syscall.Exec), so there is no launcher left to die and orphan it. The
+// returned function releases whatever adoption holds.
+func adoptChild(*os.Process) func() { return func() {} }

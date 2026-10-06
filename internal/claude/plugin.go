@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -107,31 +108,87 @@ type AvailablePlugin struct {
 	Version         string          `json:"version,omitempty"`
 }
 
-// parseInstalled accepts the array form and, tolerantly, the object form
-// with an "installed" key.
+// shapeOf names the JSON shape of data for error messages.
+func shapeOf(data []byte) string {
+	data = bytes.TrimSpace(data)
+	if len(data) == 0 {
+		return "empty output"
+	}
+	switch data[0] {
+	case '[':
+		return "an array"
+	case '{':
+		var m map[string]json.RawMessage
+		if json.Unmarshal(data, &m) != nil {
+			return "malformed JSON"
+		}
+		keys := make([]string, 0, len(m))
+		for k := range m {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		if len(keys) == 0 {
+			return "an empty object"
+		}
+		return fmt.Sprintf("an object with keys %s", strings.Join(keys, ", "))
+	case '"':
+		return "a string"
+	case 'n':
+		if string(data) == "null" {
+			return "null"
+		}
+	case 't', 'f':
+		return "a boolean"
+	}
+	if json.Valid(data) {
+		return "a number"
+	}
+	return "malformed JSON"
+}
+
+// parseInstalled accepts only the JSON array `claude plugin list --json`
+// prints. Anything else (null, an object, a string) is an error that names
+// the shape it got: a list that fails open would silently mask nothing.
 func parseInstalled(data []byte) ([]Plugin, error) {
 	data = bytes.TrimSpace(data)
 	if len(data) == 0 {
 		return nil, fmt.Errorf("empty plugin list output")
 	}
-	var list []Plugin
-	if data[0] == '[' {
-		if err := json.Unmarshal(data, &list); err != nil {
-			return nil, fmt.Errorf("parse plugin list: %w", err)
-		}
-		return list, nil
+	if data[0] != '[' {
+		return nil, fmt.Errorf("plugin list: expected a JSON array, got %s", shapeOf(data))
 	}
-	installed, _, err := parseAvailable(data)
-	return installed, err
+	var list []Plugin
+	if err := json.Unmarshal(data, &list); err != nil {
+		return nil, fmt.Errorf("parse plugin list: %w", err)
+	}
+	return list, nil
 }
 
+// parseAvailable accepts only the object `claude plugin list --json
+// --available` prints: "installed" must be a non-null array and "available",
+// when present, an array.
 func parseAvailable(data []byte) ([]Plugin, []AvailablePlugin, error) {
-	var obj struct {
-		Installed []Plugin          `json:"installed"`
-		Available []AvailablePlugin `json:"available"`
+	data = bytes.TrimSpace(data)
+	var obj map[string]json.RawMessage
+	if len(data) == 0 || data[0] != '{' || json.Unmarshal(data, &obj) != nil || obj == nil {
+		return nil, nil, fmt.Errorf("plugin list --available: expected a JSON object with an installed array, got %s", shapeOf(data))
 	}
-	if err := json.Unmarshal(bytes.TrimSpace(data), &obj); err != nil {
-		return nil, nil, fmt.Errorf("parse plugin list: %w", err)
+	rawInst, ok := obj["installed"]
+	if !ok {
+		return nil, nil, fmt.Errorf("plugin list --available: the installed key is missing, got %s", shapeOf(data))
 	}
-	return obj.Installed, obj.Available, nil
+	if len(rawInst) == 0 || rawInst[0] != '[' {
+		return nil, nil, fmt.Errorf("plugin list --available: the installed key must be an array, got %s", shapeOf(rawInst))
+	}
+	installed, err := parseInstalled(rawInst)
+	if err != nil {
+		return nil, nil, err
+	}
+	var avail []AvailablePlugin
+	if rawAvail, ok := obj["available"]; ok && string(bytes.TrimSpace(rawAvail)) != "null" {
+		if err := json.Unmarshal(rawAvail, &avail); err != nil {
+			return nil, nil, fmt.Errorf("parse available plugins: %w", err)
+		}
+	}
+	return installed, avail, nil
 }

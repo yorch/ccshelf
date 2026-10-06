@@ -7,21 +7,36 @@ import (
 	"sort"
 )
 
-// maxListOutput bounds how much plugin-list output is kept.
-const maxListOutput = 32 << 20
+// maxListOutput bounds how much plugin-list output is kept. It is a variable
+// only so that tests can lower it; production code never changes it.
+var maxListOutput = 32 << 20
 
+// limitedBuffer collects output up to maxListOutput bytes and sets over when
+// more arrives. It deliberately does not embed bytes.Buffer: that would
+// promote ReadFrom, which io.Copy prefers over Write and which would bypass
+// the limit.
 type limitedBuffer struct {
-	bytes.Buffer
+	buf  bytes.Buffer
 	over bool
 }
 
+// Write implements io.Writer, dropping data past the limit.
 func (b *limitedBuffer) Write(p []byte) (int, error) {
-	if b.Len()+len(p) > maxListOutput {
+	if b.buf.Len()+len(p) > maxListOutput {
 		b.over = true
 		return len(p), nil
 	}
-	return b.Buffer.Write(p)
+	return b.buf.Write(p)
 }
+
+// Len returns the number of bytes kept.
+func (b *limitedBuffer) Len() int { return b.buf.Len() }
+
+// Bytes returns the bytes kept.
+func (b *limitedBuffer) Bytes() []byte { return b.buf.Bytes() }
+
+// String returns the bytes kept as a string.
+func (b *limitedBuffer) String() string { return b.buf.String() }
 
 func sortPlugins(p []Plugin) {
 	sort.SliceStable(p, func(i, j int) bool {

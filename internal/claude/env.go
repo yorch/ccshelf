@@ -10,10 +10,27 @@ import (
 // keeps base order (first appearance of each name), the last value for a
 // duplicated name wins, extras override base values, and names that are new
 // are appended sorted. Entries without "=" are dropped. On Windows names are
-// compared case-insensitively.
+// compared case-insensitively and entries whose name starts with "=" (the
+// per-drive working directories such as =C:=C:\work, which child processes
+// rely on) are kept.
 func Env(base []string, extra map[string]string) []string {
+	return mergeEnv(runtime.GOOS, base, extra)
+}
+
+// splitEnv splits one environment entry into name and value. On Windows a
+// leading "=" belongs to the name.
+func splitEnv(goos, e string) (name, value string, ok bool) {
+	if goos == "windows" && strings.HasPrefix(e, "=") {
+		k, v, ok := strings.Cut(e[1:], "=")
+		return "=" + k, v, ok && k != ""
+	}
+	k, v, ok := strings.Cut(e, "=")
+	return k, v, ok && k != ""
+}
+
+func mergeEnv(goos string, base []string, extra map[string]string) []string {
 	fold := func(k string) string {
-		if runtime.GOOS == "windows" {
+		if goos == "windows" {
 			return strings.ToUpper(k)
 		}
 		return k
@@ -30,8 +47,8 @@ func Env(base []string, extra map[string]string) []string {
 		vals[f] = v
 	}
 	for _, e := range base {
-		k, v, ok := strings.Cut(e, "=")
-		if !ok || k == "" {
+		k, v, ok := splitEnv(goos, e)
+		if !ok {
 			continue
 		}
 		set(k, v)

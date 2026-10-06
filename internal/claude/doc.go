@@ -12,21 +12,30 @@
 // run claude as a child with a context. Listing runs in a caller-chosen
 // working directory (the result depends on it), has a 30 second default
 // timeout, and reports a stderr excerpt on failure. [InstalledCache] memoizes
-// the installed list in the cache directory. [ReferencedPaths] is best effort
+// the installed list in the cache directory (fingerprinted on the working
+// directory, the claude binary, the user, project and managed settings files
+// and the plugin registry). [ReferencedPaths] is best effort
 // and returns nil, nil on any failure.
 //
 // Parsing: [Plugin] decodes the JSON array printed by `claude plugin list
-// --json` (unknown keys are kept in Extra); [ParseInit] extracts the
+// --json` (unknown keys are kept in Extra). Listing accepts only that array
+// (or, with --available, an object whose "installed" is an array): null, {},
+// a string or any other shape is an error naming the shape, never an empty
+// list, so a misparsed answer cannot turn into "nothing to mask". [ParseInit] extracts the
 // system/init event from `--output-format stream-json --verbose` output;
 // [CompareVersions] and [AtLeast] compare dotted versions.
 //
 // Starting: [Start] replaces the process on Unix (syscall.Exec, returning only
 // on error) and spawns, waits and returns the exit code on Windows (Ctrl+C is
-// ignored in the launcher; termination kills the child). [StartHook] is a
+// ignored in the launcher; on a termination request the child is asked to
+// terminate first, killed after [TermGrace] if it does not, and a job object
+// with kill-on-close keeps it from outliving the launcher; the Windows code
+// is untested on real Windows). [StartHook] is a
 // documented test hook. [Spawn] runs a child with explicit stdio on every OS,
 // never through a shell, and returns 128+n for a Unix signal death.
 //
-// [Env] merges environment variables deterministically.
+// [Env] merges environment variables deterministically (on Windows names are
+// case-insensitive and entries named like "=C:" are kept).
 //
 // Tests in other packages should point the code at the fake claude built by
 // internal/testutil, never at the real binary.
