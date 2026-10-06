@@ -11,10 +11,10 @@ User's candidate solution: a CLI wrapper `<wrapper> <profile>` that launches Cla
 Inside a company with many internal Claude Code plugins in a git-based marketplace (`marketplace.json`), people can't tell what exists, what to use when, which of overlapping plugins to pick, what's new, or whether something is owned/maintained.
 
 ## Decisions
-Decisions are recorded in [../DECISIONS.md](../DECISIONS.md), not here. The user-level context that shaped them: the user is both platform owner and consumer of the internal registry; the registry is git-based with roughly 50 plugins; both use cases were meant to be one project at the same priority (since reopened in part, see the decision log); the process was to research the use cases without anchoring on the proposed solution, assess, then assess solutions including the wrapper, then discuss, with Opus subagents as adversary and brainstormer.
+Decisions are recorded in [../DECISIONS.md](../DECISIONS.md), not here. The context that shaped them: the registry is git-based, and the person asking both maintains it and uses it; both use cases were meant to be one project at the same priority (since reopened in part, see the decision log); the process was to research the use cases without anchoring on the proposed solution, assess, then assess solutions including the wrapper, then discuss, with Opus subagents as adversary and brainstormer.
 
 ## Environment
-macOS, zsh, Claude Code 2.1.290, repo `/Users/yorch/code/claude-profile` (empty at start).
+macOS, zsh, Claude Code 2.1.290; the repository was empty at the start.
 
 ## How the research was run
 1. Native-capabilities agent (official docs).

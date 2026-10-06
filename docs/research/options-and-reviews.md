@@ -51,7 +51,7 @@ IDs are prefixed `P-` here; catalog options below use `C-`. The report uses the 
 - N=20: README table generated from marketplace.json + CI lint requiring `author/tags/category` is enough.
 - N=100: flat search breaks; overlap is real; a static page with facets, diff since last tag, owner, usage counts is worth it.
 - N=500: needs a governed registry (required metadata, deprecation workflow, dedup review, usage-driven pruning): skillhub/Backstage territory.
-- Threshold for a custom catalog: roughly **50-80 plugins** or more than one publishing team. The user's ~50 sits at the threshold.
+- Threshold for a custom catalog: roughly **50-80 plugins** or more than one publishing team. A registry of about 50 sits at the threshold.
 - The report's size slider turns these reference points into bands: up to about 30 plugins native features are enough; about 31 to 79 is the threshold (convention, lint and a generated page pay off); about 80 to 299 a custom catalog is worth it (facets, overlap view, new-since diff, usage); 300 and above needs a governed registry.
 
 ## Reconciling "one project"

@@ -138,7 +138,7 @@ section>input[type=search]{display:block}
 <body>
 <div class="shell">
 <aside class="rail">
-<div class="brand"><h1>ccshelf</h1><p>Research and design notes. Claude Code 2.1.290. Generated from the Markdown in docs/ (source hash e2729930).</p></div>
+<div class="brand"><h1>ccshelf</h1><p>Research and design notes. Claude Code 2.1.290. Generated from the Markdown in docs/ (source hash 7a51ce42).</p></div>
 <nav aria-label="Sections"><div id="tabs" role="tablist" aria-orientation="vertical"></div></nav>
 <div class="legend" aria-label="Confidence markers"><b>How sure we are</b><br><span class="lg gv" aria-hidden="true">&#9679;</span>verified in docs, gh or the CLI<br><span class="lg gr" aria-hidden="true">&#9680;</span>reported by a research agent<br><span class="lg gu" aria-hidden="true">&#9675;</span>unverified or inferred</div>
 <button class="themebtn" id="themebtn" type="button">Switch theme</button>
@@ -299,7 +299,7 @@ draw(false);
 <p><strong>Direction (decided 2026-10-06, after the adversarial review): evidence first, then trimmed scope.</strong> This supersedes the earlier "both tracks in parallel" build order. The review's verdict was that the mechanism is sound but the plan was wider than its evidence, and that the benefit the pitch rests on (better skill routing, less clutter) was never measured.</p>
 <h3 id="roadmap-phase-0-evidence-before-writing-product-code">Phase 0: evidence (before writing product code)</h3>
 <ol>
-<li><strong>Routing eval.</strong> 20 or more realistic prompts on the real ~50-plugin setup, comparing the full set with a masked profile and recording which skill or plugin fires and whether it was the intended one (for example with <code>claude plugin eval</code> or <code>-p</code> runs). Fix the success criterion before running: the launcher is worth building only if the masked set measurably improves correct-first-try activation or reduces wrong-skill activations. If it does not, the launcher is documented as an alias recipe (<code>dry-run</code> prints the exact command) and not built as a product.</li>
+<li><strong>Routing eval.</strong> 20 or more realistic prompts on a real plugin setup of the size the project targets, comparing the full set with a masked profile and recording which skill or plugin fires and whether it was the intended one (for example with <code>claude plugin eval</code> or <code>-p</code> runs). Fix the success criterion before running: the launcher is worth building only if the masked set measurably improves correct-first-try activation or reduces wrong-skill activations. If it does not, the launcher is documented as an alias recipe (<code>dry-run</code> prints the exact command) and not built as a product.</li>
 <li><strong>Adopt, build or contribute.</strong> Evaluate <code>fuzzyalej/claude-profile</code> and <code>edimuj/claude-rig</code> against our gaps: default-deny masking on one shared plugin store, behavior under managed policy, concurrency, shared profiles from a private repo. Decide whether to contribute upstream instead of building a fourth tool.</li>
 <li><strong>Bundle and masking prototype (T7).</strong> Does masking a plugin that an installed bundle depends on break the bundle? Needs a second config directory and a login only the user can do. Also settles whether <code>profile = bundle</code> stays the bridge between the launcher and the catalog.</li>
 <li><strong>Stage 0 on Linux and Windows</strong> (including <code>windows-11-arm</code> if a runner is used), repeating T1, T2 and the concurrency check, plus the MCP <code>cmd /c</code> question.</li>
@@ -364,7 +364,7 @@ draw(false);
 <li class="task"><label><input type="checkbox" checked> Stage 0: launcher experiments on macOS (done 2026-10-06)</label></li>
 <li class="task"><label><input type="checkbox" checked> Adversarial review round absorbed and facts corrected (done 2026-10-06)</label></li>
 <li class="task"><label><input type="checkbox" checked> LICENSE added (MIT); docs reorganized and the report generated from the Markdown</label></li>
-<li class="task"><label><input type="checkbox"> Phase 0.1: routing eval on the real ~50 plugins; protocol and success criterion fixed (2026-10-06, <a href="#routing">routing-eval-protocol.md</a>), runs pending the org's plugin set</label></li>
+<li class="task"><label><input type="checkbox"> Phase 0.1: routing eval on a real plugin set; protocol and success criterion fixed (2026-10-06, <a href="#routing">routing-eval-protocol.md</a>), runs pending the org's plugin set</label></li>
 <li class="task"><label><input type="checkbox" checked> Phase 0.2: adopt, build or contribute: evaluated fuzzyalej/claude-profile and edimuj/claude-rig; recommendation to build (D-33, <a href="#adopt">adopt-or-build.md</a>), pending user review</label></li>
 <li class="task"><label><input type="checkbox"> Phase 0.3: bundle and masking prototype (T7); needs a second config directory and a login</label></li>
 <li class="task"><label><input type="checkbox"> Phase 0.4: Stage 0 on Linux and Windows</label></li>
@@ -1308,9 +1308,9 @@ error: nothing to add; give --plugin or --skill-off (exit 2)</code></pre>
 <h3 id="context-use-case-2-discoverability-org-registry">Use case 2: Discoverability (org registry)</h3>
 <p>Inside a company with many internal Claude Code plugins in a git-based marketplace (<code>marketplace.json</code>), people can't tell what exists, what to use when, which of overlapping plugins to pick, what's new, or whether something is owned/maintained.</p>
 <h3 id="context-decisions">Decisions</h3>
-<p>Decisions are recorded in <a href="#decisions">../DECISIONS.md</a>, not here. The user-level context that shaped them: the user is both platform owner and consumer of the internal registry; the registry is git-based with roughly 50 plugins; both use cases were meant to be one project at the same priority (since reopened in part, see the decision log); the process was to research the use cases without anchoring on the proposed solution, assess, then assess solutions including the wrapper, then discuss, with Opus subagents as adversary and brainstormer.</p>
+<p>Decisions are recorded in <a href="#decisions">../DECISIONS.md</a>, not here. The context that shaped them: the registry is git-based, and the person asking both maintains it and uses it; both use cases were meant to be one project at the same priority (since reopened in part, see the decision log); the process was to research the use cases without anchoring on the proposed solution, assess, then assess solutions including the wrapper, then discuss, with Opus subagents as adversary and brainstormer.</p>
 <h3 id="context-environment">Environment</h3>
-<p>macOS, zsh, Claude Code 2.1.290, repo <code>/Users/yorch/code/claude-profile</code> (empty at start).</p>
+<p>macOS, zsh, Claude Code 2.1.290; the repository was empty at the start.</p>
 <h3 id="context-how-the-research-was-run">How the research was run</h3>
 <ol>
 <li>Native-capabilities agent (official docs).</li>
@@ -1523,7 +1523,7 @@ document.getElementById("nmsg").textContent=m}r.oninput=draw;draw()})();
 <li>N=20: README table generated from marketplace.json + CI lint requiring <code>author/tags/category</code> is enough.</li>
 <li>N=100: flat search breaks; overlap is real; a static page with facets, diff since last tag, owner, usage counts is worth it.</li>
 <li>N=500: needs a governed registry (required metadata, deprecation workflow, dedup review, usage-driven pruning): skillhub/Backstage territory.</li>
-<li>Threshold for a custom catalog: roughly <strong>50-80 plugins</strong> or more than one publishing team. The user's ~50 sits at the threshold.</li>
+<li>Threshold for a custom catalog: roughly <strong>50-80 plugins</strong> or more than one publishing team. A registry of about 50 sits at the threshold.</li>
 <li>The report's size slider turns these reference points into bands: up to about 30 plugins native features are enough; about 31 to 79 is the threshold (convention, lint and a generated page pay off); about 80 to 299 a custom catalog is worth it (facets, overlap view, new-since diff, usage); 300 and above needs a governed registry.</li>
 </ul>
 <h3 id="options-reconciling-one-project">Reconciling "one project"</h3>
