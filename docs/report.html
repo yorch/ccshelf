@@ -138,7 +138,7 @@ section>input[type=search]{display:block}
 <body>
 <div class="shell">
 <aside class="rail">
-<div class="brand"><h1>ccshelf</h1><p>Research and design notes. Claude Code 2.1.290. Generated from the Markdown in docs/ (source hash dd1007dc).</p></div>
+<div class="brand"><h1>ccshelf</h1><p>Research and design notes. Claude Code 2.1.290. Generated from the Markdown in docs/ (source hash 638d7c0a).</p></div>
 <nav aria-label="Sections"><div id="tabs" role="tablist" aria-orientation="vertical"></div></nav>
 <div class="legend" aria-label="Confidence markers"><b>How sure we are</b><br><span class="lg gv" aria-hidden="true">&#9679;</span>verified in docs, gh or the CLI<br><span class="lg gr" aria-hidden="true">&#9680;</span>reported by a research agent<br><span class="lg gu" aria-hidden="true">&#9675;</span>unverified or inferred</div>
 <button class="themebtn" id="themebtn" type="button">Switch theme</button>
@@ -252,6 +252,7 @@ draw(false);
 <tr><td class="nw">D-29</td><td class="nw">2026-10-06</td><td><strong><code>run</code> uses the pinned commit and does not hit the network</strong> when the trusted checkout is cached; <code>trust</code> and <code>ls --refresh</code> re-resolve tags. One unreachable source is a per-source warning, never a failure of unrelated profiles.</td><td>Review X: every command ran <code>git ls-remote</code>, so an outage broke personal profiles.</td><td>Medium</td><td>Users report stale pins</td></tr>
 <tr><td class="nw">D-30</td><td class="nw">2026-10-06</td><td><strong>Cached git checkouts are verified down to every tree object</strong> (replace refs disabled) before each use; when a source is unreachable the union of all pinned protect lists keeps being enforced and the newest verified cached checkout is used; plugins that own a protected MCP server are protected (all same-name candidates, with a warning).</td><td>Review Y: replace refs could swap a tree behind a pinned commit; an outage dropped protect lists of protect-only sources.</td><td>High</td><td>Next adversarial review</td></tr>
 <tr><td class="nw">D-31</td><td class="nw">2026-10-06</td><td><strong>Plugin sources are bound to their real marketplace source</strong> (from <code>claude plugin marketplace list --json</code>, <span class="V">V</span> for github, git and directory kinds) in the source id and trust key, with an optional <code>marketplace</code> check in the config; <code>search</code>, <code>recommend</code> and <code>doctor --policy</code> can use the cached org source offline; PRF002 is info for <code>cmd /c npx|node|uvx|bunx name@version</code> (the documented Windows launcher) and a warning for anything else.</td><td>Review X/Z2: the marketplace check was a dead hook; git-source users had no catalog; the starter failed <code>lint --strict</code>.</td><td>Medium</td><td>Review Z</td></tr>
+<tr><td class="nw">D-32</td><td class="nw">2026-10-06</td><td><strong>Marketplace identity is kind-tagged and host-neutral</strong> (<code>github:owner/repo</code>, <code>git:host/path</code>; ssh, https and scp forms of one repo are equal; directory sources are hashed, never a machine path). <strong>Git checkouts carry a layout version</strong> (bump <code>layoutVersion</code> when the watched file set changes). <strong>Catalog reads (<code>search</code>, <code>recommend</code>) use only a commit the user accepted</strong> (the lockfile commit, or the exact SHA when the ref is one). The <code>PRF002</code> downgrade is limited to the exact <code>cmd /c &lt;npx|uvx|bunx&gt; [-y] &lt;pinned name@x.y.z&gt;</code> shape.</td><td>Review Z: kind confusion, a hard-coded host, an upgrade that would report valid caches as tampered, catalog reads of untrusted commits, and a downgrade that hid <code>-c</code>/<code>-e</code>/UNC forms.</td><td>High</td><td>Next adversarial review</td></tr>
 </tbody></table>
 <h3 id="decisions-superseded-or-corrected">Superseded or corrected</h3>
 <table><thead><tr><th>ID</th><th>Was</th><th>Replaced by</th></tr></thead><tbody>
@@ -513,7 +514,7 @@ path = "profiles"                               # folder inside the repo
 # [[sources]]                                   # org profiles shipped as a data-only plugin
 # type = "plugin"
 # plugin = "org-profiles@acme"
-# marketplace = "acme/claude-marketplace"        # expected marketplace source (owner/repo or git URL); a mismatch is refused
+# marketplace = "acme/claude-marketplace"        # expected marketplace source: owner/repo for a GitHub marketplace, or a git URL for a git one; a mismatch is refused
 # path = "profiles"
 
 [trust]

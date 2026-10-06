@@ -33,7 +33,7 @@ path = "profiles"                               # folder inside the repo
 # [[sources]]                                   # org profiles shipped as a data-only plugin
 # type = "plugin"
 # plugin = "org-profiles@acme"
-# marketplace = "acme/claude-marketplace"        # expected marketplace source (owner/repo or git URL); a mismatch is refused
+# marketplace = "acme/claude-marketplace"        # expected marketplace source: owner/repo for a GitHub marketplace, or a git URL for a git one; a mismatch is refused
 # path = "profiles"
 
 [trust]
