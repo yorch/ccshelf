@@ -16,7 +16,8 @@
         "path": { "type": "string" },
         "url": { "type": "string" },
         "ref": { "type": "string" },
-        "plugin": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9._-]*$" }
+        "plugin": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9._-]*$" },
+        "marketplace": { "type": "string", "minLength": 1, "description": "Plugin sources only: the owner/repo or git URL the plugin's marketplace must have been added from." }
       }
     },
     "account": {

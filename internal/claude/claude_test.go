@@ -1134,3 +1134,102 @@ func TestForegroundInterruptIsIgnored(t *testing.T) {
 		t.Fatalf("exit code %d", code)
 	}
 }
+
+func TestParseMarketplaces(t *testing.T) {
+	good := `[{"name":"a","source":"github","repo":"o/r","installLocation":"/x"},
+	{"name":"b","source":"git","url":"https://h/o/r.git","installLocation":"/y","extra":1},
+	{"name":"c","source":"directory","path":"/p","installLocation":"/p"}]`
+	list, err := parseMarketplaces([]byte(good))
+	if err != nil || len(list) != 3 {
+		t.Fatalf("parse: %v %v", list, err)
+	}
+	for i, want := range []string{"o/r", "https://h/o/r.git", "/p"} {
+		got, err := list[i].Origin()
+		if err != nil || got != want {
+			t.Errorf("origin %d = %q, %v; want %q", i, got, err, want)
+		}
+	}
+	if list[1].Extra["extra"] == nil {
+		t.Error("unknown key not kept")
+	}
+	if l, err := parseMarketplaces([]byte(" [] ")); err != nil || len(l) != 0 {
+		t.Errorf("empty array: %v %v", l, err)
+	}
+	for name, in := range map[string]string{
+		"empty": "", "null": "null", "object": `{"a":1}`, "string": `"x"`,
+		"no name": `[{"source":"git","url":"u"}]`, "bad type": `[{"name":1}]`,
+		"non-object": `[1]`, "truncated": `[{"name":"a"`,
+	} {
+		if _, err := parseMarketplaces([]byte(in)); err == nil {
+			t.Errorf("%s: no error", name)
+		}
+	}
+	for name, m := range map[string]Marketplace{
+		"unknown kind": {Name: "a", Kind: "weird", URL: "u"},
+		"no repo":      {Name: "a", Kind: "github"},
+		"no url":       {Name: "a", Kind: "git"},
+		"no path":      {Name: "a", Kind: "directory"},
+	} {
+		if _, err := m.Origin(); err == nil {
+			t.Errorf("%s: no error", name)
+		}
+	}
+	if _, err := MarketplaceOrigin(list, "zz"); err == nil {
+		t.Error("unknown marketplace accepted")
+	}
+	if _, err := MarketplaceOrigin(append(list, list[0]), "a"); err == nil {
+		t.Error("duplicate marketplace accepted")
+	}
+	if got, err := MarketplaceOrigin(list, "b"); err != nil || got != "https://h/o/r.git" {
+		t.Errorf("MarketplaceOrigin = %q, %v", got, err)
+	}
+}
+
+func TestListMarketplaces(t *testing.T) {
+	log := filepath.Join(t.TempDir(), "log")
+	bin, env := fakeEnv(t, map[string]string{"FAKE_CLAUDE_LOG": log})
+	list, err := ListMarketplaces(context.Background(), bin, t.TempDir(), env)
+	if err != nil || len(list) != 2 || list[0].Name != "acme" || list[1].Name != "claude-plugins-official" {
+		t.Fatalf("%v %+v", err, list)
+	}
+	if o, err := MarketplaceOrigin(list, "acme"); err != nil || o != "acme/plugins" {
+		t.Errorf("origin = %q, %v", o, err)
+	}
+	inv := testutil.ReadLog(t, log)
+	if len(inv) != 1 || !slices.Equal(inv[0].Argv, []string{"plugin", "marketplace", "list", "--json"}) {
+		t.Fatalf("%+v", inv)
+	}
+
+	// A custom listing, and every way the output can be unusable.
+	for name, tc := range map[string]struct {
+		content string
+		wantErr string
+	}{
+		"git source":   {`[{"name":"x","source":"git","url":"https://h.example/o/r.git","installLocation":"/y"}]`, ""},
+		"null":         {`null`, "expected a JSON array"},
+		"object":       {`{"marketplaces":[]}`, "expected a JSON array"},
+		"missing name": {`[{"source":"git","url":"u"}]`, "no name"},
+	} {
+		f := filepath.Join(t.TempDir(), "mk.json")
+		testutil.WriteFile(t, f, tc.content)
+		_, env := fakeEnv(t, map[string]string{"FAKE_CLAUDE_MARKETPLACES": f})
+		got, err := ListMarketplaces(context.Background(), bin, "", env)
+		if tc.wantErr == "" {
+			if err != nil || len(got) != 1 {
+				t.Errorf("%s: %v %v", name, got, err)
+			}
+			continue
+		}
+		if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+			t.Errorf("%s: err = %v, want %q", name, err, tc.wantErr)
+		}
+	}
+
+	_, env = fakeEnv(t, map[string]string{"FAKE_CLAUDE_MARKETPLACES_FAIL": "1"})
+	if _, err := ListMarketplaces(context.Background(), bin, "", env); err == nil || !strings.Contains(err.Error(), "exited 1") {
+		t.Errorf("failing claude: %v", err)
+	}
+	if _, err := ListMarketplaces(context.Background(), filepath.Join(t.TempDir(), "nope"), "", nil); err == nil {
+		t.Error("expected start error")
+	}
+}

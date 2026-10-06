@@ -151,6 +151,7 @@ ref = "` + sha + `"
 [[sources]]
 type = "plugin"
 plugin = "org-profiles@acme"
+marketplace = "acme/plugins"
 [trust]
 on_change = "fail"
 [accounts.work]
@@ -169,6 +170,9 @@ interactive = "never"
 	}
 	if cfg.Accounts["personal"].ConfigDir != filepath.Join(home, ".claude-personal") && !strings.HasSuffix(cfg.Accounts["personal"].ConfigDir, ".claude-personal") {
 		t.Errorf("not expanded: %v", cfg.Accounts)
+	}
+	if cfg.Sources[3].Marketplace != "acme/plugins" {
+		t.Errorf("marketplace not read: %+v", cfg.Sources[3])
 	}
 	if !filepath.IsAbs(cfg.Accounts["work"].ConfigDir) || len(cfg.Sources) != 4 {
 		t.Errorf("unexpected: %+v", cfg)
@@ -215,6 +219,12 @@ func TestLoadInvalid(t *testing.T) {
 		{"git plugin field", "[[sources]]\ntype = \"git\"\nurl = \"https://h.example/r.git\"\nref = \"v1\"\nplugin = \"a@b\"\n", "do not take plugin"},
 		{"plugin bad", "[[sources]]\ntype = \"plugin\"\nplugin = \"nomarket\"\n", "name@marketplace"},
 		{"plugin extra", "[[sources]]\ntype = \"plugin\"\nplugin = \"a@b\"\nurl = \"x\"\n", "only plugin"},
+		{"plugin marketplace bad", "[[sources]]\ntype = \"plugin\"\nplugin = \"a@b\"\nmarketplace = \"not a source\"\n", "marketplace"},
+		{"plugin marketplace http", "[[sources]]\ntype = \"plugin\"\nplugin = \"a@b\"\nmarketplace = \"http://h/o/r\"\n", "marketplace"},
+		{"plugin marketplace token", "[[sources]]\ntype = \"plugin\"\nplugin = \"a@b\"\nmarketplace = \"https://h.example/ghp_abcdef/r\"\n", "credential"},
+		{"plugin marketplace userinfo", "[[sources]]\ntype = \"plugin\"\nplugin = \"a@b\"\nmarketplace = \"https://u:p@h.example/o/r\"\n", "user information"},
+		{"git marketplace", "[[sources]]\ntype = \"git\"\nurl = \"https://h.example/r.git\"\nref = \"v1\"\nmarketplace = \"o/r\"\n", "do not take marketplace"},
+		{"dir marketplace", "[[sources]]\ntype = \"dir\"\npath = \"/x\"\nmarketplace = \"o/r\"\n", "only path"},
 		{"plugin bad path", "[[sources]]\ntype = \"plugin\"\nplugin = \"a@b\"\npath = \"../x\"\n", ".."},
 		{"bad account name", "[accounts.Work]\nconfig_dir = \"/x\"\n", "name must match"},
 		{"account no dir", "[accounts.w]\n", "required"},

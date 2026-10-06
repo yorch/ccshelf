@@ -81,6 +81,8 @@ type harness struct {
 	cwd string
 	so  *bytes.Buffer
 	se  *bytes.Buffer
+	// catalog is the injected configured-source provider (nil: none).
+	catalog clicore.CatalogProvider
 }
 
 func newHarness(t *testing.T, root string) *harness {
@@ -114,7 +116,7 @@ func (h *harness) run(args ...string) result {
 	root.PersistentFlags().BoolVar(&h.g.JSON, "json", false, "")
 	root.SetOut(h.so)
 	root.SetErr(h.se)
-	root.AddCommand(Commands(func() (*clicore.Context, error) { return h.env.Context(h.g, "", ""), nil })...)
+	root.AddCommand(CommandsWith(func() (*clicore.Context, error) { return h.env.Context(h.g, "", ""), nil }, Options{Catalog: h.catalog})...)
 	root.SetArgs(args)
 	err := root.ExecuteContext(context.Background())
 	ui.Report(h.se, err, ui.Mode{})

@@ -414,3 +414,27 @@ func TestOrgConfigWithCustomPathAndMissingRoot(t *testing.T) {
 		t.Fatalf("a missing profiles folder is not an error: %v", err)
 	}
 }
+
+func TestNormalizeSource(t *testing.T) {
+	same := [][2]string{
+		{"acme/plugins", "https://github.com/acme/plugins.git"},
+		{"acme/plugins", "git@github.com:acme/plugins.git"},
+		{"acme/plugins", "ssh://git@github.com/acme/plugins"},
+		{"ACME/plugins", "https://GitHub.com/acme/plugins/"},
+		{"https://ghe.example/a/b.git", "https://ghe.example/a/b"},
+	}
+	for _, p := range same {
+		if !strings.EqualFold(normalizeSource(p[0]), normalizeSource(p[1])) {
+			t.Errorf("%q and %q should match", p[0], p[1])
+		}
+	}
+	for _, p := range [][2]string{
+		{"acme/plugins", "https://ghe.example/acme/plugins"},
+		{"acme/plugins", "acme/plugins-evil"},
+		{"https://github.com/acme/plugins", "https://github.com.evil.example/acme/plugins"},
+	} {
+		if strings.EqualFold(normalizeSource(p[0]), normalizeSource(p[1])) {
+			t.Errorf("%q and %q must not match", p[0], p[1])
+		}
+	}
+}

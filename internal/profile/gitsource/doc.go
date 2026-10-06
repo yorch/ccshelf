@@ -96,11 +96,15 @@
 //
 // # Content hygiene
 //
-// Before anything is written, everything under profiles/, mcp/ and prompts/ of
-// the source root is checked in the committed tree: symlinks, submodules,
+// Before anything is written, everything under profiles/, mcp/, prompts/ and
+// catalog/plugins/ of the source root, and the marketplace files named by
+// catalog.marketplaces (default .claude-plugin/marketplace.json), is checked in the committed tree: symlinks, submodules,
 // unusual file modes, files over 1 MiB (or that the server left out for being
 // bigger), more than 5000 files or 32 MiB in total, and path components such as
 // "..", ".git", ":" or names with backslashes, control or invisible characters
 // are errors that name the path. Only those folders are ever read by the
-// profile package.
+// profile package. The catalog data (sidecars and marketplace files) is there
+// for the launcher's deprecated-plugin warning and for search and recommend
+// without an org data repo checkout; a marketplace file over the size limit
+// makes the source unusable, like any other watched file.
 package gitsource

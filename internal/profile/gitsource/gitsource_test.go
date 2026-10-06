@@ -871,3 +871,62 @@ func TestLayoutBase(t *testing.T) {
 		}
 	}
 }
+
+const sidecarDeprecated = "owner = \"@acme/platform\"\nstatus = \"deprecated\"\nsuperseded_by = \"sre-kit\"\n"
+
+func TestCatalogDataIsExtractedAndVerified(t *testing.T) {
+	f := newFixture(t)
+	f.seed()
+	f.write("catalog/plugins/postmortem-lite.toml", sidecarDeprecated)
+	f.write(".claude-plugin/marketplace.json", `{"name":"acme","owner":{"name":"x"},"plugins":[]}`)
+	f.write("catalog/notwatched.txt", "x")
+	f.commit("catalog")
+	f.git("tag", "v1")
+	s := f.source("v1", "")
+	if err := s.Prepare(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	for rel, want := range map[string]bool{"catalog/plugins/postmortem-lite.toml": true, ".claude-plugin/marketplace.json": true, "catalog/notwatched.txt": false} {
+		_, err := os.Stat(filepath.Join(s.Root(), filepath.FromSlash(rel)))
+		if (err == nil) != want {
+			t.Errorf("%s present = %v, want %v (%v)", rel, err == nil, want, err)
+		}
+	}
+	// Reuse re-verifies the catalog files like everything else.
+	sc := filepath.Join(s.Root(), "catalog", "plugins", "postmortem-lite.toml")
+	if err := os.WriteFile(sc, []byte(strings.Replace(sidecarDeprecated, "deprecated", "active    ", 1)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.source("v1", "").Prepare(context.Background()); !errors.Is(err, ErrTampered) {
+		t.Fatalf("a tampered sidecar: err = %v, want ErrTampered", err)
+	}
+}
+
+func TestCatalogDataHygiene(t *testing.T) {
+	cases := map[string]func(f *fixture){
+		"oversized sidecar":     func(f *fixture) { f.write("catalog/plugins/big.toml", strings.Repeat("#", MaxFileSize+1)) },
+		"oversized marketplace": func(f *fixture) { f.write(".claude-plugin/marketplace.json", strings.Repeat(" ", MaxFileSize+1)) },
+	}
+	if runtime.GOOS != "windows" {
+		cases["symlinked sidecar"] = func(f *fixture) {
+			if err := os.MkdirAll(filepath.Join(f.origin, "catalog", "plugins"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink("/etc/passwd", filepath.Join(f.origin, "catalog", "plugins", "evil.toml")); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	for name, mk := range cases {
+		t.Run(name, func(t *testing.T) {
+			f := newFixture(t)
+			f.seed()
+			mk(f)
+			f.commit("bad")
+			f.git("tag", "v1")
+			if err := f.source("v1", "").Prepare(context.Background()); !errors.Is(err, ErrHygiene) {
+				t.Fatalf("err = %v, want ErrHygiene", err)
+			}
+		})
+	}
+}

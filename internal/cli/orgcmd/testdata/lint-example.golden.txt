@@ -5,5 +5,5 @@
 .claude-plugin/marketplace.json:82: info CAT040 [audit-logger] plugin "audit-logger" ships hooks
     hint: hooks run commands on developers' machines; they need platform review
 .claude-plugin/marketplace.json:93: info CAT031 [partner-linter] plugin "partner-linter" comes from "url:https://git.partner.example/linters/partner-linter.git"; its contents cannot be inspected
-profiles/frontend.toml: warning PRF002 MCP server "figma" runs "cmd", a shell or command launcher on windows
-0 error(s), 1 warning(s), 4 info
+profiles/frontend.toml: info PRF002 MCP server "figma" uses the documented Windows launcher pattern (cmd /c npx -y @acme-example/figma-mcp@1.0.0) on windows
+0 error(s), 0 warning(s), 5 info

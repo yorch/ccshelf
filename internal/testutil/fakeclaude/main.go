@@ -17,6 +17,15 @@
 //	                              against malformed output.
 //	FAKE_CLAUDE_AVAILABLE         file with the "available" array
 //	FAKE_CLAUDE_PLUGIN_LIST_FAIL  1: plugin list exits 1 with a stderr message
+//	FAKE_CLAUDE_MARKETPLACES      file with the JSON printed by `plugin marketplace
+//	                              list --json` (default: acme from github
+//	                              acme/plugins and claude-plugins-official from
+//	                              github anthropics/claude-plugins-official). The
+//	                              shape (name, source, repo|url|path,
+//	                              installLocation) was verified against the real
+//	                              claude read-only. Valid JSON that is not an
+//	                              array is printed verbatim, to test callers.
+//	FAKE_CLAUDE_MARKETPLACES_FAIL 1: marketplace list exits 1 with a stderr message
 //	FAKE_CLAUDE_AGENTS_JSON       stdout of `agents --json --all` (default [])
 //	FAKE_CLAUDE_USER_ENABLED      user-layer settings (inline JSON or file);
 //	                              a plain {"id": bool} map is accepted HERE
@@ -127,6 +136,9 @@ func run(args []string, getenv func(string) string, stdout, stderr io.Writer) in
 		fmt.Fprintf(stdout, "%s (Claude Code)\n", v)
 		return 0
 	}
+	if len(args) >= 3 && args[0] == "plugin" && args[1] == "marketplace" && args[2] == "list" {
+		return marketplaceList(args[3:], getenv, stdout, stderr)
+	}
 	if len(args) >= 2 && args[0] == "plugin" && args[1] == "list" {
 		return pluginList(args[2:], getenv, stdout, stderr)
 	}
@@ -139,6 +151,48 @@ func run(args []string, getenv func(string) string, stdout, stderr io.Writer) in
 		return 0
 	}
 	return generic(args, getenv, stdout, stderr)
+}
+
+var builtinMarketplaces = `[
+ {"name":"acme","source":"github","repo":"acme/plugins","installLocation":"/fake/marketplaces/acme"},
+ {"name":"claude-plugins-official","source":"github","repo":"anthropics/claude-plugins-official","installLocation":"/fake/marketplaces/claude-plugins-official"}
+]`
+
+// marketplaceList emulates `claude plugin marketplace list [--json]`.
+func marketplaceList(args []string, getenv func(string) string, stdout, stderr io.Writer) int {
+	if getenv("FAKE_CLAUDE_MARKETPLACES_FAIL") == "1" {
+		fmt.Fprintln(stderr, "Error: failed to list marketplaces (fake failure)")
+		return 1
+	}
+	var asJSON bool
+	for _, a := range args {
+		if a == "--json" {
+			asJSON = true
+		} else if strings.HasPrefix(a, "-") {
+			fmt.Fprintf(stderr, "error: unknown option '%s'\n", a)
+			return 1
+		}
+	}
+	data := []byte(builtinMarketplaces)
+	if p := getenv("FAKE_CLAUDE_MARKETPLACES"); p != "" {
+		b, err := os.ReadFile(p)
+		if err != nil {
+			fmt.Fprintln(stderr, "Error: cannot read marketplace list:", err)
+			return 1
+		}
+		data = b
+	}
+	if asJSON {
+		fmt.Fprintln(stdout, strings.TrimSpace(string(data)))
+		return 0
+	}
+	var list []struct{ Name string }
+	if json.Unmarshal(data, &list) == nil {
+		for _, m := range list {
+			fmt.Fprintln(stdout, m.Name)
+		}
+	}
+	return 0
 }
 
 func readJSONSource(v string) ([]byte, error) {

@@ -186,6 +186,9 @@ func renderFiles(cat *catalog.Catalog, withSite bool) ([]outFile, error) {
 
 // searchJSON is the data of `search --json` (kind "search").
 type searchJSON struct {
+	// Source says where the catalog came from when it was not the working
+	// directory or --root: the configured org source.
+	Source  string      `json:"source,omitempty"`
 	Query   string      `json:"query"`
 	Matches []matchJSON `json:"matches"`
 }
@@ -201,7 +204,7 @@ type matchJSON struct {
 	Description string   `json:"description"`
 }
 
-func newSearch(get clicore.Provider) *cobra.Command {
+func newSearch(get clicore.Provider, opt Options) *cobra.Command {
 	var limit int
 	cmd := &cobra.Command{
 		Use:   "search <query>",
@@ -212,8 +215,14 @@ directory) locally and offline. Every word of the query must match a field
 better matches come first, ties by name.
 
 Outside an org data repo (the marketplace file of ccshelf.toml cannot be read)
-it fails with exit 1, like lint and compile, instead of reporting "no match".
-A query that matches nothing in a real repo is not an error.`,
+and without --root, it reads the catalog data of the organization's source from
+config.toml instead, so a developer who reaches the org through a git source
+needs no checkout: a dir source as it is, a git source from its verified local
+cache (the commit pinned by the trust lockfile, else the newest cached one; it
+never fetches, so run "ccshelf ls" or "ccshelf trust" once). The note on stderr
+says which one was used. When no such catalog is available it fails with exit
+1, like lint and compile, instead of reporting "no match". A query that
+matches nothing in a real catalog is not an error.`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
 				return ui.Usage(errors.New("search needs a query, for example: ccshelf search figma"))
@@ -228,7 +237,7 @@ A query that matches nothing in a real repo is not an error.`,
 			if limit < 0 {
 				return ui.Usage(errors.New("--limit must not be negative"))
 			}
-			r, err := openRepo(c)
+			r, src, err := openCatalogRepo(cmd.Context(), c, opt)
 			if err != nil {
 				return err
 			}
@@ -237,11 +246,12 @@ A query that matches nothing in a real repo is not an error.`,
 				return fmt.Errorf("building the catalog: %w", err)
 			}
 			if err := requireMarketplace(r, rep); err != nil {
-				return err
+				return notOrgRepo(err, opt.Catalog != nil)
 			}
+			noteSource(c, src)
 			query := strings.Join(args, " ")
 			ms := catalog.Search(cat, query, limit)
-			data := searchJSON{Query: query, Matches: []matchJSON{}}
+			data := searchJSON{Source: src, Query: query, Matches: []matchJSON{}}
 			for _, m := range ms {
 				data.Matches = append(data.Matches, matchJSON{
 					Name: m.Entry.Name, Marketplace: m.Entry.Marketplace, Status: m.Entry.Status,

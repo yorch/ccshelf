@@ -89,7 +89,12 @@ failure. A policy that exists but could not be read is a warning, and exit 3
 only with --strict.
 
 Exit code 1 for error findings, and when the directory is not an org data
-repo (its marketplace file cannot be read).`,
+repo (its marketplace file cannot be read). With --policy and no --root, a
+directory that is not an org data repo is not an error: only the policy part
+runs (the capability matrix and the policy findings that do not need profiles;
+the checks that need the catalog are listed as skipped), because the managed
+policy belongs to the machine, not to a repository. A developer who reaches the
+org through a git source can use it that way.`,
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			c, err := get()
@@ -105,6 +110,11 @@ repo (its marketplace file cannot be read).`,
 			r, err := openRepo(c)
 			if err != nil {
 				return err
+			}
+			if usePolicy && c.G.Root == "" && !r.isOrgRepo() {
+				// Not an org data repo and none asked for: the managed policy is a
+				// property of the machine, so that part still works.
+				return runPolicyOnly(cmd.Context(), c, doctorOptions{policy: true, installed: installed, strict: strict})
 			}
 			return runDoctor(cmd.Context(), c, r, doctorOptions{policy: usePolicy, installed: installed, usageAPI: usageAPI, usageFile: usageFile, usageDays: usageDays, skillsDir: skillsDir, strict: strict})
 		},
@@ -136,7 +146,7 @@ func runDoctor(ctx context.Context, c *clicore.Context, r *repo, o doctorOptions
 		return err
 	}
 	if err := requireMarketplace(r, lrep); err != nil {
-		return err
+		return notOrgRepo(err, false, "; doctor --policy works anywhere")
 	}
 	dropAbstractBundles(lrep, good)
 	src := profile.PortableSourceID(r.source())
@@ -209,7 +219,48 @@ func runDoctor(ctx context.Context, c *clicore.Context, r *repo, o doctorOptions
 		}
 	}
 
-	rep := doctor.Run(in)
+	return finishDoctor(c, doctor.Run(in), matrix, policyBlocked)
+}
+
+// runPolicyOnly is doctor --policy outside an org data repo: the managed
+// policy is read and evaluated, and the findings that need no profile or
+// catalog are reported. Everything that needs the catalog is skipped, and says
+// so.
+func runPolicyOnly(ctx context.Context, c *clicore.Context, o doctorOptions) error {
+	in := doctor.Input{Now: c.Now()}
+	if o.installed {
+		bin, err := claude.Locate(c.G.ClaudePath)
+		if err != nil {
+			return fmt.Errorf("--installed: %w", err)
+		}
+		wd, _ := c.Getwd()
+		in.Installed, err = claude.ListInstalled(ctx, bin, wd, claude.Env(c.Environ(), nil))
+		if err != nil {
+			return fmt.Errorf("--installed: %w", err)
+		}
+		if in.Installed == nil {
+			in.Installed = []claude.Plugin{}
+		}
+	}
+	pol, err := detectPolicy(ctx, policy.Options{GOOS: c.GOOS})
+	if err != nil {
+		return fmt.Errorf("reading managed policy: %w", err)
+	}
+	matrix := policy.Evaluate(pol, in.Installed)
+	in.Policy = policyFindings(pol, matrix, nil, o.strict)
+	blocked := false
+	for _, f := range in.Policy {
+		blocked = blocked || f.Severity == doctor.Error
+	}
+	if !c.Mode.JSON {
+		fmt.Fprintln(errw(c), "note: this directory is not an org data repo (pass --root to check one); showing the managed policy only")
+	}
+	return finishDoctor(c, doctor.Run(in), matrix, blocked)
+}
+
+// finishDoctor prints the report (and the capability matrix when there is one)
+// and maps it to the exit code.
+func finishDoctor(c *clicore.Context, rep *doctor.Report, matrix *policy.Matrix, policyBlocked bool) error {
 	if c.Mode.JSON {
 		pl := rep.Payload()
 		data := doctorJSON{Summary: pl.Summary, Findings: pl.Findings, Skipped: pl.Skipped}

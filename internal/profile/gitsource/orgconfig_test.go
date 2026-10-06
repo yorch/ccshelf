@@ -332,10 +332,23 @@ func TestWatchSet(t *testing.T) {
 	if !w.has("a/b/x.toml") || !w.has("reg.toml") || w.has("a/c.toml") || w.has("mcp/registry.toml") {
 		t.Errorf("custom watch set wrong: %+v", w)
 	}
-	if got := w.loneFiles(); len(got) != 2 {
+	if got := w.loneFiles(); len(got) != 3 {
 		t.Errorf("loneFiles = %v", got)
 	}
-	if got := newWatch(nil).loneFiles(); len(got) != 1 || got[0] != "ccshelf.toml" {
+	// The catalog data is watched too: the sidecar folder and the marketplace files.
+	for _, p := range []string{"catalog/plugins/a.toml", ".claude-plugin/marketplace.json"} {
+		if !newWatch(nil).has(p) {
+			t.Errorf("%s should be watched by default", p)
+		}
+	}
+	if newWatch(nil).has("catalog/taxonomy.toml") {
+		t.Error("the taxonomy is not catalog data the launcher reads")
+	}
+	cfg.Catalog.Marketplaces = []string{"market/a.json", "market/b.json"}
+	if w = newWatch(cfg); !w.has("market/b.json") || w.has(".claude-plugin/marketplace.json") {
+		t.Errorf("configured marketplace files not watched: %+v", w)
+	}
+	if got := newWatch(nil).loneFiles(); len(got) != 2 || got[0] != "ccshelf.toml" {
 		t.Errorf("default loneFiles = %v", got)
 	}
 }

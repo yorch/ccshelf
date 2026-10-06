@@ -100,8 +100,13 @@ func TestLintFormats(t *testing.T) {
 	}
 
 	gh := h.run("lint", "--format", "github")
-	if gh.code != 0 || !strings.Contains(gh.out, "::warning ") || !strings.Contains(gh.out, "title=PRF002") {
+	if gh.code != 0 || !strings.Contains(gh.out, "::notice file=profiles/frontend.toml,title=PRF002") || strings.Contains(gh.out, "::warning ") {
 		t.Errorf("github format:\n%s", gh.out)
+	}
+	// The same launcher without a pinned package is a warning.
+	write(t, root, "mcp/registry.toml", strings.ReplaceAll(read(t, root, "mcp/registry.toml"), "@acme-example/figma-mcp@1.0.0\"]\n\n# Read-only", "@acme-example/figma-mcp\"]\n\n# Read-only"))
+	if gh := h.run("lint", "--format", "github"); !strings.Contains(gh.out, "::warning file=profiles/frontend.toml,title=PRF002") {
+		t.Errorf("an unpinned cmd /c launcher must stay a warning:\n%s", gh.out)
 	}
 
 	bad := h.run("lint", "--format", "xml")
@@ -114,9 +119,28 @@ func TestLintFormats(t *testing.T) {
 }
 
 func TestLintStrict(t *testing.T) {
-	h := newHarness(t, copyExample(t))
-	if r := h.run("lint", "--strict"); r.code != ui.ExitFailure || !strings.Contains(r.err, "--strict") {
-		t.Errorf("strict: code %d %s", r.code, r.err)
+	root := copyExample(t)
+	h := newHarness(t, root)
+	// The starter template uses the documented Windows launcher (info only),
+	// so it passes --strict as shipped.
+	if r := h.run("lint", "--strict"); r.code != 0 {
+		t.Errorf("the starter must pass --strict: code %d\n%s\n%s", r.code, r.out, r.err)
+	}
+	// Another shell or an unpinned package is still a warning.
+	reg := read(t, root, "mcp/registry.toml")
+	for name, bad := range map[string]string{
+		"unpinned":       strings.ReplaceAll(reg, "@acme-example/figma-mcp@1.0.0\"]\n\n# Read-only", "@acme-example/figma-mcp\"]\n\n# Read-only"),
+		"latest tag":     strings.ReplaceAll(reg, "figma-mcp@1.0.0\"]\n\n# Read-only", "figma-mcp@latest\"]\n\n# Read-only"),
+		"powershell":     strings.ReplaceAll(reg, `command = "cmd"`+"\n"+`args = ["/c",`, `command = "powershell"`+"\n"+`args = ["-command",`),
+		"second command": strings.ReplaceAll(reg, "figma-mcp@1.0.0\"]\n\n# Read-only", "figma-mcp@1.0.0\", \"&\", \"calc\"]\n\n# Read-only"),
+	} {
+		if bad == reg {
+			t.Fatalf("%s: the mutation did not apply", name)
+		}
+		write(t, root, "mcp/registry.toml", bad)
+		if r := h.run("lint", "--strict"); r.code != ui.ExitFailure || !strings.Contains(r.err, "--strict") {
+			t.Errorf("%s: strict: code %d %s", name, r.code, r.err)
+		}
 	}
 }
 

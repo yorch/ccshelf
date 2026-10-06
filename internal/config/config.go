@@ -78,6 +78,11 @@ type SourceConfig struct {
 	URL    string `toml:"url,omitempty"`
 	Ref    string `toml:"ref,omitempty"`
 	Plugin string `toml:"plugin,omitempty"`
+	// Marketplace is, for plugin sources, the source (owner/repo or a git
+	// URL) the plugin's marketplace must have been added from (SR2). The
+	// "@marketplace" in a plugin id is only a local alias that anyone can
+	// reuse, so without this a lookalike marketplace could supply the profiles.
+	Marketplace string `toml:"marketplace,omitempty"`
 }
 
 // Trust holds the trust settings (SR2).
@@ -317,7 +322,7 @@ func (c *Config) Validate() error {
 			} else if err := checkDirSourcePath(s.Path); err != nil {
 				add("%s.path: %v", p, err)
 			}
-			if s.URL != "" || s.Ref != "" || s.Plugin != "" {
+			if s.URL != "" || s.Ref != "" || s.Plugin != "" || s.Marketplace != "" {
 				add("%s: dir sources take only path", p)
 			}
 		case SourceGit:
@@ -327,7 +332,14 @@ func (c *Config) Validate() error {
 				add("%s.plugin: %q must be name@marketplace", p, s.Plugin)
 			}
 			if s.URL != "" || s.Ref != "" {
-				add("%s: plugin sources take only plugin and path", p)
+				add("%s: plugin sources take only plugin, path and marketplace", p)
+			}
+			if s.Marketplace != "" {
+				if err := ValidateMarketplaceSource(s.Marketplace); err != nil {
+					add("%s.marketplace: %v", p, err)
+				} else if k := credentialMarker(s.Marketplace); k != "" {
+					add("%s.marketplace: looks like it embeds a credential (%s...); never put tokens in the configuration", p, k)
+				}
 			}
 			if s.Path != "" {
 				if err := relInside(s.Path); err != nil {
@@ -403,6 +415,9 @@ func (c *Config) validateGit(p string, s SourceConfig, add func(string, ...any))
 	if s.Plugin != "" {
 		add("%s: git sources do not take plugin", p)
 	}
+	if s.Marketplace != "" {
+		add("%s: git sources do not take marketplace", p)
+	}
 	if c.Trust.RequirePin {
 		if err := ValidatePin(s.Ref); err != nil {
 			add("%s.ref: %v", p, err)
@@ -458,6 +473,25 @@ var (
 	// helperRe matches git's <helper>:: remote-helper transports (ext::, fd::).
 	helperRe = regexp.MustCompile(`^[A-Za-z0-9+.-]+::`)
 )
+
+// ownerRepoRe is the owner/repo shorthand of a GitHub marketplace source.
+var ownerRepoRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$`)
+
+// ValidateMarketplaceSource checks the expected marketplace source of a plugin
+// source: the owner/repo shorthand Claude Code accepts for GitHub, or a git URL
+// valid under [ValidateGitURL] (no credentials, no helper transports).
+func ValidateMarketplaceSource(raw string) error {
+	if ownerRepoRe.MatchString(raw) && !strings.Contains(raw, "..") {
+		return nil
+	}
+	if raw == "" {
+		return errors.New("must not be empty")
+	}
+	if err := ValidateGitURL(raw); err != nil {
+		return fmt.Errorf("%w (use owner/repo or a git URL)", err)
+	}
+	return nil
+}
 
 // ValidateGitURL reports why url is not an acceptable git source address, or
 // nil. Exactly three forms are accepted: https://host/path (no userinfo of any

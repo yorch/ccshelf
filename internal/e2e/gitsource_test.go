@@ -171,3 +171,79 @@ func TestGitSourceWithoutOrgConfigWarnsAndOfflineRunUsesTheCache(t *testing.T) {
 	}
 	contains(t, "stderr", r.Stderr, "unavailable")
 }
+
+// A deprecated plugin of the org's catalog is a warning on run for a git
+// source, whose sidecars the launcher extracts and verifies with the profiles.
+func TestGitSourceDeprecatedPluginWarning(t *testing.T) {
+	s := newSandbox(t)
+	s.Setenv("FAKE_CLAUDE_PLUGINS", pluginsFile(t, "audit-logger@acme", "sre-kit@acme", "design-kit@acme", "seo-tools@acme", "docs-writer@acme"))
+	org := exampleOrg(t)
+	write(t, filepath.Join(org, "catalog", "plugins", "seo-tools.toml"),
+		"owner = \"@acme/seo\"\nstatus = \"deprecated\"\nsuperseded_by = \"docs-writer\"\n")
+	rem := newGitRemote(t, s, org)
+	rem.publish("v1")
+	s.useGitSource(rem.URL, "v1")
+
+	s.mustRun("trust", "seo", "--accept", s.closureHash("seo"))
+	r := s.mustRun("run", "seo")
+	contains(t, "stderr", r.Stderr, "plugin seo-tools@acme is deprecated; use docs-writer")
+	if n := strings.Count(r.Stderr, "is deprecated"); n != 1 {
+		t.Errorf("deprecation warning shown %d times, want once:\n%s", n, r.Stderr)
+	}
+	if len(s.launches()) != 1 {
+		t.Errorf("a deprecated plugin must not block the run")
+	}
+	// It is in the structured warnings too.
+	j := s.mustRun("--json", "dry-run", "seo")
+	contains(t, "dry-run --json", j.Stdout, "seo-tools@acme is deprecated")
+}
+
+// search, recommend and doctor --policy work for a developer who reaches the
+// org only through a git source: no checkout of the org data repo, and no
+// network after the commit is cached.
+func TestGitSourceCatalogCommandsWithoutAnOrgRepo(t *testing.T) {
+	s := newSandbox(t)
+	org := exampleOrg(t)
+	rem := newGitRemote(t, s, org)
+	rem.publish("v1")
+
+	// Nothing configured, nothing cached: a clear failure that names the way out.
+	r := s.run("search", "seo")
+	if r.Code != 1 {
+		t.Fatalf("search without any source: exit %d\n%s%s", r.Code, r.Stdout, r.Stderr)
+	}
+	contains(t, "stderr", r.Stderr, "not an org data repo")
+	contains(t, "stderr", r.Stderr, "--root")
+
+	s.useGitSource(rem.URL, "v1")
+	// Configured but never fetched: still nothing, and still no network.
+	if r = s.run("search", "seo"); r.Code != 1 {
+		t.Fatalf("search before the source was fetched: exit %d\n%s%s", r.Code, r.Stdout, r.Stderr)
+	}
+	s.mustRun("ls") // fetches and verifies the checkout into the cache
+	rem.stop()      // from here on the server is gone
+
+	r = s.mustRun("search", "seo")
+	contains(t, "search", r.Stdout, "seo-tools")
+	contains(t, "stderr", r.Stderr, "reading the cached catalog of git "+rem.URL)
+	j := s.mustRun("--json", "search", "seo")
+	contains(t, "search --json", j.Stdout, `"source"`)
+
+	proj := t.TempDir()
+	write(t, filepath.Join(proj, "main.tf"), "terraform {}\n")
+	r = s.mustRun("recommend", "--dir", proj)
+	contains(t, "recommend", r.Stdout, "sre-kit@acme")
+
+	// An explicit --root that is not an org repo does not fall back.
+	if r = s.run("--root", t.TempDir(), "search", "seo"); r.Code != 1 {
+		t.Errorf("explicit --root: exit %d, want 1\n%s", r.Code, r.Stderr)
+	}
+
+	// doctor --policy needs no org repo. The exit code depends on the policy of
+	// the machine running the test (0, or 3 when it blocks something), never 1.
+	r = s.run("doctor", "--policy")
+	if r.Code != 0 && r.Code != 3 {
+		t.Fatalf("doctor --policy outside an org repo: exit %d\n%s%s", r.Code, r.Stdout, r.Stderr)
+	}
+	contains(t, "doctor --policy", r.Stdout, "capability matrix")
+}

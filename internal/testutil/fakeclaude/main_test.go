@@ -567,3 +567,44 @@ func TestPluginListBadShapesVerbatim(t *testing.T) {
 		}
 	}
 }
+
+func TestMarketplaceList(t *testing.T) {
+	var out, errb strings.Builder
+	get := func(string) string { return "" }
+	if code := run([]string{"plugin", "marketplace", "list", "--json"}, get, &out, &errb); code != 0 {
+		t.Fatalf("code %d: %s", code, errb.String())
+	}
+	var list []map[string]any
+	if err := json.Unmarshal([]byte(out.String()), &list); err != nil || len(list) != 2 || list[0]["name"] != "acme" || list[0]["source"] != "github" || list[0]["repo"] == "" {
+		t.Fatalf("default list: %v %s", err, out.String())
+	}
+	out.Reset()
+	if code := run([]string{"plugin", "marketplace", "list"}, get, &out, &errb); code != 0 || !strings.Contains(out.String(), "acme") || strings.Contains(out.String(), "{") {
+		t.Errorf("plain list: %d %q", code, out.String())
+	}
+	if code := run([]string{"plugin", "marketplace", "list", "--bogus"}, get, &out, &errb); code != 1 {
+		t.Errorf("unknown option: code %d", code)
+	}
+	if code := run([]string{"plugin", "marketplace", "list", "--json"}, func(k string) string {
+		if k == "FAKE_CLAUDE_MARKETPLACES_FAIL" {
+			return "1"
+		}
+		return ""
+	}, &out, &errb); code != 1 {
+		t.Errorf("fail switch: code %d", code)
+	}
+	path := filepath.Join(t.TempDir(), "m.json")
+	if err := os.WriteFile(path, []byte("null"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	run([]string{"plugin", "marketplace", "list", "--json"}, func(k string) string {
+		if k == "FAKE_CLAUDE_MARKETPLACES" {
+			return path
+		}
+		return ""
+	}, &out, &errb)
+	if strings.TrimSpace(out.String()) != "null" {
+		t.Errorf("a non-array file must be printed verbatim: %q", out.String())
+	}
+}

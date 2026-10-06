@@ -258,7 +258,7 @@ func TestConfigExamples(t *testing.T) {
 	valid := []string{
 		"",
 		"default_account = \"work\"\n[accounts.work]\nconfig_dir = \"~/.claude-work\"\n[trust]\nrequire_pin = true\non_change = \"fail\"\n[ui]\ncolor = \"never\"\n",
-		"[[sources]]\ntype = \"git\"\nurl = \"u\"\nref = \"v1\"\npath = \"profiles\"\n[[sources]]\ntype = \"plugin\"\nplugin = \"a@b\"\n",
+		"[[sources]]\ntype = \"git\"\nurl = \"u\"\nref = \"v1\"\npath = \"profiles\"\n[[sources]]\ntype = \"plugin\"\nplugin = \"a@b\"\nmarketplace = \"https://h.example/o/r.git\"\n",
 	}
 	invalid := map[string]string{
 		"unknown":       "bogus = 1\n",

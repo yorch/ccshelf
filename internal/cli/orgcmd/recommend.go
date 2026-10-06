@@ -18,11 +18,14 @@ import (
 
 // recommendJSON is the data of `recommend --json` (kind "recommend").
 type recommendJSON struct {
+	// Source says where the catalog came from when it was not the working
+	// directory or --root: the configured org source.
+	Source          string                     `json:"source,omitempty"`
 	Dir             string                     `json:"dir"`
 	Recommendations []recommend.Recommendation `json:"recommendations"`
 }
 
-func newRecommend(get clicore.Provider) *cobra.Command {
+func newRecommend(get clicore.Provider, opt Options) *cobra.Command {
 	var dir string
 	var limit int
 	cmd := &cobra.Command{
@@ -34,8 +37,10 @@ directory) whose relevance signals and when_to_use text match it. The rules
 are deterministic; there is no model call and no network access. Only file
 names and a few small manifest files of the project are read.
 
-Outside an org data repo (the marketplace file of ccshelf.toml cannot be
-read) it fails with exit 1, like lint and compile.`,
+Outside an org data repo (the marketplace file of ccshelf.toml cannot be read)
+and without --root, it uses the catalog data of the organization's source from
+config.toml, as search does (verified local cache, never a fetch). When no such
+catalog is available it fails with exit 1, like lint and compile.`,
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			c, err := get()
@@ -45,7 +50,7 @@ read) it fails with exit 1, like lint and compile.`,
 			if limit < 0 {
 				return ui.Usage(errors.New("--limit must not be negative"))
 			}
-			r, err := openRepo(c)
+			r, src, err := openCatalogRepo(cmd.Context(), c, opt)
 			if err != nil {
 				return err
 			}
@@ -66,8 +71,9 @@ read) it fails with exit 1, like lint and compile.`,
 				return fmt.Errorf("building the catalog: %w", err)
 			}
 			if err := requireMarketplace(r, lrep); err != nil {
-				return err
+				return notOrgRepo(err, opt.Catalog != nil)
 			}
+			noteSource(c, src)
 			var mkts []*marketplace.Marketplace
 			for _, rel := range r.cfg.Catalog.Marketplaces {
 				if m, err := marketplace.LoadFile(r.root, rel); err == nil {
@@ -89,7 +95,7 @@ read) it fails with exit 1, like lint and compile.`,
 			if recs == nil {
 				recs = []recommend.Recommendation{}
 			}
-			data := recommendJSON{Dir: sig.Cwd, Recommendations: recs}
+			data := recommendJSON{Source: src, Dir: sig.Cwd, Recommendations: recs}
 			if c.Mode.JSON {
 				return ui.WriteJSON(out(c), "recommend", data)
 			}

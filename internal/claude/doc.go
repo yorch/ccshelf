@@ -23,6 +23,10 @@
 // a string or any other shape is an error naming the shape, never an empty
 // list, so a misparsed answer cannot turn into "nothing to mask". [ParseInit] extracts the
 // system/init event from `--output-format stream-json --verbose` output;
+// [ListMarketplaces] runs the read-only `claude plugin marketplace list --json`
+// (an array of name, source, repo|url|path and installLocation, verified
+// against the real claude) and fails closed on any other shape;
+// [MarketplaceOrigin] returns where a marketplace was added from.
 // [CompareVersions] and [AtLeast] compare dotted versions.
 //
 // Starting: [Start] replaces the process on Unix (syscall.Exec, returning only

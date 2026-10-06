@@ -37,12 +37,16 @@
 // Prepare requires the plugin to be enabled and installed at user or managed
 // scope: a project or local plugin comes from the repository the session
 // starts in, which must never supply the shared profiles (SR3). The "@name"
-// of a plugin id is only a local alias of a marketplace, so Options may
-// supply MarketplaceSource (the real source the marketplace was added from)
+// of a plugin id is only a local alias of a marketplace, so the launcher
+// supplies MarketplaceSource (from the read-only `claude plugin marketplace
+// list --json`, any unknown shape being an error) and, when the configuration
+// sets marketplace on the source, ExpectedMarketplace. Options may supply
+// MarketplaceSource (the real source the marketplace was added from)
 // and ExpectedMarketplace (what the organization requires). When the lookup
 // is given, the real source is bound into ID and Locator ("plugin:<id> from
 // <source>"), which keys the trust record to it; a mismatch with the expected
-// source fails Prepare. The profiles folder must be named "profiles", because
+// source fails Prepare (owner/repo and the https, ssh and scp forms of a
+// github.com URL compare equal). The profiles folder must be named "profiles", because
 // whether prompts/ and mcp/ sit next to it is decided from that name and a
 // wrapper cannot pass the decision on. Root is the directory source's root.
 package pluginsource

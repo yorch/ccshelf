@@ -76,7 +76,7 @@ func newRoot(env *clicore.Env) (*cobra.Command, *clicore.Globals) {
 		}
 	}
 	root.AddCommand(lc...)
-	root.AddCommand(orgcmd.Commands(get)...)
+	root.AddCommand(orgcmd.CommandsWith(get, orgcmd.Options{Catalog: launcher.CatalogProvider(launcher.Options{})})...)
 	return root, g
 }
 

@@ -188,18 +188,32 @@ func TestOrgRepoMutations(t *testing.T) {
 func TestOrgRepoStrictAndCompileRepairs(t *testing.T) {
 	s := newSandbox(t)
 	org := exampleOrg(t)
-	// The starter has a warning (figma launches through cmd): --strict fails.
+	// The starter launches figma on Windows through the documented cmd /c npx
+	// pattern with a pinned package: info only, so --strict passes.
 	r := orgRun(s, org, "lint", "--strict")
-	if r.Code != 1 {
-		t.Errorf("lint --strict: exit %d, want 1 (the starter has a warning)\n%s", r.Code, r.Stdout)
+	if r.Code != 0 {
+		t.Errorf("lint --strict: exit %d, want 0 (the documented launcher is info)\n%s%s", r.Code, r.Stdout, r.Stderr)
 	}
+	contains(t, "lint output", r.Stdout, "PRF002")
+	// An unpinned package is still a warning, and --strict fails on it.
+	reg := filepath.Join(org, "mcp", "registry.toml")
+	b, err := os.ReadFile(reg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	write(t, reg, strings.ReplaceAll(string(b), "figma-mcp@1.0.0\"]\n\n# Read-only", "figma-mcp\"]\n\n# Read-only"))
+	r = orgRun(s, org, "lint", "--strict")
+	if r.Code != 1 {
+		t.Errorf("lint --strict with an unpinned cmd /c launcher: exit %d, want 1\n%s", r.Code, r.Stdout)
+	}
+	write(t, reg, string(b))
 	// Staleness is repaired by compile, after which --check passes.
 	write(t, filepath.Join(org, "bundles", "profile-sre", ".claude-plugin", "plugin.json"), "{}\n")
 	if r = orgRun(s, org, "compile", "--check"); r.Code != 1 {
 		t.Fatalf("compile --check: exit %d, want 1", r.Code)
 	}
 	// --check wrote nothing.
-	b, _ := os.ReadFile(filepath.Join(org, "bundles", "profile-sre", ".claude-plugin", "plugin.json"))
+	b, _ = os.ReadFile(filepath.Join(org, "bundles", "profile-sre", ".claude-plugin", "plugin.json"))
 	if string(b) != "{}\n" {
 		t.Error("compile --check modified a file")
 	}

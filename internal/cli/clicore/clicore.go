@@ -16,6 +16,8 @@
 package clicore
 
 import (
+	"context"
+	"errors"
 	"os"
 	"runtime"
 	"time"
@@ -137,3 +139,26 @@ func (e *Env) Context(g *Globals, configColor, configInteractive string) *Contex
 	}
 	return &Context{Env: e, G: g, Mode: mode, Prompt: p, ConfigColor: configColor, ConfigInteractive: configInteractive}
 }
+
+// CatalogData is a verified local copy of the catalog data of an org data repo
+// that is not the working directory: the checkout the user's configured org
+// source keeps in the launcher's cache (or the directory of a dir source).
+type CatalogData struct {
+	// Root is the directory that holds ccshelf.toml, the marketplace files and
+	// catalog/plugins/ of the org data repo.
+	Root string
+	// Source describes where it came from, without machine paths for git
+	// sources, for example "git https://example.com/acme/data.git at 1a2b3c4d5e6f".
+	Source string
+}
+
+// ErrNoCatalog is returned by a CatalogProvider when none of the configured
+// sources has catalog data available locally.
+var ErrNoCatalog = errors.New("no configured org source has catalog data available locally")
+
+// CatalogProvider finds catalog data for commands that run outside an org
+// data repo (search, recommend). It reads only what is already on disk: it
+// never fetches, and a git checkout is used only after it passes the same
+// verification the launcher applies. internal/cli wires the launcher's
+// implementation into the org commands, which never import the launcher.
+type CatalogProvider func(ctx context.Context, c *Context) (*CatalogData, error)

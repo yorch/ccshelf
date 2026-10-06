@@ -389,7 +389,10 @@ func (s *session) buildSources(ctx context.Context, prepare bool) error {
 				continue
 			}
 			label := fmt.Sprintf("sources[%d] (plugin %s)", i, ui.Sanitize(sc.Plugin))
-			ps, err := pluginsource.New(pluginsource.Options{Plugin: sc.Plugin, Path: sc.Path, Installed: s.listInstalledFor})
+			ps, err := pluginsource.New(pluginsource.Options{
+				Plugin: sc.Plugin, Path: sc.Path, Installed: s.listInstalledFor,
+				MarketplaceSource: s.marketplaceSourceFor, ExpectedMarketplace: sc.Marketplace,
+			})
 			if err != nil {
 				s.failSource(label, err, nil)
 				continue
@@ -657,6 +660,22 @@ func (s *session) listInstalledFor(ctx context.Context) ([]claude.Plugin, error)
 	return claude.ListInstalled(ctx, bin, s.cwd, s.env)
 }
 
+// marketplaceSourceFor returns the real source the named marketplace was added
+// from, by asking the read-only `claude plugin marketplace list --json`. The
+// answer is never cached and any unknown shape is an error (SR2: the plugin
+// source is bound to where its marketplace really comes from).
+func (s *session) marketplaceSourceFor(ctx context.Context, name string) (string, error) {
+	bin, err := s.locate()
+	if err != nil {
+		return "", err
+	}
+	list, err := claude.ListMarketplaces(ctx, bin, s.cwd, s.env)
+	if err != nil {
+		return "", err
+	}
+	return claude.MarketplaceOrigin(list, name)
+}
+
 // orgConfigOf returns the org config of a shared source and whether the source
 // has one. Sources that read it themselves (git, plugin) answer from the
 // verified tree; for the others it is read from the root of the source, which
@@ -765,6 +784,9 @@ func (s *session) resolve(name string) (*profile.Resolved, error) {
 	r, err := profile.Resolve(name, s.sources, profile.ResolveOptions{AllowProject: s.proj.Allowed})
 	if err == nil {
 		s.pinProtected(r)
+		// Deprecated plugins are a warning only. r.Closure is already computed,
+		// so the trust hash does not depend on what the catalog says today.
+		r.Warnings = append(r.Warnings, s.deprecationWarnings(r)...)
 		return r, nil
 	}
 	switch {

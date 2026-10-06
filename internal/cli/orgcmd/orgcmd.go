@@ -1,6 +1,7 @@
 package orgcmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -20,15 +21,29 @@ import (
 	"github.com/ccshelf/ccshelf/internal/ui"
 )
 
+// Options holds what internal/cli injects into the org commands.
+type Options struct {
+	// Catalog finds the catalog data of the configured org source for search
+	// and recommend when the working directory is not an org data repo. Nil
+	// means there is none.
+	Catalog clicore.CatalogProvider
+}
+
 // Commands returns the org and catalog commands: lint, compile, catalog
-// (with the build subcommand), search, recommend and doctor.
+// (with the build subcommand), search, recommend and doctor, without a
+// configured org source to fall back on.
 func Commands(get clicore.Provider) []*cobra.Command {
+	return CommandsWith(get, Options{})
+}
+
+// CommandsWith is Commands with the injected pieces of opt.
+func CommandsWith(get clicore.Provider, opt Options) []*cobra.Command {
 	return []*cobra.Command{
 		newLint(get),
 		newCompile(get),
 		newCatalog(get),
-		newSearch(get),
-		newRecommend(get),
+		newSearch(get, opt),
+		newRecommend(get, opt),
 		newDoctor(get),
 	}
 }
@@ -68,6 +83,79 @@ func openRepo(c *clicore.Context) (*repo, error) {
 	}
 	return &repo{root: root, cfg: cfg}, nil
 }
+
+// isOrgRepo reports whether the repo's first configured marketplace file can
+// be read, which is what makes a directory an org data repo (the check
+// requireMarketplace applies to a catalog build).
+func (r *repo) isOrgRepo() bool {
+	if len(r.cfg.Catalog.Marketplaces) == 0 {
+		return false
+	}
+	_, err := marketplace.LoadFile(r.root, r.cfg.Catalog.Marketplaces[0])
+	return err == nil
+}
+
+// openCatalogRepo is openRepo for the commands that only read the catalog
+// (search, recommend). An explicit --root, or a working directory that is an
+// org data repo, is used as before. Otherwise the catalog data of the user's
+// configured org source is used (see clicore.CatalogProvider), so a developer
+// whose organization is reached through a git source needs no checkout; src
+// then describes it. When there is nothing to fall back on, the working
+// directory repo is returned and the caller reports "not an org data repo"
+// with a hint that names the options.
+func openCatalogRepo(ctx context.Context, c *clicore.Context, opt Options) (r *repo, src string, err error) {
+	r, err = openRepo(c)
+	if err != nil || c.G.Root != "" || r.isOrgRepo() || opt.Catalog == nil {
+		return r, "", err
+	}
+	cd, perr := opt.Catalog(ctx, c)
+	if perr != nil {
+		if errors.Is(perr, clicore.ErrNoCatalog) {
+			return r, "", nil
+		}
+		return nil, "", fmt.Errorf("reading the configured org source: %w", perr)
+	}
+	cfg, err := orgconfig.Load(cd.Root)
+	if err != nil {
+		return nil, "", fmt.Errorf("loading the org config of %s: %w", ui.SanitizeLine(cd.Source), err)
+	}
+	return &repo{root: cd.Root, cfg: cfg}, cd.Source, nil
+}
+
+// noteSource tells, on stderr and only in text mode, which configured org
+// source a catalog command read when it did not read a directory.
+func noteSource(c *clicore.Context, src string) {
+	if src == "" || c.Mode.JSON {
+		return
+	}
+	fmt.Fprintf(errw(c), "note: reading the cached catalog of %s\n", ui.SanitizeLine(src))
+}
+
+// notOrgRepo wraps the "not an org data repo" failure of a catalog command
+// with the ways out.
+func notOrgRepo(err error, withSource bool, extra ...string) error {
+	if err == nil {
+		return nil
+	}
+	hint := "run it inside an org data repo, or pass --root <dir>" + strings.Join(extra, "")
+	if withSource {
+		hint += "; or configure the organization's git source in config.toml and run \"ccshelf ls\" once so that its catalog is cached"
+	}
+	return withHintErr(err, hint)
+}
+
+type hintErr struct {
+	err  error
+	hint string
+}
+
+func (e *hintErr) Error() string { return e.err.Error() }
+func (e *hintErr) Unwrap() error { return e.err }
+
+// Hint returns the advice shown after the error.
+func (e *hintErr) Hint() string { return e.hint }
+
+func withHintErr(err error, hint string) error { return &hintErr{err: err, hint: hint} }
 
 // profilesDir is the absolute directory of the profile manifests.
 func (r *repo) profilesDir() string {
@@ -178,6 +266,18 @@ func (r *repo) profileFindings(bad []profileProblem, good []*profile.Resolved) [
 	for _, res := range good {
 		for _, w := range res.Warnings {
 			add(lint.Finding{Severity: lint.Warning, Code: "PRF002", Message: w, File: rel(res.Name)})
+		}
+		// The documented Windows launcher (cmd /c npx -y pkg@1.2.3) is not a
+		// warning; it is shown as info so that it stays visible.
+		names := make([]string, 0, len(res.MCP))
+		for n := range res.MCP {
+			names = append(names, n)
+		}
+		sort.Strings(names)
+		for _, n := range names {
+			for _, note := range profile.MCPNotes(res.MCP[n]) {
+				add(lint.Finding{Severity: lint.Info, Code: "PRF002", Message: note, File: rel(res.Name)})
+			}
 		}
 	}
 	return out

@@ -325,20 +325,30 @@ func (s *Source) checkMarketplace(ctx context.Context) (string, error) {
 	_, mkt := claude.SplitID(s.opts.Plugin)
 	src, err := s.opts.MarketplaceSource(ctx, mkt)
 	if err != nil {
-		return "", fmt.Errorf("finding the source of marketplace %q: %w", ui.SanitizeLine(mkt), err)
+		return "", fmt.Errorf("finding the source of marketplace %q: %w (add the organization's marketplace with: /plugin marketplace add <source>)", ui.SanitizeLine(mkt), err)
 	}
 	src = strings.TrimSpace(src)
 	if src == "" || ui.HasControl(src) {
 		return "", fmt.Errorf("marketplace %q reports no usable source", ui.SanitizeLine(mkt))
 	}
 	if want := s.opts.ExpectedMarketplace; want != "" && !strings.EqualFold(normalizeSource(src), normalizeSource(want)) {
-		return "", fmt.Errorf("marketplace %q was added from %q, not from the expected %q; remove it and add the expected one", ui.SanitizeLine(mkt), ui.SanitizeLine(src), ui.SanitizeLine(want))
+		return "", fmt.Errorf("marketplace %q was added from %q, not from the expected %q; remove it with /plugin marketplace remove %s and add the expected one with /plugin marketplace add %s", ui.SanitizeLine(mkt), ui.SanitizeLine(src), ui.SanitizeLine(want), ui.SanitizeLine(mkt), ui.SanitizeLine(want))
 	}
 	return src, nil
 }
 
+// normalizeSource reduces a marketplace source to a comparable form: trailing
+// slashes and ".git" are dropped, and the github.com URL forms (https, ssh and
+// scp-like) become the owner/repo shorthand Claude Code reports for GitHub
+// marketplaces. Other hosts compare as written.
 func normalizeSource(s string) string {
 	s = strings.TrimSpace(s)
 	s = strings.TrimRight(s, "/")
-	return strings.TrimSuffix(s, ".git")
+	s = strings.TrimSuffix(s, ".git")
+	for _, p := range []string{"https://github.com/", "ssh://git@github.com/", "git@github.com:"} {
+		if len(s) > len(p) && strings.EqualFold(s[:len(p)], p) {
+			return s[len(p):]
+		}
+	}
+	return s
 }

@@ -16,6 +16,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/ccshelf/ccshelf/internal/catalog/sidecar"
 	"github.com/ccshelf/ccshelf/internal/orgconfig"
 	"github.com/ccshelf/ccshelf/internal/ui"
 )
@@ -39,9 +40,14 @@ const promptsDir = "prompts"
 
 // watchSet lists what is ever read from a source root: folders (read
 // recursively) and single files, all slash separated and relative to the root.
-// It always holds ccshelf.toml, the profiles folder, the prompts folder and
-// the MCP registry; the org config can move the profiles folder and the
-// registry (profiles.dir, profiles.mcp_registry), so the set is built from it.
+// It always holds ccshelf.toml, the profiles folder, the prompts folder, the MCP
+// registry, the catalog sidecar folder (catalog/plugins) and the marketplace
+// files of catalog.marketplaces; the org config can move the profiles folder
+// and the registry (profiles.dir, profiles.mcp_registry) and name the
+// marketplace files, so the set is built from it. The catalog data is read for
+// the deprecated-plugin warning of run and for search and recommend without an
+// org data repo checkout; it is subject to the same hygiene and limits as the
+// rest, so a marketplace file over MaxFileSize makes the source unusable.
 type watchSet struct {
 	dirs  []string
 	files []string
@@ -54,7 +60,10 @@ func newWatch(cfg *orgconfig.Config) watchSet {
 	if cfg == nil {
 		cfg = orgconfig.Default()
 	}
-	w := watchSet{dirs: []string{path.Clean(cfg.Profiles.Dir), promptsDir}, files: []string{orgconfig.FileName}}
+	w := watchSet{dirs: []string{path.Clean(cfg.Profiles.Dir), promptsDir, sidecar.Dir}, files: []string{orgconfig.FileName}}
+	for _, m := range cfg.Catalog.Marketplaces {
+		w.files = append(w.files, path.Clean(m))
+	}
 	reg := path.Clean(cfg.Profiles.MCPRegistry)
 	if d := path.Dir(reg); d != "." {
 		w.dirs = append(w.dirs, d)
