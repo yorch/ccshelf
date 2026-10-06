@@ -9,8 +9,9 @@
 #
 # Resources created with GITHUB_TOKEN do not trigger other workflows, with one
 # documented exception: workflow_dispatch. The `dispatch` job therefore
-#   - runs ci.yml on the release pull request branch, so the required check `ci-ok`
-#     reports on it, and
+#   - runs ci.yml and pr-title.yml on the release pull request branch (taken from the
+#     release-please `pr` output), so the required checks `ci-ok` and `pr-title`
+#     report on it, and
 #   - runs release.yml with the new tag as its ref, so the signing identity stays
 #     .../release.yml@refs/tags/<tag> (a reusable-workflow call would not).
 # No personal access token and no GitHub App key is used.
@@ -43,6 +44,7 @@ jobs:
       release-created: ${{ steps.rp.outputs.release_created }}
       tag-name: ${{ steps.rp.outputs.tag_name }}
       prs-created: ${{ steps.rp.outputs.prs_created }}
+      pr: ${{ steps.rp.outputs.pr }}
     steps:
       - id: rp
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
@@ -63,22 +65,31 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
     steps:
-      # The release pull request branch has a fixed name (no component in the branch).
-      - name: Run ci on the release pull request branch
+      # The branch comes from the release-please `pr` output (the pull request it just
+      # created or updated: headBranchName), not from a hard-coded name.
+      - name: Run ci and the title check on the release pull request branch
         if: needs.release-please.outputs.prs-created == 'true'
+        env:
+          PR_JSON: ${{ needs.release-please.outputs.pr }}
         run: |
           set -euo pipefail
-          branch="release-please--branches--main"
-          for attempt in 1 2 3; do
-            if gh api --method POST "repos/${REPO}/actions/workflows/ci.yml/dispatches" -f "ref=${branch}"; then
-              echo "Dispatched ci.yml on ${branch}."
-              exit 0
-            fi
-            echo "Dispatch attempt ${attempt} failed; retrying." >&2
-            sleep $((attempt * 10))
+          branch="$(jq -er '.headBranchName' <<<"$PR_JSON")"
+          if ! printf '%s' "$branch" | grep -Eq '^release-please--branches--[A-Za-z0-9._/-]+$'; then
+            echo "release-please reported an unexpected release branch name." >&2
+            exit 1
+          fi
+          for workflow in ci.yml pr-title.yml; do
+            for attempt in 1 2 3; do
+              if gh api --method POST "repos/${REPO}/actions/workflows/${workflow}/dispatches" -f "ref=${branch}"; then
+                echo "Dispatched ${workflow} on ${branch}."
+                continue 2
+              fi
+              echo "Dispatch of ${workflow} attempt ${attempt} failed; retrying." >&2
+              sleep $((attempt * 10))
+            done
+            echo "Could not dispatch ${workflow} on ${branch}; run it by hand: gh workflow run ${workflow} --ref ${branch}" >&2
+            exit 1
           done
-          echo "Could not dispatch ci.yml on ${branch}; run it by hand: gh workflow run ci.yml --ref ${branch}" >&2
-          exit 1
       - name: Start the release workflow on the new tag
         if: needs.release-please.outputs.release-created == 'true'
         env:
