@@ -1,0 +1,115 @@
+{
+  "version": 1,
+  "kind": "doctor",
+  "summary": {
+    "errors": 0,
+    "warnings": 8,
+    "infos": 5
+  },
+  "findings": [
+    {
+      "severity": "warning",
+      "code": "DOC001",
+      "check": "overlap",
+      "message": "ops-helper@acme and sre-kit@acme share 4 of 5 tags (alerts, oncall, ops, runbook)",
+      "plugin": "ops-helper@acme",
+      "hint": "if the overlap is intended, add each to the other's overlaps_with; otherwise consider merging or deprecating one"
+    },
+    {
+      "severity": "info",
+      "code": "DOC002",
+      "check": "unused",
+      "message": "hooky@acme is in no profile and has 0 skill_activated events between 2026-09-06 and 2026-10-06",
+      "plugin": "hooky@acme"
+    },
+    {
+      "severity": "info",
+      "code": "DOC002",
+      "check": "unused",
+      "message": "ops-helper@acme is in no profile and has 0 skill_activated events between 2026-09-06 and 2026-10-06",
+      "plugin": "ops-helper@acme"
+    },
+    {
+      "severity": "info",
+      "code": "DOC002",
+      "check": "unused",
+      "message": "seo-tools@acme is in no profile and has 0 skill_activated events between 2026-09-06 and 2026-10-06",
+      "plugin": "seo-tools@acme"
+    },
+    {
+      "severity": "warning",
+      "code": "DOC003",
+      "check": "deprecated-in-use",
+      "message": "profile sre includes the deprecated plugin postmortem-lite@acme; use sre-kit instead",
+      "plugin": "postmortem-lite@acme",
+      "profile": "sre",
+      "hint": "in the profile's [plugins] include list, replace \"postmortem-lite@acme\" with the replacement"
+    },
+    {
+      "severity": "warning",
+      "code": "DOC004",
+      "check": "review",
+      "message": "seo-tools@acme has no review_by date",
+      "plugin": "seo-tools@acme",
+      "hint": "add review_by = \"YYYY-MM-DD\" to its sidecar"
+    },
+    {
+      "severity": "warning",
+      "code": "DOC005",
+      "check": "owner",
+      "message": "hooky@acme has no owner",
+      "plugin": "hooky@acme",
+      "hint": "add owner = \"team-or-person\" to its sidecar"
+    },
+    {
+      "severity": "warning",
+      "code": "DOC006",
+      "check": "standalone-skills",
+      "message": "1 standalone skill(s) are not mentioned by any profile and stay visible in all of them: pdf",
+      "hint": "add to the profiles that should hide them:\n[skills]\noff = [\"pdf\"]"
+    },
+    {
+      "severity": "warning",
+      "code": "DOC007",
+      "check": "missing-upstream",
+      "message": "audit-log@acme is installed but marketplace acme no longer lists it",
+      "plugin": "audit-log@acme"
+    },
+    {
+      "severity": "warning",
+      "code": "DOC008",
+      "check": "not-installed",
+      "message": "profile sre includes postmortem-lite@acme, which is not installed",
+      "plugin": "postmortem-lite@acme",
+      "profile": "sre",
+      "hint": "claude plugin install postmortem-lite@acme"
+    },
+    {
+      "severity": "info",
+      "code": "DOC009",
+      "check": "forced-by-policy",
+      "message": "audit-log@acme is forced on by managed policy and cannot be masked; profiles that leave it out still run with it: sre",
+      "plugin": "audit-log@acme"
+    },
+    {
+      "severity": "warning",
+      "code": "DOC010",
+      "check": "platform-review",
+      "message": "hooky@acme ships hooks but CODEOWNERS does not route it to the platform owners (CAT042)",
+      "plugin": "hooky@acme",
+      "hint": "give the platform team ownership of the plugin's hooks and .mcp.json in CODEOWNERS and set lint.platform_owners"
+    },
+    {
+      "severity": "info",
+      "code": "POL001",
+      "message": "no managed policy detected on this machine"
+    }
+  ],
+  "skipped": [
+    {
+      "code": "DOC011",
+      "check": "protected-masked",
+      "reason": "no org config was supplied"
+    }
+  ]
+}

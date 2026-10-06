@@ -1,0 +1,9 @@
+{"event.name":"claude_code.skill_activated","plugin.name":"sre-kit","plugin.marketplace":"acme","skill.name":"sre-kit:runbook","timestamp":"2026-09-01T10:00:00Z"}
+{"event.name":"claude_code.skill_activated","skill.name":"design-kit:figma","timestamp":"2026-09-03T10:00:00Z"}
+{"event.name":"claude_code.skill_activated","skill.name":"<REDACTED>","plugin.name":"<REDACTED>"}
+{"event.name":"claude_code.plugin_loaded","plugin.name":"sre-kit@acme"}
+{"body":"claude_code.plugin_installed","attributes":{"plugin.name":"seo-tools@acme"},"timeUnixNano":"1788000000000000000"}
+{"name":"claude_code.skill_activated","attributes":[{"key":"plugin.name","value":{"stringValue":"sre-kit@acme"}}]}
+{"event.name":"claude_code.api_request","model":"x"}
+not json at all
+{"unrelated":true}
