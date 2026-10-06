@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ccshelf/ccshelf/internal/cli/clicore"
-	"github.com/ccshelf/ccshelf/internal/policy"
+	"github.com/yorch/ccshelf/internal/cli/clicore"
+	"github.com/yorch/ccshelf/internal/policy"
 )
 
 // provider returns a CatalogProvider that serves dir, counting its calls.

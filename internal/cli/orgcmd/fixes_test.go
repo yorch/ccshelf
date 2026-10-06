@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ccshelf/ccshelf/internal/policy"
-	"github.com/ccshelf/ccshelf/internal/ui"
+	"github.com/yorch/ccshelf/internal/policy"
+	"github.com/yorch/ccshelf/internal/ui"
 )
 
 // symlinkOrSkip creates link -> target, or skips where symbolic links are

@@ -8,8 +8,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/ccshelf/ccshelf/internal/cli"
-	"github.com/ccshelf/ccshelf/internal/cli/clicore"
+	"github.com/yorch/ccshelf/internal/cli"
+	"github.com/yorch/ccshelf/internal/cli/clicore"
 )
 
 func main() {

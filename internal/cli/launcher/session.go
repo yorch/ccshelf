@@ -12,17 +12,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ccshelf/ccshelf/internal/account"
-	"github.com/ccshelf/ccshelf/internal/cache"
-	"github.com/ccshelf/ccshelf/internal/claude"
-	"github.com/ccshelf/ccshelf/internal/cli/clicore"
-	"github.com/ccshelf/ccshelf/internal/config"
-	"github.com/ccshelf/ccshelf/internal/orgconfig"
-	"github.com/ccshelf/ccshelf/internal/profile"
-	"github.com/ccshelf/ccshelf/internal/profile/gitsource"
-	"github.com/ccshelf/ccshelf/internal/profile/pluginsource"
-	"github.com/ccshelf/ccshelf/internal/trust"
-	"github.com/ccshelf/ccshelf/internal/ui"
+	"github.com/yorch/ccshelf/internal/account"
+	"github.com/yorch/ccshelf/internal/cache"
+	"github.com/yorch/ccshelf/internal/claude"
+	"github.com/yorch/ccshelf/internal/cli/clicore"
+	"github.com/yorch/ccshelf/internal/config"
+	"github.com/yorch/ccshelf/internal/orgconfig"
+	"github.com/yorch/ccshelf/internal/profile"
+	"github.com/yorch/ccshelf/internal/profile/gitsource"
+	"github.com/yorch/ccshelf/internal/profile/pluginsource"
+	"github.com/yorch/ccshelf/internal/trust"
+	"github.com/yorch/ccshelf/internal/ui"
 )
 
 // PreparedSource is a profile source that must be prepared (fetched and

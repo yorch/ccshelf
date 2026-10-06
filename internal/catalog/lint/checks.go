@@ -13,11 +13,11 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/ccshelf/ccshelf/internal/catalog/codeowners"
-	"github.com/ccshelf/ccshelf/internal/catalog/safepath"
-	"github.com/ccshelf/ccshelf/internal/catalog/sidecar"
-	"github.com/ccshelf/ccshelf/internal/marketplace"
-	"github.com/ccshelf/ccshelf/internal/orgconfig"
+	"github.com/yorch/ccshelf/internal/catalog/codeowners"
+	"github.com/yorch/ccshelf/internal/catalog/safepath"
+	"github.com/yorch/ccshelf/internal/catalog/sidecar"
+	"github.com/yorch/ccshelf/internal/marketplace"
+	"github.com/yorch/ccshelf/internal/orgconfig"
 )
 
 // Run loads the repository at root and checks it against cfg.

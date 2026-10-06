@@ -16,10 +16,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ccshelf/ccshelf/internal/cache"
-	"github.com/ccshelf/ccshelf/internal/config"
-	"github.com/ccshelf/ccshelf/internal/orgconfig"
-	"github.com/ccshelf/ccshelf/internal/profile"
+	"github.com/yorch/ccshelf/internal/cache"
+	"github.com/yorch/ccshelf/internal/config"
+	"github.com/yorch/ccshelf/internal/orgconfig"
+	"github.com/yorch/ccshelf/internal/profile"
 )
 
 // DefaultTimeout bounds one Prepare when Options.Timeout is zero.

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ccshelf/ccshelf/internal/profile"
+	"github.com/yorch/ccshelf/internal/profile"
 )
 
 // shared is a test source that behaves like a git source: it has a locator,

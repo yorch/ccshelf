@@ -18,8 +18,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccshelf/ccshelf/internal/cache"
-	"github.com/ccshelf/ccshelf/internal/testutil"
+	"github.com/yorch/ccshelf/internal/cache"
+	"github.com/yorch/ccshelf/internal/testutil"
 )
 
 func TestMain(m *testing.M) {

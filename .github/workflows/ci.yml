@@ -180,7 +180,7 @@ jobs:
           set -euo pipefail
           ext=""
           if [ "$GOOS" = "windows" ]; then ext=".exe"; fi
-          pkg="github.com/ccshelf/ccshelf/internal/version"
+          pkg="github.com/yorch/ccshelf/internal/version"
           go build -trimpath \
             -ldflags "-s -w -X ${pkg}.Version=0.0.0-ci -X ${pkg}.Commit=${COMMIT_SHA}" \
             -o "dist/ccshelf-${GOOS}-${GOARCH}${ext}" ./cmd/ccshelf
@@ -338,7 +338,7 @@ jobs:
           goarch="$(go env GOARCH)"
           exe="$(go env GOEXE)"
           bare="${CCSHELF_E2E_VERSION#v}"
-          pkg="github.com/ccshelf/ccshelf/internal/version"
+          pkg="github.com/yorch/ccshelf/internal/version"
           relroot="${RUNNER_TEMP}/e2e-release"
           stage="${RUNNER_TEMP}/e2e-stage"
           mkdir -p "${relroot}/${CCSHELF_E2E_VERSION}" "$stage"

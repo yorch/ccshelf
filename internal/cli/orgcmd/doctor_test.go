@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ccshelf/ccshelf/internal/policy"
-	"github.com/ccshelf/ccshelf/internal/testutil"
-	"github.com/ccshelf/ccshelf/internal/ui"
+	"github.com/yorch/ccshelf/internal/policy"
+	"github.com/yorch/ccshelf/internal/testutil"
+	"github.com/yorch/ccshelf/internal/ui"
 )
 
 func TestMain(m *testing.M) {

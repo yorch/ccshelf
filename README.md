@@ -9,7 +9,7 @@ Profiles and a plugin catalog for Claude Code. Unofficial: not affiliated with A
 Not released yet. From source (Go 1.27 or newer):
 
 ```sh
-go install github.com/ccshelf/ccshelf/cmd/ccshelf@latest   # module path is provisional
+go install github.com/yorch/ccshelf/cmd/ccshelf@latest   # module path is provisional
 ccshelf --version
 ```
 

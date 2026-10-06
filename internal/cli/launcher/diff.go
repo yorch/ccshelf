@@ -7,9 +7,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ccshelf/ccshelf/internal/cli/clicore"
-	"github.com/ccshelf/ccshelf/internal/profile"
-	"github.com/ccshelf/ccshelf/internal/ui"
+	"github.com/yorch/ccshelf/internal/cli/clicore"
+	"github.com/yorch/ccshelf/internal/profile"
+	"github.com/yorch/ccshelf/internal/ui"
 )
 
 // listDiff is the difference of one list between two profiles.

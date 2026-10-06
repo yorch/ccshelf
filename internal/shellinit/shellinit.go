@@ -10,7 +10,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/ccshelf/ccshelf/internal/ui"
+	"github.com/yorch/ccshelf/internal/ui"
 )
 
 // Prefix is put before the profile name to form the function name.

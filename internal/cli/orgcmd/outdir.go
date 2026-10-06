@@ -10,9 +10,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ccshelf/ccshelf/internal/bundles"
-	"github.com/ccshelf/ccshelf/internal/cli/clicore"
-	"github.com/ccshelf/ccshelf/internal/ui"
+	"github.com/yorch/ccshelf/internal/bundles"
+	"github.com/yorch/ccshelf/internal/cli/clicore"
+	"github.com/yorch/ccshelf/internal/ui"
 )
 
 // Modes of the published catalog output. The catalog is meant to be served by

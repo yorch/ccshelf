@@ -30,7 +30,7 @@ updates:
     ignore:
       # The starter template pins this Action to a placeholder SHA by design;
       # adopters replace it with a real release.
-      - dependency-name: "ccshelf/ccshelf/*"
+      - dependency-name: "yorch/ccshelf/*"
     groups:
       github-actions:
         patterns: ["*"]

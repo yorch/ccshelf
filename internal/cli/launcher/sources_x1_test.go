@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccshelf/ccshelf/internal/orgconfig"
-	"github.com/ccshelf/ccshelf/internal/profile"
-	"github.com/ccshelf/ccshelf/internal/profile/gitsource"
-	"github.com/ccshelf/ccshelf/internal/ui"
+	"github.com/yorch/ccshelf/internal/orgconfig"
+	"github.com/yorch/ccshelf/internal/profile"
+	"github.com/yorch/ccshelf/internal/profile/gitsource"
+	"github.com/yorch/ccshelf/internal/ui"
 )
 
 const (

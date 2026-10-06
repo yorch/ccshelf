@@ -9,7 +9,7 @@ import (
 	"sort"
 	"unicode/utf8"
 
-	"github.com/ccshelf/ccshelf/internal/envpolicy"
+	"github.com/yorch/ccshelf/internal/envpolicy"
 )
 
 // MaxSize is the largest settings document [Validate] accepts.

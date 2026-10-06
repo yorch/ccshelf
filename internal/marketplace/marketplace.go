@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ccshelf/ccshelf/internal/catalog/safepath"
+	"github.com/yorch/ccshelf/internal/catalog/safepath"
 )
 
 // FilePath is the location of the marketplace file below a repository root.

@@ -14,7 +14,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/ccshelf/ccshelf/internal/profile"
+	"github.com/yorch/ccshelf/internal/profile"
 )
 
 const envTOML = `name = "envp"

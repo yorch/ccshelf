@@ -22,8 +22,8 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/ccshelf/ccshelf/internal/config"
-	"github.com/ccshelf/ccshelf/internal/ui"
+	"github.com/yorch/ccshelf/internal/config"
+	"github.com/yorch/ccshelf/internal/ui"
 )
 
 // Globals are the persistent flags shared by every command. The root command

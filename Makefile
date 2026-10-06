@@ -5,7 +5,7 @@ SHELL := bash
 .SHELLFLAGS := -eu -o pipefail -c
 .DEFAULT_GOAL := help
 
-MODULE   := github.com/ccshelf/ccshelf
+MODULE   := github.com/yorch/ccshelf
 CMD      := ./cmd/ccshelf
 DIST     := dist
 VERSION  ?= dev

@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccshelf/ccshelf/internal/bundles"
-	"github.com/ccshelf/ccshelf/internal/catalog"
-	"github.com/ccshelf/ccshelf/internal/catalog/lint"
-	"github.com/ccshelf/ccshelf/internal/orgconfig"
-	"github.com/ccshelf/ccshelf/internal/profile"
+	"github.com/yorch/ccshelf/internal/bundles"
+	"github.com/yorch/ccshelf/internal/catalog"
+	"github.com/yorch/ccshelf/internal/catalog/lint"
+	"github.com/yorch/ccshelf/internal/orgconfig"
+	"github.com/yorch/ccshelf/internal/profile"
 )
 
 // TestStarterTemplate runs the whole toolchain over the committed starter

@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccshelf/ccshelf/internal/profile"
+	"github.com/yorch/ccshelf/internal/profile"
 )
 
 const (

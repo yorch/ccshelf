@@ -7,7 +7,7 @@ Thanks for helping. `ccshelf` is an unofficial, MIT-licensed tool for Claude Cod
 You need Go (the version in `go.mod`), `make`, `bash`, and `python3` for the docs targets. Nothing else.
 
 ```sh
-git clone https://github.com/ccshelf/ccshelf && cd ccshelf   # OWNER: update if the repository moves
+git clone https://github.com/yorch/ccshelf && cd ccshelf   # OWNER: update if the repository moves
 make tools     # installs pinned golangci-lint, govulncheck, goreleaser and actionlint into $(go env GOPATH)/bin
 make build     # dist/ccshelf
 make ci        # everything CI runs, locally
@@ -128,7 +128,7 @@ After each release the `pins` job opens a pull request `chore: pin checksums for
 
 The tool and its workflows are designed to the lowest common denominator (R2): no hard-coded hosts in logic, CLI first and workflow second, and few third-party actions.
 
-- **Mirror the Action and the binary.** Mirror `ccshelf/ccshelf` (the repository with `action/`) onto your instance, for example with [`actions-sync`](https://github.com/actions/actions-sync), and pin it by full commit SHA. Mirror the release assets (`ccshelf_*` archives, `checksums.txt`, `checksums.txt.sigstore.json`) to an internal location; the Action must download from there (`base-url`) and verify the SHA-256. `cosign verify-blob` needs the Sigstore trusted root and is not offline; for an air-gapped instance use the `sha256` pin or `action/pins.txt`, or mirror the trusted root and pass it as `trusted-root`.
+- **Mirror the Action and the binary.** Mirror `yorch/ccshelf` (the repository with `action/`) onto your instance, for example with [`actions-sync`](https://github.com/actions/actions-sync), and pin it by full commit SHA. Mirror the release assets (`ccshelf_*` archives, `checksums.txt`, `checksums.txt.sigstore.json`) to an internal location; the Action must download from there (`base-url`) and verify the SHA-256. `cosign verify-blob` needs the Sigstore trusted root and is not offline; for an air-gapped instance use the `sha256` pin or `action/pins.txt`, or mirror the trusted root and pass it as `trusted-root`.
 - **Third-party actions.** The workflows here use `actions/checkout`, `actions/setup-go`, `actions/upload-artifact`, `actions/download-artifact` and a few others. GHE Server administrators must mirror or allow them (or use GitHub Connect). Where that is not possible, build the binary with plain `go build` and call it directly; every `ccshelf` command works outside Actions.
 - **Attestations.** Build provenance attestations have limited support on GHE Server; use the cosign bundle with `cosign verify-blob` and a mirrored trusted root (this is not offline without it) or the SHA-256 pin instead (see [SECURITY.md](SECURITY.md)).
 - **Version skew.** GHE Server lags github.com: avoid newer Actions syntax in the Action and the data repo templates, or make it optional. The minimum supported Server version is not yet known.

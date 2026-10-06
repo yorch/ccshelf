@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ccshelf/ccshelf/internal/ui"
+	"github.com/yorch/ccshelf/internal/ui"
 )
 
 const personalMine = `name = "mine"

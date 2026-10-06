@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ccshelf/ccshelf/internal/catalog"
+	"github.com/yorch/ccshelf/internal/catalog"
 )
 
 // check is one doctor check. run returns its findings, or a non-empty skip

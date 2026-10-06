@@ -15,8 +15,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ccshelf/ccshelf/internal/claude"
-	"github.com/ccshelf/ccshelf/internal/testutil"
+	"github.com/yorch/ccshelf/internal/claude"
+	"github.com/yorch/ccshelf/internal/testutil"
 )
 
 func TestMain(m *testing.M) {

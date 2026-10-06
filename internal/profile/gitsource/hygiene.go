@@ -17,9 +17,9 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/ccshelf/ccshelf/internal/catalog/sidecar"
-	"github.com/ccshelf/ccshelf/internal/orgconfig"
-	"github.com/ccshelf/ccshelf/internal/ui"
+	"github.com/yorch/ccshelf/internal/catalog/sidecar"
+	"github.com/yorch/ccshelf/internal/orgconfig"
+	"github.com/yorch/ccshelf/internal/ui"
 )
 
 // MaxFileSize is the largest file allowed in a watched folder, and the largest

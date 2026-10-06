@@ -8,7 +8,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/ccshelf/ccshelf/internal/config"
+	"github.com/yorch/ccshelf/internal/config"
 )
 
 // ErrBadURL is wrapped by every URL validation failure.

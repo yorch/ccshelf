@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ccshelf/ccshelf/internal/cache"
+	"github.com/yorch/ccshelf/internal/cache"
 )
 
 // DefaultInstalledTTL is how long [InstalledCache] trusts a memoized list.

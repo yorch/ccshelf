@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccshelf/ccshelf/internal/testutil"
+	"github.com/yorch/ccshelf/internal/testutil"
 )
 
 // Paths of the binaries built by TestMain.

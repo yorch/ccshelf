@@ -11,7 +11,7 @@ import (
 
 	toml "github.com/pelletier/go-toml/v2"
 
-	"github.com/ccshelf/ccshelf/internal/envpolicy"
+	"github.com/yorch/ccshelf/internal/envpolicy"
 )
 
 // MCP server transport types.

@@ -54,7 +54,7 @@ func BuildFakeClaude(t testing.TB) string {
 		if runtime.GOOS == "windows" {
 			out += ".exe"
 		}
-		cmd := exec.CommandContext(context.Background(), goBin, "build", "-o", out, "github.com/ccshelf/ccshelf/internal/testutil/fakeclaude") //nolint:gosec // test helper building a fixed package
+		cmd := exec.CommandContext(context.Background(), goBin, "build", "-o", out, "github.com/yorch/ccshelf/internal/testutil/fakeclaude") //nolint:gosec // test helper building a fixed package
 		cmd.Env = origEnviron
 		if b, err := cmd.CombinedOutput(); err != nil {
 			buildErr = fmt.Errorf("build fakeclaude: %w\n%s", err, b)

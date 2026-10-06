@@ -12,12 +12,12 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ccshelf/ccshelf/internal/claude"
-	"github.com/ccshelf/ccshelf/internal/cli/clicore"
-	"github.com/ccshelf/ccshelf/internal/config"
-	"github.com/ccshelf/ccshelf/internal/policy"
-	"github.com/ccshelf/ccshelf/internal/settings"
-	"github.com/ccshelf/ccshelf/internal/ui"
+	"github.com/yorch/ccshelf/internal/claude"
+	"github.com/yorch/ccshelf/internal/cli/clicore"
+	"github.com/yorch/ccshelf/internal/config"
+	"github.com/yorch/ccshelf/internal/policy"
+	"github.com/yorch/ccshelf/internal/settings"
+	"github.com/yorch/ccshelf/internal/ui"
 )
 
 // Options holds the seams tests replace so that nothing real is started.

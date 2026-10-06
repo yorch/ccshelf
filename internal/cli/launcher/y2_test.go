@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccshelf/ccshelf/internal/cli/clicore"
-	"github.com/ccshelf/ccshelf/internal/config"
-	"github.com/ccshelf/ccshelf/internal/profile"
-	"github.com/ccshelf/ccshelf/internal/profile/gitsource"
-	"github.com/ccshelf/ccshelf/internal/trust"
+	"github.com/yorch/ccshelf/internal/cli/clicore"
+	"github.com/yorch/ccshelf/internal/config"
+	"github.com/yorch/ccshelf/internal/profile"
+	"github.com/yorch/ccshelf/internal/profile/gitsource"
+	"github.com/yorch/ccshelf/internal/trust"
 )
 
 // A git source that only declares [protect] (no profile of its own, so it is

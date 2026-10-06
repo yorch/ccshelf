@@ -1,4 +1,4 @@
-module github.com/ccshelf/ccshelf
+module github.com/yorch/ccshelf
 
 go 1.27
 

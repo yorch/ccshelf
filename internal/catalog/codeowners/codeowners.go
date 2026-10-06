@@ -9,7 +9,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/ccshelf/ccshelf/internal/catalog/safepath"
+	"github.com/yorch/ccshelf/internal/catalog/safepath"
 )
 
 // MaxSize is GitHub's size limit for a CODEOWNERS file (3 MB).

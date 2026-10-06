@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccshelf/ccshelf/internal/catalog/catalogtest"
 	toml "github.com/pelletier/go-toml/v2"
+	"github.com/yorch/ccshelf/internal/catalog/catalogtest"
 
-	"github.com/ccshelf/ccshelf/internal/marketplace"
-	"github.com/ccshelf/ccshelf/internal/orgconfig"
+	"github.com/yorch/ccshelf/internal/marketplace"
+	"github.com/yorch/ccshelf/internal/orgconfig"
 )
 
 const good = `# comment

@@ -13,9 +13,9 @@ import (
 
 	toml "github.com/pelletier/go-toml/v2"
 
-	"github.com/ccshelf/ccshelf/internal/catalog/safepath"
-	"github.com/ccshelf/ccshelf/internal/marketplace"
-	"github.com/ccshelf/ccshelf/internal/orgconfig"
+	"github.com/yorch/ccshelf/internal/catalog/safepath"
+	"github.com/yorch/ccshelf/internal/marketplace"
+	"github.com/yorch/ccshelf/internal/orgconfig"
 )
 
 // Dir is the sidecar directory below the repository root.

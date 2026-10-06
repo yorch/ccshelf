@@ -11,10 +11,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ccshelf/ccshelf/internal/claude"
-	"github.com/ccshelf/ccshelf/internal/orgconfig"
-	"github.com/ccshelf/ccshelf/internal/profile"
-	"github.com/ccshelf/ccshelf/internal/ui"
+	"github.com/yorch/ccshelf/internal/claude"
+	"github.com/yorch/ccshelf/internal/orgconfig"
+	"github.com/yorch/ccshelf/internal/profile"
+	"github.com/yorch/ccshelf/internal/ui"
 )
 
 // DefaultPath is the profiles folder inside the plugin when Options.Path is empty.

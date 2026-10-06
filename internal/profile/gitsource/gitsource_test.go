@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccshelf/ccshelf/internal/profile"
-	"github.com/ccshelf/ccshelf/internal/testutil"
+	"github.com/yorch/ccshelf/internal/profile"
+	"github.com/yorch/ccshelf/internal/testutil"
 )
 
 // fixture is a local origin repository plus an isolated environment.

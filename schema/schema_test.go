@@ -11,8 +11,8 @@ import (
 
 	toml "github.com/pelletier/go-toml/v2"
 
-	"github.com/ccshelf/ccshelf/internal/config"
-	"github.com/ccshelf/ccshelf/internal/profile"
+	"github.com/yorch/ccshelf/internal/config"
+	"github.com/yorch/ccshelf/internal/profile"
 )
 
 // tomlName returns the TOML key of a struct field, or "" to skip it.

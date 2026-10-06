@@ -96,7 +96,7 @@ linters:
             - "!$test"
           allow:
             - $gostd
-            - github.com/ccshelf/ccshelf
+            - github.com/yorch/ccshelf
             - github.com/spf13/cobra
             - github.com/spf13/pflag # cobra's flag types, used through cobra
             - github.com/pelletier/go-toml/v2

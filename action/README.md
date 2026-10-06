@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@<full commit SHA>
         with:
           persist-credentials: false
-      - uses: ccshelf/ccshelf/action@<full commit SHA>   # v0.1.0
+      - uses: yorch/ccshelf/action@<full commit SHA>   # v0.1.0
         with:
           version: v0.1.0
           sha256: <sha-256 of ccshelf_0.1.0_linux_amd64.tar.gz>   # offline pin, see below; optional when the pinned commit's pins.txt has the line
@@ -31,9 +31,9 @@ jobs:
 | `args` | empty | The subcommand and flags, split on spaces (no quoting, no shell expansion). Empty means install only. |
 | `working-directory` | `.` | Relative directory in the workspace where the command runs. `..` and absolute paths are rejected. |
 | `sha256` | empty | SHA-256 of the archive for this runner's OS and architecture, pinned by you. Wins over `pins.txt`. |
-| `base-url` | `https://github.com/ccshelf/ccshelf/releases/download` | Where `<version>/` assets live (the directory keeps the leading `v`). `https://`, or `file:///<abs path>` (`file://C:/...` on Windows), only. |
+| `base-url` | `https://github.com/yorch/ccshelf/releases/download` | Where `<version>/` assets live (the directory keeps the leading `v`). `https://`, or `file:///<abs path>` (`file://C:/...` on Windows), only. |
 | `verify-signature` | `true` | Verify the cosign signature of `checksums.txt` when neither `sha256` nor a `pins.txt` line applies. Needs the Sigstore trusted root: not offline. |
-| `cosign-identity` | empty: `https://github.com/ccshelf/ccshelf/.github/workflows/release.yml@refs/tags/<version>` | **Exact** certificate identity (`--certificate-identity`). |
+| `cosign-identity` | empty: `https://github.com/yorch/ccshelf/.github/workflows/release.yml@refs/tags/<version>` | **Exact** certificate identity (`--certificate-identity`). |
 | `cosign-identity-regexp` | empty | Explicit opt-in: a regexp (escape dots) used instead of the exact identity. Exclusive with `cosign-identity`. |
 | `trusted-root` | empty | Path to a Sigstore trusted root file your organization mirrors (`--trusted-root`). |
 | `cosign-oidc-issuer` | `https://token.actions.githubusercontent.com` | OIDC issuer the certificate must name. |
@@ -44,15 +44,15 @@ Outputs: `path` (the installed binary) and `version`. The binary's directory is 
 
 ```yaml
 # Lint the marketplace, sidecars and profiles
-- uses: ccshelf/ccshelf/action@<full commit SHA>   # v0.1.0
+- uses: yorch/ccshelf/action@<full commit SHA>   # v0.1.0
   with: { version: v0.1.0, sha256: "<archive sha-256>", args: lint }
 
 # Fail the pull request when committed bundles differ from what compile would write
-- uses: ccshelf/ccshelf/action@<full commit SHA>   # v0.1.0
+- uses: yorch/ccshelf/action@<full commit SHA>   # v0.1.0
   with: { version: v0.1.0, sha256: "<archive sha-256>", args: compile --check }
 
 # Build the static catalog
-- uses: ccshelf/ccshelf/action@<full commit SHA>   # v0.1.0
+- uses: yorch/ccshelf/action@<full commit SHA>   # v0.1.0
   with: { version: v0.1.0, sha256: "<archive sha-256>", args: catalog build --out dist/catalog }
 ```
 
@@ -66,7 +66,7 @@ The installer downloads `ccshelf_<version without v>_<os>_<arch>.tar.gz` (`.zip`
 
 1. **`sha256` input (strongest, fully offline).** The archive hash must equal your pinned value. Nothing else is trusted: not the download host, not `checksums.txt`, not a signing service.
 2. **`pins.txt` embedded in the action (offline).** [`action/pins.txt`](pins.txt) holds one `<version> <os> <arch> <sha256>` line per release archive (the version keeps its `v`). If a line matches, the archive must equal it, and cosign is not needed. Because the file is part of the action, **pinning the action by a commit SHA that contains the line for your version also pins the binary.** If there is no matching line the installer falls through to step 3; a malformed `pins.txt` fails the step.
-3. **`verify-signature: true` (default).** `cosign verify-blob` checks `checksums.txt` against the Sigstore bundle with the **exact** certificate identity `https://github.com/ccshelf/ccshelf/.github/workflows/release.yml@refs/tags/<version>` and the OIDC issuer, then the archive hash must match its single line in `checksums.txt`. `cosign` must be on `PATH` (install it in an earlier step, itself pinned by SHA); if it is missing the step **fails** and never skips silently. **This is not an offline check:** `cosign verify-blob` needs the Sigstore trusted root, which it fetches over the network unless you give it a copy with the `trusted-root` input. The only fully offline paths are steps 1 and 2.
+3. **`verify-signature: true` (default).** `cosign verify-blob` checks `checksums.txt` against the Sigstore bundle with the **exact** certificate identity `https://github.com/yorch/ccshelf/.github/workflows/release.yml@refs/tags/<version>` and the OIDC issuer, then the archive hash must match its single line in `checksums.txt`. `cosign` must be on `PATH` (install it in an earlier step, itself pinned by SHA); if it is missing the step **fails** and never skips silently. **This is not an offline check:** `cosign verify-blob` needs the Sigstore trusted root, which it fetches over the network unless you give it a copy with the `trusted-root` input. The only fully offline paths are steps 1 and 2.
 4. **`verify-signature: false` without a pin (explicit opt-out).** The archive must still match `checksums.txt`, but that file is unauthenticated, so this only detects corruption. The job prints a loud warning annotation.
 
 Why an exact identity: a regexp such as `.../release.yml@refs/tags/v.*` accepts any tag, including one an attacker pushed. The exact form ties the signature to the tag you asked for. This only helps if the tool repository restricts who can create `v*` tags and which commits they point at; see "Required repository rulesets" in `CONTRIBUTING.md`.

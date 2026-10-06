@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ccshelf/ccshelf/internal/cache"
-	"github.com/ccshelf/ccshelf/internal/testutil"
-	"github.com/ccshelf/ccshelf/internal/ui"
+	"github.com/yorch/ccshelf/internal/cache"
+	"github.com/yorch/ccshelf/internal/testutil"
+	"github.com/yorch/ccshelf/internal/ui"
 )
 
 // pluginSourceHarness installs a fake plugin "orgprofiles@acme" that carries

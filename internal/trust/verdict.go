@@ -10,8 +10,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/ccshelf/ccshelf/internal/profile"
-	"github.com/ccshelf/ccshelf/internal/ui"
+	"github.com/yorch/ccshelf/internal/profile"
+	"github.com/yorch/ccshelf/internal/ui"
 )
 
 // ExitNeedsTrust is the process exit code for "needs trust" (cli.md).

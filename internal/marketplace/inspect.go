@@ -12,7 +12,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ccshelf/ccshelf/internal/catalog/safepath"
+	"github.com/yorch/ccshelf/internal/catalog/safepath"
 )
 
 // maxManifestSize caps plugin.json and .mcp.json reads.
