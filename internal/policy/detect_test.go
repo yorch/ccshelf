@@ -393,7 +393,11 @@ func TestFileHardening(t *testing.T) {
 		if err := os.Symlink(filepath.Join(outside, "evil.json"), filepath.Join(dir, "managed-settings.json")); err != nil {
 			t.Skipf("symlinks unavailable: %v", err)
 		}
-		p := detect(t, linuxOpt(dir))
+		// The check accepts a root-owned link; make the owner explicit so the
+		// test does not depend on who runs it (a container runs as root).
+		opt := linuxOpt(dir)
+		opt.FileOwner = func(fs.FileInfo) (uint32, bool) { return 1000, true }
+		p := detect(t, opt)
 		if p.DisableSideloadFlags != nil || !p.Unreadable || !hasUnknown(p, "leaves the managed directory") {
 			t.Fatalf("%+v", p)
 		}
