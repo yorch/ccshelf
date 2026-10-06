@@ -138,7 +138,7 @@ section>input[type=search]{display:block}
 <body>
 <div class="shell">
 <aside class="rail">
-<div class="brand"><h1>ccshelf</h1><p>Research and design notes. Claude Code 2.1.290. Generated from the Markdown in docs/ (source hash ef76c0a5).</p></div>
+<div class="brand"><h1>ccshelf</h1><p>Research and design notes. Claude Code 2.1.290. Generated from the Markdown in docs/ (source hash 50ca1afc).</p></div>
 <nav aria-label="Sections"><div id="tabs" role="tablist" aria-orientation="vertical"></div></nav>
 <div class="legend" aria-label="Confidence markers"><b>How sure we are</b><br><span class="lg gv" aria-hidden="true">&#9679;</span>verified in docs, gh or the CLI<br><span class="lg gr" aria-hidden="true">&#9680;</span>reported by a research agent<br><span class="lg gu" aria-hidden="true">&#9675;</span>unverified or inferred</div>
 <button class="themebtn" id="themebtn" type="button">Switch theme</button>
@@ -361,7 +361,7 @@ draw(false);
 <li class="task"><label><input type="checkbox" checked> Phase 0.2: adopt, build or contribute: evaluated fuzzyalej/claude-profile and edimuj/claude-rig; recommendation to build (D-33, <a href="#adopt">adopt-or-build.md</a>), pending user review</label></li>
 <li class="task"><label><input type="checkbox"> Phase 0.3: bundle and masking prototype (T7); needs a second config directory and a login</label></li>
 <li class="task"><label><input type="checkbox"> Phase 0.4: Stage 0 on Linux and Windows</label></li>
-<li class="task"><label><input type="checkbox"> Phase 0.5: measure MCP and connector removal through the settings keys</label></li>
+<li class="task"><label><input type="checkbox" checked> Phase 0.5: measure MCP and connector removal through the settings keys (done 2026-10-06, see <a href="#stage0">stage0.md</a>; saving about 5.7k tokens, 19%)</label></li>
 <li class="task"><label><input type="checkbox" checked> Phase 0.6: write kill and obsolescence criteria (done 2026-10-06, section above)</label></li>
 <li class="task"><label><input type="checkbox"> Employer approval for open-sourcing (SECURITY.md and CONTRIBUTING.md are written)</label></li>
 <li class="task"><label><input type="checkbox" checked> MVP launcher: run, show, dry-run, ls, dir sources, extends, default-deny masking, closed schema, settings validation</label></li>
@@ -1441,6 +1441,26 @@ document.getElementById("nmsg").textContent=m}r.oninput=draw;draw()})();
 <tr><td>A baseline run on the same machine later reported 186 tools where Stage 0 reported 157 (MCP connection timing).</td><td>Reported</td></tr>
 <tr><td>Bundle behavior: enabling a bundle enables its dependencies; disabling a dependency is refused while an enabled plugin needs it; a plugin whose dependency is off "stays disabled" with an error. So masking a plugin that an installed bundle depends on breaks the bundle.</td><td>Reported from the docs; <strong>untested (T7)</strong></td></tr>
 </tbody></table>
+<h3 id="stage0-phase-0-5-mcp-and-connector-removal-measured-2026-10-06">Phase 0.5: MCP and connector removal measured (2026-10-06)</h3>
+<p>Method: <code>claude -p "Reply with the single word ok." --output-format stream-json --verbose --max-turns 1</code> in an empty scratch directory (nothing read or written in the project), once per variant, with the init event and the final <code>usage</code> read back. Claude Code 2.1.291, one machine with 19 plugins and 9 claude.ai connectors installed (20 MCP servers listed: 11 from plugins, 9 connectors). Each variant ran <strong>once</strong>, so the token figures carry run-to-run noise; the tool and server counts are exact. <span class="V">V</span> (run by me, outputs kept in the scratch directory; no org names are recorded here).</p>
+<table><thead><tr><th>Variant (<code>--settings</code> file or flags)</th><th>Tools</th><th>MCP tools</th><th>MCP servers</th><th>Input tokens (input + cache)</th></tr></thead><tbody>
+<tr><td>Baseline</td><td>153</td><td>125</td><td>20</td><td>29,683</td></tr>
+<tr><td><code>disableClaudeAiConnectors: true</code></td><td>54</td><td>29</td><td>12</td><td>25,168</td></tr>
+<tr><td><code>deniedMcpServers</code> for the 11 plugin servers</td><td>153</td><td>125</td><td>9</td><td>29,449</td></tr>
+<tr><td>Both of the above</td><td>25</td><td>0</td><td>1</td><td>24,109</td></tr>
+<tr><td><code>--strict-mcp-config --mcp-config</code> with <code>{"mcpServers":{}}</code></td><td>25</td><td>0</td><td>0</td><td>23,951</td></tr>
+<tr><td>The strict flags plus <code>disableClaudeAiConnectors</code></td><td>25</td><td>0</td><td>0</td><td>23,951</td></tr>
+</tbody></table>
+<p>Findings:</p>
+<ul>
+<li><code>disableClaudeAiConnectors</code> removes all nine connector servers and most MCP tools (125 to 29 tools); the remaining 29 come from plugin servers.</li>
+<li><code>deniedMcpServers</code> removed the 11 plugin servers from the list (20 to 9) but <strong>not</strong> their tools in this run: those servers were mostly <code>needs-auth</code> or not connected, so they had no tools to remove. Its effect on tool count depends on whether the servers had connected. Entries are <code>{"serverName": "&lt;full name&gt;"}</code> with the full <code>plugin:&lt;plugin&gt;:&lt;server&gt;</code> name <span class="V">V</span>. After denying all 11 and disabling connectors, one plugin server still showed (<code>needs-auth</code>): the list must be built from what is actually installed, not guessed.</li>
+<li><code>--strict-mcp-config</code> with an empty config removes every MCP server and tool, including connectors and plugin servers, and the settings keys add nothing on top of it (25 tools, 0 servers).</li>
+<li>Context saving: about 5,700 input tokens (19%) between the baseline and the fully stripped run (29.7k to 24.0k). Part of the baseline gap is the many deferred MCP tool names in the prompt; the rest of the ~24k is the system prompt, built-in tools, 53 skills and 15 agents, which MCP flags do not touch. The saving is real but modest; it is not the main reason to use a profile.</li>
+<li>Plugins (19 to 20 in the list), skills (53), agents (15) and slash commands (99) were unchanged by every MCP variant, so MCP removal and plugin masking are independent.</li>
+<li>All runs returned <code>is_error: false</code>. A repeat run is cheaper because of the prompt cache (the last row's cost was a tenth of the others for the same token total), so compare token counts, not cost.</li>
+</ul>
+<p>This closes O-10's item "the effect of MCP removal" for this one machine and version; other machines, versions and server sets can differ. The earlier Stage 0 figure (27.7k to 22.1k tokens, one run) is consistent: both show a saving of roughly 5 to 6k tokens.</p>
 </section>
 
 <section id="adopt">

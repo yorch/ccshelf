@@ -63,3 +63,26 @@ Facts the four adversary reviews corrected or added. "Verified by me" means I ra
 | A baseline run on the same machine later reported 186 tools where Stage 0 reported 157 (MCP connection timing). | Reported |
 | Bundle behavior: enabling a bundle enables its dependencies; disabling a dependency is refused while an enabled plugin needs it; a plugin whose dependency is off "stays disabled" with an error. So masking a plugin that an installed bundle depends on breaks the bundle. | Reported from the docs; **untested (T7)** |
 
+## Phase 0.5: MCP and connector removal measured (2026-10-06)
+
+Method: `claude -p "Reply with the single word ok." --output-format stream-json --verbose --max-turns 1` in an empty scratch directory (nothing read or written in the project), once per variant, with the init event and the final `usage` read back. Claude Code 2.1.291, one machine with 19 plugins and 9 claude.ai connectors installed (20 MCP servers listed: 11 from plugins, 9 connectors). Each variant ran **once**, so the token figures carry run-to-run noise; the tool and server counts are exact. {V} (run by me, outputs kept in the scratch directory; no org names are recorded here).
+
+| Variant (`--settings` file or flags) | Tools | MCP tools | MCP servers | Input tokens (input + cache) |
+|---|---|---|---|---|
+| Baseline | 153 | 125 | 20 | 29,683 |
+| `disableClaudeAiConnectors: true` | 54 | 29 | 12 | 25,168 |
+| `deniedMcpServers` for the 11 plugin servers | 153 | 125 | 9 | 29,449 |
+| Both of the above | 25 | 0 | 1 | 24,109 |
+| `--strict-mcp-config --mcp-config` with `{"mcpServers":{}}` | 25 | 0 | 0 | 23,951 |
+| The strict flags plus `disableClaudeAiConnectors` | 25 | 0 | 0 | 23,951 |
+
+Findings:
+- `disableClaudeAiConnectors` removes all nine connector servers and most MCP tools (125 to 29 tools); the remaining 29 come from plugin servers.
+- `deniedMcpServers` removed the 11 plugin servers from the list (20 to 9) but **not** their tools in this run: those servers were mostly `needs-auth` or not connected, so they had no tools to remove. Its effect on tool count depends on whether the servers had connected. Entries are `{"serverName": "<full name>"}` with the full `plugin:<plugin>:<server>` name {V}. After denying all 11 and disabling connectors, one plugin server still showed (`needs-auth`): the list must be built from what is actually installed, not guessed.
+- `--strict-mcp-config` with an empty config removes every MCP server and tool, including connectors and plugin servers, and the settings keys add nothing on top of it (25 tools, 0 servers).
+- Context saving: about 5,700 input tokens (19%) between the baseline and the fully stripped run (29.7k to 24.0k). Part of the baseline gap is the many deferred MCP tool names in the prompt; the rest of the ~24k is the system prompt, built-in tools, 53 skills and 15 agents, which MCP flags do not touch. The saving is real but modest; it is not the main reason to use a profile.
+- Plugins (19 to 20 in the list), skills (53), agents (15) and slash commands (99) were unchanged by every MCP variant, so MCP removal and plugin masking are independent.
+- All runs returned `is_error: false`. A repeat run is cheaper because of the prompt cache (the last row's cost was a tenth of the others for the same token total), so compare token counts, not cost.
+
+This closes O-10's item "the effect of MCP removal" for this one machine and version; other machines, versions and server sets can differ. The earlier Stage 0 figure (27.7k to 22.1k tokens, one run) is consistent: both show a saving of roughly 5 to 6k tokens.
+

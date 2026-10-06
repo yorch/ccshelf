@@ -79,7 +79,7 @@ Tick items in the report to track them (saved in your browser); the checked stat
 - [x] Phase 0.2: adopt, build or contribute: evaluated fuzzyalej/claude-profile and edimuj/claude-rig; recommendation to build (D-33, [adopt-or-build.md](../research/adopt-or-build.md)), pending user review
 - [ ] Phase 0.3: bundle and masking prototype (T7); needs a second config directory and a login
 - [ ] Phase 0.4: Stage 0 on Linux and Windows
-- [ ] Phase 0.5: measure MCP and connector removal through the settings keys
+- [x] Phase 0.5: measure MCP and connector removal through the settings keys (done 2026-10-06, see [stage0.md](../research/stage0.md); saving about 5.7k tokens, 19%)
 - [x] Phase 0.6: write kill and obsolescence criteria (done 2026-10-06, section above)
 - [ ] Employer approval for open-sourcing (SECURITY.md and CONTRIBUTING.md are written)
 - [x] MVP launcher: run, show, dry-run, ls, dir sources, extends, default-deny masking, closed schema, settings validation
