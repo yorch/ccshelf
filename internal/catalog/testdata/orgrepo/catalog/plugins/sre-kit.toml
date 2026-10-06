@@ -1,0 +1,8 @@
+owner = "@acme/sre"
+status = "active"
+when_to_use = ["incident response", "postmortems"]
+avoid_when = ["routine deploy checks"]
+overlaps_with = ["ops-helper"]
+review_by = "2027-03-01"
+support = "#sre-help"
+docs = "https://wiki.example.com/sre-kit"

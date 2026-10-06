@@ -1,0 +1,78 @@
+{
+  "name": "acme-tools",
+  "owner": {
+    "name": "Acme Platform Team",
+    "email": "platform@example.com"
+  },
+  "metadata": {
+    "description": "Fictional plugin marketplace used as a ccshelf test fixture"
+  },
+  "plugins": [
+    {
+      "name": "design-kit",
+      "source": "./plugins/design-kit",
+      "description": "Design review helpers: color palettes, CSS review and UI critique agents.",
+      "category": "design",
+      "tags": ["ui", "css"],
+      "version": "1.4.0",
+      "author": {"name": "Acme Web Team"}
+    },
+    {
+      "name": "sre-kit",
+      "source": "./plugins/sre-kit",
+      "description": "Incident response workflows and postmortem templates for on-call engineers.",
+      "category": "observability",
+      "tags": ["incident", "oncall"],
+      "version": "2.0.1",
+      "author": {"name": "Acme SRE"},
+      "dependencies": ["design-kit"],
+      "relevance": {
+        "topic": "incident response",
+        "signals": {
+          "cli": ["kubectl", "pagerduty"],
+          "manifestDeps": [{"file": "package.json", "pattern": "@acme/sdk"}]
+        }
+      }
+    },
+    {
+      "name": "ops-helper",
+      "source": "./plugins/ops-helper",
+      "description": "Older runbook helpers, replaced by sre-kit.",
+      "category": "observability",
+      "tags": ["oncall"],
+      "version": "0.9.0",
+      "author": "Acme SRE"
+    },
+    {
+      "name": "data-tools",
+      "source": "./plugins/data-tools",
+      "description": "SQL review skills and a read-only warehouse MCP server for analysts.",
+      "category": "data",
+      "tags": ["sql"],
+      "version": "0.3.0",
+      "author": {"name": "Acme Data"}
+    },
+    {
+      "name": "figma-bridge",
+      "source": {"source": "github", "repo": "acme-example/figma-bridge"},
+      "description": "Reads Figma frames and turns them into component stubs (hosted in its own repository).",
+      "category": "integrations",
+      "tags": ["ui"],
+      "author": {"name": "Acme Web Team"}
+    },
+    {
+      "name": "profile-frontend",
+      "source": "./bundles/profile-frontend",
+      "description": "Profile bundle for the frontend role: installs its plugins in one step.",
+      "category": "profile",
+      "author": {"name": "Acme Platform Team"}
+    },
+    {
+      "name": "profile-sre",
+      "source": "./bundles/profile-sre",
+      "description": "Profile bundle for the SRE role: installs its plugins in one step.",
+      "category": "profile",
+      "author": {"name": "Acme Platform Team"}
+    }
+  ]
+}

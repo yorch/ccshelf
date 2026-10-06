@@ -1,0 +1,1 @@
+{"mcpServers": {"warehouse": {"command": "npx", "args": ["-y", "@acme-example/warehouse-mcp"]}}}

@@ -1,0 +1,6 @@
+owner = "@acme/web"
+status = "active"
+when_to_use = ["turning Figma frames into component stubs"]
+overlaps_with = ["design-kit"]
+review_by = "2027-02-01"
+docs = "https://wiki.example.com/figma-bridge"

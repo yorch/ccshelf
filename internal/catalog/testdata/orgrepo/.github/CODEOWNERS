@@ -1,0 +1,19 @@
+# Fictional CODEOWNERS for the ccshelf test fixture.
+# The last matching rule wins, so the platform rules for hooks and MCP come after the team rules.
+/.claude-plugin/marketplace.json   @acme/platform
+/catalog/                          @acme/platform
+/profiles/                         @acme/platform
+/mcp/                              @acme/platform
+/ccshelf.toml                      @acme/platform
+/bundles/                          @acme/platform
+/.github/                          @acme/platform
+
+# each team owns its plugin source
+/plugins/design-kit/               @acme/web
+/plugins/sre-kit/                  @acme/sre
+/plugins/ops-helper/               @acme/sre
+/plugins/data-tools/               @acme/data
+
+# hooks and MCP servers run code on developer machines
+/plugins/*/hooks/                  @acme/platform
+/plugins/*/.mcp.json               @acme/platform

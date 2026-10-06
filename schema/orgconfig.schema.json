@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ccshelf.invalid/schema/orgconfig.schema.json",
+  "title": "ccshelf.toml (org config)",
+  "description": "Org config at the root of the org data repo (as the equivalent JSON object). Unknown sections and keys are errors. Every path is relative to the repo root, uses forward slashes, and must stay inside the repo (no absolute path, no .., no symlink that leaves it). Every key is optional.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "lint": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "require": {"type": "array", "items": {"$ref": "#/$defs/sidecarField"}, "default": ["owner", "status"], "description": "Sidecar fields every plugin needs."},
+        "require_when_deprecated": {"type": "array", "items": {"$ref": "#/$defs/sidecarField"}, "default": ["superseded_by"]},
+        "max_review_age_days": {"type": "integer", "minimum": 1, "default": 180, "description": "A review_by date older than this many days before today is stale."},
+        "taxonomy": {"type": "string", "default": "catalog/taxonomy.toml", "description": "Allowed categories and tags; the rules are off when the file does not exist."},
+        "min_description_length": {"type": "integer", "minimum": 0, "default": 30},
+        "platform_owners": {"type": "array", "items": {"type": "string"}, "description": "CODEOWNERS owners (@user, @org/team or email) that must own plugin hooks and .mcp.json; empty turns the rule off."}
+      }
+    },
+    "catalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "title": {"type": "string", "maxLength": 200},
+        "metadata_source": {"enum": ["sidecar", "marketplace"], "default": "sidecar"},
+        "marketplaces": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "\\.json$"}, "default": [".claude-plugin/marketplace.json"]},
+        "git_data": {"type": "boolean", "default": false, "description": "Add last change, author count and changed-since-tag data (needs git)."},
+        "base_url": {"type": "string", "pattern": "^https?://", "description": "Public URL of the catalog site."}
+      }
+    },
+    "profiles": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "dir": {"type": "string", "default": "profiles"},
+        "mcp_registry": {"type": "string", "default": "mcp/registry.toml"}
+      }
+    },
+    "protect": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Controls no profile may mask (SR3).",
+      "properties": {
+        "plugins": {"type": "array", "items": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9._-]*$"}, "description": "Plugin ids, name@marketplace."},
+        "mcp": {"type": "array", "items": {"type": "string"}, "description": "MCP server labels such as plugin:audit:audit or claude.ai Shopify."}
+      }
+    }
+  },
+  "$defs": {
+    "sidecarField": {"enum": ["owner", "status", "when_to_use", "avoid_when", "overlaps_with", "superseded_by", "review_by", "support", "docs"]}
+  }
+}

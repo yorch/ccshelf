@@ -1,0 +1,5 @@
+owner = "@acme/data"
+status = "experimental"
+when_to_use = ["reviewing SQL", "exploring the warehouse"]
+review_by = "2027-01-15"
+support = "#data-help"

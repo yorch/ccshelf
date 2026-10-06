@@ -1,0 +1,20 @@
+[lint]
+require = ["owner", "status"]
+require_when_deprecated = ["superseded_by"]
+max_review_age_days = 180
+taxonomy = "catalog/taxonomy.toml"
+min_description_length = 30
+platform_owners = ["@acme/platform"]
+
+[catalog]
+title = "Acme plugin catalog"
+metadata_source = "sidecar"
+marketplaces = [".claude-plugin/marketplace.json"]
+
+[profiles]
+dir = "profiles"
+mcp_registry = "mcp/registry.toml"
+
+[protect]
+plugins = []
+mcp = []

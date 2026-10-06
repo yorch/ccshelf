@@ -1,0 +1,6 @@
+owner = "@acme/sre"
+status = "deprecated"
+when_to_use = ["legacy runbooks"]
+overlaps_with = ["sre-kit"]
+superseded_by = "sre-kit"
+review_by = 2026-12-01

@@ -1,0 +1,3 @@
+# Parsed by the profiles package, not by the catalog lint.
+name = "frontend"
+description = "Frontend engineering"

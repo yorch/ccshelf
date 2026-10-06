@@ -1,0 +1,8 @@
+owner = "@acme/web"
+status = "active"
+when_to_use = ["reviewing a design handoff", "choosing a color palette"]
+avoid_when = ["backend-only changes"]
+overlaps_with = ["figma-bridge"]
+review_by = "2027-03-01"
+support = "#web-help"
+docs = "https://wiki.example.com/design-kit"

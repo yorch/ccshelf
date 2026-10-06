@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ccshelf.invalid/schema/catalog.schema.json",
+  "title": "ccshelf catalog.json",
+  "description": "The generated catalog of an org data repo (ccshelf catalog build). Text fields are plain text: control characters are removed and lengths are capped; links are absolute http or https URLs only.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "title", "marketplaces", "plugins", "profiles", "categories", "tags"],
+  "properties": {
+    "version": {"const": 1, "description": "Format version."},
+    "title": {"type": "string"},
+    "generated_at": {"type": "string", "description": "RFC 3339 UTC time; present only when the build was given a clock."},
+    "marketplaces": {"type": "array", "items": {"type": "string"}, "description": "Repo-relative marketplace files that fed the catalog."},
+    "latest_tag": {"type": "string", "description": "Newest git tag; present only with git data."},
+    "plugins": {"type": "array", "items": {"$ref": "#/$defs/plugin"}, "description": "Sorted by name."},
+    "profiles": {"type": "array", "items": {"$ref": "#/$defs/profile"}, "description": "Sorted by name."},
+    "categories": {"type": "array", "items": {"type": "string"}, "description": "Categories in use, sorted."},
+    "tags": {"type": "array", "items": {"type": "string"}, "description": "Tags in use, sorted."}
+  },
+  "$defs": {
+    "stringList": {"type": "array", "items": {"type": "string"}},
+    "plugin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "description", "tags", "marketplace", "when_to_use", "avoid_when", "overlaps_with"],
+      "properties": {
+        "name": {"type": "string"},
+        "display_name": {"type": "string"},
+        "description": {"type": "string"},
+        "category": {"type": "string"},
+        "tags": {"$ref": "#/$defs/stringList"},
+        "version": {"type": "string"},
+        "author": {"type": "string"},
+        "marketplace": {"type": "string", "description": "Name of the marketplace that lists the plugin."},
+        "source": {"type": "string", "description": "Where the plugin comes from, for example plugins/design-kit or github:acme/tool."},
+        "external": {"type": "boolean", "description": "True when the plugin is not in the org data repo."},
+        "homepage": {"type": "string", "pattern": "^https?://", "description": "Only an http or https URL is kept."},
+        "repository": {"type": "string", "pattern": "^https?://"},
+        "license": {"type": "string"},
+        "owner": {"type": "string", "description": "From the sidecar."},
+        "status": {"type": "string", "description": "active, experimental or deprecated when valid."},
+        "when_to_use": {"$ref": "#/$defs/stringList"},
+        "avoid_when": {"$ref": "#/$defs/stringList"},
+        "overlaps_with": {"$ref": "#/$defs/stringList"},
+        "superseded_by": {"type": "string"},
+        "review_by": {"type": "string", "description": "YYYY-MM-DD when valid."},
+        "support": {"type": "string"},
+        "docs": {"type": "string", "pattern": "^https?://"},
+        "has_hooks": {"type": "boolean"},
+        "has_mcp": {"type": "boolean"},
+        "needs_platform_review": {"type": "boolean", "description": "True when the plugin ships hooks or MCP servers."},
+        "skills": {"type": "integer", "minimum": 0},
+        "agents": {"type": "integer", "minimum": 0},
+        "commands": {"type": "integer", "minimum": 0},
+        "git": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "last_commit": {"type": "string", "description": "YYYY-MM-DD, UTC."},
+            "authors": {"type": "integer", "minimum": 0}
+          }
+        },
+        "changed_since_tag": {"type": "boolean"}
+      }
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "when_to_use"],
+      "properties": {
+        "name": {"type": "string"},
+        "description": {"type": "string"},
+        "owner": {"type": "string"},
+        "status": {"type": "string"},
+        "when_to_use": {"$ref": "#/$defs/stringList"}
+      }
+    }
+  }
+}

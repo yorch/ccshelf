@@ -1,0 +1,1 @@
+{"name": "sre-kit", "version": "2.0.1", "description": "Incident response workflows", "dependencies": ["design-kit"]}

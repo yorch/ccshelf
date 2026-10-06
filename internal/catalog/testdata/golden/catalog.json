@@ -1,0 +1,176 @@
+{
+  "version": 1,
+  "title": "Acme plugin catalog",
+  "marketplaces": [
+    ".claude-plugin/marketplace.json"
+  ],
+  "plugins": [
+    {
+      "name": "data-tools",
+      "description": "SQL review skills and a read-only warehouse MCP server for analysts.",
+      "category": "data",
+      "tags": [
+        "sql"
+      ],
+      "version": "0.3.0",
+      "author": "Acme Data",
+      "marketplace": "acme-tools",
+      "source": "plugins/data-tools",
+      "owner": "@acme/data",
+      "status": "experimental",
+      "when_to_use": [
+        "reviewing SQL",
+        "exploring the warehouse"
+      ],
+      "avoid_when": [],
+      "overlaps_with": [],
+      "review_by": "2027-01-15",
+      "support": "#data-help",
+      "has_mcp": true,
+      "needs_platform_review": true,
+      "skills": 1
+    },
+    {
+      "name": "design-kit",
+      "description": "Design review helpers: color palettes, CSS review and UI critique agents.",
+      "category": "design",
+      "tags": [
+        "ui",
+        "css"
+      ],
+      "version": "1.4.0",
+      "author": "Acme Web Team",
+      "marketplace": "acme-tools",
+      "source": "plugins/design-kit",
+      "owner": "@acme/web",
+      "status": "active",
+      "when_to_use": [
+        "reviewing a design handoff",
+        "choosing a color palette"
+      ],
+      "avoid_when": [
+        "backend-only changes"
+      ],
+      "overlaps_with": [
+        "figma-bridge"
+      ],
+      "review_by": "2027-03-01",
+      "support": "#web-help",
+      "docs": "https://wiki.example.com/design-kit",
+      "skills": 2,
+      "agents": 1
+    },
+    {
+      "name": "figma-bridge",
+      "description": "Reads Figma frames and turns them into component stubs (hosted in its own repository).",
+      "category": "integrations",
+      "tags": [
+        "ui"
+      ],
+      "author": "Acme Web Team",
+      "marketplace": "acme-tools",
+      "source": "github:acme-example/figma-bridge",
+      "external": true,
+      "owner": "@acme/web",
+      "status": "active",
+      "when_to_use": [
+        "turning Figma frames into component stubs"
+      ],
+      "avoid_when": [],
+      "overlaps_with": [
+        "design-kit"
+      ],
+      "review_by": "2027-02-01",
+      "docs": "https://wiki.example.com/figma-bridge"
+    },
+    {
+      "name": "ops-helper",
+      "description": "Older runbook helpers, replaced by sre-kit.",
+      "category": "observability",
+      "tags": [
+        "oncall"
+      ],
+      "version": "0.9.0",
+      "author": "Acme SRE",
+      "marketplace": "acme-tools",
+      "source": "plugins/ops-helper",
+      "owner": "@acme/sre",
+      "status": "deprecated",
+      "when_to_use": [
+        "legacy runbooks"
+      ],
+      "avoid_when": [],
+      "overlaps_with": [
+        "sre-kit"
+      ],
+      "superseded_by": "sre-kit",
+      "review_by": "2026-12-01",
+      "skills": 1
+    },
+    {
+      "name": "sre-kit",
+      "description": "Incident response workflows and postmortem templates for on-call engineers.",
+      "category": "observability",
+      "tags": [
+        "incident",
+        "oncall"
+      ],
+      "version": "2.0.1",
+      "author": "Acme SRE",
+      "marketplace": "acme-tools",
+      "source": "plugins/sre-kit",
+      "owner": "@acme/sre",
+      "status": "active",
+      "when_to_use": [
+        "incident response",
+        "postmortems"
+      ],
+      "avoid_when": [
+        "routine deploy checks"
+      ],
+      "overlaps_with": [
+        "ops-helper"
+      ],
+      "review_by": "2027-03-01",
+      "support": "#sre-help",
+      "docs": "https://wiki.example.com/sre-kit",
+      "has_hooks": true,
+      "needs_platform_review": true,
+      "skills": 1,
+      "commands": 1
+    }
+  ],
+  "profiles": [
+    {
+      "name": "frontend",
+      "description": "Frontend engineering",
+      "owner": "@acme/web",
+      "status": "active",
+      "when_to_use": [
+        "building web UI"
+      ]
+    },
+    {
+      "name": "sre",
+      "description": "Site reliability engineering",
+      "owner": "@acme/sre",
+      "status": "active",
+      "when_to_use": [
+        "on call"
+      ]
+    }
+  ],
+  "categories": [
+    "data",
+    "design",
+    "integrations",
+    "observability"
+  ],
+  "tags": [
+    "css",
+    "incident",
+    "oncall",
+    "sql",
+    "ui"
+  ]
+}
