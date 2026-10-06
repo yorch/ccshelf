@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "kind": "profile.list",
+  "data": [
+    {
+      "name": "a<b>",
+      "plugins": [
+        "x"
+      ],
+      "extra": {
+        "a": "2",
+        "z": "1"
+      }
+    }
+  ]
+}
