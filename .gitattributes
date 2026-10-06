@@ -17,3 +17,6 @@ testdata/** text eol=lf
 
 # The generated report is large and machine-made: collapse it in diffs.
 docs/report.html linguist-generated=true -diff
+
+# cmd.exe scripts need CRLF line endings, so this golden must keep its exact bytes.
+internal/shellinit/testdata/cmd.golden -text
