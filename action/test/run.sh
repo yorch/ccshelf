@@ -484,14 +484,150 @@ else
   esac
 fi
 
-# ---- the action's argument splitting: no eval, no globbing ------------------
-SPLIT="$(INPUT_ARGS='catalog build --out dist/*' bash -c 'read -r -a a <<<"$INPUT_ARGS"; printf "[%s]" "${a[@]}"')"
-if [ "$SPLIT" = "[catalog][build][--out][dist/*]" ]; then
-  pass "args split without globbing"
+# ---- the action's own "Run ccshelf" step: no eval, no globbing ---------------
+# Extract the real run script from action.yml (the `run: |` block of the step named
+# "Run ccshelf") and execute it, so a change such as `eval` in action.yml is caught.
+ACTION_YML="$REPO_ROOT/action/action.yml"
+RUN_STEP="$ROOT/run-step.sh"
+awk '
+  /^    - name: Run ccshelf$/ { in_step = 1; next }
+  in_step && /^    - name: / { exit }
+  in_step && /^      run: \|$/ { in_run = 1; next }
+  in_run {
+    if ($0 ~ /^        / || $0 ~ /^$/) { sub(/^        /, ""); print; next }
+    exit
+  }
+' "$ACTION_YML" >"$RUN_STEP"
+if [ -s "$RUN_STEP" ] && grep -q 'read -r -a ccshelf_args' "$RUN_STEP"; then
+  pass "extracted the Run ccshelf step from action.yml"
 else
-  OUT="$SPLIT"
-  fail "args split without globbing" "got $SPLIT"
+  OUT="$(cat "$RUN_STEP" 2>/dev/null)"
+  fail "extracted the Run ccshelf step from action.yml" "step not found or no longer splits with read -a"
 fi
+
+# A fake binary that prints each argument in brackets.
+STEPBIN="$ROOT/stepbin"
+printf '#!/bin/sh\nprintf "[%%s]" "$@"\n' >"$STEPBIN"
+chmod +x "$STEPBIN"
+STEPWD="$ROOT/stepwd"
+mkdir -p "$STEPWD/sub/dist"
+: >"$STEPWD/sub/dist/a.txt"
+: >"$STEPWD/sub/dist/b.txt"
+
+# run_step ARGS: runs the extracted step with INPUT_ARGS=ARGS in $STEPWD/sub.
+run_step() {
+  OUT="$(
+    cd "$STEPWD" &&
+      env -i PATH="$SAFE_PATH" INPUT_ARGS="$1" INPUT_WORKING_DIRECTORY="sub" CCSHELF_BIN="$STEPBIN" \
+        bash -c "$(cat "$RUN_STEP")" 2>&1
+  )"
+  RC=$?
+}
+
+run_step 'catalog build --out dist/*'
+if [ "$RC" -eq 0 ] && [ "$OUT" = "[catalog][build][--out][dist/*]" ]; then
+  pass "action.yml splits args on spaces without globbing"
+else
+  fail "action.yml splits args on spaces without globbing" "got: $OUT"
+fi
+
+run_step 'lint $(touch pwned) `touch pwned2` ; touch pwned3'
+if [ "$RC" -eq 0 ] && [ ! -e "$STEPWD/sub/pwned" ] && [ ! -e "$STEPWD/sub/pwned2" ] && [ ! -e "$STEPWD/sub/pwned3" ] &&
+  [ "$OUT" = '[lint][$(touch][pwned)][`touch][pwned2`][;][touch][pwned3]' ]; then
+  pass "action.yml never evaluates shell syntax in args"
+else
+  fail "action.yml never evaluates shell syntax in args" "got: $OUT"
+fi
+
+run_step ''
+if [ "$RC" -eq 0 ] && printf '%s' "$OUT" | grep -qF "installed at $STEPBIN"; then
+  pass "action.yml with empty args only reports the install"
+else
+  fail "action.yml with empty args only reports the install" "got: $OUT"
+fi
+
+run_step "lint${NL}--evil"
+expect_fail "action.yml rejects multi-line args" "single line"
+
+# ---- curl is restricted to https, also across redirects ---------------------
+# A fake curl records its arguments and serves files from the fake release, so the test
+# is offline. Removing either protocol flag from install.sh makes these fail.
+FAKE_CURL="$ROOT/fake-curl"
+CURL_ARGS="$ROOT/curl-args.txt"
+mkdir -p "$FAKE_CURL"
+cat >"$FAKE_CURL/curl" <<'FAKE'
+#!/bin/sh
+out=""
+url=""
+prev=""
+for a in "$@"; do
+  if [ "$prev" = "--output" ]; then out="$a"; fi
+  prev="$a"
+  url="$a"
+done
+echo "$@" >>"@ARGS@"
+cp "@REL@/@VERSION@/${url##*/}" "$out"
+FAKE
+sed -e "s|@ARGS@|$CURL_ARGS|" -e "s|@REL@|$REL|g" -e "s|@VERSION@|$VERSION|g" "$FAKE_CURL/curl" >"$FAKE_CURL/curl.tmp"
+mv "$FAKE_CURL/curl.tmp" "$FAKE_CURL/curl"
+chmod +x "$FAKE_CURL/curl"
+: >"$CURL_ARGS"
+run_install INPUT_BASE_URL="https://mirror.example/releases" INPUT_SHA256="$GOOD_SHA" PATH="$FAKE_CURL:$SAFE_PATH"
+expect_ok "https base-url downloads through curl" "matches the pinned sha256"
+CARGS="$(cat "$CURL_ARGS")"
+case "$CARGS" in
+  *"--proto =https "*) pass "curl is limited to https (--proto =https)" ;;
+  *) OUT="$CARGS"; fail "curl is limited to https (--proto =https)" "flag missing" ;;
+esac
+case "$CARGS" in
+  *"--proto-redir =https "*) pass "curl redirects are limited to https (--proto-redir =https)" ;;
+  *) OUT="$CARGS"; fail "curl redirects are limited to https (--proto-redir =https)" "flag missing" ;;
+esac
+case "$CARGS" in
+  *"--fail "*"--location "*) pass "curl fails on HTTP errors and follows redirects only with the proto limits" ;;
+  *) OUT="$CARGS"; fail "curl fails on HTTP errors" "flags missing" ;;
+esac
+
+# ---- the work directory is private (0700) -----------------------------------
+# mktemp -d already creates 0700, so a fake mktemp that returns 0755 proves install.sh
+# itself tightens the mode. Modes are not meaningful on Windows file systems.
+if [ "$IS_WINDOWS" = true ]; then
+  skip "work directory mode" "POSIX modes are not meaningful on Windows"
+else
+  FAKE_MKTEMP="$ROOT/fake-mktemp"
+  mkdir -p "$FAKE_MKTEMP"
+  REAL_MKTEMP="$(command -v mktemp)"
+  printf '#!/bin/sh\nd="$(%s "$@")" || exit 1\nchmod 755 "$d"\nprintf "%%s\\n" "$d"\n' "$REAL_MKTEMP" >"$FAKE_MKTEMP/mktemp"
+  chmod +x "$FAKE_MKTEMP/mktemp"
+  run_install INPUT_SHA256="$GOOD_SHA" PATH="$FAKE_MKTEMP:$SAFE_PATH"
+  expect_ok "install works with a permissive mktemp" "matches the pinned sha256"
+  WORKP="$(dirname "$(dirname "$(sed -n 's/^path=//p' "$LAST_TMP/out")")")"
+  MODE="$(ls -ld "$WORKP" | cut -c1-10)"
+  if [ "$MODE" = "drwx------" ]; then
+    pass "work directory is mode 0700"
+  else
+    OUT="$WORKP"; fail "work directory is mode 0700" "mode is $MODE"
+  fi
+fi
+
+# ---- version '..' is rejected explicitly ------------------------------------
+# The strict semver pattern allows dots in a pre-release part, so the explicit check is
+# the only thing stopping v1.2.3-a..b from reaching the URL.
+run_install INPUT_VERSION="v1.2.3-rc..1" INPUT_SHA256="$GOOD_SHA"
+expect_fail "version with '..' in the pre-release part fails" "version must not contain '..'"
+
+# ---- pins.txt whose last line has no trailing newline -----------------------
+PINS2_DIR="$ROOT/pins2-action"
+mkdir -p "$PINS2_DIR/scripts"
+cp "$INSTALL" "$PINS2_DIR/scripts/install.sh"
+INSTALL_SCRIPT="$PINS2_DIR/scripts/install.sh"
+printf '%s %s %s %s' "$VERSION" "$OS" "$ARCH" "$GOOD_SHA" >"$PINS2_DIR/pins.txt"
+run_install
+expect_ok "pins.txt without a final newline still counts its last line" "embedded in this action"
+printf '%s %s %s tooshort' "$VERSION" "$OS" "$ARCH" >"$PINS2_DIR/pins.txt"
+run_install INPUT_VERIFY_SIGNATURE=false
+expect_fail "a malformed last line without a newline fails closed" "malformed"
+INSTALL_SCRIPT=""
 
 echo
 echo "passed: $PASS  failed: $FAIL  skipped: $SKIPPED"

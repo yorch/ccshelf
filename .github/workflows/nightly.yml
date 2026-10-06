@@ -31,6 +31,8 @@ jobs:
     environment: nightly
     permissions:
       contents: read
+    outputs:
+      claude-version: ${{ steps.claude.outputs.version }}
     steps:
       - name: Check for the API key
         id: gate
@@ -52,6 +54,7 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Install Claude Code (npm, the runner's Node)
+        id: claude
         if: steps.gate.outputs.run == 'true'
         env:
           REQUESTED_VERSION: ${{ inputs.claude-code-version }}
@@ -64,7 +67,18 @@ jobs:
           fi
           npm install -g --prefix "${RUNNER_TEMP}/npm" "@anthropic-ai/claude-code@${version}"
           echo "${RUNNER_TEMP}/npm/bin" >> "$GITHUB_PATH"
-          "${RUNNER_TEMP}/npm/bin/claude" --version
+          # `latest` moves: record exactly what was tested, for the job summary and the failure report.
+          resolved="$("${RUNNER_TEMP}/npm/bin/claude" --version | head -n 1)"
+          pkg_version="$(npm ls -g --prefix "${RUNNER_TEMP}/npm" --depth=0 --json 2>/dev/null | jq -r '.dependencies["@anthropic-ai/claude-code"].version // "unknown"')"
+          echo "Claude Code: ${resolved} (npm package ${pkg_version}, requested ${version})"
+          echo "version=${pkg_version} (requested ${version})" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Claude Code under test"
+            echo
+            echo "- requested: \`${version}\`"
+            echo "- resolved npm package: \`${pkg_version}\`"
+            echo "- \`claude --version\`: \`${resolved}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Build ccshelf
         if: steps.gate.outputs.run == 'true'
         run: go build -trimpath -o dist/ccshelf ./cmd/ccshelf
@@ -98,12 +112,15 @@ jobs:
           REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           SHA: ${{ github.sha }}
+          CLAUDE_VERSION: ${{ needs.smoke.outputs.claude-version }}
         run: |
           set -euo pipefail
           label="nightly-failure"
           gh label create "$label" --repo "$REPO" --color B60205 \
             --description "Nightly real-claude smoke test failed" 2>/dev/null || true
           body="The nightly real-claude smoke test failed on commit ${SHA}.
+
+          Claude Code under test: ${CLAUDE_VERSION:-unknown (the install step did not finish)}
 
           Run: ${RUN_URL}"
           existing="$(gh issue list --repo "$REPO" --label "$label" --state open --json number --jq '.[0].number // empty')"

@@ -110,10 +110,11 @@ jobs:
           if [ "$USE_RACE" = "true" ]; then race="-race"; fi
           # shellcheck disable=SC2086 # $race is empty or a single fixed flag
           go test $race -count=1 -coverprofile=coverage.out -covermode=atomic ./...
-      - name: Per-package coverage
+      - name: Coverage gate (total and per-package floor)
         if: always() && hashFiles('coverage.out') != ''
         env:
           COVER_MIN: "70"
+          COVER_PKG_MIN: "70"
         run: scripts/check-cover.sh coverage.out
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
@@ -268,11 +269,147 @@ jobs:
       - name: install.sh offline tests
         run: bash action/test/run.sh
 
+  # R5: nothing else runs action/action.yml itself. This job builds the six-target archive
+  # naming for the runner's own OS/arch (same name_template as .goreleaser.yaml, which
+  # action/test/run.sh checks), serves it through a file:/// base-url, installs it with
+  # `uses: ./action` and a sha256 pin (fully offline), and runs `ccshelf version`. The Windows
+  # leg builds a zip so the zip extraction path of install.sh runs on a real Windows runner.
+  action-e2e:
+    name: action-e2e (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Build the binary and a release directory
+        id: release
+        env:
+          CCSHELF_E2E_VERSION: v0.0.0-ci
+        run: |
+          set -euo pipefail
+          goos="$(go env GOOS)"
+          goarch="$(go env GOARCH)"
+          exe="$(go env GOEXE)"
+          bare="${CCSHELF_E2E_VERSION#v}"
+          pkg="github.com/ccshelf/ccshelf/internal/version"
+          relroot="${RUNNER_TEMP}/e2e-release"
+          stage="${RUNNER_TEMP}/e2e-stage"
+          mkdir -p "${relroot}/${CCSHELF_E2E_VERSION}" "$stage"
+          CGO_ENABLED=0 go build -trimpath \
+            -ldflags "-s -w -X ${pkg}.Version=${bare} -X ${pkg}.Commit=${GITHUB_SHA}" \
+            -o "${stage}/ccshelf${exe}" ./cmd/ccshelf
+          name="ccshelf_${bare}_${goos}_${goarch}"
+          if [ "$goos" = "windows" ]; then
+            archive="${name}.zip"
+            # Git Bash has no zip: build it with Go's archive/zip (a tiny throwaway program).
+            mkdir -p "${stage}/zipper"
+            cat >"${stage}/zipper/main.go" <<'GO'
+          package main
+
+          import (
+          	"archive/zip"
+          	"io"
+          	"os"
+          )
+
+          func main() {
+          	out, err := os.Create(os.Args[1])
+          	if err != nil {
+          		panic(err)
+          	}
+          	zw := zip.NewWriter(out)
+          	w, err := zw.Create("ccshelf.exe")
+          	if err != nil {
+          		panic(err)
+          	}
+          	in, err := os.Open(os.Args[2])
+          	if err != nil {
+          		panic(err)
+          	}
+          	if _, err := io.Copy(w, in); err != nil {
+          		panic(err)
+          	}
+          	if err := zw.Close(); err != nil {
+          		panic(err)
+          	}
+          	if err := out.Close(); err != nil {
+          		panic(err)
+          	}
+          }
+          GO
+            (cd "${stage}/zipper" && go run main.go "${relroot}/${CCSHELF_E2E_VERSION}/${archive}" "${stage}/ccshelf.exe")
+          else
+            archive="${name}.tar.gz"
+            tar -czf "${relroot}/${CCSHELF_E2E_VERSION}/${archive}" -C "$stage" ccshelf
+          fi
+          if command -v sha256sum >/dev/null 2>&1; then
+            sum="$(sha256sum "${relroot}/${CCSHELF_E2E_VERSION}/${archive}" | cut -d' ' -f1)"
+          else
+            sum="$(shasum -a 256 "${relroot}/${CCSHELF_E2E_VERSION}/${archive}" | cut -d' ' -f1)"
+          fi
+          # file:/// with a drive letter on Windows (file://D:/...), file:///abs/path elsewhere.
+          if command -v cygpath >/dev/null 2>&1; then
+            base="file://$(cygpath -m "$relroot")"
+          else
+            base="file://${relroot}"
+          fi
+          {
+            echo "base-url=${base}"
+            echo "sha256=${sum}"
+          } >>"$GITHUB_OUTPUT"
+      - name: Install through the Action (offline, sha256 pinned) and run ccshelf version
+        id: ccshelf
+        uses: ./action
+        with:
+          version: v0.0.0-ci
+          base-url: ${{ steps.release.outputs.base-url }}
+          sha256: ${{ steps.release.outputs.sha256 }}
+          args: version
+      - name: The installed binary is the one built above
+        env:
+          CCSHELF_BIN: ${{ steps.ccshelf.outputs.path }}
+          INSTALLED_VERSION: ${{ steps.ccshelf.outputs.version }}
+        run: |
+          set -euo pipefail
+          [ "$INSTALLED_VERSION" = "v0.0.0-ci" ]
+          out="$("$CCSHELF_BIN" version)"
+          echo "$out"
+          case "$out" in
+            "ccshelf v0.0.0-ci "*) ;;
+            *) echo "unexpected version output" >&2; exit 1 ;;
+          esac
+      - name: A wrong sha256 pin is refused
+        id: wrong
+        continue-on-error: true
+        uses: ./action
+        with:
+          version: v0.0.0-ci
+          base-url: ${{ steps.release.outputs.base-url }}
+          sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+      - name: The refusal really happened
+        env:
+          WRONG_OUTCOME: ${{ steps.wrong.outcome }}
+        run: |
+          [ "$WRONG_OUTCOME" = "failure" ] || { echo "wrong pin outcome was $WRONG_OUTCOME, expected failure" >&2; exit 1; }
+
   # Single required status check: fails if any needed job failed or was cancelled.
   ci-ok:
     name: ci-ok
     if: always()
-    needs: [lint, test, vuln, build, docs, examples, smoke, action-test]
+    needs: [lint, test, vuln, build, docs, examples, smoke, action-test, action-e2e]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}

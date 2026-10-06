@@ -102,39 +102,25 @@ linters:
             - github.com/pelletier/go-toml/v2
             - golang.org/x/term
             - golang.org/x/sys
-        # Packages that must never start a process. The only allowed process runners are
-        # internal/claude (the launcher), the git helpers (internal/profile/gitsource and
-        # internal/catalog/gitdata) and policy's plutil runner (read.go, named below).
+        # No package may start a process unless it is listed here (deny by default, so a new
+        # package is covered without editing this file). Allowed: internal/claude (the
+        # launcher), the git helpers (internal/profile/gitsource, internal/catalog/gitdata),
+        # policy's plutil runner (read.go), internal/testutil (test helper that runs git) and
+        # tests. cmd/ has no os/exec import today; add it here if that changes on purpose.
         no-exec:
           files:
-            - "**/internal/profile/**"
-            - "!**/internal/profile/gitsource/**"
-            - "**/internal/settings/**"
-            - "**/internal/config/**"
-            - "**/internal/envpolicy/**"
-            - "**/internal/cache/**"
-            - "**/internal/catalog/site/**"
-            - "**/internal/catalog/lint/**"
-            - "**/internal/catalog/codeowners/**"
-            - "**/internal/catalog/sidecar/**"
-            - "**/internal/catalog/safepath/**"
-            - "**/internal/orgconfig/**"
-            - "**/internal/marketplace/**"
-            - "**/internal/policy/**"
-            - "!**/internal/policy/read.go" # runs plutil on macOS: the one named exception
-            - "**/internal/trust/**"
-            - "**/internal/bundles/**"
-            - "**/internal/doctor/**"
-            - "**/internal/recommend/**"
-            - "**/internal/analytics/**"
-            - "**/internal/ui/**"
-            - "**/internal/shellinit/**"
+            - $all
             - "!$test"
+            - "!**/internal/claude/**"
+            - "!**/internal/profile/gitsource/**"
+            - "!**/internal/catalog/gitdata/**"
+            - "!**/internal/policy/read.go" # runs plutil on macOS: the one named exception
+            - "!**/internal/testutil/**"
           deny:
             - pkg: os/exec
-              desc: this package must not run processes; only the launcher and git helpers may
+              desc: only the launcher and the git helpers may run processes (see the allowlist above)
             - pkg: golang.org/x/sys/execabs
-              desc: this package must not run processes
+              desc: only the launcher and the git helpers may run processes
 
   exclusions:
     generated: lax
