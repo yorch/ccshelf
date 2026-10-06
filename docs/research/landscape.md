@@ -20,6 +20,8 @@ Labels: {V} verified in docs, `gh` or the CLI; {R} reported by a subagent and no
 - No Reddit/HN evidence found (absence is not proof).
 
 ### Token-cost argument is weaker than first thought (adversary, checked against the docs) {V}
+
+<!-- widget: token-budget -->
 - Skill listing is capped at **1% of the context window** (~2k tokens on 200k, ~10k on 1M).
 - The 42k-token / 189-skill report in #14882 predates v2.1.196; docs say earlier `/context` counted full description text and could show values several times the budget. Likely a display artifact.
 - MCP tool search is on by default: only tool names cost context up front.

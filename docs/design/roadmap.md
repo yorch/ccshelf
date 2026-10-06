@@ -26,3 +26,22 @@ Both tracks in parallel became evidence first. The shared `core/` is built only 
 
 ## Non-goals (for now)
 Accounts, the trust lockfile and git sources, `compile` and committed bundles, `recommend`, the static catalog site and taxonomy (all deferred to Phase 2); a registry server/DB, vector search, a full-screen TUI dashboard (interactive prompts and pickers are in scope, see R6), custom install path (bundles cover install), MCP gateway, config-dir-per-profile, a concierge search tool before there is usage data, anything that writes shared settings.
+
+## Checklist
+Tick items in the report to track them (saved in your browser); the checked state below is the committed state.
+
+- [x] Stage 0: launcher experiments on macOS (done 2026-10-06)
+- [x] Adversarial review round absorbed and facts corrected (done 2026-10-06)
+- [x] LICENSE added (MIT); docs reorganized and the report generated from the Markdown
+- [ ] Phase 0.1: routing eval on the real ~50 plugins, with the success criterion fixed first
+- [ ] Phase 0.2: adopt, build or contribute: evaluate fuzzyalej/claude-profile and edimuj/claude-rig
+- [ ] Phase 0.3: bundle and masking prototype (T7); needs a second config directory and a login
+- [ ] Phase 0.4: Stage 0 on Linux and Windows
+- [ ] Phase 0.5: measure MCP and connector removal through the settings keys
+- [ ] Phase 0.6: write kill and obsolescence criteria
+- [ ] Employer approval for open-sourcing; then SECURITY.md, threat model and CONTRIBUTING.md
+- [ ] MVP launcher: run, show, dry-run, ls, dir sources, extends, default-deny masking, closed schema, settings validation
+- [ ] MVP catalog: lint (owner, status, when_to_use) and a generated CATALOG.md
+- [ ] Nightly real-claude smoke test before any release
+- [ ] Deferred until someone asks: accounts, trust lockfile and git sources, compiled bundles, recommend, shell-init, static site, taxonomy, Analytics join
+

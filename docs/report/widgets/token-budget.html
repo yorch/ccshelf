@@ -1,0 +1,10 @@
+<div class="widget">
+<p>Context window: <select id="ctx" aria-label="Context window size"><option value="200000">200k</option><option value="1000000">1M</option></select></p>
+<p style="margin:8px 0 4px">Skill listing budget (1% of the window): <b id="bud"></b> tokens</p>
+<div class="bar"><i id="budbar"></i></div>
+<p style="margin:12px 0 4px">Reported in #14882 (189 skills): <b>42,207</b> tokens <span class="small">(likely a display artifact from before v2.1.196)</span></p>
+<div class="bar"><i id="repbar" style="background:var(--u)"></i></div>
+</div>
+<script>
+(function(){const sel=document.getElementById("ctx");function draw(){const b=+sel.value*0.01;document.getElementById("bud").textContent=b.toLocaleString();document.getElementById("budbar").style.width=Math.min(100,b/42207*100)+"%";document.getElementById("repbar").style.width="100%"}sel.onchange=draw;draw()})();
+</script>

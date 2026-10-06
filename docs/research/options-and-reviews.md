@@ -46,6 +46,8 @@ IDs are prefixed `P-` here; catalog options below use `C-`. The report uses the 
 6. Security: a launcher must detect policy and say "blocked by policy"; it must not route around org controls, especially when the user also governs them.
 
 ### Catalog sizing (adversary)
+
+<!-- widget: catalog-size -->
 - N=20: README table generated from marketplace.json + CI lint requiring `author/tags/category` is enough.
 - N=100: flat search breaks; overlap is real; a static page with facets, diff since last tag, owner, usage counts is worth it.
 - N=500: needs a governed registry (required metadata, deprecation workflow, dedup review, usage-driven pruning): skillhub/Backstage territory.

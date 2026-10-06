@@ -1,0 +1,31 @@
+<div class="hero">
+<h2>One install, a different loadout per terminal</h2>
+<p>Pick a profile to see what the launcher would mask for one session. The plugin names are made up. The masking mechanism was tested on macOS (reported by a subagent): a generated <code>--settings</code> file sets <code>enabledPlugins</code> to <code>false</code> for every installed plugin the profile doesn't list. Writing <code>true</code> for the kept plugins and the policy toggle below are design intent, not tested.</p>
+<div class="seg" id="seg" role="radiogroup" aria-label="Profile"></div>
+<label class="policy"><input type="checkbox" id="pol"> Org policy force-enables audit-logger</label>
+<div class="loadout" id="loadout"></div>
+<p class="count" id="lcount" aria-live="polite"></p>
+<pre id="lcmd"></pre>
+</div>
+<script>
+(function(){
+const P=["design-kit@acme","playwright@acme","frontend-design@official","chrome-devtools@official","code-review@official","docs-writer@acme","sre-kit@acme","pagerduty-tools@acme","grafana-helper@acme","terraform-helpers@acme","release-notes@acme","seo-tools@acme","content-lint@acme","analytics-kit@acme","feature-dev@official","audit-logger@acme"];
+const S={"No profile":null,frontend:["design-kit@acme","playwright@acme","frontend-design@official","chrome-devtools@official","code-review@official","docs-writer@acme"],sre:["sre-kit@acme","pagerduty-tools@acme","grafana-helper@acme","terraform-helpers@acme","code-review@official","release-notes@acme"],seo:["seo-tools@acme","content-lint@acme","analytics-kit@acme","docs-writer@acme","chrome-devtools@official"]};
+const seg=$("#seg"),lo=$("#loadout"),pol=$("#pol");let cur="frontend",played=false;
+const hash=s=>{let h=5381;for(const c of s)h=((h<<5)+h+c.charCodeAt(0))>>>0;return h.toString(16).padStart(8,"0")};
+Object.keys(S).forEach(k=>{const b=document.createElement("button");b.type="button";b.textContent=k;b.setAttribute("role","radio");b.onclick=()=>{cur=k;draw(false)};seg.appendChild(b)});
+seg.addEventListener("keydown",e=>{const ks=Object.keys(S);let i=ks.indexOf(cur);if(e.key==="ArrowRight"||e.key==="ArrowDown")i=(i+1)%ks.length;else if(e.key==="ArrowLeft"||e.key==="ArrowUp")i=(i-1+ks.length)%ks.length;else return;e.preventDefault();cur=ks[i];draw(false);seg.querySelector("[aria-checked=true]").focus()});
+pol.onchange=()=>draw(false);
+function state(){const set=S[cur];const forced=pol.checked;return P.map(p=>{const inProf=set===null||set.includes(p);const lock=forced&&p==="audit-logger@acme"&&!inProf;return{p,on:inProf||lock,lock,written:inProf}})}
+function draw(initial){const st=state();seg.querySelectorAll("button").forEach(b=>{const on=b.textContent===cur;b.setAttribute("aria-checked",on);b.tabIndex=on?0:-1});
+lo.textContent="";const els=st.map((x,i)=>{const d=document.createElement("div");d.className="plug";d.style.setProperty("--d",initial?(i*35)+"ms":"0s");const sw=document.createElement("span");sw.className="sw";const c=document.createElement("code");c.textContent=x.p;c.style.background="none";c.style.padding="0";d.append(sw,c);if(x.lock){const l=document.createElement("span");l.className="lock";l.textContent="forced by policy";d.appendChild(l)}lo.appendChild(d);return[d,x]});
+const apply=()=>els.forEach(([d,x])=>d.classList.toggle("on",x.on));
+if(initial&&!reduce){requestAnimationFrame(()=>requestAnimationFrame(apply))}else apply();
+const on=st.filter(x=>x.on).length,off=st.length-on,forced=st.some(x=>x.lock);
+$("#lcount").innerHTML="<b>"+on+"</b> on, <b>"+off+"</b> masked"+(forced?". Policy keeps audit-logger on even though the launcher writes <code>false</code> for it.":".");
+if(S[cur]===null){$("#lcmd").textContent="$ claude\n# no profile: nothing is generated and every installed plugin stays enabled"}
+else{const j={enabledPlugins:Object.fromEntries(st.map(x=>[x.p,x.written]))};const txt=JSON.stringify(j,null,2);$("#lcmd").textContent="$ ccshelf run "+cur+"\n# starts: claude --settings ~/.cache/ccshelf/settings-"+hash(txt)+".json\n\n"+txt}}
+cp.heroPlay=()=>{if(played)return;played=true;draw(true)};
+draw(false);
+})();
+</script>

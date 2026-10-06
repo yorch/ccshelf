@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ccshelf research</title>
+<style>
+/*STYLE*/
+</style>
+<script>const $=(s,r=document)=>r.querySelector(s);const cp={};const reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;</script>
+</head>
+<body>
+<div class="shell">
+<aside class="rail">
+<div class="brand"><h1>ccshelf</h1><p>Research and design notes. Claude Code 2.1.290. Generated from the Markdown in docs/ (source hash /*HASH*/).</p></div>
+<nav aria-label="Sections"><div id="tabs" role="tablist" aria-orientation="vertical"></div></nav>
+<div class="legend" aria-label="Confidence markers"><b>How sure we are</b><br><span class="lg gv" aria-hidden="true">&#9679;</span>verified in docs, gh or the CLI<br><span class="lg gr" aria-hidden="true">&#9680;</span>reported by a research agent<br><span class="lg gu" aria-hidden="true">&#9675;</span>unverified or inferred</div>
+<button class="themebtn" id="themebtn" type="button">Switch theme</button>
+</aside>
+<main>
+
+/*SECTIONS*/
+
+</main>
+</div>
+<script>
+const TABS=/*TABS*/;
+const tb=$("#tabs"),root=document.documentElement;
+let lastGroup="";
+TABS.forEach(t=>{if(t.group!==lastGroup){lastGroup=t.group;const g=document.createElement("div");g.className="grp";g.textContent=t.group;g.setAttribute("role","presentation");tb.appendChild(g)}
+const b=document.createElement("button");b.type="button";b.textContent=t.label;b.setAttribute("role","tab");b.id="tab-"+t.id;b.setAttribute("aria-controls",t.id);b.dataset.id=t.id;b.onclick=()=>{show(t.id);scrollTo(0,0)};tb.appendChild(b)});
+document.querySelectorAll("section").forEach(s=>{s.setAttribute("role","tabpanel");s.setAttribute("aria-labelledby","tab-"+s.id)});
+tb.addEventListener("keydown",e=>{const bs=[...tb.querySelectorAll("[role=tab]")];let i=bs.indexOf(document.activeElement);if(i<0)return;const k=e.key;if(k==="ArrowDown"||k==="ArrowRight")i=(i+1)%bs.length;else if(k==="ArrowUp"||k==="ArrowLeft")i=(i-1+bs.length)%bs.length;else if(k==="Home")i=0;else if(k==="End")i=bs.length-1;else return;e.preventDefault();bs[i].focus();show(bs[i].dataset.id)});
+try{const t=localStorage.getItem("cp-theme");if(t)root.dataset.theme=t}catch(e){}
+$("#themebtn").onclick=()=>{const d=root.dataset.theme==="dark"||(!root.dataset.theme&&matchMedia("(prefers-color-scheme:dark)").matches);root.dataset.theme=d?"light":"dark";try{localStorage.setItem("cp-theme",root.dataset.theme)}catch(e){}};
+document.querySelectorAll("main .V,main .R,main .U").forEach(el=>{const k=el.classList.contains("V")?"verified":el.classList.contains("R")?"reported":"unverified";el.setAttribute("role","img");el.setAttribute("aria-label",k);el.title=k});
+function toc(sec){const old=sec.querySelector(".toc");if(old)old.remove();if(sec.id==="overview")return;const hs=[...sec.querySelectorAll("h3")];if(hs.length<3)return;const n=document.createElement("nav");n.className="toc";n.setAttribute("aria-label","On this page");hs.forEach((h,i)=>{if(!h.id)h.id=sec.id+"-"+i;const a=document.createElement("a");a.href="#"+h.id;a.textContent=h.textContent;a.onclick=e=>{e.preventDefault();const p=h.closest(".pane");if(p&&!p.classList.contains("on")){const bt=sec.querySelector('[data-pane="'+p.id+'"]');if(bt)bt.click()}h.scrollIntoView({behavior:reduce?"auto":"smooth"})};n.appendChild(a)});const first=sec.querySelector("h2");first.after(n)}
+function show(id){if(!document.getElementById(id))id="overview";document.querySelectorAll("section").forEach(s=>{const on=s.id===id;s.classList.toggle("on",on);if(on)toc(s)});tb.querySelectorAll("[role=tab]").forEach(b=>{const on=b.dataset.id===id;b.setAttribute("aria-selected",on);b.tabIndex=on?0:-1;if(on&&innerWidth<=860)b.scrollIntoView({inline:"center",block:"nearest"})});try{history.replaceState(null,"","#"+id)}catch(e){}if(id==="overview"&&cp.heroPlay)cp.heroPlay()}
+window.addEventListener("hashchange",()=>show((location.hash||"#overview").slice(1)));
+// internal links between notes become tab links
+document.querySelectorAll("main a[href^='#']").forEach(a=>{const id=a.getAttribute("href").slice(1);if(TABS.some(t=>t.id===id))a.addEventListener("click",e=>{e.preventDefault();show(id);scrollTo(0,0)})});
+// row filter for long tables
+document.querySelectorAll("main table").forEach((t,ti)=>{if(t.closest("#overview"))return;const rows=[...t.tBodies[0].rows];if(rows.length<8)return;const inp=document.createElement("input");inp.type="search";inp.name="filter-"+ti;inp.placeholder="Filter rows";inp.setAttribute("aria-label","Filter table rows");inp.oninput=()=>{const q=inp.value.toLowerCase();rows.forEach(r=>{r.hidden=q&&!r.textContent.toLowerCase().includes(q)})};t.before(inp)});
+// task lists keep their state in this browser
+document.querySelectorAll("main li.task input").forEach((c,i)=>{const key="cp-task-"+(c.closest("section").id)+"-"+i;c.name=key;try{const v=localStorage.getItem(key);if(v!==null)c.checked=v==="1"}catch(e){}c.addEventListener("change",()=>{try{localStorage.setItem(key,c.checked?"1":"0")}catch(e){}})});
+// panes: one section at a time (used for the workflows)
+document.querySelectorAll("[data-chips]").forEach(box=>{const sec=box.closest("section");const btns=[...box.querySelectorAll("button")];function pick(id){btns.forEach(b=>b.classList.toggle("on",b.dataset.pane===id));sec.querySelectorAll(".pane").forEach(p=>p.classList.toggle("on",p.id===id))}btns.forEach(b=>b.onclick=()=>pick(b.dataset.pane));pick(btns[0].dataset.pane)});
+show((location.hash||"#overview").slice(1)||"overview");
+</script>
+</body>
+</html>

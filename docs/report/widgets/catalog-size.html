@@ -1,0 +1,13 @@
+<div class="widget">
+<p>Plugins in the registry: <b id="nval">50</b></p>
+<input type="range" id="nrange" min="5" max="600" value="50" style="width:100%" aria-label="Number of plugins in the registry">
+<p id="nmsg" style="margin:6px 0 0"></p>
+</div>
+<script>
+(function(){const r=document.getElementById("nrange");function draw(){const n=+r.value;document.getElementById("nval").textContent=n;let m;
+if(n<=30)m="Native features are enough: a README table generated from marketplace.json plus a CI lint requiring author, tags and category.";
+else if(n<80)m="Approaching the threshold (about 50 to 80 plugins, or more than one publishing team): a metadata convention, CI lint and a generated page start to pay off.";
+else if(n<300)m="A custom catalog is worth it: flat search breaks down and overlap is real, so facets, owner and status, a new-since diff and usage counts pay off.";
+else m="You need a governed registry: required metadata, deprecation workflow, dedup review, usage-driven pruning (skillhub or Backstage territory).";
+document.getElementById("nmsg").textContent=m}r.oninput=draw;draw()})();
+</script>

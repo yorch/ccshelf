@@ -22,6 +22,8 @@ Safety: no user config was modified by the experiments (read-only inspection onl
 | **T7** bundle behavior | Skipped: needs installing a plugin. | Not tested |
 
 ## Token measurements (single run each, noisy)
+
+<!-- widget: token-bars -->
 | Run | Total (input + cache create + cache read) |
 |---|---|
 | baseline | 27,167 |
