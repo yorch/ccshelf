@@ -2,11 +2,11 @@
 
 Profiles and a plugin catalog for Claude Code. Unofficial: not affiliated with Anthropic.
 
-**Status:** implemented and under adversarial review; not yet released. The launcher, catalog, Action and starter template build for all six targets; tests pass on macOS and Linux, and Windows runs in CI and is best-effort until proven; Phase 0 evidence items (routing eval, adopt-or-build, bundle prototype, Linux/Windows runs) are still open, see the [roadmap](docs/design/roadmap.md). Start with [docs/README.md](docs/README.md) and the [decision log](docs/DECISIONS.md). The interactive report is `docs/report.html`, generated from the Markdown.
+**Status:** implemented and under adversarial review; stable releases are available. The launcher, catalog, Action and starter template build for all six targets; the test suites pass on native macOS, Linux and Windows CI runners. Phase 0 evidence items (routing eval, adopt-or-build and bundle prototype) are still open; see the [roadmap](docs/design/roadmap.md). Start with [docs/README.md](docs/README.md) and the [decision log](docs/DECISIONS.md). The interactive report is `docs/report.html`, generated from the Markdown.
 
 ## Install
 
-**No release is published yet.** Until `0.1.0` exists, build from source (Go 1.27 or newer):
+Install the latest release with the platform-specific script below, or build from source (Go 1.27 or newer):
 
 ```sh
 go install github.com/yorch/ccshelf/cmd/ccshelf@latest
@@ -15,7 +15,7 @@ ccshelf --version
 
 Or clone the repository and run `go build -o ccshelf ./cmd/ccshelf`.
 
-Once a release is published, the installers below fetch it. Both verify the download before installing anything, never need administrator rights, send no telemetry and write only into the install directory (created with any missing parent folders) and a private temporary directory that is removed afterwards. The Windows script edits your user `PATH` only with `-AddToPath`. `install.sh` needs `curl` (for example `apk add curl` or `apt install curl`); it ignores `~/.curlrc`, honors the usual proxy and CA environment variables and never turns TLS verification off.
+The installers below fetch the latest release. Both verify the download before installing anything, never need administrator rights, send no telemetry and write only into the install directory (created with any missing parent folders) and a private temporary directory that is removed afterwards. The Windows script edits your user `PATH` only with `-AddToPath`. `install.sh` needs `curl` (for example `apk add curl` or `apt install curl`); it ignores `~/.curlrc`, honors the usual proxy and CA environment variables and never turns TLS verification off.
 
 **Linux and macOS** (amd64 and arm64; WSL counts as Linux). Installs into `~/.local/bin`:
 
@@ -26,7 +26,7 @@ curl -fsSL https://github.com/yorch/ccshelf/releases/latest/download/install.sh 
 Pin a version, choose a directory, or require the signature check (options go after `sh -s --`):
 
 ```sh
-curl -fsSL https://github.com/yorch/ccshelf/releases/latest/download/install.sh | sh -s -- --version v0.1.0 --bin-dir "$HOME/bin" --require-signature
+curl -fsSL https://github.com/yorch/ccshelf/releases/latest/download/install.sh | sh -s -- --version v0.2.0 --bin-dir "$HOME/bin" --require-signature
 ```
 
 Prefer to read it first? `curl -fsSLO https://github.com/yorch/ccshelf/releases/latest/download/install.sh`, read it, then `sh install.sh`. `sh install.sh --help` lists every option (`--base-url` for a mirror of the public release, such as one hosted on your GitHub Enterprise Server, `--dry-run`, `--quiet`, `--force`). A mirror is trusted to serve the release you ask for, and its `latest` can name an older release that is still validly signed. `--cosign-identity` and `--cosign-issuer` matter only for a release you signed yourself; a mirror of the public release is checked with the default identity.
@@ -40,7 +40,7 @@ irm https://github.com/yorch/ccshelf/releases/latest/download/install.ps1 | iex
 With options (`-Version`, `-BinDir`, `-BaseUrl`, `-RequireSignature`, `-AddToPath`, `-DryRun`, `-Force`). The `irm | iex` form leaves your session alone: it defines no variable or function and changes no preference. `-AddToPath` writes your user `PATH` back as an expandable value, so `%VARIABLE%` entries stay as they are:
 
 ```powershell
-& ([scriptblock]::Create((irm https://github.com/yorch/ccshelf/releases/latest/download/install.ps1))) -Version v0.1.0 -AddToPath
+& ([scriptblock]::Create((irm https://github.com/yorch/ccshelf/releases/latest/download/install.ps1))) -Version v0.2.0 -AddToPath
 ```
 
 **What the installers check.** The release's `checksums.txt` is fetched from the same release as the archive, the archive must match exactly one line in it (SHA-256, always), and the archive may contain only `ccshelf` (`ccshelf.exe`), `LICENSE` and `README.md`. When [cosign](https://docs.sigstore.dev/cosign/) is on your `PATH` the signature of `checksums.txt` is verified first against the release workflow's exact identity, and a failure stops the install; `--require-signature` (`-RequireSignature`) turns a missing cosign into an error too. Without cosign the installer says so: the checksum then detects corruption, not a tampered release, because both files come from the same place. See [SECURITY.md](SECURITY.md) for what this does and does not prove.
