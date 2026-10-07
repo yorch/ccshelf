@@ -307,6 +307,13 @@ func (c *command) run(ctx context.Context, cc *clicore.Context, f *flags) error 
 		Version: f.version, Prerelease: f.prerelease, AllowDowngrade: f.allowDowngrade,
 		RequireSignature: f.requireSignature, Force: f.force,
 	}
+	// A signature that cannot be checked as required stops everything: before
+	// the network, the dry run and the confirmation (a --check only reports).
+	if !f.check {
+		if err := u.CheckSignatureRequirement(req); err != nil {
+			return mapError(cc, err, f, nil)
+		}
+	}
 	dctx, cancel := context.WithTimeout(ctx, 2*update.MetadataTimeout)
 	plan, err := u.Discover(dctx, req)
 	cancel()

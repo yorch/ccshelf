@@ -259,6 +259,22 @@ func (u *Updater) cosign() (string, bool) {
 	return u.LookCosign()
 }
 
+// CheckSignatureRequirement fails with KindSignatureRequired when the request
+// demands a verified signature and cosign is not available. The command
+// calls it before it plans, prints the dry run or asks for confirmation, so
+// that an update that cannot be verified as required never gets that far;
+// Apply checks again.
+func (u *Updater) CheckSignatureRequirement(req Request) error {
+	if !req.RequireSignature {
+		return nil
+	}
+	if _, ok := u.cosign(); ok {
+		return nil
+	}
+	return newErr(KindSignatureRequired, "install cosign (https://docs.sigstore.dev/cosign/) and make sure it is on PATH, or run without --require-signature to rely on the SHA-256 check alone", nil,
+		"--require-signature needs cosign, which is not on PATH")
+}
+
 // Apply downloads, verifies and installs plan.Target. progress receives short
 // status lines. Nothing is replaced unless every check passes.
 func (u *Updater) Apply(ctx context.Context, p *Plan, req Request, progress func(string)) (*Result, error) {
@@ -283,11 +299,10 @@ func (u *Updater) Apply(ctx context.Context, p *Plan, req Request, progress func
 		}
 		return nil, newErr(KindFailure, "", err, "cannot update %s", p.Exe)
 	}
-	cosignPath, haveCosign := u.cosign()
-	if req.RequireSignature && !haveCosign {
-		return nil, newErr(KindSignatureRequired, "install cosign (https://docs.sigstore.dev/cosign/) and make sure it is on PATH, or run without --require-signature to rely on the SHA-256 check alone", nil,
-			"--require-signature needs cosign, which is not on PATH")
+	if err := u.CheckSignatureRequirement(req); err != nil {
+		return nil, err
 	}
+	cosignPath, haveCosign := u.cosign()
 	for _, name := range []string{p.Archive.Name, ChecksumsName} {
 		if _, ok := p.Target.Asset(name); !ok {
 			return nil, newErr(KindFailure, "the release may still be publishing; try again later", nil,

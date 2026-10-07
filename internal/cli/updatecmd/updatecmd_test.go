@@ -581,3 +581,46 @@ func TestBaseURLRepoPathDoesNotChangeTheSigner(t *testing.T) {
 		t.Errorf("identity = %q: base_url must not choose the signer", got)
 	}
 }
+
+// --require-signature is decided before the network, the dry run and the
+// confirmation: without cosign nothing may get as far as a plan or a question.
+func TestRequireSignatureIsCheckedFirst(t *testing.T) {
+	for name, args := range map[string][]string{
+		"dry-run":     {"update", "--dry-run", "--require-signature"},
+		"interactive": {"update", "--require-signature"},
+		"yes":         {"update", "--yes", "--require-signature"},
+		"up to date":  {"update", "--require-signature", "--version", "v0.1.0"},
+		"force":       {"update", "--force", "--dry-run", "--require-signature"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := newHarness(t, "0.1.0")
+			h.publish("v0.2.0")
+			sc := ui.NewScripted() // any question is a failure
+			h.prompt = sc
+			if code := h.run(args...); code != ui.ExitFailure {
+				t.Fatalf("exit = %d, want 1\nstdout:\n%s\nstderr:\n%s", code, h.out, h.errb)
+			}
+			has(t, h.errb.String(), "--require-signature needs cosign")
+			hasNot(t, h.out.String(), "dry run")
+			hasNot(t, h.errb.String(), "equivalent")
+			if len(sc.Asked) != 0 {
+				t.Errorf("asked %v before the signature requirement was checked", sc.Asked)
+			}
+			if h.hits() != 0 {
+				t.Errorf("%d requests before the signature requirement was checked", h.hits())
+			}
+		})
+	}
+	t.Run("with cosign the dry run proceeds", func(t *testing.T) {
+		h := newHarness(t, "0.1.0")
+		h.publish("v0.2.0")
+		h.opt.LookCosign = func() (string, bool) { return "/usr/bin/cosign", true }
+		h.mustRun("update", "--dry-run", "--require-signature")
+		has(t, h.out.String(), "dry run")
+	})
+	t.Run("check only reports", func(t *testing.T) {
+		h := newHarness(t, "0.1.0")
+		h.publish("v0.2.0")
+		h.mustRun("update", "--check", "--require-signature")
+	})
+}
