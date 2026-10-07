@@ -163,6 +163,38 @@ func ReadFile(dir, name string) ([]byte, error) {
 	return readRegular(filepath.Join(dir, name), MaxFileSize)
 }
 
+// statePattern matches the fixed names of small mutable records (for example
+// update-state.json) that are not content addressed and never aged out by GC.
+var statePattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,40}\.json$`)
+
+// WriteState atomically writes content to the fixed-name record called name
+// (lower-case letters, digits and "-", ending in .json) in dir with mode 0600,
+// replacing any previous regular file of that name. Unlike [WriteReplace] the
+// name carries no content address, so [GC] and [Prune] never remove it.
+func WriteState(dir, name string, content []byte) error {
+	if !statePattern.MatchString(name) {
+		return fmt.Errorf("invalid cache state file name %q", name)
+	}
+	if len(content) > MaxFileSize {
+		return fmt.Errorf("cache file %q too large", name)
+	}
+	return publish(dir, filepath.Join(dir, name), content, true)
+}
+
+// ReadState reads the record written by [WriteState] without following
+// symlinks. It returns an error wrapping [os.ErrNotExist] when the file is
+// absent and [ErrTampered] when it is not a regular file owned by the current
+// user or is larger than limit bytes (0 means [MaxFileSize]).
+func ReadState(dir, name string, limit int64) ([]byte, error) {
+	if !statePattern.MatchString(name) {
+		return nil, fmt.Errorf("invalid cache state file name %q", name)
+	}
+	if limit <= 0 || limit > MaxFileSize {
+		limit = MaxFileSize
+	}
+	return readRegular(filepath.Join(dir, name), limit)
+}
+
 // deleteHint is appended to errors about a cache file that cannot be trusted:
 // every cache file can be rebuilt, so removing it is always safe.
 func deleteHint(path string) string {
