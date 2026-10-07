@@ -115,16 +115,37 @@ func TestApplyUpToDate(t *testing.T) {
 		t.Fatalf("plan = %+v %v", p, err)
 	}
 	// An older newest release (this build is a pre-release ahead of it) is
-	// up to date too, not a downgrade.
+	// "up to date" for the plain command, but installing it is a downgrade.
 	fx2 := newFixture(t, "0.3.0-rc.1")
 	fx2.release("v0.2.0", false)
-	if p, err := fx2.u.Discover(context.Background(), Request{}); err != nil || !p.UpToDate || p.Downgrade {
+	if p, err := fx2.u.Discover(context.Background(), Request{}); err != nil || !p.UpToDate || !p.Downgrade {
 		t.Errorf("pre-release ahead of latest: %+v %v", p, err)
 	}
 	// Force reinstalls the same version.
 	res, err := fx.apply(Request{Force: true})
 	if err != nil || res.To != "0.2.0" {
 		t.Errorf("forced reinstall = %+v %v", res, err)
+	}
+}
+
+// --force never implies a downgrade: an older "latest" (a rolled-back
+// release, or a mirror that lags) is refused unless --allow-downgrade is given.
+func TestForceDoesNotDowngradeToOlderLatest(t *testing.T) {
+	fx := newFixture(t, "0.3.0")
+	fx.release("v0.2.0", false)
+	for _, req := range []Request{{Force: true}, {}} {
+		_, err := fx.apply(req)
+		e := mustKind(t, err, KindUsage)
+		if !strings.Contains(e.Hint(), "--allow-downgrade") {
+			t.Errorf("%+v: hint = %q", req, e.Hint())
+		}
+		if readFile(t, fx.exe) != string(fakeBinary("0.3.0")) {
+			t.Fatalf("%+v: a refused downgrade must change nothing", req)
+		}
+	}
+	res, err := fx.apply(Request{Force: true, AllowDowngrade: true})
+	if err != nil || res.To != "0.2.0" || readFile(t, fx.exe) != string(fakeBinary("0.2.0")) {
+		t.Fatalf("--force --allow-downgrade = %+v %v", res, err)
 	}
 }
 

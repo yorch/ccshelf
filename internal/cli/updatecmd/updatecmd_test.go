@@ -500,3 +500,24 @@ func TestPlainHTTPBaseURLIsRefusedWhateverTheConfigSays(t *testing.T) {
 		t.Errorf("https base URL refused: %v", err)
 	}
 }
+
+// --force reinstalls the running version and overrides the package-manager
+// refusal, but never installs an older "latest" release: that needs
+// --allow-downgrade.
+func TestForceNeverImpliesDowngrade(t *testing.T) {
+	h := newHarness(t, "0.3.0")
+	h.publish("v0.2.0")
+	h.srv.SetLatest("v0.2.0")
+	h.prompt = ui.NewScripted()
+	if code := h.run("update", "--force", "--yes"); code != ui.ExitUsage {
+		t.Fatalf("exit = %d, want 2\n%s", code, h.errb)
+	}
+	has(t, h.errb.String(), "--allow-downgrade")
+	if h.exeContent() != string(fakeBinary("0.3.0")) || downloads(h) != 0 {
+		t.Fatal("a refused downgrade must download and change nothing")
+	}
+	h.mustRun("update", "--force", "--allow-downgrade", "--yes")
+	if h.exeContent() != string(fakeBinary("0.2.0")) {
+		t.Fatalf("--force --allow-downgrade did not install: %q", h.exeContent())
+	}
+}

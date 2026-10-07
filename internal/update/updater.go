@@ -83,7 +83,7 @@ type Request struct {
 	// RequireSignature makes a missing cosign an error.
 	RequireSignature bool
 	// Force overrides the package-manager and development-build refusals, and
-	// reinstalls the same version.
+	// reinstalls the same version. It never allows a downgrade.
 	Force bool
 }
 
@@ -106,7 +106,7 @@ type Plan struct {
 	Method Method
 	// UpToDate is true when Target is not newer than the running version.
 	UpToDate bool
-	// Downgrade is true when an explicitly requested Target is older.
+	// Downgrade is true whenever Target is older than the running version.
 	Downgrade bool
 }
 
@@ -154,10 +154,14 @@ func (u *Updater) PlanFor(rel Release, req Request) (*Plan, error) {
 		switch c := rel.Version.Compare(p.Current); {
 		case c == 0:
 			p.UpToDate = true
-		case c < 0 && req.Version == "":
-			p.UpToDate = true // the newest release is older than this build
 		case c < 0:
+			// An older release is a downgrade whether it was asked for by
+			// name or is merely the newest one a (mirror or pre-release
+			// feed) offers; only --allow-downgrade installs it, and --force
+			// never implies it. Without a named version the plain answer is
+			// still "up to date".
 			p.Downgrade = true
+			p.UpToDate = req.Version == ""
 		}
 	}
 	u.locate(p)
