@@ -210,19 +210,15 @@ func newSearch(get clicore.Provider, opt Options) *cobra.Command {
 		Use:   "search <query>",
 		Short: "Search the plugin catalog of the org data repo",
 		Long: `Search the catalog of the org data repo (--root, default the current
-directory) locally and offline. Every word of the query must match a field
-(name, display name, tags, category, when_to_use, description or owner);
-better matches come first, ties by name.
+directory). Every word of the query must match a field (name, display name,
+tags, category, when_to_use, description or owner); better matches come first,
+ties by name.
 
-Outside an org data repo (the marketplace file of ccshelf.toml cannot be read)
-and without --root, it reads the catalog data of the organization's source from
-config.toml instead, so a developer who reaches the org through a git source
-needs no checkout: a dir source as it is, a git source from its verified local
-cache (the commit pinned by the trust lockfile, else the newest cached one; it
-never fetches, so run "ccshelf ls" or "ccshelf trust" once). The note on stderr
-says which one was used. When no such catalog is available it fails with exit
-1, like lint and compile, instead of reporting "no match". A query that
-matches nothing in a real catalog is not an error.`,
+Outside an org data repo and without --root, [catalog].remote_url in the user
+config takes precedence and retrieves catalog.json over HTTPS for this search.
+Otherwise search reads a configured org source from its local directory or
+verified git cache. A query that matches nothing in a real catalog is not an
+error.`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
 				return ui.Usage(errors.New("search needs a query, for example: ccshelf search figma"))
@@ -241,12 +237,16 @@ matches nothing in a real catalog is not an error.`,
 			if err != nil {
 				return err
 			}
-			cat, rep, err := catalog.BuildContext(cmd.Context(), r.root, r.cfg, catalog.Options{Now: c.Now})
-			if err != nil {
-				return fmt.Errorf("building the catalog: %w", err)
-			}
-			if err := requireMarketplace(r, rep); err != nil {
-				return notOrgRepo(err, opt.Catalog != nil)
+			cat := r.catalog
+			if cat == nil {
+				built, rep, err := catalog.BuildContext(cmd.Context(), r.root, r.cfg, catalog.Options{Now: c.Now})
+				if err != nil {
+					return fmt.Errorf("building the catalog: %w", err)
+				}
+				if err := requireMarketplace(r, rep); err != nil {
+					return notOrgRepo(err, opt.Catalog != nil)
+				}
+				cat = built
 			}
 			noteSource(c, src)
 			query := strings.Join(args, " ")

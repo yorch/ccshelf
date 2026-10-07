@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -38,6 +39,9 @@ type Options struct {
 	Policy policy.Options
 	// NewGit builds a prepared-on-demand git source (default gitsource.New).
 	NewGit GitFactory
+	// CatalogHTTPClient retrieves an explicitly configured catalog.json.
+	// The zero value uses a bounded-timeout HTTPS client.
+	CatalogHTTPClient *http.Client
 
 	// Test seams (unexported: only tests in this package set them).
 	// validateSettings replaces settings.Validate; afterSettingsWrite runs

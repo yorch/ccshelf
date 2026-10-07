@@ -30,17 +30,19 @@ func newRecommend(get clicore.Provider, opt Options) *cobra.Command {
 	var limit int
 	cmd := &cobra.Command{
 		Use:   "recommend",
-		Short: "Suggest plugins and profiles for a project directory (rule based, offline)",
+		Short: "Suggest plugins and profiles for a project directory (rule based)",
 		Long: `Look at a project directory (--dir, default the current directory) and suggest
 plugins and profiles of the org data repo (--root, default the current
 directory) whose relevance signals and when_to_use text match it. The rules
-are deterministic; there is no model call and no network access. Only file
-names and a few small manifest files of the project are read.
+are deterministic and there is no model call. Only file names and a few small
+manifest files of the project are read.
 
 Outside an org data repo (the marketplace file of ccshelf.toml cannot be read)
-and without --root, it uses the catalog data of the organization's source from
-config.toml, as search does (verified local cache, never a fetch). When no such
-catalog is available it fails with exit 1, like lint and compile.`,
+and without --root, [catalog].remote_url in the user config is retrieved over
+HTTPS when set; otherwise it uses the catalog data of the organization's
+source from its local directory or verified git cache. Remote JSON can
+recommend profiles; plugin recommendations need marketplace relevance rules
+from the org data repo.`,
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			c, err := get()
@@ -65,6 +67,25 @@ catalog is available it fails with exit 1, like lint and compile.`,
 			sig, err := recommend.Collect(cmd.Context(), target)
 			if err != nil {
 				return fmt.Errorf("reading the project directory: %w", err)
+			}
+			if r.catalog != nil {
+				noteSource(c, src)
+				profs := make([]recommend.ProfileInfo, 0, len(r.catalog.Profiles))
+				for _, m := range r.catalog.Profiles {
+					profs = append(profs, recommend.ProfileInfo{Name: m.Name, Status: m.Status, WhenToUse: m.WhenToUse})
+				}
+				recs := recommend.ForCatalog(r.catalog, sig, profs)
+				if limit > 0 && len(recs) > limit {
+					recs = recs[:limit]
+				}
+				if recs == nil {
+					recs = []recommend.Recommendation{}
+				}
+				data := recommendJSON{Source: src, Dir: sig.Cwd, Recommendations: recs}
+				if c.Mode.JSON {
+					return ui.WriteJSON(out(c), "recommend", data)
+				}
+				return writeRecommendText(out(c), c.Mode, data)
 			}
 			cat, lrep, err := catalog.BuildContext(cmd.Context(), r.root, r.cfg, catalog.Options{Now: c.Now})
 			if err != nil {

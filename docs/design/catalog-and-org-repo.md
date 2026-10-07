@@ -231,7 +231,7 @@ The templates live in `internal/scaffold/templates/` and are embedded into the b
 ## Consumption
 - **Plugins:** users add the marketplace natively (`extraKnownMarketplaces` or `/plugin marketplace add <git URL>`), and bundles install profile plugin sets in one step.
 - **Profiles:** users configure a `git` source pointing at this org data repo at a pinned tag, or a local clone as a `dir` source (see [profiles.md](profiles.md), "Profile sources and sharing"). The `plugin` source (profiles shipped inside a plugin) comes later.
-- **Catalog:** the published site, and `ccshelf search` or `ccshelf doctor` reading the same data locally.
+- **Catalog:** the published site, and `ccshelf search` or `ccshelf doctor` reading the same data locally. `ccshelf search` can also read the published `catalog.json` directly when the user's `config.toml` sets `[catalog] remote_url`; this is useful when developers should not need an org repo checkout.
 
 ## Variants
 - **Plugins in other repos:** `source` entries point at external git repos; sidecars still live here; `lint` can't inspect external plugin contents beyond the marketplace entry.

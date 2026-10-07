@@ -56,9 +56,9 @@
 // once for every included plugin whose status is deprecated, naming the
 // replacement. It is a warning only and never part of the trust closure; a
 // source without sidecars is silent. CatalogProvider gives search and
-// recommend the catalog data of the configured org source, read from the
-// verified cache and never fetched, for developers without an org data repo
-// checkout.
+// recommend catalog data for developers without an org data repo checkout. An
+// explicitly configured remote catalog is fetched over HTTPS; profile sources
+// are read from their local directory or verified cache.
 //
 // Every interactive flow ends by printing the equivalent flag command line.
 // The package never writes outside the ccshelf configuration and cache

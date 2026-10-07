@@ -36,12 +36,24 @@ path = "profiles"                               # folder inside the repo
 # marketplace = "acme/claude-marketplace"        # expected marketplace source: owner/repo for a GitHub marketplace, or a git URL for a git one; a mismatch is refused
 # path = "profiles"
 
+# Optional published catalog.json for `ccshelf search` outside an org repo.
+# This takes precedence over catalog data from the configured profile sources.
+# [catalog]
+# remote_url = "https://catalog.example.com/catalog.json"
+
 [trust]
 require_pin = true            # refuse git sources without a pinned ref (the tag is resolved to a commit SHA)
 trust_project_profiles = false # project .ccshelf/ folders are ignored unless trusted per repo
 on_change = "prompt"          # prompt | fail. What to do when an accepted profile changes (there is no auto-accept: `allow` is rejected)
                               # in a way that adds MCP commands, env values or system-prompt text.
 ```
+`catalog.remote_url` is read only from the user's config file. It must be an
+HTTPS URL without embedded credentials, a query string or a fragment. Search
+fetches it on each invocation, checks the `catalog.json` format version, and
+rejects responses larger than 8 MiB. It supports `ccshelf search` and profile
+recommendations. Plugin recommendations still need the org data repo's
+marketplace relevance rules; commands that build or lint the catalog also need
+the source files.
 **Precedence:** personal, then org. A personal profile with the same name overrides the org one, and `extends` can still pull in org profiles. **Project profiles (a `.ccshelf/` folder in a repository) are off by default** (SR2): when explicitly trusted per repo they can never shadow a name from another source and can never define MCP commands, env or prompt text.
 
 **Trust model (SR1 and SR2).** A shared profile is a closed schema (it cannot carry permissions, hooks, auth or endpoint settings, and MCP definitions live in a reviewed registry), but it still selects plugins and MCP servers that run code, so loading one is effectively running code from that source. The launcher therefore:
