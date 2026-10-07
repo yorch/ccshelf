@@ -191,6 +191,7 @@ func TestLoadInvalid(t *testing.T) {
 	tests := []struct{ name, body, want string }{
 		{"unknown key", "bogus = 1\n", "unknown key"},
 		{"unknown nested", "[trust]\nfoo = 1\n", "line 2"},
+		{"unknown catalog key", "[catalog]\nfoo = 1\n", "line 2"},
 		{"syntax", "[trust\n", "line 1"},
 		{"allow", "[trust]\non_change = \"allow\"\n", "never auto-accepted"},
 		{"bad on_change", "[trust]\non_change = \"x\"\n", "on_change"},
@@ -232,6 +233,10 @@ func TestLoadInvalid(t *testing.T) {
 		{"account unset var", "[accounts.w]\nconfig_dir = \"$NOPE_UNSET/x\"\n", "not set"},
 		{"default unknown", "default_account = \"x\"\n", "not a configured account"},
 		{"claude unset var", "[claude]\npath = \"$NOPE_UNSET\"\n", "claude.path"},
+		{"catalog non-https", "[catalog]\nremote_url = \"http://catalog.example/catalog.json\"\n", "absolute HTTPS URL"},
+		{"catalog credentials", "[catalog]\nremote_url = \"https://user:pass@catalog.example/catalog.json\"\n", "credentials"},
+		{"catalog query", "[catalog]\nremote_url = \"https://catalog.example/catalog.json?token=secret\"\n", "query strings"},
+		{"catalog fragment", "[catalog]\nremote_url = \"https://catalog.example/catalog.json#latest\"\n", "query strings"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
