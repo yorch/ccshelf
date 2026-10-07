@@ -9,7 +9,7 @@ Code layout of the tool repo, design principles and the Go stack. For the org da
 - `profiles/`: local per-terminal launcher. Depends on `core`.
 - `catalog/`: metadata lint + static catalog site, runs in CI. Depends on `core`.
 
-Separate releases. Git plus CI is the registry; no server or database.
+Separate releases. Git plus CI is the registry; no server or database. `internal/update` (with `internal/cli/updatecmd`) implements the verified self-update; see [update.md](update.md).
 
 ### Design principles
 1. **Never write shared state** (`~/.claude/settings.json`, `~/.claude.json`, plugin cache). The launcher writes only its own generated files (content-addressed, in its own cache dir; see [platform.md](platform.md)) and starts `claude`. This is what makes concurrent terminals safe and what mcpick-style tools probably lack {U}.

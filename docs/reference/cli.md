@@ -60,6 +60,7 @@ Scripts can rely on these; they never change meaning.
 | [`ccshelf shell-init`](#ccshelf-shell-init) | Print shell functions cs-<profile> that run each profile |
 | [`ccshelf show`](#ccshelf-show) | Show a resolved profile: parents merged, MCP servers, closure |
 | [`ccshelf trust`](#ccshelf-trust) | Review and trust a shared profile (or a project folder) |
+| [`ccshelf update`](#ccshelf-update) | Update ccshelf to the latest release (verified), or roll back |
 | [`ccshelf version`](#ccshelf-version) | Print the ccshelf version |
 
 ## ccshelf account
@@ -315,6 +316,8 @@ ccshelf edit [profile] [flags]
 
 Create config.toml and your personal profiles directory. With --git-url the org data repo becomes a profile source (pin it with --ref: a tag or a full commit id). With --dir another local profiles directory becomes a source. In a terminal, anything you did not pass as a flag is asked for, and the equivalent flag command is printed at the end. Nothing is fetched here: profiles from a shared source are fetched, and need your trust, when you first use them.
 
+Automatic updates are off unless you turn them on: --update-mode notify checks for a newer release once a day and prints one line when there is one, install also installs it (same major version only). In a terminal you are asked once.
+
 **Usage**
 
 ```text
@@ -341,6 +344,7 @@ ccshelf init --account-name work
 | `-h`, `--help` |  | help for init |
 | `--path` | `string` | folder inside the repo that holds the profiles (default "profiles") |
 | `--ref` | `string` | tag or full commit id the git source is pinned to |
+| `--update-mode` | `string` | automatic update mode: off, notify or install (default: asked in a terminal, otherwise off) |
 
 ## ccshelf lint
 
@@ -549,6 +553,44 @@ ccshelf trust [profile] [flags]
 | `-h`, `--help` |  | help for trust |
 | `--project` |  | act on the repository's .ccshelf folder |
 | `--revoke` |  | remove the trust records instead |
+
+## ccshelf update
+
+Download the newest ccshelf release, verify it and replace this binary.
+
+The archive's SHA-256 must match checksums.txt of the same release, fetched over HTTPS without credentials. If cosign is on PATH the keyless signature of checksums.txt is verified as well, against the project's release workflow, and a mismatch stops the update; --require-signature makes a missing cosign an error. The previous binary is kept as <name>.old; --rollback restores it.
+
+Nothing contacts the network unless you run this command or set [update] mode in config.toml (off by default). A copy installed by Homebrew, Scoop, WinGet, "go install" or a system package, and development builds, are not replaced unless you pass --force; the right command is printed instead.
+
+**Usage**
+
+```text
+ccshelf update [flags]
+```
+
+**Examples**
+
+```text
+ccshelf update --check
+ccshelf update
+ccshelf update --version v0.2.0 --yes
+ccshelf update --rollback
+```
+
+**Flags**
+
+| Flag | Value | Description |
+|---|---|---|
+| `--allow-downgrade` |  | allow --version to install an older release |
+| `--check` |  | only report the current and latest version (exit 0 either way) |
+| `--dry-run` |  | show what would be downloaded, verified and replaced; change nothing |
+| `--force` |  | also replace a package-managed or development build, or reinstall the same version (never installs an older release) |
+| `-h`, `--help` |  | help for update |
+| `--prerelease` |  | consider pre-releases when looking for the latest |
+| `--require-signature` |  | fail (before anything else) unless cosign is available to verify the release signature |
+| `--rollback` |  | restore the previous binary kept by the last update |
+| `--version` | `string` | install this release (for example v0.2.0) instead of the latest |
+| `--yes` |  | do not ask for confirmation |
 
 ## ccshelf version
 

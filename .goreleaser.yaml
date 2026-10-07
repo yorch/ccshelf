@@ -32,6 +32,7 @@ builds:
       - -X github.com/yorch/ccshelf/internal/version.Version={{ .Version }}
       - -X github.com/yorch/ccshelf/internal/version.Commit={{ .Commit }}
       - -X github.com/yorch/ccshelf/internal/version.Date={{ .CommitDate }}
+      - -X github.com/yorch/ccshelf/internal/version.Repo=yorch/ccshelf
     mod_timestamp: "{{ .CommitTimestamp }}"
 
 archives:

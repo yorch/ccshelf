@@ -19,6 +19,7 @@ import (
 type initFlags struct {
 	gitURL, ref, path, dir  string
 	accountName, accountDir string
+	updateMode              string
 	force                   bool
 }
 
@@ -32,7 +33,11 @@ data repo becomes a profile source (pin it with --ref: a tag or a full commit
 id). With --dir another local profiles directory becomes a source. In a
 terminal, anything you did not pass as a flag is asked for, and the equivalent
 flag command is printed at the end. Nothing is fetched here: profiles from a
-shared source are fetched, and need your trust, when you first use them.`,
+shared source are fetched, and need your trust, when you first use them.
+
+Automatic updates are off unless you turn them on: --update-mode notify checks
+for a newer release once a day and prints one line when there is one, install
+also installs it (same major version only). In a terminal you are asked once.`,
 		Example: `  ccshelf init
   ccshelf init --git-url git@ghe.example.com:acme/claude-marketplace.git --ref v2026.10.1
   ccshelf init --account-name work`,
@@ -44,6 +49,7 @@ shared source are fetched, and need your trust, when you first use them.`,
 	c.Flags().StringVar(&f.dir, "dir", "", "absolute directory of profiles to add as a dir source")
 	c.Flags().StringVar(&f.accountName, "account-name", "", "also create an account with this name (see: ccshelf account add)")
 	c.Flags().StringVar(&f.accountDir, "account-dir", "", "directory of that account (default ~/.claude-<name>)")
+	c.Flags().StringVar(&f.updateMode, "update-mode", "", "automatic update mode: off, notify or install (default: asked in a terminal, otherwise off)")
 	c.Flags().BoolVar(&f.force, "force", false, "replace an existing configuration file")
 	c.RunE = l.do(func(ctx context.Context, cc *clicore.Context, cmd *cobra.Command, _ []string) error {
 		return l.initConfig(ctx, cc, &f, cmd.Flags().Changed("path"))
@@ -59,10 +65,22 @@ func (l *launcher) initConfig(ctx context.Context, cc *clicore.Context, f *initF
 	if _, err := os.Lstat(path); err == nil && !f.force {
 		return ui.Failure(withHint(fmt.Errorf("%s already exists", path), "edit it, or replace it with: ccshelf init --force"))
 	}
+	if f.updateMode != "" && !validUpdateMode(f.updateMode) {
+		return ui.Usage(withHint(fmt.Errorf("--update-mode %q is not one of %s", ui.Sanitize(f.updateMode), strings.Join(config.UpdateModes(), ", ")),
+			"off never checks; notify prints one line when a release exists; install also installs it"))
+	}
+	// An [update] section of the file being replaced is kept, and is never asked
+	// about again: init asks once.
+	var keptUpdate config.Update
+	if f.force {
+		if old, err := config.Load(path); err == nil {
+			keptUpdate = old.Update
+		}
+	}
 	asked := false
-	if canPrompt(cc) && f.gitURL == "" && f.ref == "" && f.dir == "" && f.accountName == "" {
+	if canPrompt(cc) && f.gitURL == "" && f.ref == "" && f.dir == "" && f.accountName == "" && f.updateMode == "" {
 		var err error
-		if asked, err = askInit(ctx, cc, f, pathGiven); err != nil {
+		if asked, err = askInit(ctx, cc, f, pathGiven, !keptUpdate.Present()); err != nil {
 			return err
 		}
 	}
@@ -76,6 +94,10 @@ func (l *launcher) initConfig(ctx context.Context, cc *clicore.Context, f *initF
 		}
 	}
 	cfg := config.Default()
+	cfg.Update = keptUpdate
+	if f.updateMode != "" {
+		cfg.Update.Mode = f.updateMode
+	}
 	if f.gitURL != "" {
 		cfg.Sources = append(cfg.Sources, config.SourceConfig{Type: config.SourceGit, URL: f.gitURL, Ref: f.ref, Path: f.path})
 	}
@@ -141,6 +163,9 @@ func (l *launcher) initConfig(ctx context.Context, cc *clicore.Context, f *initF
 				rec.Flag("--account-dir", f.accountDir)
 			}
 		}
+		if f.updateMode != "" {
+			rec.Flag("--update-mode", f.updateMode)
+		}
 		if f.force {
 			rec.Bool("--force")
 		}
@@ -150,7 +175,7 @@ func (l *launcher) initConfig(ctx context.Context, cc *clicore.Context, f *initF
 }
 
 // askInit is the init wizard. It reports whether it asked anything.
-func askInit(ctx context.Context, cc *clicore.Context, f *initFlags, pathGiven bool) (bool, error) {
+func askInit(ctx context.Context, cc *clicore.Context, f *initFlags, pathGiven, askUpdate bool) (bool, error) {
 	url, err := cc.Prompt.Input(ctx, "Org data repo URL (empty to skip)", "", func(s string) error {
 		if s == "" {
 			return nil
@@ -190,5 +215,26 @@ func askInit(ctx context.Context, cc *clicore.Context, f *initFlags, pathGiven b
 		return false, err
 	}
 	f.accountName = strings.TrimSpace(name)
+	if askUpdate {
+		// Default no; the answer is written either way so that it is asked once.
+		yes, err := cc.Prompt.Confirm(ctx, "Check for updates once a day and tell me when one exists?", false)
+		if err != nil {
+			return false, err
+		}
+		f.updateMode = config.UpdateOff
+		if yes {
+			f.updateMode = config.UpdateNotify
+		}
+	}
 	return true, nil
+}
+
+// validUpdateMode reports whether m is an accepted --update-mode value.
+func validUpdateMode(m string) bool {
+	for _, x := range config.UpdateModes() {
+		if m == x {
+			return true
+		}
+	}
+	return false
 }

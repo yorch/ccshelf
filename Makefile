@@ -11,10 +11,12 @@ DIST     := dist
 VERSION  ?= dev
 COMMIT   ?= $(shell git rev-parse --short=12 HEAD 2>/dev/null || echo none)
 DATE     ?= $(shell git log -1 --format=%cs 2>/dev/null || date -u +%Y-%m-%d)
+REPO     ?= yorch/ccshelf
 LDFLAGS  := -s -w \
   -X $(MODULE)/internal/version.Version=$(VERSION) \
   -X $(MODULE)/internal/version.Commit=$(COMMIT) \
-  -X $(MODULE)/internal/version.Date=$(DATE)
+  -X $(MODULE)/internal/version.Date=$(DATE) \
+  -X $(MODULE)/internal/version.Repo=$(REPO)
 GOEXE    := $(shell go env GOEXE)
 BIN      := $(DIST)/ccshelf$(GOEXE)
 COVER_MIN ?= 70

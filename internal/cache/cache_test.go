@@ -477,3 +477,93 @@ func TestPublishVerifiesAfterRename(t *testing.T) {
 		t.Fatalf("err = %v, want ErrTampered", err)
 	}
 }
+
+func TestWriteAndReadState(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := ReadState(dir, "update-state.json", 0); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("a missing record = %v, want ErrNotExist", err)
+	}
+	if err := WriteState(dir, "update-state.json", []byte(`{"a":1}`)); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ReadState(dir, "update-state.json", 0)
+	if err != nil || string(got) != `{"a":1}` {
+		t.Fatalf("ReadState = %q %v", got, err)
+	}
+	// Replaced atomically, not appended.
+	if err := WriteState(dir, "update-state.json", []byte(`{"b":2}`)); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := ReadState(dir, "update-state.json", 0); string(got) != `{"b":2}` {
+		t.Errorf("after the second write = %q", got)
+	}
+	if runtime.GOOS != "windows" {
+		fi, err := os.Stat(filepath.Join(dir, "update-state.json"))
+		if err != nil || fi.Mode().Perm() != 0o600 {
+			t.Errorf("mode = %v %v, want 0600", fi.Mode().Perm(), err)
+		}
+	}
+	// No temporary file is left behind, and GC never removes a state record.
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 1 {
+		t.Errorf("directory has %d entries, want just the record", len(entries))
+	}
+	old := time.Now().Add(-365 * 24 * time.Hour)
+	if err := os.Chtimes(filepath.Join(dir, "update-state.json"), old, old); err != nil {
+		t.Fatal(err)
+	}
+	removed, err := GC(dir, time.Hour, nil)
+	if err != nil || len(removed) != 0 {
+		t.Errorf("GC removed %v %v: state records are not content-addressed files", removed, err)
+	}
+	if _, err := ReadState(dir, "update-state.json", 0); err != nil {
+		t.Errorf("the record vanished: %v", err)
+	}
+}
+
+func TestStateNamesAndLimits(t *testing.T) {
+	dir := t.TempDir()
+	for _, bad := range []string{"", "x", "state", "State.json", "../x.json", "a/b.json", ".hidden.json", "a b.json", "-a.json", "1a.json", "a_b.json", strings.Repeat("a", 60) + ".json", "x.json.tmp"} {
+		if err := WriteState(dir, bad, []byte("x")); err == nil {
+			t.Errorf("WriteState accepted %q", bad)
+		}
+		if _, err := ReadState(dir, bad, 0); err == nil || errors.Is(err, os.ErrNotExist) {
+			t.Errorf("ReadState accepted %q (%v)", bad, err)
+		}
+	}
+	if err := WriteState(dir, "ok.json", make([]byte, MaxFileSize+1)); err == nil {
+		t.Error("an oversize record must be refused")
+	}
+	if err := WriteState(dir, "ok.json", []byte("0123456789")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ReadState(dir, "ok.json", 5); !errors.Is(err, ErrTampered) {
+		t.Errorf("a record over the caller's limit = %v, want ErrTampered", err)
+	}
+	if b, err := ReadState(dir, "ok.json", 10); err != nil || len(b) != 10 {
+		t.Errorf("at the limit: %q %v", b, err)
+	}
+}
+
+func TestReadStateRefusesNonRegularFiles(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "d.json"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ReadState(dir, "d.json", 0); !errors.Is(err, ErrTampered) {
+		t.Errorf("a directory = %v, want ErrTampered", err)
+	}
+	if runtime.GOOS == "windows" {
+		return
+	}
+	target := filepath.Join(dir, "target")
+	if err := os.WriteFile(target, []byte("secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(dir, "l.json")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ReadState(dir, "l.json", 0); !errors.Is(err, ErrTampered) {
+		t.Errorf("a symlink = %v, want ErrTampered", err)
+	}
+}

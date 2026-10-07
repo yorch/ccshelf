@@ -83,6 +83,8 @@ PAGES: list[tuple[str, str, str, str, str]] = [
      "The staged plan: Phase 0 evidence, the MVP, deferred work and non-goals."),
     ("Design", "Release process", "design/release.md", "design/release.html",
      "How ccshelf is versioned and released: release pull requests from conventional commits, the signing chain, and the runbook."),
+    ("Design", "Updating", "design/update.md", "design/update.html",
+     "How ccshelf update verifies and replaces the binary, rolls back, and the opt-in automatic update that is off by default."),
     ("Decisions", "Decision log", "DECISIONS.md", "decisions.html",
      "The decision log of ccshelf: what was decided, why, with what confidence and when to revisit it."),
     ("Research", "Context", "research/context.md", "research/context.html",
