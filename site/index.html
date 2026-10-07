@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#eef0ec" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#111513" media="(prefers-color-scheme: dark)">
 <title>ccshelf: Profiles for Claude Code</title>
-<meta name="description" content="ccshelf starts Claude Code with a named profile of plugins, skills and MCP servers, one set per terminal, and lints and publishes your organization's plugin catalog. Open source, unofficial; v0.2.0 is available.">
+<meta name="description" content="ccshelf starts Claude Code with a named profile of plugins, skills and MCP servers, one set per terminal, and lints and publishes your organization's plugin catalog. Open source, unofficial; stable releases are available.">
 <link rel="canonical" href="__SITE_URL__/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="ccshelf">
@@ -22,7 +22,7 @@
 <meta property="og:image:alt" content="A shelf of labelled plugin items with two of them lifted into a loadout.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="ccshelf: Profiles for Claude Code">
-<meta name="twitter:description" content="One shelf of plugins, a different loadout for every terminal. Unofficial, open source; v0.2.0 is available.">
+<meta name="twitter:description" content="One shelf of plugins, a different loadout for every terminal. Unofficial, open source; stable releases are available.">
 <meta name="twitter:image" content="__SITE_URL__/assets/og.png">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="assets/site.css">
@@ -134,7 +134,7 @@
       </div>
     </div>
     <p class="demo-note">Real <code>ccshelf dry-run</code> output from commit <span id="cap-commit">c2a679d</span>, fictional <code>acme</code> org, fake <code>claude</code>. <a href="https://github.com/yorch/ccshelf/blob/main/site/README.md#the-loadout-demo-is-captured-output">How it's made</a></p>
-    <p class="status"><strong>Status:</strong> implemented; v0.2.0 is available for macOS, Linux and Windows. CI tests all six amd64 and arm64 targets. Open source (MIT). Unofficial: not affiliated with Anthropic.</p>
+    <p class="status"><strong>Status:</strong> implemented; stable releases are available for macOS, Linux and Windows. CI tests all six amd64 and arm64 targets. Open source (MIT). Unofficial: not affiliated with Anthropic.</p>
   </div>
 </section>
 
@@ -285,7 +285,7 @@
         <dd>A project profile can never shadow another source's profile. The org config can list plugins and MCP servers (audit, secret scanning) that no profile may mask. <span class="protects">Protects against a repository or a profile switching off a control the organization requires.</span></dd></div>
       <div id="sr4"><dt>Private, verified cache <span class="badge c-ok">implemented</span></dt>
         <dd>Cache directories are owner-only (mode 0700, files 0600), created without following symlinks, and each content-addressed file is re-hashed before reuse. Secrets are never written to disk or to argv, and output is redacted. <span class="protects">Protects against another local user, or a stale file, changing what <code>claude</code> receives.</span></dd></div>
-      <div id="sr5"><dt>Hardened CI and releases <span class="badge c-ok">v0.2.0 published</span></dt>
+      <div id="sr5"><dt>Hardened CI and releases <span class="badge c-ok">signed release available</span></dt>
         <dd>The Action is pinned by full commit SHA and embeds the expected checksum of the binary it downloads. Release checksums are signed with cosign, archives have GitHub build provenance and an SBOM, and workflows use <code>permissions: {}</code> and least privilege. <span class="protects">Protects against a tampered binary or a compromised action in your pipeline.</span></dd></div>
     </dl>
     <p class="more"><a href="docs/design/security.html">Read the full security design</a> and the <a href="https://github.com/yorch/ccshelf/blob/main/SECURITY.md">security policy</a>.</p>
@@ -326,7 +326,7 @@
 <!-- INSTALL -->
 <section class="sec wrap" id="install" aria-labelledby="h-install">
   <div class="sec-head"><h2 id="h-install">Install and quick start</h2>
-    <p>The latest release is v0.2.0. Use the installer for your platform; it verifies the download before installing. You can also build from source.</p></div>
+    <p>Install the latest release with the script for your platform; it verifies the download before installing. You can also build from source.</p></div>
   <div class="sec-body">
     <h3 class="sub">Linux and macOS</h3>
     <div class="cmd">
@@ -350,7 +350,7 @@ go build -o ccshelf ./cmd/ccshelf
 ./ccshelf version</code></pre>
       <button class="copy" type="button" data-copy="c-install" hidden>Copy commands</button>
     </div>
-    <p class="fine">Needs Go 1.27 or newer. Put the binary on your <code>PATH</code>, or run <code>go install github.com/yorch/ccshelf/cmd/ccshelf@latest</code>.</p>
+    <p class="fine">Needs Go 1.27 or newer. Put the binary on your <code>PATH</code>, or run <code>go install ./cmd/ccshelf</code> from the checkout.</p>
 
     <h3 class="sub">Try it</h3>
     <div class="cmd">

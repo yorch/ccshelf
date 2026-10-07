@@ -2,11 +2,11 @@
 
 Profiles and a plugin catalog for Claude Code. Unofficial: not affiliated with Anthropic.
 
-**Status:** implemented and under adversarial review; v0.2.0 is published. The launcher, catalog, Action and starter template build for all six targets; the test suites pass on native macOS, Linux and Windows CI runners. Phase 0 evidence items (routing eval, adopt-or-build and bundle prototype) are still open; see the [roadmap](docs/design/roadmap.md). Start with [docs/README.md](docs/README.md) and the [decision log](docs/DECISIONS.md). The interactive report is `docs/report.html`, generated from the Markdown.
+**Status:** implemented and under adversarial review; stable releases are available. The launcher, catalog, Action and starter template build for all six targets; the test suites pass on native macOS, Linux and Windows CI runners. Phase 0 evidence items (routing eval, adopt-or-build and bundle prototype) are still open; see the [roadmap](docs/design/roadmap.md). Start with [docs/README.md](docs/README.md) and the [decision log](docs/DECISIONS.md). The interactive report is `docs/report.html`, generated from the Markdown.
 
 ## Install
 
-**Latest release: `v0.2.0`.** Install it with the platform-specific script below, or build from source (Go 1.27 or newer):
+Install the latest release with the platform-specific script below, or build from source (Go 1.27 or newer):
 
 ```sh
 go install github.com/yorch/ccshelf/cmd/ccshelf@latest
