@@ -575,6 +575,7 @@ class Builder:
   <div class="wrap foot-in">
     <p>These notes are published from the Markdown in <a href="{attr(self.repo_url)}" rel="external noopener">the ccshelf repository</a>: <a href="{src_href}" rel="external noopener">view the source of this page</a>. Unofficial: not affiliated with Anthropic. Open source under the MIT License.</p>
     <p class="fine">Design notes and decision records, not a user manual. ccshelf is not released yet. Plugin names, teams and the <code>acme</code> organization in examples are fictional.</p>
+    <p class="credit">Made by <a href="https://github.com/yorch" rel="author external noopener">Jorge Barnaby</a>.</p>
   </div>
 </footer>
 </body>

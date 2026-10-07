@@ -56,6 +56,8 @@ PLACEHOLDER = "__SITE_URL__"
 BASE_MARKER = "<!--SITE_BASE-->"
 # Documentation hosts that may be linked with <a href> (never loaded as a resource).
 OUTBOUND_DOC_HOSTS = {"code.claude.com"}
+# The author credit in the footer: exactly this address, on an <a href> only.
+AUTHOR_URL = "https://github.com/yorch"
 # Every attribute that can carry a URL, whatever the tag (including SVG's xlink:href).
 URL_ATTRS = {
     "href", "xlink:href", "src", "srcset", "imagesrcset", "poster", "data", "action", "formaction",
@@ -534,6 +536,8 @@ def check_site(root: str, built: bool = False) -> list[str]:
     def external_ok(tag: str, attr: str, u: str, attrs: dict[str, str]) -> bool:
         if tag == "a" and attr == "href":
             if repo_ok(u):
+                return True
+            if u.rstrip("/") == AUTHOR_URL:
                 return True
             s = urlsplit(u)
             return s.scheme == "https" and s.hostname in OUTBOUND_DOC_HOSTS
