@@ -317,3 +317,68 @@ func TestInitFailsForAMissingDirectory(t *testing.T) {
 		t.Error("Init of a missing directory succeeded")
 	}
 }
+
+func TestInitSkipsTheTemplateDirectory(t *testing.T) {
+	needGit(t)
+	ctx := context.Background()
+	plain := t.TempDir()
+	if IsRepo(ctx, plain) {
+		t.Skip("the temporary directory is inside a git work tree")
+	}
+	git(t, plain, nil, "init", "-q")
+	samples, _ := os.ReadDir(filepath.Join(plain, ".git", "hooks"))
+	if len(samples) == 0 {
+		t.Skip("this git installation has no template hooks, so there is nothing to skip")
+	}
+	dir := t.TempDir()
+	if err := Init(ctx, dir); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadDir(filepath.Join(dir, ".git", "hooks")); len(got) != 0 {
+		t.Errorf("Init copied the template hooks: %v", got)
+	}
+}
+
+func TestEnclosingWorkTree(t *testing.T) {
+	needGit(t)
+	ctx := context.Background()
+	outer := t.TempDir()
+	if IsRepo(ctx, outer) {
+		t.Skip("the temporary directory is inside a git work tree")
+	}
+	if got := EnclosingWorkTree(ctx, filepath.Join(outer, "not", "yet")); got != "" {
+		t.Errorf("no repository above: %q", got)
+	}
+	git(t, outer, nil, "init", "-q")
+	want, _ := filepath.EvalSymlinks(outer)
+	for _, sub := range []string{"", "sub", filepath.Join("a", "b", "missing")} {
+		got := EnclosingWorkTree(ctx, filepath.Join(outer, sub))
+		if g, _ := filepath.EvalSymlinks(got); g != want {
+			t.Errorf("EnclosingWorkTree(%q) = %q, want %q", sub, got, want)
+		}
+	}
+}
+
+func TestDefaultBranch(t *testing.T) {
+	needGit(t)
+	ctx := context.Background()
+	dir := t.TempDir()
+	if IsRepo(ctx, dir) {
+		t.Skip("the temporary directory is inside a git work tree")
+	}
+	if b, src := DefaultBranch(ctx, dir); b != "" || src != "" {
+		t.Errorf("no repository: %q %q", b, src)
+	}
+	git(t, dir, nil, "init", "-q", "-b", "trunk")
+	if b, src := DefaultBranch(ctx, dir); b != "trunk" || src != "HEAD" {
+		t.Errorf("unborn HEAD: %q %q", b, src)
+	}
+	// A clone-style origin/HEAD wins over the current branch.
+	commit(t, dir, "x.txt", "1", "a@example.com", "2026-01-10T12:00:00Z")
+	git(t, dir, nil, "update-ref", "refs/remotes/origin/master", "HEAD")
+	git(t, dir, nil, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/master")
+	git(t, dir, nil, "checkout", "-q", "-b", "feature")
+	if b, src := DefaultBranch(ctx, dir); b != "master" || src != "origin/HEAD" {
+		t.Errorf("origin/HEAD: %q %q", b, src)
+	}
+}

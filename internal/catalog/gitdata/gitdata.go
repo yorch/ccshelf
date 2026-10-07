@@ -260,9 +260,57 @@ func ChangedSince(ctx context.Context, root, tag string, dirs []string) ([]strin
 // it creates .git and nothing else, and never commits, fetches or pushes. The
 // directory must exist. Like every call here, it runs with the user's global
 // and system git configuration switched off.
+//
+// The template directory is switched off (--template= with no value): the
+// system's git templates would copy sample hooks, which are code, into the new
+// repository.
 func Init(ctx context.Context, dir string) error {
-	_, err := runGit(ctx, gitArgs(dir, []string{"-c", "init.defaultBranch=main"}, "init", "--quiet"), "init")
+	_, err := runGit(ctx, gitArgs(dir, []string{"-c", "init.defaultBranch=main"}, "init", "--quiet", "--template="), "init")
 	return err
+}
+
+// EnclosingWorkTree returns the top-level directory of the work tree that
+// contains dir (or, when dir does not exist yet, its nearest existing parent),
+// or "" when there is none. "git init" in such a directory creates a nested
+// repository. It is read-only; the result is untrusted text.
+func EnclosingWorkTree(ctx context.Context, dir string) string {
+	d := filepath.Clean(dir)
+	for {
+		if fi, err := os.Stat(d); err == nil && fi.IsDir() {
+			break
+		}
+		parent := filepath.Dir(d)
+		if parent == d {
+			return ""
+		}
+		d = parent
+	}
+	out, err := run(ctx, d, "rev-parse", "--show-toplevel")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(out)
+}
+
+// DefaultBranch returns the default branch of the repository whose root is
+// dir, and where it was read from: the branch that the remote "origin" points
+// at ("origin/HEAD", set by a clone), else the branch that HEAD names ("HEAD",
+// which works before the first commit). It returns "" when neither exists
+// (a detached HEAD, no repository). It is read-only and makes no network call;
+// the name is untrusted text that the caller validates. dir must be the root
+// of the repository: git would otherwise read a parent repository.
+func DefaultBranch(ctx context.Context, dir string) (branch, source string) {
+	if out, err := run(ctx, dir, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"); err == nil {
+		if b, ok := strings.CutPrefix(strings.TrimSpace(out), "origin/"); ok && b != "" {
+			return b, "origin/HEAD"
+		}
+	}
+	if out, err := run(ctx, dir, "symbolic-ref", "--quiet", "--short", "HEAD"); err == nil {
+		if b := strings.TrimSpace(out); b != "" {
+			return b, "HEAD"
+		}
+	}
+	return "", ""
 }
 
 // RemoteURL returns the URL of the remote "origin" of the repository in dir,
