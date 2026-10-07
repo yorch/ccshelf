@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -40,7 +41,7 @@ func TestRollback(t *testing.T) {
 
 	// --dry-run.
 	h.mustRun("update", "--rollback", "--dry-run")
-	has(t, h.out.String(), "would restore ccshelf.old (0.1.0)")
+	has(t, h.out.String(), "would restore "+filepath.Base(h.exe)+".old (0.1.0)")
 	h.mustRun("--json", "update", "--rollback", "--dry-run")
 	if _, data := h.envelope(); data["action"] != "dry-run" || data["latest"] != "0.1.0" {
 		t.Errorf("envelope = %v", data)

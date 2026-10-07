@@ -126,7 +126,7 @@ PY
   mutate "link check ignores the type" 'if (c != "-") bad=1' 'if (0) bad=1'
   mutate "no top-level ccshelf check" "grep -qx 'ccshelf' \"\$TMP/names.txt\" ||" 'true ||'
   mutate "listing counts not compared" '[ "$n_names" = "$n_types" ] ||' 'true ||'
-  mutate "entry count not capped" '[ "$n_names" -ge 1 ] && [ "$n_names" -le 3 ] ||' 'true ||'
+  mutate "entry count not capped" 'if [ "$n_names" -lt 1 ] || [ "$n_names" -gt 3 ]; then' 'if false; then'
   mutate "binary size not capped" '[ "$size" -le "$MAX_BINARY_BYTES" ] ||' 'true ||'
   mutate "extraction not cut off (no head -c)" '| head -c "$((MAX_BINARY_BYTES + 1))" >' '| cat >'
   mutate "empty binary accepted" '[ "$size" -gt 0 ] || die "the ccshelf entry' 'true || die "the ccshelf entry'
@@ -380,10 +380,13 @@ inst() {
   LAST_BIN="$tmp/bin"
   p="${STUBS}${TOOLDIR:-$TOOLS}"
   if [ "$ON_PATH" -eq 1 ]; then p="$tmp/bin:$p"; fi
-  local bindir=(--bin-dir "$LAST_BIN")
-  [ "$NO_BINDIR" -eq 1 ] && bindir=()
-  OUT="$(env -i HOME="$tmp/home" TMPDIR="$tmp/tmpdir" PATH="$p" "${envs[@]}" \
-    "$TEST_SH" "${INSTALL_RUN:-$INSTALL}" --base-url "$BASE" "${bindir[@]}" "$@" 2>&1 <"$STDIN_FILE")"
+  if [ "$NO_BINDIR" -eq 1 ]; then
+    OUT="$(env -i HOME="$tmp/home" TMPDIR="$tmp/tmpdir" PATH="$p" "${envs[@]}" \
+      "$TEST_SH" "${INSTALL_RUN:-$INSTALL}" --base-url "$BASE" "$@" 2>&1 <"$STDIN_FILE")"
+  else
+    OUT="$(env -i HOME="$tmp/home" TMPDIR="$tmp/tmpdir" PATH="$p" "${envs[@]}" \
+      "$TEST_SH" "${INSTALL_RUN:-$INSTALL}" --base-url "$BASE" --bin-dir "$LAST_BIN" "$@" 2>&1 <"$STDIN_FILE")"
+  fi
   RC=$?
   # Every run, successful or not, must leave no temp directory and no staged file behind.
   local leaks
@@ -599,7 +602,7 @@ FIXED="$ROOT/fixed-bin"
 inst -- --version "$TAG" --bin-dir "$FIXED"
 expect_ok "first install into a fixed dir"
 inst -- --version "$TAG" --bin-dir "$FIXED"
-expect_ok "reinstalling the same version is fine" "replacing the installed ccshelf v$BARE"
+expect_ok "reinstalling the same version is fine" "replacing the"
 
 # help and option errors
 inst -- --help

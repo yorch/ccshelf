@@ -180,7 +180,7 @@ func TestUpdateEndToEnd(t *testing.T) {
 
 	// The real thing.
 	r = u.mustCcshelf("update", "--yes")
-	contains(t, "update --yes", r.Stderr, "updated ccshelf 0.0.1 -> 0.0.2", "ccshelf.old")
+	contains(t, "update --yes", r.Stderr, "updated ccshelf 0.0.1 -> 0.0.2", filepath.Base(u.bin)+".old")
 	if v := u.version(); v != "0.0.2" {
 		t.Fatalf("version after the update = %q, want 0.0.2", v)
 	}

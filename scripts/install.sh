@@ -430,7 +430,9 @@ tar -tvzf "$TMP/$ARCHIVE" >"$TMP/types.txt" 2>/dev/null </dev/null || die "canno
 n_names="$(wc -l <"$TMP/names.txt" | tr -d ' ')"
 n_types="$(wc -l <"$TMP/types.txt" | tr -d ' ')"
 [ "$n_names" = "$n_types" ] || die "the archive listing is inconsistent; refusing to extract"
-[ "$n_names" -ge 1 ] && [ "$n_names" -le 3 ] || die "the archive has $n_names entries, expected ccshelf with at most LICENSE and README.md"
+if [ "$n_names" -lt 1 ] || [ "$n_names" -gt 3 ]; then
+  die "the archive has $n_names entries, expected ccshelf with at most LICENSE and README.md"
+fi
 if awk 'BEGIN {bad=0} {if ($0 != "ccshelf" && $0 != "LICENSE" && $0 != "README.md") bad=1; if (seen[$0]++) bad=1} END {exit bad}' "$TMP/names.txt"; then
   :
 else
