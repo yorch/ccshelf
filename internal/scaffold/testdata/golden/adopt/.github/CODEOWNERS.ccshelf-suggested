@@ -1,0 +1,19 @@
+# Rules that "ccshelf catalog init" suggests adding to .github/CODEOWNERS.
+# GitHub applies the LAST matching rule: append the rules below at the end, with the rules for
+# hooks, MCP servers and plugin manifests last.
+#
+# Put this catch-all at the TOP of the file, not at the end (it would override every rule above it):
+#   *                                  @legacy/platform
+
+/.claude-plugin/marketplace.json   @legacy/platform
+/bundles/                          @legacy/platform
+/catalog/                          @legacy/platform
+/profiles/                         @legacy/platform
+/mcp/                              @legacy/platform
+/prompts/                          @legacy/platform
+/ccshelf.toml                      @legacy/platform
+/docs/                             @legacy/platform
+/plugins/*/hooks/                  @legacy/platform
+/plugins/*/.mcp.json               @legacy/platform
+/plugins/*/.lsp.json               @legacy/platform
+/plugins/*/.claude-plugin/         @legacy/platform

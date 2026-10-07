@@ -480,6 +480,9 @@ func TestElevatedAdvice(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			if runtime.GOOS == "windows" && tc.goos != "windows" {
+				t.Skip("Unix shell command rendering is exercised on Unix runners")
+			}
 			cc := &clicore.Context{Env: &clicore.Env{GOOS: tc.goos}}
 			got := elevatedAdvice(cc, tc.dir, &tc.flags, tc.plan)
 			if !strings.Contains(got, tc.want) {
