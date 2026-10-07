@@ -42,8 +42,9 @@ Scripts can rely on these; they never change meaning.
 | [`ccshelf account add`](#ccshelf-account-add) | Add an account and print the one-time steps to log in |
 | [`ccshelf account ls`](#ccshelf-account-ls) | List the configured accounts |
 | [`ccshelf account rm`](#ccshelf-account-rm) | Forget an account (its directory is left alone) |
-| [`ccshelf catalog`](#ccshelf-catalog) | Build the plugin catalog of the org data repo |
+| [`ccshelf catalog`](#ccshelf-catalog) | Set up the org data repo and build its plugin catalog |
 | [`ccshelf catalog build`](#ccshelf-catalog-build) | Write catalog.json, CATALOG.md and the static site |
+| [`ccshelf catalog init`](#ccshelf-catalog-init) | Set up a new org data repo, or add the missing pieces to an existing marketplace repo |
 | [`ccshelf compile`](#ccshelf-compile) | Generate the profile-* bundle plugins from the profile manifests |
 | [`ccshelf completion`](#ccshelf-completion) | Print a shell completion script |
 | [`ccshelf diff`](#ccshelf-diff) | Compare two resolved profiles |
@@ -152,7 +153,7 @@ ccshelf account rm <name> [flags]
 
 ## ccshelf catalog
 
-Build the plugin catalog of the org data repo
+Set up the org data repo and build its plugin catalog
 
 **Usage**
 
@@ -172,6 +173,7 @@ ccshelf catalog [command]
 | Command | What it does |
 |---|---|
 | [`ccshelf catalog build`](#ccshelf-catalog-build) | Write catalog.json, CATALOG.md and the static site |
+| [`ccshelf catalog init`](#ccshelf-catalog-init) | Set up a new org data repo, or add the missing pieces to an existing marketplace repo |
 
 ## ccshelf catalog build
 
@@ -196,6 +198,87 @@ ccshelf catalog build [flags]
 | `--no-site` |  | write only catalog.json and CATALOG.md |
 | `--out` | `string` | output directory (default dist/catalog) |
 | `--timestamp` |  | stamp generated_at into the output |
+
+## ccshelf catalog init
+
+Bootstrap an org data repo in dir (default: --root, else the current directory). This is the organization's setup; "ccshelf init" is each developer's own.
+
+Modes (detected, or forced with --mode):
+
+```text
+new    an empty or missing directory (a lone .git counts as empty).
+adopt  a directory with content, such as a marketplace repo that has
+       .claude-plugin/marketplace.json and/or plugins/. Nothing existing is
+       changed: the command prints a plan and only creates files that are
+       missing. An existing file is reported as skip-exists (and as
+       up to date when it already equals what would be written), or as
+       needs-merge for CODEOWNERS, .gitattributes and .gitignore, with the
+       lines to add; --write-suggestions saves them next to the file as
+       <name>.ccshelf-suggested. A marketplace.json is never rewritten.
+       --force replaces the other differing files after saving <file>.bak.
+```
+
+Generated files (each group can be left out with a --no-<group> flag):
+
+```text
+ccshelf.toml, .claude-plugin/marketplace.json (a skeleton; in adopt mode it
+lists the plugins found under plugins/), catalog/plugins/<name>.toml (a stub
+per plugin: the owner from CODEOWNERS or --owner, status experimental, and
+TODO(ccshelf) placeholders that ccshelf lint reports as warnings, CAT048),
+.github/CODEOWNERS, .github/workflows/{validate,catalog,release}.yml,
+README.md, .gitattributes and .gitignore. ccshelf has no built-in profiles:
+profiles/example.toml.sample, an all-comment sample, is written only with
+--example-profile.
+```
+
+The workflows call the ccshelf action pinned by full commit SHA. Pass --ccshelf-ref <40-hex SHA> and --ccshelf-version <vX.Y.Z> to pin it (a tag given as --ccshelf-ref sets the version only). Without them the workflows contain a placeholder and fail with a clear message until you pin them.
+
+Flags are the contract: every value can be passed as a flag. In a terminal, the values that are missing are asked for, the plan is shown, and the equivalent flag command is printed. Without a terminal, a missing value is a usage error (exit 2) naming the flag, and writing needs --yes (or --dry-run to print the plan). Nothing is committed, pushed or fetched; --git-init only runs git init when the directory is not a repository yet.
+
+**Usage**
+
+```text
+ccshelf catalog init [dir] [flags]
+```
+
+**Examples**
+
+```text
+ccshelf catalog init ./acme-claude --marketplace-name acme --org "Acme Corp" --platform-owners @acme/platform --yes
+ccshelf catalog init . --platform-owners @acme/platform --dry-run
+ccshelf catalog init . --mode adopt --platform-owners @acme/platform --write-suggestions --yes
+```
+
+**Flags**
+
+| Flag | Value | Description |
+|---|---|---|
+| `--ccshelf-ref` | `string` | full 40-hex commit SHA of the ccshelf action to pin, or a release tag vX.Y.Z (sets the version only) |
+| `--ccshelf-version` | `string` | ccshelf release tag the action installs, such as v0.1.0 |
+| `--default-branch` | `string` | default branch the catalog workflow publishes from (default: read from an existing repository, else main) |
+| `--dry-run` |  | print the plan and write nothing |
+| `--example-profile` |  | also write profiles/example.toml.sample, an all-comment sample |
+| `--force` |  | replace existing files that differ, after saving <file>.bak (never marketplace.json) |
+| `--git-init` |  | run git init when the directory is not a git repository (nothing else of git) |
+| `-h`, `--help` |  | help for init |
+| `--marketplace-name` | `string` | marketplace name (lower case letters, digits and hyphens) |
+| `--mode` | `string` | new or adopt (default: detected from the directory) |
+| `--no-codeowners` |  | do not generate .github/CODEOWNERS |
+| `--no-config` |  | do not generate ccshelf.toml |
+| `--no-gitattributes` |  | do not generate .gitattributes |
+| `--no-gitignore` |  | do not generate .gitignore |
+| `--no-marketplace` |  | do not generate .claude-plugin/marketplace.json |
+| `--no-readme` |  | do not generate README.md |
+| `--no-sidecars` |  | do not generate catalog/plugins/<name>.toml (same as --sidecars none) |
+| `--no-workflows` |  | do not generate the .github/workflows files |
+| `--org` | `string` | display name of the organization (default: the marketplace name) |
+| `--owner` | `string` | default owner of the plugin sidecars (default: the first platform owner) |
+| `--platform-owners` | `strings` | CODEOWNERS owners of everything that runs code or shapes the catalog (@user, @org/team or an email address; repeatable) |
+| `--quiet` |  | do not print the suggested lines of the files that need a merge (they stay in --json and in --write-suggestions) |
+| `--runner-label` | `string` | fallback of runs-on in the workflows when the RUNNER_LABEL variable is unset (default ubuntu-latest) |
+| `--sidecars` | `string` | sidecar files for the plugins found: stub or none (default "stub") |
+| `--write-suggestions` |  | write <name>.ccshelf-suggested files for the files that need a merge |
+| `--yes` |  | write without asking for confirmation (never accepts trust) |
 
 ## ccshelf compile
 

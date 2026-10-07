@@ -254,3 +254,73 @@ func ChangedSince(ctx context.Context, root, tag string, dirs []string) ([]strin
 	sort.Strings(changed)
 	return changed, nil
 }
+
+// Init runs "git init" in dir with the initial branch main. It is used by
+// "ccshelf catalog init --git-init" and only when dir is not a repository yet:
+// it creates .git and nothing else, and never commits, fetches or pushes. The
+// directory must exist. Like every call here, it runs with the user's global
+// and system git configuration switched off.
+//
+// The template directory is switched off (--template= with no value): the
+// system's git templates would copy sample hooks, which are code, into the new
+// repository.
+func Init(ctx context.Context, dir string) error {
+	_, err := runGit(ctx, gitArgs(dir, []string{"-c", "init.defaultBranch=main"}, "init", "--quiet", "--template="), "init")
+	return err
+}
+
+// EnclosingWorkTree returns the top-level directory of the work tree that
+// contains dir (or, when dir does not exist yet, its nearest existing parent),
+// or "" when there is none. "git init" in such a directory creates a nested
+// repository. It is read-only; the result is untrusted text.
+func EnclosingWorkTree(ctx context.Context, dir string) string {
+	d := filepath.Clean(dir)
+	for {
+		if fi, err := os.Stat(d); err == nil && fi.IsDir() {
+			break
+		}
+		parent := filepath.Dir(d)
+		if parent == d {
+			return ""
+		}
+		d = parent
+	}
+	out, err := run(ctx, d, "rev-parse", "--show-toplevel")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(out)
+}
+
+// DefaultBranch returns the default branch of the repository whose root is
+// dir, and where it was read from: the branch that the remote "origin" points
+// at ("origin/HEAD", set by a clone), else the branch that HEAD names ("HEAD",
+// which works before the first commit). It returns "" when neither exists
+// (a detached HEAD, no repository). It is read-only and makes no network call;
+// the name is untrusted text that the caller validates. dir must be the root
+// of the repository: git would otherwise read a parent repository.
+func DefaultBranch(ctx context.Context, dir string) (branch, source string) {
+	if out, err := run(ctx, dir, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"); err == nil {
+		if b, ok := strings.CutPrefix(strings.TrimSpace(out), "origin/"); ok && b != "" {
+			return b, "origin/HEAD"
+		}
+	}
+	if out, err := run(ctx, dir, "symbolic-ref", "--quiet", "--short", "HEAD"); err == nil {
+		if b := strings.TrimSpace(out); b != "" {
+			return b, "HEAD"
+		}
+	}
+	return "", ""
+}
+
+// RemoteURL returns the URL of the remote "origin" of the repository in dir,
+// or "" when there is none (or dir is not a repository). It is read-only and
+// makes no network call. The URL is untrusted text: callers validate or
+// sanitize it before use.
+func RemoteURL(ctx context.Context, dir string) string {
+	out, err := run(ctx, dir, "remote", "get-url", "origin")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(out)
+}

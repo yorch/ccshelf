@@ -145,6 +145,20 @@ func mutations() []mutation {
 		{"invalid CODEOWNERS line", "CAT047", Warning, "", co, nil, func(t *testing.T, root string) {
 			catalogtest.Write(t, root, co, catalogtest.Read(t, root, co)+"!negated @acme/web\n")
 		}},
+		{"placeholder in sidecar", "CAT048", Warning, "design-kit", "catalog/plugins/design-kit.toml", nil, rep("catalog/plugins/design-kit.toml", `support = "#web-help"`, `support = "TODO(ccshelf): where to ask"`)},
+		{"placeholder in description", "CAT048", Warning, "design-kit", mkt, nil, func(t *testing.T, root string) {
+			var doc map[string]any
+			if err := json.Unmarshal([]byte(catalogtest.Read(t, root, mkt)), &doc); err != nil {
+				t.Fatal(err)
+			}
+			for _, e := range doc["plugins"].([]any) {
+				if m := e.(map[string]any); m["name"] == "design-kit" {
+					m["description"] = "TODO(ccshelf): describe what design-kit does"
+				}
+			}
+			b, _ := json.MarshalIndent(doc, "", "  ")
+			catalogtest.Write(t, root, mkt, string(b)+"\n")
+		}},
 		{"profile without bundle", "CAT050", Error, "profile-qa", "profiles/qa.toml", nil, write("profiles/qa.toml", "name = \"qa\"\n[plugins]\ninclude = [\"sre-kit@acme-tools\"]\n")},
 		{"bundle without profile", "CAT051", Error, "profile-sre", mkt, nil, remove("profiles/sre.toml")},
 		{"bundle wrong source", "CAT052", Error, "profile-sre", mkt, nil, rep(mkt, `"source": "./bundles/profile-sre"`, `"source": "./plugins/sre-kit"`)},

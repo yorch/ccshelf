@@ -209,6 +209,7 @@
   <div class="sec-body">
     <div class="prose">
       <p>Each plugin gets a small sidecar file, <code>catalog/plugins/&lt;name&gt;.toml</code>, with an owner, a status, when to use it and when not to, what it overlaps with and a review date. <code>ccshelf lint</code> fails the pull request when a required field is missing or stale; <code>ccshelf catalog build</code> turns the same data into a site; <code>ccshelf search</code> and <code>ccshelf doctor</code> read it locally.</p>
+      <p>To start, <code>ccshelf catalog init [dir]</code> sets up a new organization repository, or adds the missing pieces to an existing marketplace repository without changing a file that is already there (unless you pass <code>--force</code>, which saves a backup first). It prints a plan first (<code>create</code>, <code>skip-exists</code>, <code>needs-merge</code>), writes the configuration, a sidecar stub per plugin, <code>CODEOWNERS</code>, pinned workflows and a README, and leaves placeholders that <code>ccshelf lint</code> reports as warnings until someone fills them in. There are no built-in profiles. <code>--dry-run</code> writes nothing.</p>
     </div>
 
     <figure class="cat" aria-labelledby="cat-cap">
@@ -389,6 +390,7 @@ ccshelf catalog build</code></pre>
       <dl class="cmds">
       <div><dt><code>lint</code></dt><dd>Check marketplace entries, sidecars and profiles.</dd></div>
       <div><dt><code>compile [--check]</code></dt><dd>Regenerate the <code>profile-*</code> bundle plugins, or fail if the committed ones differ.</dd></div>
+      <div><dt><code>catalog init [dir]</code></dt><dd>Set up a new org data repo, or add the missing files to an existing marketplace repo. Prints a plan, leaves existing files alone unless <code>--force</code> (which saves a <code>.bak</code>), <code>--dry-run</code> writes nothing.</dd></div>
       <div><dt><code>catalog build</code></dt><dd>Build the static catalog site and <code>catalog.json</code>.</dd></div>
       <div><dt><code>search &lt;query&gt;</code></dt><dd>Find plugins and profiles by what they are for.</dd></div>
       <div><dt><code>recommend</code></dt><dd>Suggest profiles from the current directory. Rule-based, no LLM.</dd></div>

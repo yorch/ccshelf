@@ -18,6 +18,7 @@ Guidance for AI coding agents (and humans) working in this repo, the public **to
 - **R6:** every command works with flags alone; interactive prompts, pickers and wizards are an optional front-end used only on a TTY; trust is never auto-accepted; see `docs/design/cli.md`.
 - **R5:** this public repo holds the tool. Adopting orgs keep profiles and catalog data in their own private repo. Never put real org data here; examples (including the starter template under `examples/`) are fictional. No built-in default profiles: roles are org choices and examples only show the format.
 - Language: **Go**. Build order: **evidence first, then trimmed scope** (routing eval, adopt-or-build evaluation, bundle prototype and a Linux/Windows Stage 0 before product code; then an MVP launcher and catalog lint with `CATALOG.md`). See `docs/design/roadmap.md`.
+- Org setup: `ccshelf catalog init [dir]` bootstraps or retrofits an org data repo (never changes an existing file without `--force`). Its templates in `internal/scaffold/templates/` are the single source of the starter's workflows, `.gitattributes` and `.gitignore`; after editing them run `go test ./internal/scaffold -run 'Golden|Example' -update` and commit the regenerated files.
 - Profile sources: `dir` only in the MVP, then `git` (after SR2), then `plugin`.
 - Profiles share auth, history and memory (no `CLAUDE_CONFIG_DIR` by default). Accounts are a separate axis (see `docs/design/launcher.md`).
 

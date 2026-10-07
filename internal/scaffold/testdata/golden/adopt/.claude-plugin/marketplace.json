@@ -1,0 +1,9 @@
+{
+  "name": "legacy",
+  "owner": {"name": "Legacy Org"},
+  "plugins": [
+    {"name": "tools-a", "source": "./plugins/tools-a", "description": "Helpers for the A team, used every day.", "author": {"name": "A team"}},
+    {"name": "tools-b", "source": "./plugins/tools-b", "description": "Helpers for the B team with a deploy hook.", "author": {"name": "B team"}},
+    {"name": "partner", "source": {"source": "github", "repo": "partner/plugin"}, "description": "A plugin maintained outside this repository.", "author": {"name": "Partner"}}
+  ]
+}

@@ -1,0 +1,30 @@
+# A sample profile manifest. ccshelf loads only profiles/<name>.toml files, so this
+# file (note the .sample suffix) is not used: copy it to profiles/<name>.toml, remove
+# the leading "# " from the lines you want, and run "ccshelf lint" and "ccshelf compile".
+# ccshelf has no built-in profiles: which roles exist, and what they contain, is your
+# organization's choice. The full format is in the ccshelf documentation (profiles).
+#
+# name = "my-role"                  # must equal the file name without .toml
+# description = "What this profile is for, in one line"
+# owner = "@your-org/your-team"
+# status = "active"                 # active, experimental or deprecated
+# when_to_use = ["a situation where someone should pick this profile"]
+# avoid_when = ["a situation where they should not"]
+# extends = []                      # profiles whose settings this one starts from
+#
+# [plugins]
+# mode = "allow-only"               # only the listed plugins are enabled
+# include = [[.PluginRef]]
+# exclude = []
+#
+# [mcp]
+# servers = []                      # names from mcp/registry.toml
+# claudeai_connectors = "none"
+# strict = true
+#
+# [session]
+# effort = "medium"
+# inherit_user_settings = true
+#
+# [policy]
+# on_blocked = "warn"

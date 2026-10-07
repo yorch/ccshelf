@@ -391,3 +391,19 @@ func TestExecKeys(t *testing.T) {
 		t.Error("nil map")
 	}
 }
+
+func TestExactKeys(t *testing.T) {
+	got, err := ExactKeys([]byte(`{"name": "a", "Description": "b", "n": null}`))
+	if err != nil || len(got) != 3 || string(got["name"]) != `"a"` || string(got["Description"]) != `"b"` {
+		t.Fatalf("%v %v", got, err)
+	}
+	for _, bad := range []string{
+		`{"name": "a", "name": "b"}`,
+		`{"name": "a", "NAME": "evil"}`,
+		`[]`, `{"a": }`, `{"a": 1} x`, ``,
+	} {
+		if _, err := ExactKeys([]byte(bad)); err == nil {
+			t.Errorf("%q: no error", bad)
+		}
+	}
+}

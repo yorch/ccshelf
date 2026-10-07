@@ -247,6 +247,19 @@ func decodeManifest(data []byte) (*manifest, error) {
 	return m, nil
 }
 
+// ExactKeys decodes a JSON object into its top-level keys, matched exactly.
+// It is the strict reading that the rest of the tool applies to plugin.json:
+// a key that repeats, in the same or in a different letter case, is an error
+// (Go's own decoder would silently keep the last one of a case-insensitive
+// match, and Claude Code could read another).
+func ExactKeys(data []byte) (map[string]json.RawMessage, error) {
+	m, err := decodeManifest(data)
+	if err != nil {
+		return nil, err
+	}
+	return m.fields, nil
+}
+
 // fill copies name, version, description and dependencies into info.
 func (m *manifest) fill(info *PluginInfo) error {
 	get := func(key string, dst any) error {

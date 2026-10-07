@@ -72,6 +72,7 @@ func Check(d *Data, cfg *orgconfig.Config, opt Options) *Report {
 		c.entry(ref)
 		c.source(ref)
 		c.metadata(ref, names)
+		c.placeholders(ref)
 		c.relevance(ref)
 		c.dependencies(ref)
 		c.ownership(ref)
@@ -115,6 +116,52 @@ func (c *checker) entry(ref *PluginRef) {
 	}
 	if p.Author.IsZero() {
 		c.add(Warning, "CAT007", fmt.Sprintf("plugin %s has no author", q(p.Name)), ref, "", 0, "")
+	}
+}
+
+// PlaceholderMarker is the text that "ccshelf catalog init" writes into a value
+// that a person still has to fill in. CAT048 reports it wherever it is left.
+const PlaceholderMarker = "TODO(ccshelf)"
+
+// placeholders is CAT048: a marketplace description or a sidecar value that
+// still holds the placeholder written by "ccshelf catalog init". The finding is
+// a warning, so a freshly generated repo lints clean of errors and the
+// remaining work stays listed until it is done.
+func (c *checker) placeholders(ref *PluginRef) {
+	if ref.Dup {
+		return
+	}
+	p := ref.Plugin
+	if strings.Contains(p.Description, PlaceholderMarker) {
+		c.add(Warning, "CAT048", fmt.Sprintf("plugin %s: description still has the %s placeholder", q(p.Name), PlaceholderMarker), ref, "", 0,
+			"describe what the plugin does in one or two sentences")
+	}
+	sc := c.d.Sidecars[p.Name]
+	if sc == nil {
+		return
+	}
+	fields := []struct {
+		name string
+		vals []string
+	}{
+		{"owner", []string{sc.Owner}},
+		{"status", []string{sc.Status}},
+		{"when_to_use", sc.WhenToUse},
+		{"avoid_when", sc.AvoidWhen},
+		{"overlaps_with", sc.OverlapsWith},
+		{"superseded_by", []string{sc.SupersededBy}},
+		{"review_by", []string{sc.ReviewBy}},
+		{"support", []string{sc.Support}},
+		{"docs", []string{sc.Docs}},
+	}
+	for _, f := range fields {
+		for _, v := range f.vals {
+			if strings.Contains(v, PlaceholderMarker) {
+				c.add(Warning, "CAT048", fmt.Sprintf("plugin %s: %s still has the %s placeholder", q(p.Name), f.name, PlaceholderMarker), ref, sc.File, sc.LineOf(f.name),
+					"replace it with real content")
+				break
+			}
+		}
 	}
 }
 

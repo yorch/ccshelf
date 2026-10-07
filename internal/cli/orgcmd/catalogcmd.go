@@ -41,13 +41,13 @@ type lintSummary struct {
 func newCatalog(get clicore.Provider) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "catalog",
-		Short: "Build the plugin catalog of the org data repo",
+		Short: "Set up the org data repo and build its plugin catalog",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return cmd.Help()
 		},
 	}
-	cmd.AddCommand(newCatalogBuild(get))
+	cmd.AddCommand(newCatalogInit(get), newCatalogBuild(get))
 	return cmd
 }
 
