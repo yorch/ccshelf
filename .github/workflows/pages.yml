@@ -2,20 +2,24 @@
 # scripts/build_docs.py) to GitHub Pages. The site is static and makes no external requests;
 # scripts/build-site.sh builds it and runs scripts/check_site.py on the result, here and in ci.yml.
 #
-# MANUAL ONLY. The site is built and checked but deliberately not published automatically (see
-# decision D-34 in docs/DECISIONS.md and site/README.md). Before the first run:
-#   1. enable Pages for the repository with source "GitHub Actions" (Settings > Pages; a private
-#      repository needs a plan that includes Pages for private repositories);
-#   2. point the repository link in site/index.html (the href of id="repo") at the public home, or
-#      pass it through the repo_url input below;
-#   3. have the owner's open-source approval (O-11) and the public home (O-08) settled.
-# To publish on every change to the site later, add this trigger back under `on:`:
-#   push:
-#     branches: [main]
-#     paths: ['site/**', 'docs/**', 'scripts/build-site.sh', 'scripts/build_docs.py', '.github/workflows/pages.yml']
+# AUTOMATIC AND MANUAL. A push to main that changes the site, the docs, or the build scripts
+# publishes it (decision D-45, which supersedes D-34); `workflow_dispatch` republishes on demand
+# (for example to pass a different repo_url). Pages must be enabled with source "GitHub Actions"
+# (Settings > Pages). Pull requests never deploy: the site is built and validated for them by the
+# `site` job in ci.yml. The deploy runs in the protected `github-pages` environment.
 name: pages
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'site/**'
+      - 'docs/**'
+      - 'scripts/build-site.sh'
+      - 'scripts/build_docs.py'
+      - 'scripts/gen_cli_reference.py'
+      - 'scripts/check_site.py'
+      - '.github/workflows/pages.yml'
   workflow_dispatch:
     inputs:
       repo_url:

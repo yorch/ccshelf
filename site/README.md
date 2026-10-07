@@ -50,12 +50,8 @@ What the page says under the terminal is one line: real `ccshelf dry-run` output
 - **Repository link.** The href of `<a id="repo">` in `index.html` is `REPO_URL`; every other repository link starts with it (the validator enforces that). Today it is the private working repository. Change it to the public home before publishing: edit it in one find-and-replace in `index.html`, or pass `--repo-url` to `scripts/build-site.sh` at deploy time.
 - **Site address.** `canonical`, `og:url` and the social image use the placeholder `__SITE_URL__`, and `404.html` has a `<!--SITE_BASE-->` marker. `scripts/build-site.sh <out> <site_url>` fills them in on a copy and validates the result (it also renders the docs pages into `<out>/docs` first; those are never committed).
 
-## Publishing (manual, gated)
+## Publishing
 
-The site is **not** published automatically (decision D-34). `.github/workflows/pages.yml` runs only on `workflow_dispatch`. One-time setup:
+The site is published automatically (decision D-45, which supersedes D-34). `.github/workflows/pages.yml` runs on every push to `main` that changes `site/`, `docs/`, the site build scripts or the workflow itself, and on `workflow_dispatch` (Actions tab > pages > Run workflow; pass `repo_url` only if `site/index.html` should link somewhere else). Pull requests never deploy; the `site` job in `ci.yml` builds and validates the site for them.
 
-1. Settle the gates: employer approval to open-source (O-11), the public GitHub home (O-08) and the module path (D-25).
-2. Enable Pages: Settings > Pages > Source "GitHub Actions". For a private repository this needs a plan that includes Pages for private repositories, and the site is then visible only to people with access.
-3. Run the `pages` workflow from the Actions tab. Pass `repo_url` if `site/index.html` still points at the working repository.
-
-To deploy on every change to `site/` later, restore the `push` trigger shown in the comment at the top of `pages.yml`.
+One-time setup: Settings > Pages > Source "GitHub Actions". The live site is https://yorch.github.io/ccshelf/. To stop automatic deploys, remove the `push` trigger from `pages.yml` and keep `workflow_dispatch`.
