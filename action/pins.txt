@@ -3,3 +3,9 @@
 # The release workflow opens a pull request that appends the six lines for each new
 # version. Pin the action by the commit SHA of a commit that contains the line for the
 # version you install and the binary is pinned too (see action/README.md).
+v0.2.0 linux amd64 071e50ca6e79360f45c32a99bac6e400e6ee3ddf54e0e223e0b529ab263f6955
+v0.2.0 linux arm64 3edaf9ef645287013c538dd6623e4d8fa7c3b47194b562f3f09116a501bec7c7
+v0.2.0 darwin amd64 b3e984a520c4640b7c57478f1a844d82795811f18586e1ba51b3b1a1113ffd78
+v0.2.0 darwin arm64 5fd39ada4e247a788d14f0422f145ead55492b55f0890f08418844fec8bdf313
+v0.2.0 windows amd64 efcf86670b4ee00fa05708c710f15cb2b9b28698ce0f90421cac1717bf5ca419
+v0.2.0 windows arm64 5435ebf4b666388d1952002e73577b94bde5b9c610f7815e792998c05db63bbb
