@@ -10,6 +10,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/yorch/ccshelf/internal/catalog/safepath"
+	"github.com/yorch/ccshelf/internal/marketplace"
 	"github.com/yorch/ccshelf/internal/ui"
 )
 
@@ -54,11 +56,81 @@ type foundPlugin struct {
 	Author      string
 }
 
+// windowsReserved are the device names Windows will not use as a file name,
+// with or without an extension, in any letter case.
+var windowsReserved = map[string]bool{
+	"CON": true, "PRN": true, "AUX": true, "NUL": true,
+	"COM1": true, "COM2": true, "COM3": true, "COM4": true, "COM5": true, "COM6": true, "COM7": true, "COM8": true, "COM9": true,
+	"LPT1": true, "LPT2": true, "LPT3": true, "LPT4": true, "LPT5": true, "LPT6": true, "LPT7": true, "LPT8": true, "LPT9": true,
+}
+
+// sourceSegRe is a path segment of a plugin source that is written into a
+// CODEOWNERS pattern: no space, no #, no glob or escape character, no leading
+// ! or control character can match.
+var sourceSegRe = regexp.MustCompile(`^[A-Za-z0-9._-]{1,128}$`)
+
+// safeSourceDir reports whether dir, the cleaned local source of a
+// marketplace entry, may be written into a CODEOWNERS pattern: a relative
+// path (safepath) of plain segments that stays below the repository.
+func safeSourceDir(dir string) bool {
+	if dir == "" || len(dir) > 300 || safepath.CheckRel(dir) != nil || strings.HasPrefix(dir, "!") {
+		return false
+	}
+	for _, seg := range strings.Split(dir, "/") {
+		if !sourceSegRe.MatchString(seg) || strings.Trim(seg, ".") == "" || strings.EqualFold(seg, ".git") {
+			return false
+		}
+	}
+	return true
+}
+
+// portableName reports whether name works as a file name on every platform
+// this tool supports: a plugin name (pluginNameRe), not a Windows device
+// name (CON, NUL, COM1 and so on, with or without an extension) and without a
+// trailing dot. why says what is wrong when ok is false.
+func portableName(name string) (ok bool, why string) {
+	switch {
+	case !pluginNameRe.MatchString(name):
+		return false, "its name is not a plugin name"
+	case strings.HasSuffix(name, "."):
+		return false, "a name ending in a dot is not a valid file name on Windows"
+	}
+	stem, _, _ := strings.Cut(name, ".")
+	if windowsReserved[strings.ToUpper(stem)] {
+		return false, "its name is a reserved device name on Windows"
+	}
+	return true, ""
+}
+
+// pathCollision returns the first pair of paths that differ only in letter
+// case (they would be one file on Windows and on the default macOS file
+// system), or "" when there is none.
+func pathCollision(paths []string) string {
+	seen := map[string]string{}
+	for _, p := range paths {
+		k := strings.ToLower(p)
+		if prev, ok := seen[k]; ok {
+			return fmt.Sprintf("%s and %s", prev, p)
+		}
+		seen[k] = p
+	}
+	return ""
+}
+
 // manifest is the part of plugin.json read here.
 type manifest struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	Author      json.RawMessage `json:"author"`
+	Name        string
+	Description string
+	Author      json.RawMessage
+}
+
+// stringField decodes a JSON string value; ok is false for anything else.
+func stringField(raw json.RawMessage) (string, bool) {
+	var s string
+	if len(raw) == 0 || json.Unmarshal(raw, &s) != nil {
+		return "", false
+	}
+	return s, true
 }
 
 // authorName returns the author's name from the string or object form, or "".
@@ -110,8 +182,9 @@ func discoverPlugins(fsys FS) (found []foundPlugin, notes []string) {
 			continue
 		case !e.IsDir():
 			continue
-		case !pluginNameRe.MatchString(n):
-			notes = append(notes, fmt.Sprintf("%s/%s was skipped: its name is not a plugin name", pluginsDir, ui.SanitizeLine(n)))
+		}
+		if ok, why := portableName(n); !ok {
+			notes = append(notes, fmt.Sprintf("%s/%s was skipped: %s", pluginsDir, ui.SanitizeLine(n), why))
 			continue
 		}
 		mf := pluginsDir + "/" + n + "/.claude-plugin/plugin.json"
@@ -123,20 +196,33 @@ func discoverPlugins(fsys FS) (found []foundPlugin, notes []string) {
 			notes = append(notes, fmt.Sprintf("%s was skipped: %s", mf, ui.SanitizeLine(err.Error())))
 			continue
 		}
-		var m manifest
-		if err := json.Unmarshal(data, &m); err != nil {
-			notes = append(notes, fmt.Sprintf("%s was skipped: it is not valid JSON for a plugin manifest", mf))
+		fields, err := marketplace.ExactKeys(data)
+		if err != nil {
+			notes = append(notes, fmt.Sprintf("%s was skipped: %s", mf, ui.SanitizeLine(err.Error())))
 			continue
 		}
+		var m manifest
+		var nameOK, descOK bool
+		m.Name, nameOK = stringField(fields["name"])
+		m.Description, descOK = stringField(fields["description"])
+		if _, has := fields["name"]; has && !nameOK {
+			notes = append(notes, fmt.Sprintf("%s was skipped: name is not a string", mf))
+			continue
+		}
+		if _, has := fields["description"]; has && !descOK {
+			notes = append(notes, fmt.Sprintf("%s was skipped: description is not a string", mf))
+			continue
+		}
+		m.Author = fields["author"]
 		fp := foundPlugin{Name: n, Dir: pluginsDir + "/" + n, Description: cleanText(m.Description, 500), Author: authorName(m.Author)}
-		if m.Name != "" && pluginNameRe.MatchString(m.Name) {
+		if ok, _ := portableName(m.Name); ok {
 			fp.Name = m.Name
 		}
-		if other, dup := names[fp.Name]; dup {
-			notes = append(notes, fmt.Sprintf("%s was skipped: the plugin name %q is already used by %s", fp.Dir, fp.Name, other))
+		if other, dup := names[strings.ToLower(fp.Name)]; dup {
+			notes = append(notes, fmt.Sprintf("%s was skipped: the plugin name %q is already used by %s (names that differ only in letter case collide on Windows and macOS)", fp.Dir, fp.Name, other))
 			continue
 		}
-		names[fp.Name] = fp.Dir
+		names[strings.ToLower(fp.Name)] = fp.Dir
 		found = append(found, fp)
 	}
 	sort.Slice(found, func(i, j int) bool { return found[i].Dir < found[j].Dir })

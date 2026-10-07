@@ -190,3 +190,50 @@ func TestTargetOpenDetectsASwap(t *testing.T) {
 		t.Error("a target swapped for a link was opened")
 	}
 }
+
+func TestResolveTargetRefusesClaudeAndCcshelfDirectories(t *testing.T) {
+	base := t.TempDir()
+	home := filepath.Join(base, "users", "me")
+	claude := filepath.Join(home, ".claude")
+	cfg := filepath.Join(home, ".config", "ccshelf")
+	if err := os.MkdirAll(claude, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	opts := func(arg string) TargetOptions {
+		return TargetOptions{Arg: arg, Wd: base, Home: home, Forbidden: []string{claude, cfg, "relative/ignored", ""}}
+	}
+	for name, arg := range map[string]string{
+		"the Claude directory":      claude,
+		"inside it":                 filepath.Join(claude, "plugins", "x"),
+		"the ccshelf config dir":    cfg,
+		"inside the config dir":     filepath.Join(cfg, "org"),
+		"the parent of home":        filepath.Dir(home),
+		"the grandparent of home":   base,
+		"relative, inside Claude's": filepath.Join(".", "users", "me", ".claude", "x"),
+	} {
+		te := targetErr(t, opts(arg))
+		if !te.Usage {
+			t.Errorf("%s: %+v", name, te)
+		}
+	}
+	// Siblings and children of the home directory are fine.
+	for _, arg := range []string{filepath.Join(home, ".claudex"), filepath.Join(home, "code", "org"), filepath.Join(home, ".config", "ccshelf-org"), filepath.Join(base, "users", "other")} {
+		if _, err := ResolveTarget(opts(arg)); err != nil {
+			t.Errorf("%s: %v", arg, err)
+		}
+	}
+	// A link into the Claude directory is followed for the comparison.
+	link := filepath.Join(base, "link")
+	if err := os.Symlink(claude, link); err == nil {
+		if te := targetErr(t, opts(filepath.Join(link, "org"))); !te.Usage {
+			t.Errorf("through a link: %+v", te)
+		}
+	}
+	if runtime.GOOS == "windows" {
+		return
+	}
+	// A directory that is not there yet is compared where it would be created.
+	if te := targetErr(t, opts(filepath.Join(claude, "does", "not", "exist"))); !te.Usage {
+		t.Errorf("missing below Claude: %+v", te)
+	}
+}

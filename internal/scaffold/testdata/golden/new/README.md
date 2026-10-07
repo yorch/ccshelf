@@ -17,9 +17,9 @@ ccshelf.toml                       org configuration: lint rules, catalog settin
 
 ## Set up (once)
 
-- [ ] **Pin ccshelf in the workflows.** `validate.yml` and `catalog.yml` call the `yorch/ccshelf/action`. Replace the all-zero commit SHA with the full 40-character commit SHA of the ccshelf release you chose, keep its tag in the trailing comment, set `version:` to the same release, then delete the "Refuse to run until ccshelf is pinned" step. Prefer a commit that already holds the `action/pins.txt` line for your version: the binary is then pinned by the commit alone. Optionally set the repository variable `CCSHELF_SHA256_LINUX_AMD64` to the archive hash from the release's `checksums.txt`.
-- [ ] **Replace every `TODO(ccshelf)`** (in `catalog/plugins/*.toml` and in marketplace descriptions). `ccshelf lint` lists them as warnings (CAT048) until they are gone.
-- [ ] **Protect the repository.** Require code-owner review on the default branch, protect `v*` tags (block updates and deletion) and limit the `github-pages` environment to the default branch. `.github/` is owned by the platform team so that plugin teams cannot change workflows or CODEOWNERS.
+- [ ] **Pin ccshelf in the workflows.** `validate.yml` and `catalog.yml` call the `yorch/ccshelf/action`. Replace the all-zero commit SHA with the full 40-character commit SHA of the ccshelf release you chose, keep its tag in the trailing comment, set `version:` to the same release, then delete the `guard` job and the `needs: guard` line that sit above and inside the first job. While the placeholder is there, the `guard` job fails with a clear `ccshelf is not pinned` error and the other jobs are skipped (the runner would otherwise stop with "unable to resolve action", because it resolves every action of a job before running its first step). Prefer a commit that already holds the `action/pins.txt` line for your version: the binary is then pinned by the commit alone. Optionally set the repository variable `CCSHELF_SHA256_LINUX_AMD64` to the archive hash from the release's `checksums.txt`.
+- [ ] **Replace every `TODO(ccshelf)`** in `catalog/plugins/*.toml` and in marketplace descriptions: `ccshelf lint` lists those as warnings (CAT048) until they are gone. Lint does not read the workflows or this file, so search them yourself (`grep -rn 'TODO(ccshelf)' .github README.md`).
+- [ ] **Protect the repository.** Require code-owner review on the default branch, protect `v*` tags (block updates and deletion) and limit the `github-pages` environment to the default branch (`main`). `.github/` is owned by the platform team so that plugin teams cannot change workflows or CODEOWNERS.
 - [ ] **Decide who the platform owners are.** `@acme/platform` own everything that runs code on developer machines or shapes the catalog: hooks, MCP servers, plugin manifests, profiles, workflows and this configuration.
 - [ ] **Choose which plugins nobody may mask.** List them under `[protect]` in `ccshelf.toml`.
 
@@ -34,7 +34,7 @@ ccshelf.toml                       org configuration: lint rules, catalog settin
 ## Profiles and the catalog
 
 - A **profile** is a named set of plugins, MCP servers and session defaults. ccshelf has no built-in profiles: the roles are your choice. Put them in `profiles/<name>.toml` and run `ccshelf compile` to regenerate `bundles/`, then commit the result.
-- The **catalog** is a static site and a `CATALOG.md` built from the marketplace and the sidecars: `ccshelf catalog build --out dist/catalog`. CI builds it on every pull request and publishes it from the default branch.
+- The **catalog** is a static site and a `CATALOG.md` built from the marketplace and the sidecars: `ccshelf catalog build --out dist/catalog`. CI builds it on every pull request and publishes it from the default branch (`main`).
 
 ## Everyday commands
 
@@ -44,5 +44,9 @@ ccshelf compile --check               fail when committed bundles differ from th
 ccshelf catalog build --out dist/catalog
 ccshelf search <words>                search the catalog
 ```
+
+## GitHub Enterprise Server
+
+The workflows use no host name. `release.yml` points `gh` at `github.server_url` and passes the workflow token as `GH_ENTERPRISE_TOKEN` as well as `GH_TOKEN`; `catalog.yml` calls the REST API at `github.api_url`. On GitHub Enterprise Server the administrator must allow or mirror the actions the workflows use, `upload-artifact` and the Pages actions may be missing on older versions (see the comments in the workflows), and the runner needs `curl`, `jq` and `gh`.
 
 Documentation: <https://github.com/yorch/ccshelf>.

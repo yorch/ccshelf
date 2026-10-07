@@ -422,7 +422,7 @@ func TestDiscoverySkipsLinkedPluginDirectoriesWithANote(t *testing.T) {
 
 func TestExistingFilesWithCRLFAreComparedByContent(t *testing.T) {
 	m := newMem(map[string]string{
-		".gitignore":     "dist/\r\n.DS_Store\r\n*.ccshelf-suggested\r\n",
+		".gitignore":     "dist/\r\n.DS_Store\r\n*.ccshelf-suggested\r\n*.bak\r\n",
 		".gitattributes": "* text=auto eol=lf\r\n",
 	})
 	plan, err := Build(m, baseParams())

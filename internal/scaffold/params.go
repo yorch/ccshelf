@@ -66,6 +66,13 @@ type Params struct {
 	CcshelfVersion string
 	// RunnerLabel is the fallback of runs-on (--runner-label).
 	RunnerLabel string
+	// DefaultBranch is the branch that the catalog workflow publishes from
+	// (--default-branch); empty means "main".
+	DefaultBranch string
+	// BranchSource says where DefaultBranch was taken from when the caller
+	// detected it instead of being told ("origin/HEAD" or "HEAD"); the plan
+	// notes it. It is empty for an explicit value.
+	BranchSource string
 	// Skip holds the groups not to generate.
 	Skip map[Group]bool
 	// ExampleProfile also writes profiles/example.toml.sample.
@@ -115,6 +122,26 @@ var (
 	versionRe         = regexp.MustCompile(`^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z][0-9A-Za-z.-]{0,30})?$`)
 	runnerLabelRe     = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 )
+
+// DefaultBranchName is the default branch when neither --default-branch nor a
+// repository says otherwise.
+const DefaultBranchName = "main"
+
+// ValidBranch reports whether s is acceptable as --default-branch: a plain
+// branch name of letters, digits and . _ - / that git accepts as a ref and
+// that has no glob meaning in a workflow branch filter.
+func ValidBranch(s string) bool {
+	if !branchRe.MatchString(s) {
+		return false
+	}
+	if strings.Contains(s, "..") || strings.Contains(s, "//") || strings.Contains(s, "/.") ||
+		strings.HasSuffix(s, "/") || strings.HasSuffix(s, ".") || strings.HasSuffix(s, ".lock") || strings.Contains(s, ".lock/") {
+		return false
+	}
+	return true
+}
+
+var branchRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]{0,99}$`)
 
 // DefaultRunnerLabel is the runs-on fallback when --runner-label is not given.
 const DefaultRunnerLabel = "ubuntu-latest"
@@ -188,6 +215,9 @@ func (p *Params) Validate() error {
 	if versionRe.MatchString(p.CcshelfRef) && p.CcshelfVersion != "" && p.CcshelfVersion != p.CcshelfRef {
 		return &FieldError{"--ccshelf-version", "differs from the release tag given as --ccshelf-ref"}
 	}
+	if p.DefaultBranch != "" && !ValidBranch(p.DefaultBranch) {
+		return &FieldError{"--default-branch", fmt.Sprintf("%q must be a plain branch name (letters, digits, . _ - and /)", ui.SanitizeLine(p.DefaultBranch))}
+	}
 	if p.RunnerLabel != "" && !ValidRunnerLabel(p.RunnerLabel) {
 		return &FieldError{"--runner-label", fmt.Sprintf("%q must match %s", ui.SanitizeLine(p.RunnerLabel), runnerLabelRe)}
 	}
@@ -237,6 +267,13 @@ func (p *Params) runner() string {
 		return p.RunnerLabel
 	}
 	return DefaultRunnerLabel
+}
+
+func (p *Params) branch() string {
+	if p.DefaultBranch != "" {
+		return p.DefaultBranch
+	}
+	return DefaultBranchName
 }
 
 func (p *Params) org(marketplaceName string) string {

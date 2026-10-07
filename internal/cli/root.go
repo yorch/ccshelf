@@ -132,11 +132,18 @@ func reportJSON(w io.Writer, err error, code int) {
 		Message string `json:"message"`
 		Hint    string `json:"hint,omitempty"`
 		Code    int    `json:"code"`
+		// Data carries what a command knows about a partial failure, such as
+		// the files it had written; see errorData.
+		Data map[string]any `json:"data,omitempty"`
 	}
 	o := out{Message: ui.SanitizeLine(err.Error()), Code: code}
 	var h interface{ Hint() string }
 	if errors.As(err, &h) {
 		o.Hint = ui.SanitizeLine(h.Hint())
+	}
+	var ed interface{ ErrorData() map[string]any }
+	if errors.As(err, &ed) {
+		o.Data = ed.ErrorData()
 	}
 	var mf *ui.MissingFlagError
 	if o.Hint == "" && errors.As(err, &mf) && mf.Flag != "" {

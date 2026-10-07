@@ -204,6 +204,33 @@ func (m *memFS) Replace(name string, data []byte, perm fs.FileMode) error {
 	return nil
 }
 
+func (m *memFS) Remove(name string) error {
+	if _, err := m.Lstat(name); err != nil {
+		return err
+	}
+	if m.links[name] {
+		return ErrSymlink
+	}
+	if _, ok := m.files[name]; ok {
+		delete(m.files, name)
+		delete(m.modes, name)
+		return nil
+	}
+	prefix := name + "/"
+	for f := range m.files {
+		if strings.HasPrefix(f, prefix) {
+			return errors.New("directory not empty")
+		}
+	}
+	for d := range m.dirs {
+		if strings.HasPrefix(d, prefix) {
+			return errors.New("directory not empty")
+		}
+	}
+	delete(m.dirs, name)
+	return nil
+}
+
 func (m *memFS) read(name string) string { return string(m.files[name]) }
 
 func (m *memFS) names() []string {

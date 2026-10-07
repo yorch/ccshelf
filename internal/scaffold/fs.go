@@ -52,6 +52,9 @@ type FS interface {
 	WriteNew(name string, data []byte, perm fs.FileMode) error
 	// Replace atomically replaces the regular file name.
 	Replace(name string, data []byte, perm fs.FileMode) error
+	// Remove deletes the regular file or the empty directory name. It never
+	// removes a symbolic link or a directory that has content.
+	Remove(name string) error
 }
 
 // checkName refuses names that are not plain relative slash paths.
@@ -108,6 +111,9 @@ func (emptyFS) WriteNew(string, []byte, fs.FileMode) error {
 func (emptyFS) Replace(string, []byte, fs.FileMode) error {
 	return errors.New("the target directory does not exist")
 }
+
+// Remove implements FS.
+func (emptyFS) Remove(string) error { return errors.New("the target directory does not exist") }
 
 // osFS is an FS over a directory, confined with os.Root.
 type osFS struct {
@@ -346,4 +352,22 @@ func (o *osFS) Replace(name string, data []byte, perm fs.FileMode) error {
 		return fmt.Errorf("replacing %s: %w", name, err)
 	}
 	return nil
+}
+
+// Remove implements FS.
+func (o *osFS) Remove(name string) error {
+	if name == "." {
+		return errors.New("refusing to remove the target directory")
+	}
+	fi, err := o.Lstat(name)
+	if err != nil {
+		return err
+	}
+	if fi.Mode()&fs.ModeSymlink != 0 {
+		return fmt.Errorf("%s: %w", name, ErrSymlink)
+	}
+	if !fi.Mode().IsRegular() && !fi.IsDir() {
+		return fmt.Errorf("%s: %w", name, ErrNotRegular)
+	}
+	return o.root.Remove(name)
 }

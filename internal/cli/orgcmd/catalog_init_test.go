@@ -172,6 +172,8 @@ func TestCatalogInitHostileValuesAreRejected(t *testing.T) {
 		{"--ccshelf-version", "v1.2.3\nrun: x"},
 		{"--runner-label", "x'}} ${{ secrets.X }}"},
 		{"--runner-label", "a b"},
+		{"--default-branch", "main\n[x]"},
+		{"--default-branch", "a b"},
 		{"--mode", "both"},
 		{"--sidecars", "all"},
 	}

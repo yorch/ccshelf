@@ -70,6 +70,22 @@ type Plan struct {
 	// NeedsPin is true when a workflow that this plan writes still has the
 	// placeholder ccshelf action reference.
 	NeedsPin bool
+	// PinFiles are those workflows, sorted.
+	PinFiles []string
+}
+
+// MarkerFiles returns the files this plan creates or replaces that contain
+// the TODO(ccshelf) placeholder, sorted. The README is not counted: it quotes
+// the marker to explain it.
+func (p *Plan) MarkerFiles() []string {
+	var out []string
+	for _, e := range p.Entries {
+		if (e.Action == ActionCreate || e.Action == ActionOverwrite) && e.Path != pathReadme && bytes.Contains(e.Content, []byte(Placeholder)) {
+			out = append(out, e.Path)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // Count returns the number of entries with action a.
@@ -165,11 +181,37 @@ func (b *builder) run() error {
 	for _, w := range []string{"validate", "catalog", "release"} {
 		b.addWorkflow(w)
 	}
+	if b.p.BranchSource != "" && b.p.Enabled(GroupWorkflows) {
+		b.note("the default branch %s of the workflows was read from %s of the existing repository (read only); pass --default-branch to use another", b.p.branch(), b.p.BranchSource)
+	}
+	if len(b.plan.PinFiles) > 0 {
+		sort.Strings(b.plan.PinFiles)
+		b.addTodoOnce("pin the ccshelf action in " + strings.Join(b.plan.PinFiles, " and ") + ": a full 40-character commit SHA and the matching version (or re-run with --ccshelf-ref <sha> --ccshelf-version <tag>), then delete the guard job and its needs line; until then the guard job fails with a clear message and the other jobs are skipped")
+	}
 	b.addReadme()
 	b.addLines(pathAttributes, GroupGitattributes, "gitattributes.tmpl")
 	b.addLines(pathIgnore, GroupGitignore, "gitignore.tmpl")
 	b.addExampleProfile()
-	return b.firstConflict()
+	if err := b.firstConflict(); err != nil {
+		return err
+	}
+	return b.writeCollision()
+}
+
+// writeCollision stops the plan, before anything is written, when two files it
+// writes would be one file on a case-insensitive file system (Windows and the
+// default macOS one): the second create would fail halfway through the run.
+func (b *builder) writeCollision() error {
+	var paths []string
+	for _, e := range b.plan.Entries {
+		if e.Action == ActionCreate || e.Action == ActionOverwrite {
+			paths = append(paths, e.Path)
+		}
+	}
+	if pair := pathCollision(paths); pair != "" {
+		return fmt.Errorf("%s differ only in letter case, so they would be one file on Windows and on the default macOS file system; rename one of the plugins (nothing was written)", pair)
+	}
+	return nil
 }
 
 // actionConflict marks an entry that cannot be planned (a directory where a
@@ -238,20 +280,28 @@ func (b *builder) load() error {
 	if data, seen := b.readExisting(pathMarketplace); seen {
 		b.mktSeen = true
 		if data != nil {
-			m, err := marketplace.Parse(data)
-			if err != nil {
+			if m, err := marketplace.Parse(data); err != nil {
 				b.note("%s exists but is not a valid marketplace file (%s); it is left alone and no sidecars are generated from it", pathMarketplace, ui.SanitizeLine(err.Error()))
+			} else if _, err := marketplace.ExactKeys(data); err != nil {
+				b.note("%s exists but is ambiguous (%s); it is left alone and no sidecars are generated from it", pathMarketplace, ui.SanitizeLine(err.Error()))
 			} else {
 				b.mkt = m
 			}
 		}
 	}
-	if b.mkt != nil && b.p.MarketplaceName != "" && b.p.MarketplaceName != b.mkt.Name {
-		return &FieldError{"--marketplace-name", fmt.Sprintf("%s already names the marketplace %q; leave the flag out or pass that name", pathMarketplace, ui.SanitizeLine(b.mkt.Name))}
-	}
 	b.name = b.p.MarketplaceName
 	if b.mkt != nil {
-		b.name = b.mkt.Name
+		switch {
+		case ValidMarketplaceName(b.mkt.Name):
+			if b.p.MarketplaceName != "" && b.p.MarketplaceName != b.mkt.Name {
+				return &FieldError{"--marketplace-name", fmt.Sprintf("%s already names the marketplace %q; leave the flag out or pass that name", pathMarketplace, b.mkt.Name)}
+			}
+			b.name = b.mkt.Name
+		default:
+			// The name is untrusted text that would end up in generated files:
+			// it is never used. The file itself is left alone.
+			b.note("%s names the marketplace %q, which is not a valid marketplace name (%s); it is not used: pass --marketplace-name for the generated files (the file itself is not changed)", pathMarketplace, ui.SanitizeLine(b.mkt.Name), MarketplaceNameRe)
+		}
 	}
 	b.cfg = orgconfig.Default()
 	if data, seen := b.readExisting(pathConfig); seen {
@@ -339,6 +389,7 @@ func (b *builder) computeTargets() {
 	b.listed = true
 	listedDirs := map[string]bool{}
 	listedNames := map[string]bool{}
+	seenTargets := map[string]string{}
 	for _, p := range b.mkt.Plugins {
 		listedNames[p.Name] = true
 		dir := p.Source.LocalPath()
@@ -348,10 +399,19 @@ func (b *builder) computeTargets() {
 		if strings.HasPrefix(p.Name, bundlePrefix) && strings.HasPrefix(dir, bundlesDir+"/") {
 			continue // generated bundles have no sidecar
 		}
-		if !pluginNameRe.MatchString(p.Name) {
-			b.note("the marketplace entry %q was skipped: its name cannot be a sidecar file name", ui.SanitizeLine(p.Name))
+		if ok, why := portableName(p.Name); !ok {
+			b.note("the marketplace entry %q was skipped: %s, so it cannot be a sidecar file name", ui.SanitizeLine(p.Name), why)
 			continue
 		}
+		if dir != "" && !safeSourceDir(dir) {
+			b.note("the source %q of the marketplace entry %q is not a plain directory below the repository (letters, digits, . _ - and / only, no \"..\"): its sidecar is generated, but no CODEOWNERS rule is", ui.SanitizeLine(dir), p.Name)
+			dir = ""
+		}
+		if prev, dup := seenTargets[p.Name]; dup {
+			b.note("the marketplace entry %q is listed twice (%s and %s); only the first gets a sidecar", p.Name, prev, ui.SanitizeLine(p.Source.Summary()))
+			continue
+		}
+		seenTargets[p.Name] = ui.SanitizeLine(p.Source.Summary())
 		b.targets = append(b.targets, target{Name: p.Name, Dir: dir, Description: p.Description})
 	}
 	var unlisted []string
@@ -368,12 +428,15 @@ func (b *builder) computeTargets() {
 // view is the data of the text templates. Every value is validated or
 // encoded: nothing here can carry markup of the target format.
 type view struct {
-	Pin            pin
-	Comment        string
-	Runner         string
-	Org            string // Markdown-escaped
-	Marketplace    string
-	PlatformOwners string // Markdown code spans
+	Pin             pin
+	Comment         string
+	Runner          string // validated label, safe in a YAML single-quoted scalar
+	Branch          string // validated branch name, safe in a YAML double-quoted scalar
+	Org             string // Markdown-escaped
+	MarketplaceCode string // Markdown code span
+	BranchCode      string // Markdown code span
+	PlatformOwners  string // Markdown code spans
+	PluginRef       string // TOML array holding one string
 }
 
 func render(name string, v view) ([]byte, error) {
@@ -480,6 +543,7 @@ func (b *builder) file(path string, g Group, k kind, content gen, rules func() [
 	case kindLines:
 		if s := missingLines(old, want); len(s) > 0 {
 			add(Entry{Action: ActionMerge, Suggestion: s, Reason: "exists; the lines to add are in the suggestion"})
+			b.noteBlockedSuggestion(path)
 			return
 		}
 		add(Entry{Action: ActionSkip, Reason: "exists and already has every generated line"})
@@ -490,11 +554,24 @@ func (b *builder) file(path string, g Group, k kind, content gen, rules func() [
 		}
 		if s := rules(); len(s) > 0 {
 			add(Entry{Action: ActionMerge, Suggestion: s, Reason: "exists; the rules to add are in the suggestion"})
+			b.noteBlockedSuggestion(path)
 			return
 		}
 		add(Entry{Action: ActionSkip, Reason: "exists and already covers every generated rule"})
 	default:
 		add(Entry{Action: ActionSkip, Reason: "exists; left alone"})
+	}
+}
+
+// noteBlockedSuggestion notes a <file>.ccshelf-suggested that exists and was
+// not written by this tool: --write-suggestions would not replace it.
+func (b *builder) noteBlockedSuggestion(path string) {
+	sp := path + SuggestionSuffix
+	data, err := b.fs.ReadFile(sp, maxReadSize)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+	case err != nil || !isOurSuggestion(data):
+		b.note("%s exists and was not written by ccshelf: --write-suggestions does not replace it (move it away first)", sp)
 	}
 }
 
@@ -518,7 +595,7 @@ func missingLines(existing, want []byte) []byte {
 	if len(out) == 0 {
 		return nil
 	}
-	return []byte("# Lines that \"ccshelf catalog init\" suggests adding to the existing file.\n" + strings.Join(out, "\n") + "\n")
+	return []byte(suggestionHeads[0] + " adding to the existing file.\n" + strings.Join(out, "\n") + "\n")
 }
 
 func (b *builder) addLines(path string, g Group, tmpl string) {
@@ -544,7 +621,7 @@ func (b *builder) addReadme() {
 		for i, o := range pl {
 			codes[i] = mdCode(o)
 		}
-		data, err := render("README.md.tmpl", view{Org: mdEscape(b.p.org(b.name)), Marketplace: b.name, PlatformOwners: strings.Join(codes, ", ")})
+		data, err := render("README.md.tmpl", view{Org: mdEscape(b.p.org(b.name)), MarketplaceCode: mdCode(b.name), BranchCode: mdCode(b.p.branch()), PlatformOwners: strings.Join(codes, ", ")})
 		return data, err == nil
 	}, nil)
 }
@@ -563,9 +640,9 @@ func (b *builder) addWorkflow(name string) {
 		pn := b.p.pin()
 		if strict && !pn.Pinned && name != "release" {
 			b.plan.NeedsPin = true
-			b.addTodoOnce("pin the ccshelf action in .github/workflows/validate.yml and catalog.yml: a full 40-character commit SHA and the matching version (or re-run with --ccshelf-ref <sha> --ccshelf-version <tag>); the workflows fail with a clear message until then")
+			b.plan.PinFiles = append(b.plan.PinFiles, ".github/workflows/"+name+".yml")
 		}
-		data, err := render(name+".yml.tmpl", view{Pin: pn, Comment: b.comment(pn), Runner: b.p.runner()})
+		data, err := render(name+".yml.tmpl", view{Pin: pn, Comment: b.comment(pn), Runner: b.p.runner(), Branch: b.p.branch()})
 		return data, err == nil
 	}, nil)
 }
@@ -585,7 +662,7 @@ func (b *builder) addExampleProfile() {
 		if m == "" {
 			m = "your-marketplace"
 		}
-		data, err := render("example-profile.toml.sample.tmpl", view{Marketplace: m})
+		data, err := render("example-profile.toml.sample.tmpl", view{PluginRef: tomlArray([]string{"my-plugin@" + m})})
 		return data, err == nil
 	}, nil)
 }

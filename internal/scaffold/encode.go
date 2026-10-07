@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/yorch/ccshelf/internal/ui"
 )
 
 // tomlString encodes s as a TOML basic string. Values are validated before
@@ -51,9 +53,13 @@ func tomlArray(ss []string) string {
 // mdEscape escapes s for Markdown text: every ASCII punctuation character is
 // preceded by a backslash, which CommonMark allows for all of them, so a name
 // can never start a link, emphasis, a heading, HTML or a table.
+//
+// Control, invisible and bidirectional characters are replaced first (the
+// values are validated before they get here; this is the second line of
+// defense), so a value is always one visible line.
 func mdEscape(s string) string {
 	var b strings.Builder
-	for _, r := range s {
+	for _, r := range ui.SanitizeLine(s) {
 		if r < 0x80 && strings.ContainsRune("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~", r) {
 			b.WriteByte('\\')
 		}
@@ -64,6 +70,7 @@ func mdEscape(s string) string {
 
 // mdCode renders s as an inline code span that cannot be closed from inside.
 func mdCode(s string) string {
+	s = ui.SanitizeLine(s)
 	fence := "`"
 	for strings.Contains(s, fence) {
 		fence += "`"

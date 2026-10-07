@@ -25,8 +25,9 @@
 # Workflows and CODEOWNERS themselves: without this a plugin team could edit them.
 /.github/                          @acme/platform
 
-# Hooks and MCP servers in plugins are code on developer machines (these come last on purpose).
+# Hooks, MCP and LSP servers in plugins are code on developer machines (these come last on purpose).
 /plugins/*/hooks/                  @acme/platform
 /plugins/*/.mcp.json               @acme/platform
+/plugins/*/.lsp.json               @acme/platform
 # Plugin manifests can declare hooks and MCP servers inline, so they are platform-reviewed too (last on purpose).
 /plugins/*/.claude-plugin/         @acme/platform

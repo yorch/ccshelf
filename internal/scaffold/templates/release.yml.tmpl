@@ -31,11 +31,18 @@ jobs:
     steps:
       - name: Create the next tag for this month
         env:
+          # gh reads GH_TOKEN for its default host and GH_ENTERPRISE_TOKEN for every other host (an
+          # Enterprise Server, or Enterprise Cloud with data residency); each token goes only to its host.
           GH_TOKEN: ${{ github.token }}
+          GH_ENTERPRISE_TOKEN: ${{ github.token }}
+          SERVER_URL: ${{ github.server_url }}
           REPO: ${{ github.repository }}
           COMMIT: ${{ github.sha }}
         run: |
           set -euo pipefail
+          # Point gh at the server that runs this workflow: the host of the server URL, without the scheme.
+          GH_HOST="${SERVER_URL#*://}"
+          export GH_HOST
           prefix="v$(date -u +%Y.%m)"
           existing="$(gh api --paginate "repos/${REPO}/git/matching-refs/tags/${prefix}." --jq '.[].ref' | wc -l | tr -d ' ')"
           next=$((existing + 1))

@@ -51,7 +51,7 @@ func (b *builder) renderConfig(platform []string) []byte {
 	if mk == "" {
 		mk = "marketplace"
 	}
-	w.WriteString("# plugins = [\"audit-logger@" + mk + "\"]\n")
+	w.WriteString("# plugins = " + tomlArray([]string{"audit-logger@" + mk}) + "\n")
 	w.WriteString("# mcp = [\"plugin:audit:audit\"]\n")
 	return []byte(w.String())
 }
@@ -145,8 +145,21 @@ func (b *builder) addSidecars() {
 	if !b.p.Enabled(GroupSidecars) {
 		return
 	}
+	existing := map[string]string{} // lower-cased name -> name, of the sidecars already there
+	if ents, err := b.fs.ReadDir(sidecarDir); err == nil {
+		for _, e := range ents {
+			existing[strings.ToLower(e.Name())] = e.Name()
+		}
+	}
 	for _, t := range b.targets {
 		path := sidecarDir + "/" + t.Name + ".toml"
+		if have, ok := existing[strings.ToLower(path[len(sidecarDir)+1:])]; ok && have != t.Name+".toml" {
+			b.plan.Entries = append(b.plan.Entries, Entry{
+				Path: path, Group: GroupSidecars, Action: actionConflict,
+				Reason: "differs only in letter case from the existing " + sidecarDir + "/" + ui.SanitizeLine(have) + " (one file on Windows and macOS); rename one of them",
+			})
+			continue
+		}
 		b.file(path, GroupSidecars, kindPlain, func(strict bool) ([]byte, bool) {
 			owner, ok := b.targetOwner(t, strict)
 			if !ok {
@@ -344,7 +357,7 @@ func (b *builder) addCodeowners() {
 		if len(missing) == 0 && top == "" {
 			return nil
 		}
-		head := "# Rules that \"ccshelf catalog init\" suggests adding to " + ui.SanitizeLine(b.coPath) + ".\n" +
+		head := suggestionHeads[1] + " adding to " + ui.SanitizeLine(b.coPath) + ".\n" +
 			"# GitHub applies the LAST matching rule: append the rules below at the end, with the rules for\n" +
 			"# hooks, MCP servers and plugin manifests last.\n"
 		if top != "" {

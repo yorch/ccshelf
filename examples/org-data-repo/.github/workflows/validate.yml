@@ -13,17 +13,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # TODO(ccshelf): once the ccshelf action below is pinned (see README.md), delete this job and the
+  # "needs: guard" line of the validate job. It is a job of its own on purpose: the runner resolves
+  # every action of a job before its first step runs, so a guard step inside that job could never
+  # run ahead of the unresolvable placeholder; a failed "guard" skips the jobs that need it instead.
+  guard:
+    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
+    timeout-minutes: 2
+    permissions: {}
+    steps:
+      - name: Refuse to run until ccshelf is pinned
+        run: |
+          echo "::error title=ccshelf is not pinned::The ccshelf action in this workflow still has the placeholder commit SHA or version. Replace them with a released ccshelf commit SHA and tag, then delete the guard job and its needs line. See README.md."
+          exit 1
+
   validate:
+    needs: guard
     runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
     timeout-minutes: 10
     permissions:
       contents: read
     steps:
-      # TODO(ccshelf): remove this step once the ccshelf action below is pinned (see README.md).
-      - name: Refuse to run until ccshelf is pinned
-        run: |
-          echo "::error title=ccshelf is not pinned::Replace the all-zero commit SHA and the version of the ccshelf action in this workflow with a released commit SHA and tag, then remove this step. See README.md."
-          exit 1
       - name: Check out the pull request
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

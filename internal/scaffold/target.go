@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/yorch/ccshelf/internal/ui"
@@ -31,6 +32,10 @@ type TargetOptions struct {
 	Wd string
 	// Home is the user's home directory, or "" when unknown.
 	Home string
+	// Forbidden are directories that a target may be neither equal to nor
+	// inside: Claude Code's configuration directories and ccshelf's own
+	// configuration and cache directories. Relative entries are ignored.
+	Forbidden []string
 }
 
 // Target is a validated target directory.
@@ -51,7 +56,11 @@ const toolModule = "github.com/yorch/ccshelf"
 // ResolveTarget validates the directory argument and returns the target. It
 // refuses (without touching anything):
 //   - an argument with a ".." component or a control character;
-//   - the file system root and the user's home directory;
+//   - the file system root, the user's home directory and every directory
+//     above it (an org data repo is never that broad);
+//   - a directory that is, or lies inside, one of o.Forbidden (the Claude Code
+//     and ccshelf configuration and cache directories: this tool never writes
+//     into them);
 //   - a directory that is, or lies inside, the ccshelf tool repository;
 //   - a target that is a symbolic link or not a directory, and, for a relative
 //     argument, any component below the working directory that is a symbolic
@@ -85,6 +94,9 @@ func ResolveTarget(o TargetOptions) (*Target, error) {
 	if err := checkNotHome(dir, o.Home); err != nil {
 		return nil, err
 	}
+	if err := checkNotForbidden(dir, o.Forbidden); err != nil {
+		return nil, err
+	}
 	if err := checkNotToolRepo(dir); err != nil {
 		return nil, err
 	}
@@ -98,6 +110,11 @@ func checkNotHome(dir, home string) error {
 	if home == "" {
 		return nil
 	}
+	if filepath.IsAbs(home) && within(resolveLoose(home), resolveLoose(dir)) {
+		// The home directory is the target or lies below it: the target is an
+		// ancestor of home, which holds everything of the user.
+		return &TargetError{Msg: "refusing to use your home directory, or a directory above it, as an org data repo", Usage: true}
+	}
 	di, err := os.Stat(dir)
 	if err != nil {
 		if filepath.Clean(home) == dir {
@@ -107,6 +124,60 @@ func checkNotHome(dir, home string) error {
 	}
 	if hi, err := os.Stat(home); err == nil && os.SameFile(di, hi) {
 		return &TargetError{Msg: "refusing to use your home directory as an org data repo", Usage: true}
+	}
+	return nil
+}
+
+// resolveLoose resolves symbolic links in the existing part of p and appends
+// the part that does not exist, so that a directory that is yet to be created
+// compares with the real directories around it.
+func resolveLoose(p string) string {
+	p = filepath.Clean(p)
+	var tail []string
+	for cur := p; ; cur = filepath.Dir(cur) {
+		if r, err := filepath.EvalSymlinks(cur); err == nil {
+			for i := len(tail) - 1; i >= 0; i-- {
+				r = filepath.Join(r, tail[i])
+			}
+			return r
+		}
+		if filepath.Dir(cur) == cur {
+			return p
+		}
+		tail = append(tail, filepath.Base(cur))
+	}
+}
+
+func samePath(a, b string) bool {
+	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
+		return strings.EqualFold(a, b)
+	}
+	return a == b
+}
+
+// within reports whether p is dir or lies below it (both resolved).
+func within(p, dir string) bool {
+	if samePath(p, dir) {
+		return true
+	}
+	rel, err := filepath.Rel(dir, p)
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
+}
+
+// checkNotForbidden refuses a target equal to or inside one of the forbidden
+// directories, and a target above the home directory (an ancestor of it).
+func checkNotForbidden(dir string, forbidden []string) error {
+	resolved := resolveLoose(dir)
+	for _, f := range forbidden {
+		if f == "" || !filepath.IsAbs(f) {
+			continue
+		}
+		if within(resolved, resolveLoose(f)) {
+			return &TargetError{Msg: fmt.Sprintf("refusing to use %s: it is, or is inside, %s, a directory of Claude Code or ccshelf that this command never writes to", ui.SanitizeLine(dir), ui.SanitizeLine(f)), Usage: true}
+		}
 	}
 	return nil
 }
