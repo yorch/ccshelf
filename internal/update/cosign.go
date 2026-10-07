@@ -14,6 +14,12 @@ import (
 // CosignTimeout bounds one cosign run.
 const CosignTimeout = 90 * time.Second
 
+// execWaitDelay bounds how long Wait lingers after a child has exited or its
+// context is done: without it a child that leaves a grandchild holding the
+// inherited stdout/stderr pipe blocks Wait far past the deadline. It is a
+// variable only so that tests can shorten it.
+var execWaitDelay = 2 * time.Second
+
 // ErrSignature means the keyless signature of checksums.txt did not verify.
 var ErrSignature = errors.New("signature verification failed")
 
@@ -91,6 +97,7 @@ func VerifyCosign(ctx context.Context, cosignPath string, environ []string, bund
 	}
 	cmd := exec.CommandContext(ctx, cosignPath, args...) //nolint:gosec // cosignPath is the PATH lookup of "cosign"; args are fixed and never go through a shell
 	cmd.Env = scrubEnv(environ)
+	cmd.WaitDelay = execWaitDelay
 	var out capWriter
 	cmd.Stdout, cmd.Stderr = &out, &out
 	if err := cmd.Run(); err != nil {

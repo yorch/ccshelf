@@ -451,6 +451,7 @@ func RunVersion(ctx context.Context, path string, environ []string) (string, err
 	defer cancel()
 	cmd := exec.CommandContext(ctx, path, "version", "--json") //nolint:gosec // path is the file this update just verified (or the backup being restored)
 	cmd.Env = append(scrubEnv(environ), "CCSHELF_NO_UPDATE_CHECK=1")
+	cmd.WaitDelay = execWaitDelay
 	var out capWriter
 	cmd.Stdout = &out
 	if err := cmd.Run(); err != nil {
