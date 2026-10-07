@@ -246,7 +246,10 @@ func TestResolveExecutable(t *testing.T) {
 	if err != nil || got != real || !wasLink {
 		t.Errorf("link into a directory we own = %q %v %v, want %q", got, wasLink, err, real)
 	}
-	// A link whose target directory we cannot write is refused.
+	// A link whose target directory we cannot write is still resolved (that
+	// is checked by CheckWritable right before a replacement, see
+	// TestApplyRefusesAnUnwritableLinkTarget), because resolving must not
+	// write anything.
 	if os.Geteuid() != 0 {
 		ro := filepath.Join(root, "ro")
 		if err := os.Mkdir(ro, 0o700); err != nil {
@@ -261,8 +264,8 @@ func TestResolveExecutable(t *testing.T) {
 		if err := os.Symlink(inner, l2); err != nil {
 			t.Fatal(err)
 		}
-		if _, _, err := ResolveExecutable(l2); err == nil {
-			t.Error("a link into a read-only directory must be refused")
+		if got, _, err := ResolveExecutable(l2); err != nil || got != inner {
+			t.Errorf("a link into a read-only directory = %q %v: resolving must not probe for writability", got, err)
 		}
 	}
 	// A link to a directory owned by someone else is refused: /usr/bin is

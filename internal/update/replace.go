@@ -51,9 +51,13 @@ func CheckWritable(dir string) error {
 
 // ResolveExecutable returns the path the update will replace. A symlinked
 // executable is followed to its target, but only when the target's directory is
-// one the current user owns and can write (so a link in a world-readable
-// location can never be used to overwrite something that is not ours).
-// wasLink reports whether a link was followed.
+// one the current user owns (so a link in a world-readable location can never
+// be used to overwrite something that is not ours); that the directory can be
+// written is checked later by [CheckWritable], right before a replacement,
+// because this function must not write anything (it also serves --check and
+// --dry-run). wasLink reports whether a link was followed. On Linux
+// os.Executable already returns the resolved path, so a link is seen here
+// mostly where the OS reports the path as invoked (macOS).
 func ResolveExecutable(exe string) (resolved string, wasLink bool, err error) {
 	if !filepath.IsAbs(exe) {
 		return "", false, fmt.Errorf("the executable path %q is not absolute", exe)
@@ -73,9 +77,9 @@ func ResolveExecutable(exe string) (resolved string, wasLink bool, err error) {
 	if err := dirOwnedByUser(dir); err != nil {
 		return "", true, fmt.Errorf("%s is a link to %s, whose directory %s is not one you own: %w", exe, target, dir, err)
 	}
-	if err := CheckWritable(dir); err != nil {
-		return "", true, fmt.Errorf("%s is a link to %s: %w", exe, target, err)
-	}
+	// Whether the directory can be written is not probed here: this runs for
+	// --check, --dry-run and the cached notice, which must change nothing on
+	// disk. Apply and Rollback do the probe just before they replace.
 	return target, true, nil
 }
 
