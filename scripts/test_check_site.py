@@ -104,6 +104,19 @@ class Links(Base):
         self.mutate("</body>", '<img src="https://code.claude.com/x.png" alt="x" width="1" height="1"></body>')
         self.assertFails("external URL not allowed")
 
+    def test_author_credit_link(self):
+        self.mutate("</body>", '<a href="https://github.com/yorch">Jorge Barnaby</a></body>')
+        self.assertClean()
+        # only the exact profile address, only on an anchor
+        for bad in ("https://github.com/yorch/other", "http://github.com/yorch", "https://github.com/yorchx",
+                    "https://github.com/yorch@evil.test"):
+            self.setUp()
+            self.mutate("</body>", f'<a href="{bad}">x</a></body>')
+            self.assertFails("external URL not allowed")
+        self.setUp()
+        self.mutate("</body>", '<img src="https://github.com/yorch" alt="x" width="1" height="1"></body>')
+        self.assertFails("external URL not allowed")
+
     def test_repo_prefix_boundary(self):
         self.mutate("</body>", '<a href="https://example.test/org/repo-evil/x">x</a></body>')
         self.assertFails("external URL not allowed")
@@ -596,7 +609,8 @@ class Build(unittest.TestCase):
         with open(os.path.join(self.out, "o", "index.html"), encoding="utf-8") as f:
             text = f.read()
         self.assertIn('id="repo" href="https://github.com/example/public"', text)
-        self.assertNotIn("github.com/yorch", text)
+        # the author credit links to the profile (github.com/yorch); only the repository address is swapped
+        self.assertNotIn("github.com/yorch/ccshelf", text)
         self.assertIn("git clone https://github.com/example/public\n", text)
         # every page of the build, docs included, carries the swapped address and none the old one
         for d, _, fs in os.walk(os.path.join(self.out, "o")):
@@ -611,7 +625,7 @@ class Build(unittest.TestCase):
         with open(os.path.join(self.out, "o", "docs", "index.html"), encoding="utf-8") as f:
             self.assertIn('href="https://github.com/example/public/blob/main/', f.read())
         with open(os.path.join(self.out, "o", "docs", "search-index.js"), encoding="utf-8") as f:
-            self.assertNotIn("https://github.com/yorch", f.read())
+            self.assertNotIn("https://github.com/yorch/ccshelf", f.read())
 
     def test_build_refuses_bad_url(self):
         self.assertNotEqual(self.build("http://example.test").returncode, 0)

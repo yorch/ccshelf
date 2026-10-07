@@ -208,7 +208,7 @@ ul, ol, dl { margin: 0; padding: 0; }
 .prose p, .sec-body > p { max-width: 62ch; }
 .prose h3, .sub { margin: 0 0 8px; }
 .sub { margin-top: 28px; font-size: 1.1rem; }
-.fine { color: var(--muted); font-size: 0.92rem; max-width: 62ch; }
+.fine, .credit { color: var(--muted); font-size: 0.92rem; max-width: 62ch; }
 .evidence { border-left: 3px solid var(--line); padding-left: 12px; font-size: 0.98rem; }
 .two { display: grid; gap: 20px; margin-top: 28px; }
 .more { margin-top: 20px; }
