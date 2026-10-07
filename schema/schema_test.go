@@ -164,6 +164,7 @@ func TestEnumerationsMatchGoConstants(t *testing.T) {
 		{"trust.on_change", c, "trust.on_change", config.OnChangeModes()},
 		{"ui.color", c, "ui.color", config.ColorModes()},
 		{"ui.interactive", c, "ui.interactive", config.InteractiveModes()},
+		{"update.mode", c, "update.mode", config.UpdateModes()},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -258,6 +259,8 @@ func TestConfigExamples(t *testing.T) {
 	valid := []string{
 		"",
 		"default_account = \"work\"\n[accounts.work]\nconfig_dir = \"~/.claude-work\"\n[trust]\nrequire_pin = true\non_change = \"fail\"\n[ui]\ncolor = \"never\"\n",
+		"[update]\nmode = \"notify\"\ninterval = \"36h\"\nbase_url = \"https://ghe.example.com\"\n",
+		"[update]\nmode = \"install\"\ninterval = \"1h30m\"\n",
 		"[[sources]]\ntype = \"git\"\nurl = \"u\"\nref = \"v1\"\npath = \"profiles\"\n[[sources]]\ntype = \"plugin\"\nplugin = \"a@b\"\nmarketplace = \"https://h.example/o/r.git\"\n",
 	}
 	invalid := map[string]string{
@@ -272,6 +275,10 @@ func TestConfigExamples(t *testing.T) {
 		"no config_dir": "[accounts.work]\n",
 		"nested":        "[claude]\nargs = \"x\"\n",
 		"wrong type":    "[trust]\nrequire_pin = \"yes\"\n",
+		"update mode":   "[update]\nmode = \"auto\"\n",
+		"update chan":   "[update]\nchannel = \"beta\"\n",
+		"update intvl":  "[update]\ninterval = \"daily\"\n",
+		"update type":   "[update]\ninterval = 24\n",
 	}
 	for i, v := range valid {
 		if errs := check(s, s, decode(t, v), "$"); len(errs) > 0 {

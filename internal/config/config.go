@@ -67,6 +67,7 @@ type Config struct {
 	Accounts       map[string]Account `toml:"accounts,omitempty"`
 	Claude         Claude             `toml:"claude"`
 	UI             UI                 `toml:"ui"`
+	Update         Update             `toml:"update,omitempty"`
 }
 
 // SourceConfig describes one profile source. Sources are listed most specific
@@ -309,6 +310,7 @@ func (c *Config) Validate() error {
 	if strings.ContainsRune(c.Claude.Path, 0) {
 		add("claude.path: contains a NUL byte")
 	}
+	c.Update.validate(add)
 
 	for i, s := range c.Sources {
 		p := fmt.Sprintf("sources[%d]", i)
