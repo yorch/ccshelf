@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#eef0ec" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#111513" media="(prefers-color-scheme: dark)">
 <title>ccshelf: Profiles for Claude Code</title>
-<meta name="description" content="ccshelf starts Claude Code with a named profile of plugins, skills and MCP servers, one set per terminal, and lints and publishes your organization's plugin catalog. Open source, unofficial, not released yet.">
+<meta name="description" content="ccshelf starts Claude Code with a named profile of plugins, skills and MCP servers, one set per terminal, and lints and publishes your organization's plugin catalog. Open source, unofficial; v0.2.0 is available.">
 <link rel="canonical" href="__SITE_URL__/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="ccshelf">
@@ -22,7 +22,7 @@
 <meta property="og:image:alt" content="A shelf of labelled plugin items with two of them lifted into a loadout.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="ccshelf: Profiles for Claude Code">
-<meta name="twitter:description" content="One shelf of plugins, a different loadout for every terminal. Unofficial, open source, not released yet.">
+<meta name="twitter:description" content="One shelf of plugins, a different loadout for every terminal. Unofficial, open source; v0.2.0 is available.">
 <meta name="twitter:image" content="__SITE_URL__/assets/og.png">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="assets/site.css">
@@ -61,7 +61,7 @@
     <h1 id="h-hero">One plugin shelf. A loadout per terminal.</h1>
     <div class="hero-aside">
       <p class="lede">ccshelf starts Claude Code with only the plugins, skills and MCP servers that a named profile asks for. Run <code>ccshelf run sre</code> in one terminal and <code>ccshelf run frontend</code> in another, at the same time.</p>
-      <p class="hero-links"><a class="btn" href="#install">Build from source</a> <a href="#how">See what a profile turns off</a></p>
+      <p class="hero-links"><a class="btn" href="#install">Install ccshelf</a> <a href="#how">See what a profile turns off</a></p>
     </div>
   </div>
 
@@ -134,7 +134,7 @@
       </div>
     </div>
     <p class="demo-note">Real <code>ccshelf dry-run</code> output from commit <span id="cap-commit">c2a679d</span>, fictional <code>acme</code> org, fake <code>claude</code>. <a href="https://github.com/yorch/ccshelf/blob/main/site/README.md#the-loadout-demo-is-captured-output">How it's made</a></p>
-    <p class="status"><strong>Status:</strong> implemented and under review, not released yet. Tested on macOS and Linux; Windows runs in CI and is best-effort until proven. Install from source for now. Open source (MIT). Unofficial: not affiliated with Anthropic.</p>
+    <p class="status"><strong>Status:</strong> implemented; v0.2.0 is available for macOS, Linux and Windows. CI tests all six amd64 and arm64 targets. Open source (MIT). Unofficial: not affiliated with Anthropic.</p>
   </div>
 </section>
 
@@ -285,8 +285,8 @@
         <dd>A project profile can never shadow another source's profile. The org config can list plugins and MCP servers (audit, secret scanning) that no profile may mask. <span class="protects">Protects against a repository or a profile switching off a control the organization requires.</span></dd></div>
       <div id="sr4"><dt>Private, verified cache <span class="badge c-ok">implemented</span></dt>
         <dd>Cache directories are owner-only (mode 0700, files 0600), created without following symlinks, and each content-addressed file is re-hashed before reuse. Secrets are never written to disk or to argv, and output is redacted. <span class="protects">Protects against another local user, or a stale file, changing what <code>claude</code> receives.</span></dd></div>
-      <div id="sr5"><dt>Hardened CI and releases <span class="badge c-warn">workflows written, no release yet</span></dt>
-        <dd>The Action is pinned by full commit SHA and embeds the expected checksum of the binary it downloads. Releases are planned with signatures, provenance and an SBOM. Workflows use <code>permissions: {}</code> and least privilege. <span class="protects">Protects against a tampered binary or a compromised action in your pipeline.</span></dd></div>
+      <div id="sr5"><dt>Hardened CI and releases <span class="badge c-ok">v0.2.0 published</span></dt>
+        <dd>The Action is pinned by full commit SHA and embeds the expected checksum of the binary it downloads. Release checksums are signed with cosign, archives have GitHub build provenance and an SBOM, and workflows use <code>permissions: {}</code> and least privilege. <span class="protects">Protects against a tampered binary or a compromised action in your pipeline.</span></dd></div>
     </dl>
     <p class="more"><a href="docs/design/security.html">Read the full security design</a> and the <a href="https://github.com/yorch/ccshelf/blob/main/SECURITY.md">security policy</a>.</p>
   </div>
@@ -296,7 +296,7 @@
 <section class="sec wrap" id="platforms" aria-labelledby="h-plat">
   <div class="sec-head"><h2 id="h-plat">Platforms, GitHub and managed policy</h2></div>
   <div class="sec-body">
-    <p class="fine">Implemented and tested on macOS and Linux with a fake <code>claude</code> test double; only macOS has driven the real <code>claude</code>. Windows runs in CI: treat it as best-effort until proven on real machines. GHE Server is designed for but untested.</p>
+    <p class="fine">The test suites pass on native macOS, Linux and Windows CI runners, across amd64 and arm64; only macOS has driven the real <code>claude</code>. GHE Server is designed for but untested.</p>
     <details class="fold">
       <summary>Build targets and how far each is exercised</summary>
     <table class="targets">
@@ -305,7 +305,7 @@
       <tbody>
         <tr><th scope="row">macOS</th><td><span class="badge c-ok">tested</span></td><td><span class="badge c-ok">tested</span></td></tr>
         <tr><th scope="row">Linux (WSL counts)</th><td><span class="badge c-ok">tested</span></td><td><span class="badge c-ok">tested</span></td></tr>
-        <tr><th scope="row">Windows (native)</th><td><span class="badge c-warn">CI, best-effort</span></td><td><span class="badge c-warn">CI, best-effort</span></td></tr>
+        <tr><th scope="row">Windows (native)</th><td><span class="badge c-ok">CI tested</span></td><td><span class="badge c-ok">CI tested</span></td></tr>
       </tbody>
     </table>
     </details>
@@ -326,9 +326,23 @@
 <!-- INSTALL -->
 <section class="sec wrap" id="install" aria-labelledby="h-install">
   <div class="sec-head"><h2 id="h-install">Install and quick start</h2>
-    <p>No release is published yet, so build from source today. Once a release is published, one command installs it: the script verifies the download before it installs anything.</p></div>
+    <p>The latest release is v0.2.0. Use the installer for your platform; it verifies the download before installing. You can also build from source.</p></div>
   <div class="sec-body">
-    <h3 class="sub">Build from source (works today)</h3>
+    <h3 class="sub">Linux and macOS</h3>
+    <div class="cmd">
+      <pre id="c-install-sh"><code>curl -fsSL https://github.com/yorch/ccshelf/releases/latest/download/install.sh | sh</code></pre>
+      <button class="copy" type="button" data-copy="c-install-sh" hidden>Copy command</button>
+    </div>
+    <p class="fine">Supports amd64 and arm64; WSL uses the Linux installer. Installs into <code>~/.local/bin</code>, without sudo, and needs <code>curl</code>. To pin a version and require cosign signature verification, run <code>curl -fsSL https://github.com/yorch/ccshelf/releases/latest/download/install.sh | sh -s -- --version v0.2.0 --require-signature</code>. SHA-256 verification against that release's <code>checksums.txt</code> is always required; the signature is checked when cosign is installed.</p>
+
+    <h3 class="sub">Windows</h3>
+    <div class="cmd">
+      <pre id="c-install-ps"><code>irm https://github.com/yorch/ccshelf/releases/latest/download/install.ps1 | iex</code></pre>
+      <button class="copy" type="button" data-copy="c-install-ps" hidden>Copy command</button>
+    </div>
+    <p class="fine">Supports amd64 and arm64 in Windows PowerShell 5.1 or PowerShell 7. Installs into <code>%LOCALAPPDATA%\Programs\ccshelf</code>. Add <code>-AddToPath</code> to update your user PATH. To pin a version and require cosign, run <code>&amp; ([scriptblock]::Create((irm https://github.com/yorch/ccshelf/releases/latest/download/install.ps1))) -Version v0.2.0 -RequireSignature</code>. The binaries are not notarized or Authenticode-signed yet; ccshelf is unofficial and not affiliated with Anthropic. See the <a href="https://github.com/yorch/ccshelf#install">README</a> for all options, manual verification and uninstall instructions.</p>
+
+    <h3 class="sub">Build from source</h3>
     <div class="cmd">
       <pre id="c-install"><code>git clone https://github.com/yorch/ccshelf
 cd ccshelf
@@ -336,21 +350,7 @@ go build -o ccshelf ./cmd/ccshelf
 ./ccshelf version</code></pre>
       <button class="copy" type="button" data-copy="c-install" hidden>Copy commands</button>
     </div>
-    <p class="fine">Needs Go 1.27 or newer. Put the binary on your <code>PATH</code>, or run <code>go install ./cmd/ccshelf</code> from the checkout.</p>
-
-    <h3 class="sub">Once a release is published: Linux and macOS</h3>
-    <div class="cmd">
-      <pre id="c-install-sh"><code>curl -fsSL https://github.com/yorch/ccshelf/releases/latest/download/install.sh | sh</code></pre>
-      <button class="copy" type="button" data-copy="c-install-sh" hidden>Copy command</button>
-    </div>
-    <p class="fine">Installs into <code>~/.local/bin</code>, without sudo, and needs <code>curl</code>. Pin a version and require the signature check with <code>sh -s -- --version v0.1.0 --require-signature</code>. It always checks the archive against the release's <code>checksums.txt</code>, and checks the cosign signature of that file when cosign is installed.</p>
-
-    <h3 class="sub">Once a release is published: Windows</h3>
-    <div class="cmd">
-      <pre id="c-install-ps"><code>irm https://github.com/yorch/ccshelf/releases/latest/download/install.ps1 | iex</code></pre>
-      <button class="copy" type="button" data-copy="c-install-ps" hidden>Copy command</button>
-    </div>
-    <p class="fine">Installs into <code>%LOCALAPPDATA%\Programs\ccshelf</code>. Options (<code>-Version</code>, <code>-AddToPath</code>, <code>-RequireSignature</code>) are in the <a href="https://github.com/yorch/ccshelf#install">README</a>, together with the manual download and verification steps and how to uninstall. The binaries are not notarized or Authenticode-signed yet; ccshelf is unofficial and not affiliated with Anthropic.</p>
+    <p class="fine">Needs Go 1.27 or newer. Put the binary on your <code>PATH</code>, or run <code>go install github.com/yorch/ccshelf/cmd/ccshelf@latest</code>.</p>
 
     <h3 class="sub">Try it</h3>
     <div class="cmd">
@@ -460,8 +460,8 @@ ccshelf catalog build</code></pre>
       <p>Not shown yet. The routing evaluation that would show it is still open, and the one measurement so far covers token savings from hiding MCP servers and connectors only. The project's own kill criteria say what happens if the evidence does not support the launcher.</p>
     </details>
     <details>
-      <summary>When will it be released?</summary>
-      <p>There is no date. Releases are planned as signed archives for the six targets plus the reusable Action; until then, install from source.</p>
+      <summary>Where can I get the latest release?</summary>
+      <p>Install with the platform-specific commands above, or choose an archive from the <a href="https://github.com/yorch/ccshelf/releases/latest">latest GitHub release</a>. Releases include signed checksums and build provenance for macOS, Linux and Windows on amd64 and arm64.</p>
     </details>
   </div>
 </section>
