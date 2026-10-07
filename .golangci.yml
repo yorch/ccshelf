@@ -115,6 +115,7 @@ linters:
             - "!**/internal/profile/gitsource/**"
             - "!**/internal/catalog/gitdata/**"
             - "!**/internal/policy/read.go" # runs plutil on macOS: the one named exception
+            - "!**/internal/update/**" # runs cosign (PATH lookup only) and the version check of the downloaded binary
             - "!**/internal/testutil/**"
           deny:
             - pkg: os/exec

@@ -18,6 +18,9 @@ var (
 	Commit = "none"
 	// Date is the build or commit date, or "unknown".
 	Date = "unknown"
+	// Repo is the GitHub "owner/name" this binary was released from; "ccshelf
+	// update" looks for releases there. The linker sets it for release builds.
+	Repo = "yorch/ccshelf"
 )
 
 // Placeholder values used when nothing better is known.
