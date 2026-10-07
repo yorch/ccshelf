@@ -32,9 +32,9 @@ func TestAcquireLock(t *testing.T) {
 		if fi.Mode().Perm() != 0o600 {
 			t.Errorf("lock mode = %v, want 0600", fi.Mode().Perm())
 		}
-	}
-	if b, _ := os.ReadFile(path); !strings.HasPrefix(string(b), strconv.Itoa(os.Getpid())) {
-		t.Errorf("lock file = %q, want the holder's pid", b)
+		if b, _ := os.ReadFile(path); !strings.HasPrefix(string(b), strconv.Itoa(os.Getpid())) {
+			t.Errorf("lock file = %q, want the holder's pid", b)
+		}
 	}
 	rel()
 	rel2, err := AcquireLock(dir)
