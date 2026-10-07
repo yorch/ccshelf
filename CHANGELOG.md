@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.2.0](https://github.com/yorch/ccshelf/compare/v0.1.0...v0.2.0) (2026-10-07)
+
+
+### Features
+
+* **catalog:** add catalog init to bootstrap or adopt an org repo ([#13](https://github.com/yorch/ccshelf/issues/13)) ([761a8cf](https://github.com/yorch/ccshelf/commit/761a8cfda413e1016b6fcc770fdf4845afbda618))
+* **install:** add verified install scripts for Linux, macOS and Windows ([#14](https://github.com/yorch/ccshelf/issues/14)) ([3ec9a84](https://github.com/yorch/ccshelf/commit/3ec9a84c8b71b6d482f5362ff065d9d0d26e23cb))
+* **update:** add ccshelf update and opt-in automatic updates ([#12](https://github.com/yorch/ccshelf/issues/12)) ([7b847ff](https://github.com/yorch/ccshelf/commit/7b847ff239fb2ca5a0c76c0f2509e78227e201c4))
+
+
+### Bug fixes
+
+* **ci:** repair cross-platform checks on main ([#15](https://github.com/yorch/ccshelf/issues/15)) ([2d056b7](https://github.com/yorch/ccshelf/commit/2d056b70adf39860ec24c44334fccab5a285b52a))
+* **release:** publish releases under the yorch owner ([#10](https://github.com/yorch/ccshelf/issues/10)) ([069ce4c](https://github.com/yorch/ccshelf/commit/069ce4c0b99fd9c4ecbac2091fd55d3b29cac796))
+* **update:** treat lock PID diagnostics as best effort ([#16](https://github.com/yorch/ccshelf/issues/16)) ([a2e048f](https://github.com/yorch/ccshelf/commit/a2e048faf68669ad72f16f02f6a05dfa75fdd0b1))
+
 ## 0.1.0 (2026-10-07)
 
 
