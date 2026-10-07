@@ -25,7 +25,8 @@ var ErrLocked = errors.New("another ccshelf update is in progress")
 // returned release function is idempotent.
 func AcquireLock(dir string) (release func(), err error) {
 	path := filepath.Join(dir, LockName)
-	if fi, serr := os.Lstat(path); serr == nil && !fi.Mode().IsRegular() {
+	fi, serr := os.Lstat(path) //nolint:gosec // a fixed name in the private cache directory
+	if serr == nil && !fi.Mode().IsRegular() {
 		return nil, fmt.Errorf("the update lock %s is not a regular file", path)
 	} else if serr != nil && !errors.Is(serr, fs.ErrNotExist) {
 		return nil, fmt.Errorf("inspecting the update lock %s: %w", path, serr)

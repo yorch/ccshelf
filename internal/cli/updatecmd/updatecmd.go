@@ -106,10 +106,10 @@ unless you pass --force; the right command is printed instead.`,
 	fl.StringVar(&f.version, "version", "", "install this release (for example v0.2.0) instead of the latest")
 	fl.BoolVar(&f.prerelease, "prerelease", false, "consider pre-releases when looking for the latest")
 	fl.BoolVar(&f.dryRun, "dry-run", false, "show what would be downloaded, verified and replaced; change nothing")
-	fl.BoolVar(&f.requireSignature, "require-signature", false, "fail unless cosign is available to verify the release signature")
+	fl.BoolVar(&f.requireSignature, "require-signature", false, "fail (before anything else) unless cosign is available to verify the release signature")
 	fl.BoolVar(&f.rollback, "rollback", false, "restore the previous binary kept by the last update")
 	fl.BoolVar(&f.yes, "yes", false, "do not ask for confirmation")
-	fl.BoolVar(&f.force, "force", false, "also replace a package-managed or development build, or reinstall the same version")
+	fl.BoolVar(&f.force, "force", false, "also replace a package-managed or development build, or reinstall the same version (never installs an older release)")
 	fl.BoolVar(&f.allowDowngrade, "allow-downgrade", false, "allow --version to install an older release")
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
 		cc, err := c.get()
@@ -542,7 +542,7 @@ func (c *command) rollback(ctx context.Context, cc *clicore.Context, u *update.U
 	if f.yes && !rp.Verified && !f.force {
 		// --yes skips the confirmation only: a backup that could not be
 		// checked is a risk that needs its own explicit flag.
-		return ui.Failure(withHint(fmt.Errorf("%s could not be checked (%v), so --yes alone will not restore it", filepath.Base(rp.Backup), rp.VerifyErr),
+		return ui.Failure(withHint(fmt.Errorf("%s could not be checked (%w), so --yes alone will not restore it", filepath.Base(rp.Backup), rp.VerifyErr),
 			"if you are sure it is the previous ccshelf, add --force: ccshelf update --rollback --yes --force"))
 	}
 	if !f.yes {

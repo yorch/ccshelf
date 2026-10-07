@@ -883,15 +883,23 @@ func TestNetworkErrorHints(t *testing.T) {
 		"rate limited":               {&HTTPError{Status: 429}, "", gh, "limits unauthenticated"},
 	} {
 		e := networkError(tc.err, tc.ver, tc.src)
-		got := e.Error() + " | " + e.(*Error).Hint()
+		got := e.Error() + " | " + hintOf(e)
 		if !strings.Contains(got, tc.want) {
 			t.Errorf("%s: %q does not mention %q", name, got, tc.want)
 		}
 	}
-	if h := downloadError(redirect, "x.tar.gz").(*Error).Hint(); !strings.Contains(h, "asset_hosts") {
+	if h := hintOf(downloadError(redirect, "x.tar.gz")); !strings.Contains(h, "asset_hosts") {
 		t.Errorf("download redirect hint = %q", h)
 	}
-	if h := downloadError(errors.New("boom"), "x").(*Error).Hint(); strings.Contains(h, "asset_hosts") {
+	if h := hintOf(downloadError(errors.New("boom"), "x")); strings.Contains(h, "asset_hosts") {
 		t.Errorf("an ordinary download failure must not suggest asset_hosts: %q", h)
 	}
+}
+
+func hintOf(err error) string {
+	var e *Error
+	if !errors.As(err, &e) {
+		return ""
+	}
+	return e.Hint()
 }

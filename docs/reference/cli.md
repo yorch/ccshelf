@@ -584,10 +584,10 @@ ccshelf update --rollback
 | `--allow-downgrade` |  | allow --version to install an older release |
 | `--check` |  | only report the current and latest version (exit 0 either way) |
 | `--dry-run` |  | show what would be downloaded, verified and replaced; change nothing |
-| `--force` |  | also replace a package-managed or development build, or reinstall the same version |
+| `--force` |  | also replace a package-managed or development build, or reinstall the same version (never installs an older release) |
 | `-h`, `--help` |  | help for update |
 | `--prerelease` |  | consider pre-releases when looking for the latest |
-| `--require-signature` |  | fail unless cosign is available to verify the release signature |
+| `--require-signature` |  | fail (before anything else) unless cosign is available to verify the release signature |
 | `--rollback` |  | restore the previous binary kept by the last update |
 | `--version` | `string` | install this release (for example v0.2.0) instead of the latest |
 | `--yes` |  | do not ask for confirmation |

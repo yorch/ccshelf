@@ -36,18 +36,19 @@ Every command works with flags alone; on a terminal, missing values are asked fo
 ccshelf update --check     # current and latest version; exit 0 either way
 ccshelf update             # verify (SHA-256, and cosign if installed), then replace this binary
 ccshelf update --rollback  # restore the previous binary kept as ccshelf.old
+ccshelf update --yes       # the scripted form: no question (the automatic update never acts in scripts)
 ```
 
-The archive's SHA-256 must match `checksums.txt` of the same release; with [cosign](https://docs.sigstore.dev/cosign/) on `PATH` its keyless signature is checked too (`--require-signature` insists on it). A copy installed with Homebrew, Scoop, WinGet or `go install`, and development builds, are left to their package manager (the command is printed; `--force` overrides). Nothing checks for updates by itself unless you opt in:
+The archive's SHA-256 must match `checksums.txt` of the same release; with [cosign](https://docs.sigstore.dev/cosign/) on `PATH` its keyless signature is checked too (`--require-signature` insists on it, and is checked before anything else). The signature must come from the release workflow of the repository this binary was built from, whatever `base_url` says; a fork that signs its own releases names itself in `cosign_identity_repo`. `--force` never installs an older release than the one you run; `--allow-downgrade` does. A copy installed with Homebrew, Scoop, WinGet or `go install`, and development builds, are left to their package manager (the command is printed; `--force` overrides). Nothing checks for updates by itself unless you opt in:
 
 ```toml
 # config.toml
 [update]
-mode = "notify"   # off (default) | notify (one line when a release exists) | install (same major version only)
+mode = "notify"   # off (default) | notify (one line when a release exists) | install (see below)
 interval = "24h"
 ```
 
-`CCSHELF_NO_UPDATE_CHECK=1` turns the automatic check off; CI is never touched. Details: [docs/design/update.md](docs/design/update.md).
+`install` takes only a newer stable release of the same major version (for 0.x, the same minor). Both modes act only in an interactive terminal (stdin, stdout and stderr all terminals), never in scripts, cron jobs or pipelines, never when `CI` is set, and `CCSHELF_NO_UPDATE_CHECK=1` turns them off. Details: [docs/design/update.md](docs/design/update.md).
 
 For organizations, `ccshelf lint`, `compile`, `catalog build`, `search`, `recommend` and `doctor` work on the org data repo (see [examples/org-data-repo](examples/org-data-repo/README.md) for a starter template). The design is in [docs/](docs/README.md).
 
