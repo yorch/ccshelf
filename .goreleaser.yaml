@@ -87,7 +87,7 @@ changelog:
 # published release is never found as a draft, so its assets are never replaced.
 release:
   github:
-    owner: &owner ccshelf # OWNER
+    owner: &owner yorch # OWNER
     name: ccshelf
   draft: false
   use_existing_draft: true
@@ -162,7 +162,7 @@ winget:
     description: "Profiles and a plugin catalog for Claude Code. Unofficial; not affiliated with Anthropic."
     license: MIT
     homepage: "https://github.com/yorch/ccshelf"
-    publisher_url: "https://github.com/ccshelf"
+    publisher_url: "https://github.com/yorch"
     package_identifier: ccshelf.ccshelf
     release_notes_url: "https://github.com/yorch/ccshelf/releases/tag/{{ .Tag }}"
     repository:
