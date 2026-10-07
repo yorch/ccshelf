@@ -62,12 +62,17 @@ func TestTableEdges(t *testing.T) {
 		t.Errorf("no headers: %q %v", b.String(), err)
 	}
 	b.Reset()
-	// Width below the minimum column: rows are still printed, never panic.
+	// Width below the minimum column: full records wrap instead of overflowing.
 	if err := Table(&b, []string{"A", "B"}, [][]string{{"aaaaaaaaaaaaaaaa", "bbbbbbbbbbbbbbbbb"}}, Mode{Width: 5}); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(b.String(), "…") {
-		t.Errorf("expected truncation: %q", b.String())
+	if strings.Contains(b.String(), "…") {
+		t.Errorf("stacked records must not truncate: %q", b.String())
+	}
+	for _, line := range strings.Split(b.String(), "\n") {
+		if DisplayWidth(line) > 5 {
+			t.Errorf("line wider than 5: %q", line)
+		}
 	}
 	if err := Table(failWriter{}, []string{"A"}, nil, Mode{}); err == nil {
 		t.Error("write error not returned")

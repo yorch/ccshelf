@@ -109,8 +109,7 @@ catalog is available it fails with exit 1, like lint and compile.`,
 
 func writeRecommendText(w io.Writer, mode ui.Mode, d recommendJSON) error {
 	if len(d.Recommendations) == 0 {
-		_, err := fmt.Fprintf(w, "no suggestions for %s\n", ui.SanitizeLine(d.Dir))
-		return err
+		return ui.EmptyState(w, "no suggestions for "+d.Dir, "browse the catalog with: ccshelf search <query>")
 	}
 	rows := make([][]string, 0, len(d.Recommendations))
 	for _, r := range d.Recommendations {

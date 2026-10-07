@@ -45,7 +45,7 @@ func TestLsGoldenAndJSON(t *testing.T) {
 func TestLsEmpty(t *testing.T) {
 	h := newHarness(t)
 	h.mustRun("ls")
-	if h.out.Len() != 0 || !strings.Contains(h.errb.String(), "ccshelf new") {
+	if !strings.Contains(h.out.String(), "no profiles found\nhint:") || !strings.Contains(h.out.String(), "ccshelf new") || h.errb.Len() != 0 {
 		t.Errorf("out %q err %q", h.out, h.errb)
 	}
 }
@@ -316,8 +316,8 @@ func TestAccountCommands(t *testing.T) {
 		t.Errorf("rm no name: %d", code)
 	}
 	h.mustRun("account", "ls")
-	if !strings.Contains(h.errb.String(), "no accounts") {
-		t.Errorf("empty list: %s", h.errb)
+	if !strings.Contains(h.out.String(), "no accounts") || h.errb.Len() != 0 {
+		t.Errorf("empty list: out %s err %s", h.out, h.errb)
 	}
 }
 

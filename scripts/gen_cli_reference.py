@@ -29,7 +29,9 @@ ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
 DEFAULT_OUT = os.path.join(ROOT, "docs", "reference", "cli.md")
 EXIT_GO = os.path.join(ROOT, "internal", "ui", "exit.go")
 PROG = "ccshelf"
-SECTION_RE = re.compile(r"^(Usage|Aliases|Examples|Available Commands|Flags|Global Flags):$")
+# Cobra command groups have application-defined headings. Recognize headings
+# generically, then require command-shaped rows in non-reserved sections.
+SECTION_RE = re.compile(r"^([A-Za-z][^:\n]*):$")
 FLAG_RE = re.compile(r"^ {2}(?:(-\w), | {4})(--[\w-]+)(?: ([\w\[\]]+))?\s{2,}(\S.*)$")
 CMD_RE = re.compile(r"^ {2}([\w-]+)\s{2,}(\S.*)$")
 
@@ -74,7 +76,7 @@ def parse_help(text: str) -> Help:
             h.aliases.extend(a.strip() for a in line.split(","))
         elif section == "Examples":
             h.examples.append(line[2:] if line.startswith("  ") else line)
-        elif section == "Available Commands":
+        elif section and section not in ("Flags", "Global Flags"):
             m = CMD_RE.match(line)
             if not m:
                 raise ValueError("cannot parse command line: %r" % line)
