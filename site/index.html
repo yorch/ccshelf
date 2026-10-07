@@ -393,6 +393,7 @@ ccshelf catalog build</code></pre>
       <div><dt><code>search &lt;query&gt;</code></dt><dd>Find plugins and profiles by what they are for.</dd></div>
       <div><dt><code>recommend</code></dt><dd>Suggest profiles from the current directory. Rule-based, no LLM.</dd></div>
       <div><dt><code>doctor [--policy]</code></dt><dd>Overlaps, unused or deprecated plugins in use, stale owners, policy shadowing and the capability matrix.</dd></div>
+      <div><dt><code>update [--check] [--rollback]</code></dt><dd>Replace this binary with the latest release after checking its SHA-256 and, if cosign is installed, its signature. <code>--check</code> only reports; <code>--rollback</code> restores the previous binary. Nothing updates by itself unless you set <code>[update] mode</code>.</dd></div>
       <div><dt><code>version</code></dt><dd>Print the version. <code>--version</code> works too.</dd></div>
       </dl>
       <h3 class="sub">Exit codes</h3>
@@ -428,6 +429,10 @@ ccshelf catalog build</code></pre>
     <details>
       <summary>How do accounts fit in?</summary>
       <p>An account is a separate Claude Code identity and data directory, a different axis from profiles: the account says who you are, the profile says what is active. ccshelf honors an existing <code>CLAUDE_CONFIG_DIR</code> and never unsets it, or you can name accounts and use <code>--account</code>. Each account has its own installed plugins and login; ccshelf never reads or copies credentials.</p>
+    </details>
+    <details>
+      <summary>How do I update ccshelf?</summary>
+      <p>Run <code>ccshelf update</code>. It downloads the latest release over HTTPS, checks the archive against the release's <code>checksums.txt</code> (and, when cosign is installed, the signature of that file), runs the new binary once to confirm its version, and replaces the old one, which is kept as <code>ccshelf.old</code> for <code>ccshelf update --rollback</code>. <code>ccshelf update --check</code> only reports. A copy installed by Homebrew, Scoop, WinGet or <code>go install</code> is left to that tool and the command to run is printed. Nothing checks for updates by itself unless you opt in with <code>[update] mode = "notify"</code> (one line when a release exists) or <code>"install"</code> (same major version only); <code>CCSHELF_NO_UPDATE_CHECK=1</code> turns it off and CI is never touched.</p>
     </details>
     <details>
       <summary>Does it change my Claude Code config?</summary>

@@ -30,6 +30,25 @@ ccshelf run --account personal sre-night --resume         # ccshelf flags first,
 
 Every command works with flags alone; on a terminal, missing values are asked for and the equivalent command is printed. Profiles from a shared source (a git repo of your organization) must be trusted first: `ccshelf trust <profile>` shows what the profile does, and nothing is ever accepted automatically (`--yes` does not accept trust). Exit codes: 0 ok, 1 failure, 2 usage, 3 policy, 4 trust required, 130 interrupted.
 
+### Update
+
+```sh
+ccshelf update --check     # current and latest version; exit 0 either way
+ccshelf update             # verify (SHA-256, and cosign if installed), then replace this binary
+ccshelf update --rollback  # restore the previous binary kept as ccshelf.old
+```
+
+The archive's SHA-256 must match `checksums.txt` of the same release; with [cosign](https://docs.sigstore.dev/cosign/) on `PATH` its keyless signature is checked too (`--require-signature` insists on it). A copy installed with Homebrew, Scoop, WinGet or `go install`, and development builds, are left to their package manager (the command is printed; `--force` overrides). Nothing checks for updates by itself unless you opt in:
+
+```toml
+# config.toml
+[update]
+mode = "notify"   # off (default) | notify (one line when a release exists) | install (same major version only)
+interval = "24h"
+```
+
+`CCSHELF_NO_UPDATE_CHECK=1` turns the automatic check off; CI is never touched. Details: [docs/design/update.md](docs/design/update.md).
+
 For organizations, `ccshelf lint`, `compile`, `catalog build`, `search`, `recommend` and `doctor` work on the org data repo (see [examples/org-data-repo](examples/org-data-repo/README.md) for a starter template). The design is in [docs/](docs/README.md).
 
 The project website (static; the /docs pages are generated from the Markdown at build time) lives in [site/](site/); it is checked by `make site-check` and is deployed to GitHub Pages only by hand (`.github/workflows/pages.yml`, see [site/README.md](site/README.md)).

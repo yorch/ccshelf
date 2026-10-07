@@ -18,6 +18,7 @@
 | [design/platform.md](design/platform.md) | GitHub, GHE and cross-platform support (R1, R2) |
 | [design/project.md](design/project.md) | Open source (R4), license and the project name |
 | [design/release.md](design/release.md) | Versioning and the release pull request (release-please), the token, tag and signing chain, PR title rules, failure and rollback, first-release runbook, and the assessment of three other projects |
+| [design/update.md](design/update.md) | `ccshelf update`: verification (SHA-256, cosign), install-method detection, replacing the binary, rollback and the opt-in automatic update |
 | [design/workflows.md](design/workflows.md) | Example workflows (mockups) |
 | [../site/](../site/index.html) | The project website: a static page with a loadout demo from captured output, plus these notes published as a `/docs` section (D-35, built by `scripts/build_docs.py`); validated by `scripts/check-site.sh`; deployed to GitHub Pages only by hand (D-34), see `site/README.md` |
 | [reference/cli.md](reference/cli.md) | The command reference, **generated from the real binary** (`scripts/gen-cli-reference.sh`; CI fails when it is stale) {V} |

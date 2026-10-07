@@ -48,7 +48,7 @@ Guidance for AI coding agents (and humans) working in this repo, the public **to
 - Platform differences via build tags; use `filepath`, `os.UserConfigDir`/cache dirs, never string-concatenated paths.
 - Shell out to the user's `git` (inherits credential helpers and SSH config) rather than embedding a git library.
 - Tests: golden files for generated settings, a fake `claude` test double, CI matrix on macOS, Linux and Windows. A real-`claude` integration test is opt-in because it needs authentication.
-- No telemetry. No network calls except those the user asked for (git fetch of configured sources).
+- No telemetry. No network calls except those the user asked for (git fetch of configured sources, and `ccshelf update`; the opt-in `[update] mode` check is off by default and documented in `docs/design/update.md`).
 
 ## Commits and pull requests
 Both commit messages **and pull request titles** use [Conventional Commits](https://www.conventionalcommits.org/). Maintainers squash-merge, so the PR title becomes the commit on `main`, and the release changelog is generated from those messages.
