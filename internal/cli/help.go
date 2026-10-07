@@ -41,8 +41,11 @@ type usageHint struct {
 	hint string
 }
 
+// Unwrap preserves the original error and its exit-code classification.
 func (e usageHint) Unwrap() error { return e.error }
-func (e usageHint) Hint() string  { return e.hint }
+
+// Hint returns the command-specific recovery instruction.
+func (e usageHint) Hint() string { return e.hint }
 
 // Preserve more specific recovery instructions and missing-value hints.
 // A generic usage error instead points to the command that failed, not a

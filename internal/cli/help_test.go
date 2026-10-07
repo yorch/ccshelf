@@ -104,7 +104,12 @@ func TestUsageHintPreservesSpecificErrors(t *testing.T) {
 		ui.MissingFlags("profile name", "--name"),
 		usageHint{error: errors.New("invalid"), hint: "a specific fix"},
 	} {
-		if got := withUsageHint(err, root, root); got != err {
+		got := withUsageHint(err, root, root)
+		if !errors.Is(got, err) {
+			t.Errorf("original error lost: %v", got)
+		}
+		var wantHint, gotHint interface{ Hint() string }
+		if errors.As(err, &wantHint) && (!errors.As(got, &gotHint) || gotHint.Hint() != wantHint.Hint()) {
 			t.Errorf("specific hint replaced: %v", got)
 		}
 	}
