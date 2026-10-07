@@ -13,6 +13,7 @@ import (
 	"github.com/yorch/ccshelf/internal/cli/clicore"
 	"github.com/yorch/ccshelf/internal/cli/launcher"
 	"github.com/yorch/ccshelf/internal/cli/orgcmd"
+	"github.com/yorch/ccshelf/internal/cli/updatecmd"
 	"github.com/yorch/ccshelf/internal/ui"
 	"github.com/yorch/ccshelf/internal/version"
 )
@@ -77,6 +78,8 @@ func newRoot(env *clicore.Env) (*cobra.Command, *clicore.Globals) {
 	}
 	root.AddCommand(lc...)
 	root.AddCommand(orgcmd.CommandsWith(get, orgcmd.Options{Catalog: launcher.CatalogProvider(launcher.Options{})})...)
+	root.AddCommand(updatecmd.Commands(get, updatecmd.Options{})...)
+	updatecmd.Hook(root, get, updatecmd.Options{})
 	return root, g
 }
 

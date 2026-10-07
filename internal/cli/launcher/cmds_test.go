@@ -254,7 +254,7 @@ func TestInit(t *testing.T) {
 
 func TestInitWizardAndAccount(t *testing.T) {
 	h := newHarness(t)
-	sc := ui.NewScripted("https://example.com/acme/data.git", "v1.0.0", "profiles", "", "work")
+	sc := ui.NewScripted("https://example.com/acme/data.git", "v1.0.0", "profiles", "", "work", true)
 	h.prompt = sc
 	if code := h.run("init"); code != 0 {
 		t.Fatalf("code %d\n%s", code, h.errb)
@@ -262,7 +262,7 @@ func TestInitWizardAndAccount(t *testing.T) {
 	if err := sc.Done(); err != nil {
 		t.Error(err)
 	}
-	if !strings.Contains(h.errb.String(), "Equivalent: ccshelf init --git-url") || !strings.Contains(h.errb.String(), "--account-name work") {
+	if !strings.Contains(h.errb.String(), "Equivalent: ccshelf init --git-url") || !strings.Contains(h.errb.String(), "--account-name work") || !strings.Contains(h.errb.String(), "--update-mode notify") {
 		t.Errorf("stderr %s", h.errb)
 	}
 	h.prompt = nil
@@ -492,5 +492,89 @@ func TestTrustRevokeUnknown(t *testing.T) {
 	h.writeProfile("mine", personalMine)
 	if code := h.run("trust", "mine", "--revoke"); code != ui.ExitFailure {
 		t.Errorf("code %d", code)
+	}
+}
+
+func TestInitUpdateMode(t *testing.T) {
+	read := func(h *harness) string {
+		b, err := os.ReadFile(filepath.Join(h.configDir(), "config.toml"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+
+	// Flags-only and non-interactive: [update] is never written, so the
+	// default (off) stands.
+	h := newHarness(t)
+	h.mustRun("init")
+	if strings.Contains(read(h), "update") {
+		t.Errorf("init must not write [update] by itself:\n%s", read(h))
+	}
+
+	// The flag sets it, with no question asked even on a terminal.
+	h = newHarness(t)
+	sc := ui.NewScripted()
+	h.prompt = sc
+	h.mustRun("init", "--update-mode", "notify")
+	if err := sc.Done(); err != nil {
+		t.Error(err)
+	}
+	if got := read(h); !strings.Contains(got, "[update]") || !strings.Contains(got, "notify") {
+		t.Errorf("config:\n%s", got)
+	}
+	if strings.Contains(h.errb.String(), "Equivalent") {
+		t.Error("a flags-only run prints no equivalent command")
+	}
+
+	// A bad value is a usage error and writes nothing.
+	h = newHarness(t)
+	for _, bad := range []string{"always", "Notify", "on", "auto"} {
+		if code := h.run("init", "--update-mode", bad); code != ui.ExitUsage {
+			t.Errorf("--update-mode %s: exit %d, want 2", bad, code)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(h.configDir(), "config.toml")); err == nil {
+		t.Error("an invalid --update-mode wrote a config")
+	}
+	h.mustRun("init", "--update-mode", "off")
+	if got := read(h); !strings.Contains(got, "off") {
+		t.Errorf("an explicit off is written:\n%s", got)
+	}
+
+	// The wizard asks once; the default is no, and the answer is recorded.
+	for answer, want := range map[bool]string{true: "notify", false: "off"} {
+		h = newHarness(t)
+		sc = ui.NewScripted("", "", "", answer) // no repo, no dir, no account, then the update question
+		h.prompt = sc
+		h.mustRun("init")
+		if err := sc.Done(); err != nil {
+			t.Error(err)
+		}
+		if !strings.Contains(sc.Asked[len(sc.Asked)-1], "Check for updates once a day") {
+			t.Errorf("asked %v", sc.Asked)
+		}
+		if got := read(h); !strings.Contains(got, want) {
+			t.Errorf("answer %v: config:\n%s", answer, got)
+		}
+		if !strings.Contains(h.errb.String(), "--update-mode "+want) {
+			t.Errorf("answer %v: the equivalent command lacks --update-mode %s:\n%s", answer, want, h.errb)
+		}
+	}
+
+	// --force keeps an existing [update] section and does not ask again.
+	h = newHarness(t)
+	h.mustRun("init", "--update-mode", "install")
+	sc = ui.NewScripted("", "", "") // only the three profile questions
+	h.prompt = sc
+	h.mustRun("init", "--force")
+	if err := sc.Done(); err != nil {
+		t.Error(err)
+	}
+	if got := read(h); !strings.Contains(got, "install") {
+		t.Errorf("--force dropped the update mode:\n%s", got)
+	}
+	if strings.Contains(h.errb.String(), "--update-mode") {
+		t.Errorf("nothing about the update mode was chosen interactively:\n%s", h.errb)
 	}
 }
