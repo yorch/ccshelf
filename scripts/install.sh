@@ -83,12 +83,15 @@ Usage: install.sh [options]
   --cosign-identity ID    certificate identity cosign must see (default: the release workflow
                           of the public repository at the release tag)
   --cosign-issuer URL     certificate OIDC issuer (default: GitHub Actions)
-  --force                 replace an existing file named ccshelf that is not ccshelf
+  --force                 replace an existing file or symlink named ccshelf that is not ccshelf
+                          (a directory with that name is never replaced)
   --dry-run               download and verify, then stop: install nothing
   --quiet                 print only warnings and errors
   --help                  show this help
 
 The SHA-256 check against the release's checksums.txt cannot be turned off.
+Downloads need curl (https only, redirects included; ~/.curlrc is ignored). Proxy and CA
+environment variables are honored; TLS verification is never disabled.
 When piped from curl, pass options after `sh -s --`.
 EOF
 }
@@ -259,11 +262,20 @@ if [ "$OS" = darwin ] && [ "$ARCH" = amd64 ]; then
 fi
 
 # ---- tools ------------------------------------------------------------------
-DL_TOOL=""
+# curl is the only network client: it is the one tool whose flags can pin https for redirects too,
+# ignore the user's config file and cap the size (a wget fallback could do none of that reliably,
+# and busybox wget accepts none of it). file:/// mirrors need no client.
+HAVE_CURL=0
 if command -v curl >/dev/null 2>&1; then
-  DL_TOOL=curl
-elif command -v wget >/dev/null 2>&1; then
-  DL_TOOL=wget
+  HAVE_CURL=1
+fi
+
+# 5-second limit for running an existing ccshelf to identify it (see the target checks below).
+TIMEOUT_TOOL=""
+if command -v timeout >/dev/null 2>&1; then
+  TIMEOUT_TOOL=timeout
+elif command -v gtimeout >/dev/null 2>&1; then
+  TIMEOUT_TOOL=gtimeout
 fi
 
 # Hash through stdin: the file name never reaches the tool (GNU sha256sum prefixes the digest with
@@ -284,6 +296,8 @@ file_size() { # file
   wc -c <"$1" | tr -d ' '
 }
 
+NEED_CURL="curl is required; install it (for example: apk add curl, apt install curl)"
+
 # fetch URL DEST MAXBYTES. https only for the network; file:/// is a local copy.
 fetch() {
   _url="$1"
@@ -294,18 +308,13 @@ fetch() {
       cp -- "${_url#file://}" "$_dest" 2>/dev/null || die "cannot read $_url"
       ;;
     https://*)
-      case "$DL_TOOL" in
-        curl)
-          curl --proto '=https' --proto-redir '=https' --fail --location --silent --show-error \
-            --max-filesize "$_max" --connect-timeout 20 --max-time 300 --retry 2 \
-            --output "$_dest" -- "$_url" </dev/null || die "download failed: $_url"
-          ;;
-        wget)
-          wget --quiet --https-only --max-redirect=5 --timeout=20 --tries=3 \
-            --output-document="$_dest" -- "$_url" </dev/null || die "download failed: $_url"
-          ;;
-        *) die "neither curl nor wget is installed" ;;
-      esac
+      [ "$HAVE_CURL" -eq 1 ] || die "$NEED_CURL"
+      # -q must be the first argument: it makes curl ignore ~/.curlrc (which could disable
+      # certificate checks or add a proxy). Proxy and CA environment variables are still honored;
+      # TLS verification is never turned off here.
+      curl -q --proto '=https' --proto-redir '=https' --fail --location --silent --show-error \
+        --max-filesize "$_max" --connect-timeout 20 --max-time 300 --retry 2 \
+        --output "$_dest" -- "$_url" </dev/null || die "download failed: $_url"
       ;;
     *) die "refusing to fetch a non-https URL: $_url" ;;
   esac
@@ -345,11 +354,6 @@ say "  from:      $BASE_URL"
 say "  into:      $BIN_DIR"
 if [ "$DRY_RUN" -eq 1 ]; then
   say "  dry run: downloads and verifies, installs nothing"
-fi
-if [ -z "$DL_TOOL" ]; then
-  case "$BASE_URL" in
-    https://*) die "neither curl nor wget is installed" ;;
-  esac
 fi
 
 # ---- resolve the release ----------------------------------------------------
@@ -460,16 +464,30 @@ fi
 
 TARGET="$BIN_DIR/ccshelf"
 if [ -e "$TARGET" ] || [ -L "$TARGET" ]; then
+  # A real directory is never replaced, not even with --force: moving the new binary "into" it
+  # would report success without installing anything.
+  if [ -d "$TARGET" ] && [ ! -L "$TARGET" ]; then
+    die "$TARGET is a directory; refusing to replace it (--force does not replace directories; move it away and retry)"
+  fi
   if [ "$FORCE" -eq 1 ]; then
     say "--force: replacing $TARGET"
   else
     [ ! -L "$TARGET" ] || die "$TARGET is a symlink; refusing to replace it (use --force to replace it anyway)"
     [ -f "$TARGET" ] || die "$TARGET exists and is not a regular file (use --force to replace it anyway)"
-    old="$("$TARGET" version 2>/dev/null </dev/null | head -n 1 || true)"
-    case "$old" in
-      "ccshelf "*) say "replacing the installed ${old%% (*}" ;;
-      *) die "$TARGET exists and does not look like ccshelf (use --force to replace it anyway)" ;;
-    esac
+    # Identify the existing file without running it first: it must contain the name ccshelf. Only
+    # then is it run, for its version, and only under a 5-second limit. Without `timeout` (stock
+    # macOS) it is not run at all and the name check alone decides.
+    grep -aqF 'ccshelf' "$TARGET" 2>/dev/null </dev/null ||
+      die "$TARGET exists and does not look like ccshelf (use --force to replace it anyway)"
+    if [ -n "$TIMEOUT_TOOL" ]; then
+      old="$("$TIMEOUT_TOOL" 5 "$TARGET" version 2>/dev/null </dev/null | head -c 1024 | head -n 1 || true)"
+      case "$old" in
+        "ccshelf "*) say "replacing the installed ${old%% (*}" ;;
+        *) die "$TARGET exists and does not look like ccshelf (use --force to replace it anyway)" ;;
+      esac
+    else
+      say "replacing the existing ccshelf (not run: no timeout tool to bound it)"
+    fi
   fi
 fi
 
@@ -482,12 +500,24 @@ size="$(file_size "$TMP/ccshelf")"
 [ "$size" -gt 0 ] || die "the ccshelf entry of $ARCHIVE is empty"
 [ "$size" -le "$MAX_BINARY_BYTES" ] || die "the ccshelf entry of $ARCHIVE is larger than $MAX_BINARY_BYTES bytes"
 
+VERIFIED_SUM="$(sha256_of "$TMP/ccshelf")"
 STAGE="$BIN_DIR/.ccshelf.new.$$"
 rm -f "$STAGE"
 cp "$TMP/ccshelf" "$STAGE" || die "cannot write into $BIN_DIR"
 chmod 755 "$STAGE"
+# A symlink named ccshelf (only reachable with --force) is removed itself: mv would otherwise
+# follow a link to a directory and move the binary into it, outside this directory.
+if [ -L "$TARGET" ]; then
+  rm -f -- "$TARGET" || die "cannot remove the symlink $TARGET"
+fi
 mv -f "$STAGE" "$TARGET" || die "cannot move the new binary into place at $TARGET"
 STAGE=""
+# Whatever the file system did, what is at TARGET must be our regular file with the verified bytes.
+if [ ! -f "$TARGET" ] || [ -L "$TARGET" ]; then
+  die "$TARGET is not a regular file after the install; the binary was not installed there"
+fi
+[ "$(sha256_of "$TARGET")" = "$VERIFIED_SUM" ] ||
+  die "the file at $TARGET does not match the verified binary; the install is not trustworthy"
 
 say "installed $TARGET"
 if [ "$QUIET" -eq 0 ]; then
