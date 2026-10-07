@@ -68,6 +68,10 @@ type harness struct {
 func newHarness(t *testing.T) *harness {
 	t.Helper()
 	d := testutil.IsolatedEnv(t)
+	// Unit tests must not inherit the runner's environment: CI=true disables
+	// prompts everywhere, so tests that need the wizards would silently take the
+	// non-interactive path. A test that wants CI set does so explicitly afterwards.
+	t.Setenv("CI", "")
 	h := &harness{
 		t: t, dirs: d, out: &bytes.Buffer{}, errb: &bytes.Buffer{}, goos: "linux", cwd: d["WORK"],
 		managed: filepath.Join(t.TempDir(), "managed"),
