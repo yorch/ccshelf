@@ -11,8 +11,8 @@ import ci_changes as c
 ALL_TRUE = ("go", "pins", "lint", "examples", "site", "install", "mutants", "action")
 
 
-def pr(*files):
-    return c.build_outputs("pull_request", list(files))
+def pr(*files, head_ref=""):
+    return c.build_outputs("pull_request", list(files), head_ref)
 
 
 def on(outputs):
@@ -40,8 +40,8 @@ class GroupTests(unittest.TestCase):
         self.assertEqual(on(out), {"action", "pins", "lint"})
 
     def test_docs(self):
-        for f in ("docs/DECISIONS.md", "site/index.html", "README.md", "CHANGELOG.md", ".release-please-manifest.json",
-                  "scripts/build_docs.py", "scripts/check-links.sh", "docs/report.html", "scripts/ci_changes.py"):
+        for f in ("docs/DECISIONS.md", "site/index.html", "CHANGELOG.md", ".release-please-manifest.json",
+                  "scripts/build_docs.py", "scripts/check-links.sh", "docs/report.html"):
             out, why = pr(f)
             self.assertIsNone(why, f)
             self.assertEqual(on(out), {"site"}, f)
@@ -109,6 +109,43 @@ class FailOpenTests(unittest.TestCase):
     def test_diff_failure(self):
         self.assert_full(*c.build_outputs("pull_request", None))
 
+    def test_classifier_changes_fail_open(self):
+        for f in ("scripts/ci_changes.py", "scripts/test_ci_changes.py"):
+            out, why = pr("docs/README.md", f)
+            self.assert_full(out, why)
+            self.assertIn("classifier", why)
+
+    def test_release_branch_fails_open(self):
+        out, why = pr("CHANGELOG.md", ".release-please-manifest.json", head_ref="release-please--branches--main")
+        self.assert_full(out, why)
+        self.assertIn("release pull request", why)
+        out, why = pr("CHANGELOG.md", head_ref="my-release-please--x")
+        self.assertIsNone(why)
+        out, why = pr("CHANGELOG.md", head_ref="")
+        self.assertIsNone(why)
+
+    def test_installer_archive_inputs(self):
+        for f in ("LICENSE", "README.md"):
+            self.assertTrue({"install", "mutants"} <= on(pr(f)[0]), f)
+
+    def test_summary_survives_non_utf8_path(self):
+        path = b"bad\xff.txt".decode("utf-8", "surrogateescape")
+        out, why = pr(path)
+        text = c.summary(out, why, [path])
+        with tempfile.TemporaryDirectory() as d:
+            os.environ["GITHUB_STEP_SUMMARY"] = os.path.join(d, "s.md")
+            try:
+                c.emit("GITHUB_STEP_SUMMARY", text)
+            finally:
+                del os.environ["GITHUB_STEP_SUMMARY"]
+            with open(os.path.join(d, "s.md"), encoding="utf-8") as fh:
+                self.assertIn("no rule matches", fh.read())
+
+    def test_summary_warns_when_diff_not_computed(self):
+        out, why = c.build_outputs("pull_request", None)
+        self.assertIn("could not be computed", c.summary(out, why, None))
+        self.assertIn("WARNING", c.summary(out, why, None))
+
     def test_github_lookalike_is_not_github(self):
         out, why = pr(".githubx/file")
         self.assertIn("no rule matches", why)
@@ -158,6 +195,52 @@ class ChangedFilesTests(unittest.TestCase):
         self.assertIsNone(c.changed_files("--output=x", "abc"))
         self.assertIsNone(c.changed_files("", ""))
         self.assertIsNone(c.changed_files(None, None))
+
+    def test_shallow_clone_fails_open(self):
+        # The failure mode of `fetch-depth: 1` in ci.yml: the base commit is missing, the
+        # diff cannot be computed, and the classifier must fail open.
+        with tempfile.TemporaryDirectory() as d:
+            src = os.path.join(d, "src")
+            os.mkdir(src)
+
+            def git(cwd, *a):
+                return subprocess.run(["git", "-C", cwd, *a], check=True, capture_output=True, text=True).stdout.strip()
+            git(src, "init", "-q", "-b", "main")
+            git(src, "config", "user.email", "t@example.test")
+            git(src, "config", "user.name", "t")
+            git(src, "config", "commit.gpgsign", "false")
+            for name in ("one", "two"):
+                with open(os.path.join(src, name + ".md"), "w") as fh:
+                    fh.write(name + "\n")
+                git(src, "add", ".")
+                git(src, "commit", "-qm", name)
+            base = git(src, "rev-parse", "HEAD")
+            git(src, "checkout", "-q", "-b", "topic")
+            with open(os.path.join(src, "topic.md"), "w") as fh:
+                fh.write("t\n")
+            git(src, "add", ".")
+            git(src, "commit", "-qm", "topic")
+            head = git(src, "rev-parse", "HEAD")
+            git(src, "checkout", "-q", "main")
+            with open(os.path.join(src, "main.md"), "w") as fh:
+                fh.write("m\n")
+            git(src, "add", ".")
+            git(src, "commit", "-qm", "main moves")
+            git(src, "merge", "-q", "--no-ff", "-m", "merge", "topic")
+            merge = git(src, "rev-parse", "HEAD")
+            shallow = os.path.join(d, "shallow")
+            git(d, "clone", "-q", "--depth", "1", "file://" + src, shallow)
+            git(shallow, "fetch", "-q", "--depth", "1", "origin", merge)
+            old = os.getcwd()
+            os.chdir(shallow)
+            try:
+                files = c.changed_files(base, head)
+            finally:
+                os.chdir(old)
+            self.assertIsNone(files)
+            out, why = c.build_outputs("pull_request", files)
+            self.assertEqual(out["full"], "true")
+            self.assertEqual(why, c.NO_DIFF)
 
     def test_real_repository(self):
         with tempfile.TemporaryDirectory() as d:

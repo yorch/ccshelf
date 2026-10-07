@@ -1,5 +1,5 @@
 # Pull requests are scanned only when they change what CodeQL analyses (Go sources and
-# modules, the workflows and the composite Action). CodeQL is not a required check (the
+# modules, the workflows, the composite Action and the starter's workflows). CodeQL is not a required check (the
 # required checks are `ci-ok` and `pr-title`), so a skipped run blocks nothing. Push to
 # main and the weekly schedule are unfiltered and scan everything.
 name: codeql
@@ -15,6 +15,7 @@ on:
       - go.sum
       - ".github/**"
       - "action/**"
+      - "examples/**" # holds workflow files the actions extractor scans
   schedule:
     - cron: "17 4 * * 1" # weekly, Monday 04:17 UTC
 

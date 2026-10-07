@@ -43,7 +43,7 @@ env:
 
 jobs:
   # Decides which of the jobs below run. Pull requests only; every other event runs all.
-  # The full history is fetched on pull requests so `git diff base...head` has a merge base.
+  # The full history is fetched so `git diff base...head` has a merge base.
   changes:
     name: changes
     runs-on: ubuntu-latest
@@ -64,13 +64,17 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: ${{ github.event_name == 'pull_request' && 0 || 1 }}
+          # Not conditional on the event: `cond && 0 || 1` always yields 1, because 0 is
+          # falsy in GitHub expressions {R}. A shallow checkout cannot compute the diff, so
+          # every pull request would fail open and nothing would be gated.
+          fetch-depth: 0
       - name: Classify the changed files
         id: classify
         env:
           EVENT_NAME: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.head_ref }}
         run: python3 -I scripts/ci_changes.py
 
   lint:
@@ -233,18 +237,26 @@ jobs:
           CGO_ENABLED: "0"
           COMMIT_SHA: ${{ github.sha }}
         run: |
-          set -euo pipefail
+          set -uo pipefail
           pkg="github.com/yorch/ccshelf/internal/version"
+          failed=""
           for goos in darwin linux windows; do
             for goarch in amd64 arm64; do
               ext=""
               if [ "$goos" = "windows" ]; then ext=".exe"; fi
               echo "building ${goos}/${goarch}"
-              GOOS="$goos" GOARCH="$goarch" go build -trimpath \
+              if ! GOOS="$goos" GOARCH="$goarch" go build -trimpath \
                 -ldflags "-s -w -X ${pkg}.Version=0.0.0-ci -X ${pkg}.Commit=${COMMIT_SHA}" \
-                -o "dist/ccshelf-${goos}-${goarch}${ext}" ./cmd/ccshelf
+                -o "dist/ccshelf-${goos}-${goarch}${ext}" ./cmd/ccshelf; then
+                echo "::error::build failed for ${goos}/${goarch}"
+                failed="${failed} ${goos}/${goarch}"
+              fi
             done
           done
+          if [ -n "$failed" ]; then
+            echo "Failed targets:${failed}" >&2
+            exit 1
+          fi
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ccshelf-cross-builds

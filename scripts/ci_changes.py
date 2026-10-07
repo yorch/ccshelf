@@ -11,12 +11,17 @@ Fail open: everything runs (every output is true) when
     release pull request relies on the dispatched run),
   - the changed files cannot be computed or the diff is empty,
   - any changed file is under .github/ (workflows, actions, CODEOWNERS, Dependabot),
+  - the classifier or its tests change (a pull request must not gate itself),
+  - the pull request branch starts with `release-please--` (the release pull request:
+    a cheap native run must never be able to supersede a failed full dispatched run),
   - any changed file matches no known path rule (a new top-level file or directory).
 
 Input, from the environment only (never argv, never `${{ }}` in `run:`):
   EVENT_NAME   github.event_name
   BASE_SHA     github.event.pull_request.base.sha
   HEAD_SHA     github.event.pull_request.head.sha
+  HEAD_REF     github.head_ref (attacker-controlled on forks; the only effect of a
+               matching name is that more jobs run)
 Output: `name=value` lines appended to $GITHUB_OUTPUT and a short Markdown summary
 appended to $GITHUB_STEP_SUMMARY (both printed to stdout when unset).
 
@@ -78,7 +83,9 @@ RULES = [
     ("prefix", "docs/", _DOCS),
     ("prefix", "site/", _DOCS),
     ("root_md", "", _DOCS),
-    ("exact", "LICENSE", _DOCS),
+    # make-e2e-release.sh copies LICENSE and README.md into the install-test archive.
+    ("exact", "LICENSE", ("docs", "installer")),
+    ("exact", "README.md", ("installer",)),
     ("exact", ".gitignore", _DOCS),
     # Release-please state: the release pull request changes only these two (the
     # manifest here; CHANGELOG.md is a root Markdown file). The config is not listed,
@@ -101,7 +108,7 @@ RULES = [
     # run in the docs job).
     ("exact", "scripts/check_pr_title.py", _DOCS),
     ("exact", "scripts/test_check_pr_title.py", _DOCS),
-    ("exact", "scripts/ci_changes.py", _DOCS),
+    ("exact", "scripts/ci_changes.py", _DOCS),  # also fail open, see SELF_PATHS
     ("exact", "scripts/test_ci_changes.py", _DOCS),
     # Action pin tooling.
     ("exact", "scripts/check-pins.sh", ("workflows",)),
@@ -114,6 +121,10 @@ RULES = [
 ]
 
 FULL_EVENTS_NOTE = "not a pull request"
+NO_DIFF = "the changed files could not be computed"
+RELEASE_BRANCH_PREFIX = "release-please--"
+# Changing these must run everything: a pull request cannot gate itself.
+SELF_PATHS = ("scripts/ci_changes.py", "scripts/test_ci_changes.py")
 
 
 def groups_for(path):
@@ -133,17 +144,21 @@ def groups_for(path):
     return found
 
 
-def classify(files):
+def classify(files, head_ref=""):
     """Return (groups, reason). reason is None when the groups come from the files, or
     a string saying why everything must run (fail open)."""
+    if (head_ref or "").startswith(RELEASE_BRANCH_PREFIX):
+        return set(GROUPS), "the pull request is the release pull request (" + RELEASE_BRANCH_PREFIX + "*)"
     if files is None:
-        return set(GROUPS), "the changed files could not be computed"
+        return set(GROUPS), NO_DIFF
     if not files:
         return set(GROUPS), "the diff is empty"
     groups = set()
     for path in files:
         if path == ".github" or path.startswith(".github/"):
             return set(GROUPS), "a file under .github/ changed (" + path + ")"
+        if path in SELF_PATHS:
+            return set(GROUPS), "the job-selection classifier or its tests changed (" + path + ")"
         g = groups_for(path)
         if not g:
             return set(GROUPS), "no rule matches " + path
@@ -162,12 +177,12 @@ MATRIX_ALL = [
 ]
 
 
-def build_outputs(event_name, files):
+def build_outputs(event_name, files, head_ref=""):
     """Return (outputs, reason): outputs maps names to 'true'/'false' (matrix to JSON)."""
     if event_name != "pull_request":
         groups, reason = set(GROUPS), FULL_EVENTS_NOTE + " (" + (event_name or "unknown event") + ")"
     else:
-        groups, reason = classify(files)
+        groups, reason = classify(files, head_ref)
     g = groups.__contains__
     legs = [x for x in MATRIX_ALL if event_name != "pull_request" or not x["experimental"]]
     out = {
@@ -207,6 +222,9 @@ def changed_files(base, head):
 
 def summary(outputs, reason, files):
     lines = ["### ci job selection", ""]
+    if reason == NO_DIFF:
+        lines.append("**WARNING: the changed files could not be computed, so gating did not happen.**")
+        lines.append("")
     if reason:
         lines.append("Running **everything** (fail open): " + reason + ".")
     else:
@@ -222,10 +240,11 @@ def summary(outputs, reason, files):
 def emit(path_env, text):
     target = os.environ.get(path_env)
     if target:
-        with open(target, "a", encoding="utf-8") as fh:
+        # A path that is not valid UTF-8 (kept by surrogateescape) must not crash the write.
+        with open(target, "a", encoding="utf-8", errors="replace") as fh:
             fh.write(text)
     else:
-        sys.stdout.write(text)
+        sys.stdout.write(text.encode("utf-8", "replace").decode("utf-8"))
 
 
 def main():
@@ -233,7 +252,7 @@ def main():
     files = None
     if event == "pull_request":
         files = changed_files(os.environ.get("BASE_SHA", ""), os.environ.get("HEAD_SHA", ""))
-    outputs, reason = build_outputs(event, files)
+    outputs, reason = build_outputs(event, files, os.environ.get("HEAD_REF", ""))
     emit("GITHUB_OUTPUT", "".join("%s=%s\n" % kv for kv in outputs.items()))
     emit("GITHUB_STEP_SUMMARY", summary(outputs, reason, files))
     return 0
