@@ -397,3 +397,67 @@ func TestSidecarStubHonoursLintRequire(t *testing.T) {
 		}
 	}
 }
+
+func TestDiscoverySkipsLinkedPluginDirectoriesWithANote(t *testing.T) {
+	m := newMem(map[string]string{
+		"plugins/real/.claude-plugin/plugin.json": `{"name": "real", "description": "A real plugin with a description."}`,
+	})
+	m.symlink("plugins/linked")
+	plan, err := Build(m, baseParams())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.Join(plan.Notes, "\n"), "plugins/linked is a symbolic link") {
+		t.Errorf("notes = %v", plan.Notes)
+	}
+	for _, e := range plan.Entries {
+		if strings.Contains(e.Path, "linked") {
+			t.Errorf("a linked directory got an entry: %s", e.Path)
+		}
+	}
+	if !strings.Contains(string(entryOf(t, plan, ".claude-plugin/marketplace.json").Content), `"real"`) {
+		t.Error("the real plugin is missing")
+	}
+}
+
+func TestExistingFilesWithCRLFAreComparedByContent(t *testing.T) {
+	m := newMem(map[string]string{
+		".gitignore":     "dist/\r\n.DS_Store\r\n*.ccshelf-suggested\r\n",
+		".gitattributes": "* text=auto eol=lf\r\n",
+	})
+	plan, err := Build(m, baseParams())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e := entryOf(t, plan, ".gitignore"); e.Action != ActionSkip || !strings.Contains(e.Reason, "every generated line") {
+		t.Errorf(".gitignore: %s (%s)", e.Action, e.Reason)
+	}
+	e := entryOf(t, plan, ".gitattributes")
+	if e.Action != ActionMerge || !strings.Contains(string(e.Suggestion), "*.json text eol=lf") || strings.Contains(string(e.Suggestion), "* text=auto") {
+		t.Errorf(".gitattributes: %s\n%s", e.Action, e.Suggestion)
+	}
+}
+
+func TestInvalidExistingFilesAreReportedNotFatal(t *testing.T) {
+	m := newMem(map[string]string{
+		".claude-plugin/marketplace.json":      "{not json",
+		"ccshelf.toml":                         "[lint\n",
+		"plugins/a/.claude-plugin/plugin.json": `{"name": "a"}`,
+	})
+	plan, err := Build(m, baseParams())
+	if err != nil {
+		t.Fatal(err)
+	}
+	notes := strings.Join(plan.Notes, "\n")
+	for _, want := range []string{"marketplace.json exists but is not a valid marketplace file", "ccshelf.toml exists but is not valid"} {
+		if !strings.Contains(notes, want) {
+			t.Errorf("notes lack %q:\n%s", want, notes)
+		}
+	}
+	if e := entryOf(t, plan, ".claude-plugin/marketplace.json"); e.Action != ActionSkip {
+		t.Errorf("marketplace.json: %s", e.Action)
+	}
+	if e := entryOf(t, plan, "ccshelf.toml"); e.Action != ActionSkip {
+		t.Errorf("ccshelf.toml: %s", e.Action)
+	}
+}
