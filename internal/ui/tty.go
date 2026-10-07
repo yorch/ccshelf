@@ -16,17 +16,16 @@ import (
 	"golang.org/x/term"
 )
 
-// TTY is the line-oriented Prompter for terminals. It never uses raw mode, so
-// it works on any terminal, including Windows consoles and screen readers: a
-// question is printed as a numbered list and the user types a number or, when
-// the question is filterable, part of a label (type-to-filter). Ambiguous text
-// narrows the list and asks again; "/" clears the filter. Ctrl+D or end of
-// input returns ErrAborted; canceling the context returns ctx.Err().
+// TTY uses an inline keyboard picker on capable terminals. Plain mode,
+// unsupported terminals and non-file streams retain numbered line prompts:
+// ambiguous text narrows the list and "/" clears the filter. Ctrl+D or end
+// of input returns ErrAborted; canceling the context returns ctx.Err().
+// Keyboard prompts restore terminal state synchronously before returning.
 //
-// Prompts are written to Streams.Err and answers are read from Streams.In. A
-// canceled read cannot be interrupted at the operating system level, so one
-// goroutine may remain blocked reading input until the process exits; that is
-// harmless because a canceled command is about to exit.
+// Prompts are written to Streams.Err and answers are read from Streams.In.
+// A canceled line-mode read cannot be interrupted at the operating system
+// level, so one goroutine may remain blocked until the process exits. Keyboard
+// pickers use synchronous polling instead and never leave a reader behind.
 type TTY struct {
 	streams Streams
 	mode    Mode
@@ -156,6 +155,12 @@ func (t *TTY) Select(ctx context.Context, q Question) (int, error) {
 	if len(q.Options) == 0 {
 		return -1, errors.New("select: no options to choose from")
 	}
+	if indexes, handled, err := t.keyboardSelect(ctx, q, false); handled || err != nil {
+		if err != nil {
+			return -1, err
+		}
+		return indexes[0], nil
+	}
 	cands := allIndexes(len(q.Options))
 	t.title(q)
 	t.printList(q, cands)
@@ -213,6 +218,9 @@ func (t *TTY) Select(ctx context.Context, q Question) (int, error) {
 func (t *TTY) MultiSelect(ctx context.Context, q Question) ([]int, error) {
 	if len(q.Options) == 0 {
 		return nil, errors.New("multi-select: no options to choose from")
+	}
+	if indexes, handled, err := t.keyboardSelect(ctx, q, true); handled || err != nil {
+		return indexes, err
 	}
 	t.title(q)
 	t.printList(Question{Options: q.Options}, allIndexes(len(q.Options)))
