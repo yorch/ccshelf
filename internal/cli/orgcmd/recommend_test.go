@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ccshelf/ccshelf/internal/ui"
+	"github.com/yorch/ccshelf/internal/ui"
 )
 
 // project makes a fictional infrastructure project directory.

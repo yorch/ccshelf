@@ -24,13 +24,13 @@ inputs:
   base-url:
     description: Directory that holds <version>/ release assets (the directory name keeps the leading v). Change it for a GHE Server or offline mirror. https:// or file:/// (absolute path) only.
     required: false
-    default: https://github.com/ccshelf/ccshelf/releases/download
+    default: https://github.com/yorch/ccshelf/releases/download
   verify-signature:
     description: Verify the cosign signature of checksums.txt (needs cosign on PATH and the Sigstore trusted root, so it is not offline) when neither sha256 nor a pins.txt line applies. "false" is an explicit, loudly warned opt-out.
     required: false
     default: "true"
   cosign-identity:
-    description: Exact certificate identity the signature must have. Empty means the tool repo's release workflow at the tag, https://github.com/ccshelf/ccshelf/.github/workflows/release.yml@refs/tags/<version>.
+    description: Exact certificate identity the signature must have. Empty means the tool repo's release workflow at the tag, https://github.com/yorch/ccshelf/.github/workflows/release.yml@refs/tags/<version>.
     required: false
     default: ""
   cosign-identity-regexp:

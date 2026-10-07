@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccshelf/ccshelf/internal/claude"
-	"github.com/ccshelf/ccshelf/internal/cli/clicore"
-	"github.com/ccshelf/ccshelf/internal/testutil"
-	"github.com/ccshelf/ccshelf/internal/ui"
+	"github.com/yorch/ccshelf/internal/claude"
+	"github.com/yorch/ccshelf/internal/cli/clicore"
+	"github.com/yorch/ccshelf/internal/testutil"
+	"github.com/yorch/ccshelf/internal/ui"
 )
 
 func testEnv(out, errb *bytes.Buffer) *clicore.Env {

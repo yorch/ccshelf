@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/ccshelf/ccshelf/internal/catalog/sidecar"
-	"github.com/ccshelf/ccshelf/internal/marketplace"
-	"github.com/ccshelf/ccshelf/internal/orgconfig"
-	"github.com/ccshelf/ccshelf/internal/profile"
-	"github.com/ccshelf/ccshelf/internal/ui"
+	"github.com/yorch/ccshelf/internal/catalog/sidecar"
+	"github.com/yorch/ccshelf/internal/marketplace"
+	"github.com/yorch/ccshelf/internal/orgconfig"
+	"github.com/yorch/ccshelf/internal/profile"
+	"github.com/yorch/ccshelf/internal/ui"
 )
 
 // deprecationWarnings returns one warning for every plugin the resolved

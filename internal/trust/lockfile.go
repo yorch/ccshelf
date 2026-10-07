@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ccshelf/ccshelf/internal/profile"
-	"github.com/ccshelf/ccshelf/internal/version"
+	"github.com/yorch/ccshelf/internal/profile"
+	"github.com/yorch/ccshelf/internal/version"
 )
 
 // LockVersion is the lockfile format version.

@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccshelf/ccshelf/internal/analytics"
-	"github.com/ccshelf/ccshelf/internal/catalog"
-	"github.com/ccshelf/ccshelf/internal/catalog/lint"
-	"github.com/ccshelf/ccshelf/internal/claude"
-	"github.com/ccshelf/ccshelf/internal/orgconfig"
+	"github.com/yorch/ccshelf/internal/analytics"
+	"github.com/yorch/ccshelf/internal/catalog"
+	"github.com/yorch/ccshelf/internal/catalog/lint"
+	"github.com/yorch/ccshelf/internal/claude"
+	"github.com/yorch/ccshelf/internal/orgconfig"
 )
 
 var now = time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)

@@ -9,10 +9,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ccshelf/ccshelf/internal/catalog"
-	"github.com/ccshelf/ccshelf/internal/catalog/site"
-	"github.com/ccshelf/ccshelf/internal/cli/clicore"
-	"github.com/ccshelf/ccshelf/internal/ui"
+	"github.com/yorch/ccshelf/internal/catalog"
+	"github.com/yorch/ccshelf/internal/catalog/site"
+	"github.com/yorch/ccshelf/internal/cli/clicore"
+	"github.com/yorch/ccshelf/internal/ui"
 )
 
 // defaultOut is the --out default, relative to the working directory.

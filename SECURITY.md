@@ -10,7 +10,7 @@
 
 Please **do not open a public issue** for a security problem.
 
-Report it privately with GitHub Security Advisories: on the repository page choose **Security**, then **Report a vulnerability** (`https://github.com/ccshelf/ccshelf/security/advisories/new`). <!-- OWNER: update the URL if the repository moves -->
+Report it privately with GitHub Security Advisories: on the repository page choose **Security**, then **Report a vulnerability** (`https://github.com/yorch/ccshelf/security/advisories/new`). <!-- OWNER: update the URL if the repository moves -->
 
 Include what you can: the version (`ccshelf --version`), your operating system, the smallest profile, config or workflow that reproduces the problem, and what you expected. Do not include real secrets or real organization data.
 
@@ -55,7 +55,7 @@ The exact identity `.../.github/workflows/release.yml@refs/tags/<version>` is on
 
 ## Verifying a release
 
-Every release publishes archives, `checksums.txt`, its keyless cosign bundle (`checksums.txt.sigstore.json`), an SBOM per archive, and a GitHub build provenance attestation. Replace `OWNER/REPO` with the repository the release came from (`ccshelf/ccshelf` for the public project). <!-- OWNER -->
+Every release publishes archives, `checksums.txt`, its keyless cosign bundle (`checksums.txt.sigstore.json`), an SBOM per archive, and a GitHub build provenance attestation. Replace `OWNER/REPO` with the repository the release came from (`yorch/ccshelf` for the public project). <!-- OWNER -->
 
 1. Verify the signature on the checksums file (needs [cosign](https://docs.sigstore.dev/cosign/)). Use the **exact** identity of the release workflow at the tag you downloaded, not a prefix or regexp (a regexp also accepts a tag an attacker pushed):
 

@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ccshelf/ccshelf/internal/claude"
+	"github.com/yorch/ccshelf/internal/claude"
 )
 
 // FeatureID names a launcher capability.

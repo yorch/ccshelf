@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ccshelf/ccshelf/internal/orgconfig"
-	"github.com/ccshelf/ccshelf/internal/profile"
+	"github.com/yorch/ccshelf/internal/orgconfig"
+	"github.com/yorch/ccshelf/internal/profile"
 )
 
 const protectConfig = "[protect]\nplugins = [\"audit-logger@acme\"]\nmcp = [\"plugin:audit:audit\"]\n"

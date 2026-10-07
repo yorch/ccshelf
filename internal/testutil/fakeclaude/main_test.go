@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ccshelf/ccshelf/internal/claude"
+	"github.com/yorch/ccshelf/internal/claude"
 )
 
 type result struct {

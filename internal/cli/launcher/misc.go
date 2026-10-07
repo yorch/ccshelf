@@ -9,11 +9,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ccshelf/ccshelf/internal/cli/clicore"
-	"github.com/ccshelf/ccshelf/internal/profile"
-	"github.com/ccshelf/ccshelf/internal/shellinit"
-	"github.com/ccshelf/ccshelf/internal/ui"
-	"github.com/ccshelf/ccshelf/internal/version"
+	"github.com/yorch/ccshelf/internal/cli/clicore"
+	"github.com/yorch/ccshelf/internal/profile"
+	"github.com/yorch/ccshelf/internal/shellinit"
+	"github.com/yorch/ccshelf/internal/ui"
+	"github.com/yorch/ccshelf/internal/version"
 )
 
 func evalSymlinks(p string) (string, error) { return filepath.EvalSymlinks(p) }

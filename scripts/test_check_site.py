@@ -604,12 +604,14 @@ class Build(unittest.TestCase):
                 if f.endswith((".html", ".js")):
                     with open(os.path.join(d, f), encoding="utf-8") as fh:
                         body = fh.read()
-                    self.assertNotIn("github.com/yorch/ccshelf", body, f)
+                    # the module path in prose ("github.com/yorch/ccshelf") is documentation text,
+                    # not a link: only the full address must be swapped
+                    self.assertNotIn("https://github.com/yorch/ccshelf", body, f)
                     self.assertNotIn("__SITE_URL__", body, f)
         with open(os.path.join(self.out, "o", "docs", "index.html"), encoding="utf-8") as f:
             self.assertIn('href="https://github.com/example/public/blob/main/', f.read())
         with open(os.path.join(self.out, "o", "docs", "search-index.js"), encoding="utf-8") as f:
-            self.assertNotIn("github.com/yorch", f.read())
+            self.assertNotIn("https://github.com/yorch", f.read())
 
     def test_build_refuses_bad_url(self):
         self.assertNotEqual(self.build("http://example.test").returncode, 0)

@@ -4,11 +4,11 @@ import (
 	"sort"
 	"time"
 
-	"github.com/ccshelf/ccshelf/internal/analytics"
-	"github.com/ccshelf/ccshelf/internal/catalog"
-	"github.com/ccshelf/ccshelf/internal/catalog/lint"
-	"github.com/ccshelf/ccshelf/internal/claude"
-	"github.com/ccshelf/ccshelf/internal/orgconfig"
+	"github.com/yorch/ccshelf/internal/analytics"
+	"github.com/yorch/ccshelf/internal/catalog"
+	"github.com/yorch/ccshelf/internal/catalog/lint"
+	"github.com/yorch/ccshelf/internal/claude"
+	"github.com/yorch/ccshelf/internal/orgconfig"
 )
 
 // Severity of a finding. The values match the lint package.

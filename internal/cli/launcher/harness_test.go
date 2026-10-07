@@ -15,10 +15,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ccshelf/ccshelf/internal/cli/clicore"
-	"github.com/ccshelf/ccshelf/internal/policy"
-	"github.com/ccshelf/ccshelf/internal/testutil"
-	"github.com/ccshelf/ccshelf/internal/ui"
+	"github.com/yorch/ccshelf/internal/cli/clicore"
+	"github.com/yorch/ccshelf/internal/policy"
+	"github.com/yorch/ccshelf/internal/testutil"
+	"github.com/yorch/ccshelf/internal/ui"
 )
 
 var update = flag.Bool("update", false, "rewrite golden files")

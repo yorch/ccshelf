@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ccshelf/ccshelf/internal/catalog/catalogtest"
 	toml "github.com/pelletier/go-toml/v2"
+	"github.com/yorch/ccshelf/internal/catalog/catalogtest"
 )
 
 const full = `

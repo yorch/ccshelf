@@ -4,7 +4,7 @@ version: 2
 
 # OWNER: the GitHub owner is defined once, as the YAML anchor `owner` under
 # `release.github` below, and reused by the tap, bucket and winget sections.
-# Literal `ccshelf/ccshelf` strings elsewhere (ldflags, homepage, the verify
+# Literal `yorch/ccshelf` strings elsewhere (ldflags, homepage, the verify
 # instructions in the release footer) must be changed together with it.
 
 project_name: ccshelf
@@ -29,9 +29,9 @@ builds:
       - -trimpath
     ldflags:
       - -s -w
-      - -X github.com/ccshelf/ccshelf/internal/version.Version={{ .Version }}
-      - -X github.com/ccshelf/ccshelf/internal/version.Commit={{ .Commit }}
-      - -X github.com/ccshelf/ccshelf/internal/version.Date={{ .CommitDate }}
+      - -X github.com/yorch/ccshelf/internal/version.Version={{ .Version }}
+      - -X github.com/yorch/ccshelf/internal/version.Commit={{ .Commit }}
+      - -X github.com/yorch/ccshelf/internal/version.Date={{ .CommitDate }}
     mod_timestamp: "{{ .CommitTimestamp }}"
 
 archives:
@@ -106,11 +106,11 @@ release:
     ```sh
     cosign verify-blob \
       --bundle checksums.txt.sigstore.json \
-      --certificate-identity 'https://github.com/ccshelf/ccshelf/.github/workflows/release.yml@refs/tags/{{ .Tag }}' \
+      --certificate-identity 'https://github.com/yorch/ccshelf/.github/workflows/release.yml@refs/tags/{{ .Tag }}' \
       --certificate-oidc-issuer https://token.actions.githubusercontent.com \
       checksums.txt
     sha256sum --check --ignore-missing checksums.txt
-    gh attestation verify <archive> --repo ccshelf/ccshelf
+    gh attestation verify <archive> --repo yorch/ccshelf
     ```
 
     Targets without a native CI runner are built but not natively tested; see `SECURITY.md` and the README.
@@ -127,7 +127,7 @@ homebrew_casks:
       name: homebrew-tap
       token: '{{ index .Env "HOMEBREW_TAP_TOKEN" }}'
     directory: Casks
-    homepage: "https://github.com/ccshelf/ccshelf"
+    homepage: "https://github.com/yorch/ccshelf"
     description: "Profiles and a plugin catalog for Claude Code. Unofficial; not affiliated with Anthropic."
     license: MIT
     commit_author:
@@ -144,7 +144,7 @@ scoops:
       name: scoop-bucket
       token: '{{ index .Env "SCOOP_BUCKET_TOKEN" }}'
     directory: bucket
-    homepage: "https://github.com/ccshelf/ccshelf"
+    homepage: "https://github.com/yorch/ccshelf"
     description: "Profiles and a plugin catalog for Claude Code. Unofficial; not affiliated with Anthropic."
     license: MIT
     commit_author:
@@ -161,10 +161,10 @@ winget:
     short_description: "Profiles and a plugin catalog for Claude Code."
     description: "Profiles and a plugin catalog for Claude Code. Unofficial; not affiliated with Anthropic."
     license: MIT
-    homepage: "https://github.com/ccshelf/ccshelf"
+    homepage: "https://github.com/yorch/ccshelf"
     publisher_url: "https://github.com/ccshelf"
     package_identifier: ccshelf.ccshelf
-    release_notes_url: "https://github.com/ccshelf/ccshelf/releases/tag/{{ .Tag }}"
+    release_notes_url: "https://github.com/yorch/ccshelf/releases/tag/{{ .Tag }}"
     repository:
       owner: *owner
       name: winget-pkgs

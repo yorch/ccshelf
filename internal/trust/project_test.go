@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ccshelf/ccshelf/internal/config"
+	"github.com/yorch/ccshelf/internal/config"
 )
 
 func newProjects(t *testing.T) *ProjectStore {

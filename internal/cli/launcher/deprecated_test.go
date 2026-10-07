@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ccshelf/ccshelf/internal/testutil"
+	"github.com/yorch/ccshelf/internal/testutil"
 )
 
 const deprecatedSidecar = "owner = \"@acme/seo\"\nstatus = \"deprecated\"\nsuperseded_by = \"docs-writer\"\n"

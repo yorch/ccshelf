@@ -27,21 +27,21 @@ jobs:
       # repository variables CCSHELF_SHA256_LINUX_AMD64 (archive hash from the release checksums.txt).
       # Without that variable the action verifies the cosign signature, which needs cosign on PATH.
       - name: Lint metadata, profiles and ownership
-        uses: ccshelf/ccshelf/action@0000000000000000000000000000000000000000 # TODO replace with the released commit SHA of ccshelf
+        uses: yorch/ccshelf/action@0000000000000000000000000000000000000000 # TODO replace with the released commit SHA of ccshelf
         with:
           version: v0.1.0
           sha256: ${{ vars.CCSHELF_SHA256_LINUX_AMD64 }}
           args: lint
 
       - name: Check that committed bundles match the profiles
-        uses: ccshelf/ccshelf/action@0000000000000000000000000000000000000000 # TODO replace with the released commit SHA of ccshelf
+        uses: yorch/ccshelf/action@0000000000000000000000000000000000000000 # TODO replace with the released commit SHA of ccshelf
         with:
           version: v0.1.0
           sha256: ${{ vars.CCSHELF_SHA256_LINUX_AMD64 }}
           args: compile --check
 
       - name: Build the catalog preview
-        uses: ccshelf/ccshelf/action@0000000000000000000000000000000000000000 # TODO replace with the released commit SHA of ccshelf
+        uses: yorch/ccshelf/action@0000000000000000000000000000000000000000 # TODO replace with the released commit SHA of ccshelf
         with:
           version: v0.1.0
           sha256: ${{ vars.CCSHELF_SHA256_LINUX_AMD64 }}

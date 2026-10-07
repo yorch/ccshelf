@@ -18,7 +18,7 @@ import (
 
 	toml "github.com/pelletier/go-toml/v2"
 
-	"github.com/ccshelf/ccshelf/internal/config/tomlkeys"
+	"github.com/yorch/ccshelf/internal/config/tomlkeys"
 )
 
 // MaxFileSize is the largest config file Load accepts.

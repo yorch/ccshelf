@@ -9,11 +9,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ccshelf/ccshelf/internal/catalog"
-	"github.com/ccshelf/ccshelf/internal/cli/clicore"
-	"github.com/ccshelf/ccshelf/internal/marketplace"
-	"github.com/ccshelf/ccshelf/internal/recommend"
-	"github.com/ccshelf/ccshelf/internal/ui"
+	"github.com/yorch/ccshelf/internal/catalog"
+	"github.com/yorch/ccshelf/internal/cli/clicore"
+	"github.com/yorch/ccshelf/internal/marketplace"
+	"github.com/yorch/ccshelf/internal/recommend"
+	"github.com/yorch/ccshelf/internal/ui"
 )
 
 // recommendJSON is the data of `recommend --json` (kind "recommend").

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccshelf/ccshelf/internal/ui"
+	"github.com/yorch/ccshelf/internal/ui"
 )
 
 func testEnv() *Env {

@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccshelf/ccshelf/internal/catalog/catalogtest"
-	"github.com/ccshelf/ccshelf/internal/orgconfig"
+	"github.com/yorch/ccshelf/internal/catalog/catalogtest"
+	"github.com/yorch/ccshelf/internal/orgconfig"
 )
 
 const (

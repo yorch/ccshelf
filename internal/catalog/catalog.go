@@ -10,9 +10,9 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/ccshelf/ccshelf/internal/catalog/gitdata"
-	"github.com/ccshelf/ccshelf/internal/catalog/lint"
-	"github.com/ccshelf/ccshelf/internal/orgconfig"
+	"github.com/yorch/ccshelf/internal/catalog/gitdata"
+	"github.com/yorch/ccshelf/internal/catalog/lint"
+	"github.com/yorch/ccshelf/internal/orgconfig"
 )
 
 // Version is the catalog.json format version.

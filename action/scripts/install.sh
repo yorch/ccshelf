@@ -39,7 +39,7 @@ warn_loud() {
 
 VERSION="${INPUT_VERSION:-}"
 PIN_SHA="${INPUT_SHA256:-}"
-BASE_URL="${INPUT_BASE_URL:-https://github.com/ccshelf/ccshelf/releases/download}"
+BASE_URL="${INPUT_BASE_URL:-https://github.com/yorch/ccshelf/releases/download}"
 VERIFY_SIG="${INPUT_VERIFY_SIGNATURE:-true}"
 COSIGN_IDENTITY="${INPUT_COSIGN_IDENTITY:-}"
 COSIGN_IDENTITY_REGEXP="${INPUT_COSIGN_IDENTITY_REGEXP:-}"
@@ -285,7 +285,7 @@ elif [ "$VERIFY_SIG" = true ]; then
   else
     if [ -z "$COSIGN_IDENTITY" ]; then
       # OWNER: the tool repo; the exact identity of its release workflow for this tag.
-      COSIGN_IDENTITY="https://github.com/ccshelf/ccshelf/.github/workflows/release.yml@refs/tags/${VERSION}"
+      COSIGN_IDENTITY="https://github.com/yorch/ccshelf/.github/workflows/release.yml@refs/tags/${VERSION}"
     fi
     cosign_args+=(--certificate-identity "$COSIGN_IDENTITY")
   fi

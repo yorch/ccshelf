@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ccshelf/ccshelf/internal/catalog"
+	"github.com/yorch/ccshelf/internal/catalog"
 )
 
 //go:embed templates/index.html templates/app.js templates/style.css

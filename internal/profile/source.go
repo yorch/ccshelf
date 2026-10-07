@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ccshelf/ccshelf/internal/config"
+	"github.com/yorch/ccshelf/internal/config"
 )
 
 // Kind is the origin trust level of a profile. The zero value is KindInvalid

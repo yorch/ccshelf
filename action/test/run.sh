@@ -240,7 +240,7 @@ fi
 run_install PATH="$COSIGN_OK:$SAFE_PATH"
 expect_ok "fake cosign succeeds" "signature verified"
 ARGS="$(cat "$COSIGN_ARGS" 2>/dev/null || true)"
-EXACT="https://github.com/ccshelf/ccshelf/.github/workflows/release.yml@refs/tags/${VERSION}"
+EXACT="https://github.com/yorch/ccshelf/.github/workflows/release.yml@refs/tags/${VERSION}"
 case "$ARGS" in
   *"verify-blob"*"--bundle "*"checksums.txt.sigstore.json --certificate-identity ${EXACT} --certificate-oidc-issuer https://token.actions.githubusercontent.com"*)
     pass "cosign called with bundle, the exact default identity and issuer"

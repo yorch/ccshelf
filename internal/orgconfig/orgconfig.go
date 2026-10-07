@@ -11,7 +11,7 @@ import (
 
 	toml "github.com/pelletier/go-toml/v2"
 
-	"github.com/ccshelf/ccshelf/internal/catalog/safepath"
+	"github.com/yorch/ccshelf/internal/catalog/safepath"
 )
 
 // ErrInvalid is wrapped by every error about a ccshelf.toml that exists but

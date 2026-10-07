@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ccshelf/ccshelf/internal/orgconfig"
+	"github.com/yorch/ccshelf/internal/orgconfig"
 )
 
 // PoC: a replace ref inside the cached checkout's object store swaps the tree

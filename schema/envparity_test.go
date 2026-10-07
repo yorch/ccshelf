@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ccshelf/ccshelf/internal/envpolicy"
+	"github.com/yorch/ccshelf/internal/envpolicy"
 )
 
 // envpolicyData holds the constants of internal/envpolicy that define which

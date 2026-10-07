@@ -10,11 +10,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ccshelf/ccshelf/internal/cli/clicore"
-	"github.com/ccshelf/ccshelf/internal/cli/launcher"
-	"github.com/ccshelf/ccshelf/internal/cli/orgcmd"
-	"github.com/ccshelf/ccshelf/internal/ui"
-	"github.com/ccshelf/ccshelf/internal/version"
+	"github.com/yorch/ccshelf/internal/cli/clicore"
+	"github.com/yorch/ccshelf/internal/cli/launcher"
+	"github.com/yorch/ccshelf/internal/cli/orgcmd"
+	"github.com/yorch/ccshelf/internal/ui"
+	"github.com/yorch/ccshelf/internal/version"
 )
 
 // NewRoot builds the root command. The globals are bound as persistent flags

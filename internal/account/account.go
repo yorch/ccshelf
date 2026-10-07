@@ -12,8 +12,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ccshelf/ccshelf/internal/config"
-	"github.com/ccshelf/ccshelf/internal/ui"
+	"github.com/yorch/ccshelf/internal/config"
+	"github.com/yorch/ccshelf/internal/ui"
 )
 
 // Options controls Add.

@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ccshelf/ccshelf/internal/config"
+	"github.com/yorch/ccshelf/internal/config"
 )
 
 // ProjectFolder is the folder inside a repository that holds project profiles.

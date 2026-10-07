@@ -11,8 +11,8 @@ import (
 
 	toml "github.com/pelletier/go-toml/v2"
 
-	"github.com/ccshelf/ccshelf/internal/config/tomlkeys"
-	"github.com/ccshelf/ccshelf/internal/envpolicy"
+	"github.com/yorch/ccshelf/internal/config/tomlkeys"
+	"github.com/yorch/ccshelf/internal/envpolicy"
 )
 
 // MaxManifestSize is the largest manifest accepted.

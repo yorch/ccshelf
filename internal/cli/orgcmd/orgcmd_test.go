@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ccshelf/ccshelf/internal/ui"
+	"github.com/yorch/ccshelf/internal/ui"
 )
 
 var update = flag.Bool("update", false, "rewrite golden files")

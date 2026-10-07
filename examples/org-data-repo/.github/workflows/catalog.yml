@@ -26,7 +26,7 @@ jobs:
           persist-credentials: false
 
       - name: Build the catalog
-        uses: ccshelf/ccshelf/action@0000000000000000000000000000000000000000 # TODO replace with the released commit SHA of ccshelf
+        uses: yorch/ccshelf/action@0000000000000000000000000000000000000000 # TODO replace with the released commit SHA of ccshelf
         with:
           version: v0.1.0
           sha256: ${{ vars.CCSHELF_SHA256_LINUX_AMD64 }}
