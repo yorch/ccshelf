@@ -612,6 +612,8 @@ class Build(unittest.TestCase):
         # the author credit links to the profile (github.com/yorch); only the repository address is swapped
         self.assertNotIn("github.com/yorch/ccshelf", text)
         self.assertIn("git clone https://github.com/example/public\n", text)
+        self.assertIn("curl -fsSL https://github.com/example/public/releases/latest/download/install.sh | sh", text)
+        self.assertIn("irm https://github.com/example/public/releases/latest/download/install.ps1 | iex", text)
         # every page of the build, docs included, carries the swapped address and none the old one
         for d, _, fs in os.walk(os.path.join(self.out, "o")):
             for f in fs:
