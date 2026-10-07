@@ -24,7 +24,7 @@ jobs:
     # Scheduled runs always use the default branch (and github.event.repository is not
     # available on them), so only manual runs are checked against it.
     if: github.event_name == 'schedule' || github.ref_name == github.event.repository.default_branch
-    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
+    runs-on: ${{ vars.RUNNER_LABEL || 'linux-runners' }}
     timeout-minutes: 5
     permissions:
       contents: write

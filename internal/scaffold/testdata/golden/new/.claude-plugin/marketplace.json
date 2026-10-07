@@ -1,0 +1,8 @@
+{
+  "name": "acme",
+  "owner": {
+    "name": "Acme"
+  },
+  "description": "Acme Claude Code plugins.",
+  "plugins": []
+}

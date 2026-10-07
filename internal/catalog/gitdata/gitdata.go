@@ -254,3 +254,25 @@ func ChangedSince(ctx context.Context, root, tag string, dirs []string) ([]strin
 	sort.Strings(changed)
 	return changed, nil
 }
+
+// Init runs "git init" in dir with the initial branch main. It is used by
+// "ccshelf catalog init --git-init" and only when dir is not a repository yet:
+// it creates .git and nothing else, and never commits, fetches or pushes. The
+// directory must exist. Like every call here, it runs with the user's global
+// and system git configuration switched off.
+func Init(ctx context.Context, dir string) error {
+	_, err := runGit(ctx, gitArgs(dir, []string{"-c", "init.defaultBranch=main"}, "init", "--quiet"), "init")
+	return err
+}
+
+// RemoteURL returns the URL of the remote "origin" of the repository in dir,
+// or "" when there is none (or dir is not a repository). It is read-only and
+// makes no network call. The URL is untrusted text: callers validate or
+// sanitize it before use.
+func RemoteURL(ctx context.Context, dir string) string {
+	out, err := run(ctx, dir, "remote", "get-url", "origin")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(out)
+}

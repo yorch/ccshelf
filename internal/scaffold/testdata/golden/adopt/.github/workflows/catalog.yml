@@ -21,20 +21,15 @@ jobs:
     permissions:
       contents: read
     steps:
-      # TODO(ccshelf): remove this step once the ccshelf action below is pinned (see README.md).
-      - name: Refuse to run until ccshelf is pinned
-        run: |
-          echo "::error title=ccshelf is not pinned::Replace the all-zero commit SHA and the version of the ccshelf action in this workflow with a released commit SHA and tag, then remove this step. See README.md."
-          exit 1
       - name: Check out main
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Build the catalog
-        uses: yorch/ccshelf/action@0000000000000000000000000000000000000000 # TODO(ccshelf) replace with the full commit SHA of a released ccshelf commit
+        uses: yorch/ccshelf/action@cccccccccccccccccccccccccccccccccccccccc # v0.2.0
         with:
-          version: v0.1.0
+          version: v0.2.0
           sha256: ${{ vars.CCSHELF_SHA256_LINUX_AMD64 }}
           args: catalog build --out dist/catalog
 

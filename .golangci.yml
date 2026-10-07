@@ -140,7 +140,7 @@ linters:
       # Reading user-chosen files is the job of these packages; confinement to the source
       # root is enforced and tested in internal/catalog/safepath and internal/profile (SR4).
       # Scoped per path so that a new package does not inherit the exemption.
-      - path: ^internal/(bundles|cache|catalog/catalogtest|catalog/safepath|catalog/site|claude|config|policy|profile|recommend|testutil|trust)/
+      - path: ^internal/(bundles|cache|catalog/catalogtest|catalog/safepath|catalog/site|claude|config|policy|profile|recommend|scaffold|testutil|trust)/
         text: "G304|G703"
         linters: [gosec]
       # Process execution is the point of these packages (arguments are an argv, never a shell string).

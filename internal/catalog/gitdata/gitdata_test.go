@@ -277,3 +277,43 @@ func TestDubiousOwnershipDetection(t *testing.T) {
 		t.Error("dubiousOwnership misclassifies")
 	}
 }
+
+func TestInitAndRemoteURL(t *testing.T) {
+	needGit(t)
+	dir := t.TempDir()
+	if IsRepo(context.Background(), dir) {
+		t.Skip("the temporary directory is inside a git work tree")
+	}
+	if err := Init(context.Background(), dir); err != nil {
+		t.Fatal(err)
+	}
+	if st, err := os.Stat(filepath.Join(dir, ".git")); err != nil || !st.IsDir() {
+		t.Fatalf(".git: %v", err)
+	}
+	head, err := os.ReadFile(filepath.Join(dir, ".git", "HEAD"))
+	if err != nil || strings.TrimSpace(string(head)) != "ref: refs/heads/main" {
+		t.Errorf("HEAD = %q, %v", head, err)
+	}
+	// Init makes no commit and no other file.
+	ents, _ := os.ReadDir(dir)
+	if len(ents) != 1 {
+		t.Errorf("init wrote more than .git: %v", ents)
+	}
+	if got := RemoteURL(context.Background(), dir); got != "" {
+		t.Errorf("RemoteURL of a repo without a remote = %q", got)
+	}
+	git(t, dir, nil, "remote", "add", "origin", "git@ghe.example.com:acme/data.git")
+	if got := RemoteURL(context.Background(), dir); got != "git@ghe.example.com:acme/data.git" {
+		t.Errorf("RemoteURL = %q", got)
+	}
+	if got := RemoteURL(context.Background(), t.TempDir()); got != "" {
+		t.Errorf("RemoteURL outside a repository = %q", got)
+	}
+}
+
+func TestInitFailsForAMissingDirectory(t *testing.T) {
+	needGit(t)
+	if err := Init(context.Background(), filepath.Join(t.TempDir(), "missing")); err == nil {
+		t.Error("Init of a missing directory succeeded")
+	}
+}
