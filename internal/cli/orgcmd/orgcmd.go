@@ -23,9 +23,8 @@ import (
 
 // Options holds what internal/cli injects into the org commands.
 type Options struct {
-	// Catalog finds the catalog data of the configured org source for search
-	// and recommend when the working directory is not an org data repo. Nil
-	// means there is none.
+	// Catalog finds catalog data for search and recommend when the working
+	// directory is not an org data repo. Nil means there is no fallback.
 	Catalog clicore.CatalogProvider
 }
 
@@ -50,8 +49,9 @@ func CommandsWith(get clicore.Provider, opt Options) []*cobra.Command {
 
 // repo is an opened org data repo.
 type repo struct {
-	root string
-	cfg  *orgconfig.Config
+	root    string
+	cfg     *orgconfig.Config
+	catalog *catalog.Catalog
 }
 
 // openRepo finds the root (--root or the working directory) and loads
@@ -97,12 +97,10 @@ func (r *repo) isOrgRepo() bool {
 
 // openCatalogRepo is openRepo for the commands that only read the catalog
 // (search, recommend). An explicit --root, or a working directory that is an
-// org data repo, is used as before. Otherwise the catalog data of the user's
-// configured org source is used (see clicore.CatalogProvider), so a developer
-// whose organization is reached through a git source needs no checkout; src
-// then describes it. When there is nothing to fall back on, the working
-// directory repo is returned and the caller reports "not an org data repo"
-// with a hint that names the options.
+// org data repo, is used as before. Otherwise the user's configured remote
+// catalog or org source is used (see clicore.CatalogProvider). When there is
+// nothing to fall back on, the working directory repo is returned and the
+// caller reports "not an org data repo" with a hint that names the options.
 func openCatalogRepo(ctx context.Context, c *clicore.Context, opt Options) (r *repo, src string, err error) {
 	r, err = openRepo(c)
 	if err != nil || c.G.Root != "" || r.isOrgRepo() || opt.Catalog == nil {
@@ -115,6 +113,9 @@ func openCatalogRepo(ctx context.Context, c *clicore.Context, opt Options) (r *r
 		}
 		return nil, "", fmt.Errorf("reading the configured org source: %w", perr)
 	}
+	if cd.Catalog != nil {
+		return &repo{catalog: cd.Catalog}, cd.Source, nil
+	}
 	cfg, err := orgconfig.Load(cd.Root)
 	if err != nil {
 		return nil, "", fmt.Errorf("loading the org config of %s: %w", ui.SanitizeLine(cd.Source), err)
@@ -122,13 +123,17 @@ func openCatalogRepo(ctx context.Context, c *clicore.Context, opt Options) (r *r
 	return &repo{root: cd.Root, cfg: cfg}, cd.Source, nil
 }
 
-// noteSource tells, on stderr and only in text mode, which configured org
-// source a catalog command read when it did not read a directory.
+// noteSource tells, on stderr and only in text mode, which configured source
+// a catalog command read when it did not read the working directory.
 func noteSource(c *clicore.Context, src string) {
 	if src == "" || c.Mode.JSON {
 		return
 	}
-	fmt.Fprintf(errw(c), "note: reading the cached catalog of %s\n", ui.SanitizeLine(src))
+	if strings.HasPrefix(src, "remote catalog ") {
+		fmt.Fprintf(errw(c), "note: retrieving %s\n", ui.SanitizeLine(src))
+	} else {
+		fmt.Fprintf(errw(c), "note: reading the cached catalog of %s\n", ui.SanitizeLine(src))
+	}
 }
 
 // notOrgRepo wraps the "not an org data repo" failure of a catalog command
@@ -139,7 +144,7 @@ func notOrgRepo(err error, withSource bool, extra ...string) error {
 	}
 	hint := "run it inside an org data repo, or pass --root <dir>" + strings.Join(extra, "")
 	if withSource {
-		hint += "; or configure the organization's git source in config.toml and run \"ccshelf ls\" once so that its catalog is cached"
+		hint += "; or configure catalog.remote_url in config.toml, or configure the organization's git source and run \"ccshelf ls\" once"
 	}
 	return withHintErr(err, hint)
 }

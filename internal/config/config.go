@@ -63,11 +63,17 @@ func InteractiveModes() []string { return []string{InteractiveAuto, InteractiveN
 type Config struct {
 	DefaultAccount string             `toml:"default_account,omitempty"`
 	Sources        []SourceConfig     `toml:"sources,omitempty"`
+	Catalog        Catalog            `toml:"catalog"`
 	Trust          Trust              `toml:"trust"`
 	Accounts       map[string]Account `toml:"accounts,omitempty"`
 	Claude         Claude             `toml:"claude"`
 	UI             UI                 `toml:"ui"`
 	Update         Update             `toml:"update,omitempty"`
+}
+
+// Catalog configures optional remote catalog retrieval for discovery commands.
+type Catalog struct {
+	RemoteURL string `toml:"remote_url,omitempty"`
 }
 
 // SourceConfig describes one profile source. Sources are listed most specific
@@ -311,6 +317,17 @@ func (c *Config) Validate() error {
 		add("claude.path: contains a NUL byte")
 	}
 	c.Update.validate(add)
+	if c.Catalog.RemoteURL != "" {
+		u, err := url.Parse(c.Catalog.RemoteURL)
+		switch {
+		case err != nil:
+			add("catalog.remote_url: %v", err)
+		case u.Scheme != "https" || u.Host == "":
+			add("catalog.remote_url: must be an absolute HTTPS URL")
+		case u.User != nil || u.RawQuery != "" || u.Fragment != "":
+			add("catalog.remote_url: credentials, query strings and fragments are not allowed")
+		}
+	}
 
 	for i, s := range c.Sources {
 		p := fmt.Sprintf("sources[%d]", i)

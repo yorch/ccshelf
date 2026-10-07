@@ -14,17 +14,15 @@ import (
 )
 
 // CatalogProvider returns the launcher's implementation of
-// clicore.CatalogProvider: it finds the catalog data of the org data repo that
-// the user's configured sources point at, for search and recommend run outside
-// an org data repo checkout. Only opt.NewGit is used.
+// clicore.CatalogProvider: it finds catalog data for search and recommend
+// outside an org data repo checkout. An explicit catalog.remote_url is fetched
+// first; otherwise configured sources are read from disk. Only opt.NewGit is
+// used for profile sources.
 //
-// It never touches the network. A dir source is used as it is. A git source is
-// used from its verified cache, and only at a commit that was accepted: the
-// one a full-SHA ref names, else a commit the trust lockfile recorded for its
-// tag (never merely the newest cached checkout). Sources are tried in the
-// order of the configuration and the first one whose org config and first
-// marketplace file read cleanly wins; a source with nothing usable is skipped.
-// With none left it returns clicore.ErrNoCatalog.
+// Remote catalogs require HTTPS and are size and format checked. Without that
+// setting, a dir source is used as it is and a git source is used from its
+// verified cache, at a commit that was accepted by the trust model. Sources
+// are tried in order; with none usable this returns clicore.ErrNoCatalog.
 func CatalogProvider(opt Options) clicore.CatalogProvider {
 	l := &launcher{opt: opt}
 	return l.catalogData
@@ -40,6 +38,9 @@ func (l *launcher) catalogData(ctx context.Context, cc *clicore.Context) (*clico
 		return nil, fmt.Errorf("working directory: %w", err)
 	}
 	s := &session{l: l, cc: cc, cfg: cfg, cwd: cwd, gitIDs: map[string]bool{}}
+	if cfg.Catalog.RemoteURL != "" {
+		return l.fetchCatalog(ctx, cfg.Catalog.RemoteURL)
+	}
 	newGit := l.opt.NewGit
 	if newGit == nil {
 		newGit = defaultGit

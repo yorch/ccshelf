@@ -27,11 +27,19 @@
       "properties": {
         "config_dir": { "type": "string", "minLength": 1 }
       }
+    },
+    "catalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "remote_url": { "type": "string", "format": "uri", "description": "HTTPS URL of a published catalog.json. Credentials, query strings and fragments are not allowed." }
+      }
     }
   },
   "properties": {
     "default_account": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,31}$" },
     "sources": { "type": "array", "items": { "$ref": "#/$defs/source" } },
+    "catalog": { "$ref": "#/$defs/catalog" },
     "trust": {
       "type": "object",
       "additionalProperties": false,

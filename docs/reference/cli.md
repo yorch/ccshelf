@@ -47,7 +47,7 @@ Scripts can rely on these; they never change meaning.
 | [`ccshelf show`](#ccshelf-show) | Show a resolved profile: parents merged, MCP servers, closure |
 | [`ccshelf trust`](#ccshelf-trust) | Review and trust a shared profile (or a project folder) |
 | [`ccshelf doctor`](#ccshelf-doctor) | Check the org's catalog and profiles for overlap, staleness and policy conflicts |
-| [`ccshelf recommend`](#ccshelf-recommend) | Suggest plugins and profiles for a project directory (rule based, offline) |
+| [`ccshelf recommend`](#ccshelf-recommend) | Suggest plugins and profiles for a project directory (rule based) |
 | [`ccshelf search`](#ccshelf-search) | Search the plugin catalog of the org data repo |
 | [`ccshelf catalog`](#ccshelf-catalog) | Set up the org data repo and build its plugin catalog |
 | [`ccshelf catalog build`](#ccshelf-catalog-build) | Write catalog.json, CATALOG.md and the static site |
@@ -269,9 +269,9 @@ ccshelf doctor [flags]
 
 ## ccshelf recommend
 
-Look at a project directory (--dir, default the current directory) and suggest plugins and profiles of the org data repo (--root, default the current directory) whose relevance signals and when_to_use text match it. The rules are deterministic; there is no model call and no network access. Only file names and a few small manifest files of the project are read.
+Look at a project directory (--dir, default the current directory) and suggest plugins and profiles of the org data repo (--root, default the current directory) whose relevance signals and when_to_use text match it. The rules are deterministic and there is no model call. Only file names and a few small manifest files of the project are read.
 
-Outside an org data repo (the marketplace file of ccshelf.toml cannot be read) and without --root, it uses the catalog data of the organization's source from config.toml, as search does (verified local cache, never a fetch). When no such catalog is available it fails with exit 1, like lint and compile.
+Outside an org data repo (the marketplace file of ccshelf.toml cannot be read) and without --root, [catalog].remote_url in the user config is retrieved over HTTPS when set; otherwise it uses the catalog data of the organization's source from its local directory or verified git cache. Remote JSON can recommend profiles; plugin recommendations need marketplace relevance rules from the org data repo.
 
 **Usage**
 
@@ -289,9 +289,9 @@ ccshelf recommend [flags]
 
 ## ccshelf search
 
-Search the catalog of the org data repo (--root, default the current directory) locally and offline. Every word of the query must match a field (name, display name, tags, category, when_to_use, description or owner); better matches come first, ties by name.
+Search the catalog of the org data repo (--root, default the current directory). Every word of the query must match a field (name, display name, tags, category, when_to_use, description or owner); better matches come first, ties by name.
 
-Outside an org data repo (the marketplace file of ccshelf.toml cannot be read) and without --root, it reads the catalog data of the organization's source from config.toml instead, so a developer who reaches the org through a git source needs no checkout: a dir source as it is, a git source from its verified local cache (the commit pinned by the trust lockfile, else the newest cached one; it never fetches, so run "ccshelf ls" or "ccshelf trust" once). The note on stderr says which one was used. When no such catalog is available it fails with exit 1, like lint and compile, instead of reporting "no match". A query that matches nothing in a real catalog is not an error.
+Outside an org data repo and without --root, [catalog].remote_url in the user config takes precedence and retrieves catalog.json over HTTPS for this search. Otherwise search reads a configured org source from its local directory or verified git cache. A query that matches nothing in a real catalog is not an error.
 
 **Usage**
 
