@@ -277,7 +277,8 @@ jobs:
         with:
           persist-credentials: false
       - name: The job-selection classifier's own tests
-        run: python3 -I scripts/test_ci_changes.py
+        # discover puts scripts/ on sys.path; `python3 -I file.py` does not (-I implies -P).
+        run: python3 -I -m unittest discover -s scripts -p 'test_ci_changes.py'
       - name: The generated report matches the Markdown
         run: python3 docs/build_report.py --check
       - name: Relative Markdown links resolve
