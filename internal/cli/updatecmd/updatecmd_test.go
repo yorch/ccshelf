@@ -455,6 +455,24 @@ func TestElevatedAdvice(t *testing.T) {
 			"run: sudo /usr/local/bin/ccshelf update --rollback --yes",
 		},
 		{
+			"unix with every consent flag", "linux", "/usr/local/bin",
+			flags{force: true, allowDowngrade: true, requireSignature: true, version: "v0.1.0"},
+			&update.Plan{Exe: "/usr/local/bin/ccshelf", Target: update.Release{Tag: "v0.1.0"}},
+			"sudo /usr/local/bin/ccshelf update --yes --version v0.1.0 --force --allow-downgrade --require-signature",
+		},
+		{
+			"unix flags without a named version", "linux", "/usr/local/bin",
+			flags{force: true, requireSignature: true},
+			&update.Plan{Exe: "/usr/local/bin/ccshelf", Target: update.Release{Tag: "v0.2.0"}},
+			"update --yes --version v0.2.0 --force --require-signature",
+		},
+		{
+			"unix rollback forced", "linux", "/usr/local/bin",
+			flags{rollback: true, force: true},
+			nil,
+			"sudo /usr/local/bin/ccshelf update --rollback --yes --force",
+		},
+		{
 			"windows", "windows", `C:\Program Files\ccshelf`,
 			flags{},
 			&update.Plan{Exe: `C:\Program Files\ccshelf\ccshelf.exe`, Target: update.Release{Tag: "v0.2.0"}},
@@ -623,4 +641,70 @@ func TestRequireSignatureIsCheckedFirst(t *testing.T) {
 		h.publish("v0.2.0")
 		h.mustRun("update", "--check", "--require-signature")
 	})
+}
+
+// The command printed after an interactive confirmation must do the same thing
+// when replayed: every flag that widened what the update may do is repeated.
+func TestEquivalentCommandReplays(t *testing.T) {
+	replay := func(t *testing.T, h *harness, printed string) int {
+		t.Helper()
+		var args []string
+		for _, l := range strings.Split(printed, "\n") {
+			if rest, ok := strings.CutPrefix(l, "Equivalent: ccshelf "); ok {
+				args = strings.Fields(rest)
+			}
+		}
+		if len(args) == 0 || args[0] != "update" {
+			t.Fatalf("no equivalent command in:\n%s", printed)
+		}
+		h.prompt = ui.NewScripted() // the replay must not need a question
+		return h.run(args...)
+	}
+	for name, tc := range map[string]struct {
+		cur     string
+		publish []string
+		args    []string
+		want    []string // flags that must appear in the printed command
+		after   string
+	}{
+		"force on a dev build": {"dev", []string{"v0.2.0"}, []string{"update", "--force"}, []string{"--force", "--version v0.2.0", "--yes"}, "0.2.0"},
+		"allow-downgrade":      {"0.3.0", []string{"v0.2.0", "v0.3.0"}, []string{"update", "--version", "v0.2.0", "--allow-downgrade"}, []string{"--allow-downgrade"}, "0.2.0"},
+		"force and downgrade":  {"0.3.0", []string{"v0.2.0"}, []string{"update", "--force", "--allow-downgrade", "--version", "v0.2.0"}, []string{"--force", "--allow-downgrade"}, "0.2.0"},
+		"require-signature":    {"0.1.0", []string{"v0.2.0"}, []string{"update", "--require-signature"}, []string{"--require-signature"}, "0.2.0"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := newHarness(t, tc.cur)
+			signed := strings.Contains(strings.Join(tc.args, " "), "--require-signature")
+			if signed {
+				h.opt.LookCosign = func() (string, bool) { return "/fake/cosign", true }
+				h.opt.VerifyCosign = func(context.Context, string, []string, string, string, string, string) error { return nil }
+			}
+			for _, v := range tc.publish {
+				r := h.publish(v)
+				if signed {
+					r.Assets["checksums.txt.sigstore.json"] = []byte("{}")
+				}
+			}
+			h.prompt = ui.NewScripted(true)
+			h.mustRun(tc.args...)
+			printed := h.errb.String()
+			for _, w := range tc.want {
+				has(t, printed, w)
+			}
+			if h.exeContent() != string(fakeBinary(tc.after)) {
+				t.Fatalf("first run: exe = %q", h.exeContent())
+			}
+			// Put the original binary back and replay the printed command.
+			if err := os.WriteFile(h.exe, fakeBinary(tc.cur), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			_ = os.Remove(h.exe + ".old")
+			if code := replay(t, h, printed); code != 0 {
+				t.Fatalf("replayed command exited %d\n%s", code, h.errb)
+			}
+			if h.exeContent() != string(fakeBinary(tc.after)) {
+				t.Errorf("replay: exe = %q, want version %s", h.exeContent(), tc.after)
+			}
+		})
+	}
 }

@@ -96,6 +96,16 @@ func TestRollbackOfAnUnverifiableBackup(t *testing.T) {
 		t.Errorf("exit = %d, want 2", code)
 	}
 	has(t, h.errb.String(), "--yes")
+	// --yes skips the confirmation only: an unchecked backup also needs --force.
+	for _, args := range [][]string{{"update", "--rollback", "--yes"}, {"--json", "update", "--rollback", "--yes"}} {
+		if code := h.run(args...); code != ui.ExitFailure {
+			t.Errorf("%v: exit = %d, want 1", args, code)
+		}
+		has(t, h.errb.String(), "--force")
+		if h.exeContent() != string(fakeBinary("0.2.0")) {
+			t.Fatalf("%v restored an unverifiable backup with --yes alone", args)
+		}
+	}
 	// A terminal must type "yes".
 	h.prompt = ui.NewScripted("no")
 	h.mustRun("update", "--rollback")
@@ -108,6 +118,18 @@ func TestRollbackOfAnUnverifiableBackup(t *testing.T) {
 	h.mustRun("update", "--rollback")
 	if h.exeContent() != "from another platform" {
 		t.Errorf("exe = %q", h.exeContent())
+	}
+	// The command printed after that confirmation must replay: it has --force.
+	has(t, h.errb.String(), "Equivalent: ccshelf update --rollback --force --yes")
+	// --yes with --force is the explicit way.
+	h3 := newHarness(t, "0.2.0")
+	if err := os.WriteFile(h3.exe+".old", []byte("from another platform"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	h3.opt.RunVersion = h.opt.RunVersion
+	h3.mustRun("update", "--rollback", "--yes", "--force")
+	if h3.exeContent() != "from another platform" {
+		t.Errorf("--yes --force did not restore: %q", h3.exeContent())
 	}
 	// A backup that runs but is not ccshelf is refused whatever the flags.
 	h2 := newHarness(t, "0.2.0")

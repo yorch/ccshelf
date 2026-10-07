@@ -349,7 +349,7 @@ func (c *command) run(ctx context.Context, cc *clicore.Context, f *flags) error 
 		return c.printDryRun(cc, u, plan, rep)
 	}
 	if !f.yes {
-		ok, err := c.confirm(ctx, cc, plan)
+		ok, err := c.confirm(ctx, cc, plan, f)
 		if err != nil {
 			return err
 		}
@@ -381,6 +381,23 @@ func (c *command) run(ctx context.Context, cc *clicore.Context, f *flags) error 
 	}
 	info(cc, "the previous version is kept as %s; undo with: ccshelf update --rollback", filepath.Base(res.Backup))
 	return nil
+}
+
+// consentFlags are the non-default flags that change what an update is allowed
+// to do; a printed command or a sudo line must repeat them to behave the same
+// when replayed (--version carries --prerelease's effect).
+func (f *flags) consentFlags() []string {
+	var out []string
+	if f.force {
+		out = append(out, "--force")
+	}
+	if f.allowDowngrade {
+		out = append(out, "--allow-downgrade")
+	}
+	if f.requireSignature {
+		out = append(out, "--require-signature")
+	}
+	return out
 }
 
 func checkFlags(f *flags) error {
@@ -480,7 +497,7 @@ func (c *command) printDryRun(cc *clicore.Context, u *update.Updater, p *update.
 
 // confirm shows current -> new and asks. Without a terminal the missing flag is
 // named (exit 2). In a terminal the equivalent flag command is printed (R6).
-func (c *command) confirm(ctx context.Context, cc *clicore.Context, p *update.Plan) (bool, error) {
+func (c *command) confirm(ctx context.Context, cc *clicore.Context, p *update.Plan, f *flags) (bool, error) {
 	if !canPrompt(cc) {
 		return false, ui.MissingFlags("confirm the update", "--yes")
 	}
@@ -494,6 +511,9 @@ func (c *command) confirm(ctx context.Context, cc *clicore.Context, p *update.Pl
 	if ok {
 		rec := ui.NewRecorder("update")
 		rec.Flag("--version", p.Target.Tag)
+		for _, w := range f.consentFlags() {
+			rec.Bool(w)
+		}
 		rec.Bool("--yes")
 		if err := rec.Print(cc.Streams.Err, cc.GOOS); err != nil {
 			status(cc, ui.LevelWarn, "cannot print the equivalent command: %v", err)
@@ -519,6 +539,12 @@ func (c *command) rollback(ctx context.Context, cc *clicore.Context, u *update.U
 		line(cc, "dry run: would restore %s (%s) over %s; nothing was changed", filepath.Base(rp.Backup), orUnknown(rp.BackupVersion), rp.Exe)
 		return nil
 	}
+	if f.yes && !rp.Verified && !f.force {
+		// --yes skips the confirmation only: a backup that could not be
+		// checked is a risk that needs its own explicit flag.
+		return ui.Failure(withHint(fmt.Errorf("%s could not be checked (%v), so --yes alone will not restore it", filepath.Base(rp.Backup), rp.VerifyErr),
+			"if you are sure it is the previous ccshelf, add --force: ccshelf update --rollback --yes --force"))
+	}
 	if !f.yes {
 		if !canPrompt(cc) {
 			return ui.MissingFlags("confirm the rollback", "--yes")
@@ -540,11 +566,16 @@ func (c *command) rollback(ctx context.Context, cc *clicore.Context, u *update.U
 		}
 		rec := ui.NewRecorder("update")
 		rec.Bool("--rollback")
+		if f.force || !rp.Verified {
+			rec.Bool("--force") // an unchecked backup is only restored with --force
+		}
 		rec.Bool("--yes")
 		_ = rec.Print(cc.Streams.Err, cc.GOOS)
 	}
 	if err := u.Rollback(rp); err != nil {
-		return mapError(cc, err, f, nil)
+		replay := *f // the sudo line must restore an unchecked backup the same way
+		replay.force = replay.force || !rp.Verified
+		return mapError(cc, err, &replay, nil)
 	}
 	if cc.Mode.JSON {
 		return ui.WriteJSON(cc.Streams.Out, "update", rep)
@@ -608,10 +639,17 @@ func elevatedAdvice(cc *clicore.Context, dir string, f *flags, p *update.Plan) s
 	switch {
 	case f.rollback:
 		words = []string{exe, "update", "--rollback", "--yes"}
+		if f.force {
+			words = append(words, "--force")
+		}
 	case f.version != "":
 		words = append(words, "--version", f.version)
+		words = append(words, f.consentFlags()...)
 	case p != nil:
 		words = append(words, "--version", p.Target.Tag)
+		words = append(words, f.consentFlags()...)
+	default:
+		words = append(words, f.consentFlags()...)
 	}
 	cmdline, err := ui.Join(sh, words)
 	if err != nil {
