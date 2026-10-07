@@ -23,6 +23,7 @@ Guidance for AI coding agents (and humans) working in this repo, the public **to
 - Profiles share auth, history and memory (no `CLAUDE_CONFIG_DIR` by default). Accounts are a separate axis (see `docs/design/launcher.md`).
 
 ## Working rules
+- **Worktrees:** Always do repository work in a dedicated Git worktree and task branch; do not edit the primary checkout. Use the primary checkout only when the user explicitly asks you not to use a worktree. Reuse a suitable existing task worktree when possible; otherwise create one from the appropriate current base branch. Do not remove other worktrees or branches unless asked.
 - **Never modify the user's real Claude Code config** (`~/.claude/`, `~/.claude.json`, installed plugins) from experiments. Do not run `claude plugin install/uninstall/enable/disable` or `marketplace add/remove` against the default config. Use a scratch directory as cwd. For experiments that need isolation, ask the user first (a second `CLAUDE_CONFIG_DIR` needs an interactive login only the user can do).
 - Generated files must be **content-addressed** and written atomically in the launcher's own cache dir. The launcher must never write shared Claude Code state.
 - Never use symlinks, `$TMPDIR` or shell aliases as a design assumption: they break on Windows. Use `exec` on Unix and spawn-and-wait only on Windows (spawn-and-wait on Unix breaks job control).
@@ -55,7 +56,7 @@ Guidance for AI coding agents (and humans) working in this repo, the public **to
 - No telemetry. No network calls except those the user asked for (git fetch of configured sources, and `ccshelf update`; the opt-in `[update] mode` check is off by default and documented in `docs/design/update.md`).
 
 ## Commits and pull requests
-Both commit messages **and pull request titles** use [Conventional Commits](https://www.conventionalcommits.org/). Maintainers squash-merge, so the PR title becomes the commit on `main`, and the release changelog is generated from those messages.
+Every commit message and pull request title **must** use [Conventional Commits](https://www.conventionalcommits.org/); there are no exceptions. Maintainers squash-merge, so the PR title becomes the commit on `main`, and the release changelog is generated from those messages.
 
 - **Format:** `type(scope)!: description`. The scope and the `!` are optional.
   - Types: `feat` (new behavior), `fix` (a bug), `docs`, `test`, `ci` (workflows and release tooling), `build`, `refactor`, `perf`, `chore`, `revert`.
