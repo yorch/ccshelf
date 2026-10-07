@@ -312,10 +312,10 @@ func (u *Updater) Apply(ctx context.Context, p *Plan, req Request, progress func
 	if err := os.MkdirAll(u.StateDir, 0o700); err != nil {
 		return nil, newErr(KindFailure, "", err, "preparing the cache directory")
 	}
-	release, err := AcquireLock(u.StateDir, u.now)
+	release, err := AcquireLock(u.StateDir)
 	if err != nil {
 		if errors.Is(err, ErrLocked) {
-			return nil, newErr(KindLocked, "wait for it to finish; a lock left by a crash expires after 10 minutes", err, "another ccshelf update is already running")
+			return nil, newErr(KindLocked, "wait for it to finish (the lock is released automatically if it was killed)", err, "another ccshelf update is already running")
 		}
 		return nil, newErr(KindFailure, "", err, "locking the update")
 	}
@@ -544,7 +544,7 @@ func (u *Updater) Rollback(rp *RollbackPlan) error {
 	if err := os.MkdirAll(u.StateDir, 0o700); err != nil {
 		return newErr(KindFailure, "", err, "preparing the cache directory")
 	}
-	release, err := AcquireLock(u.StateDir, u.now)
+	release, err := AcquireLock(u.StateDir)
 	if err != nil {
 		if errors.Is(err, ErrLocked) {
 			return newErr(KindLocked, "wait for it to finish", err, "another ccshelf update is already running")

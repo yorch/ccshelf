@@ -51,10 +51,14 @@ func (fx *fixture) noLeftovers() {
 		if strings.HasPrefix(e.Name(), "update-") && e.IsDir() {
 			fx.t.Errorf("leftover download directory %s", e.Name())
 		}
-		if e.Name() == LockName {
-			fx.t.Error("the lock was not released")
-		}
 	}
+	// The lock file stays, but the lock itself must be free.
+	rel, err := AcquireLock(fx.state)
+	if err != nil {
+		fx.t.Errorf("the lock was not released: %v", err)
+		return
+	}
+	rel()
 }
 
 func mustKind(t *testing.T, err error, want Kind) *Error {
@@ -653,7 +657,7 @@ func TestConcurrentUpdatesNeverReplaceTwice(t *testing.T) {
 	<-inDownload
 	_, err := fx.apply(Request{})
 	e := mustKind(t, err, KindLocked)
-	if !strings.Contains(e.Hint(), "10 minutes") {
+	if !strings.Contains(e.Hint(), "released automatically") {
 		t.Errorf("hint = %q", e.Hint())
 	}
 	if readFile(t, fx.exe) != string(fakeBinary("0.1.0")) {
@@ -668,7 +672,7 @@ func TestConcurrentUpdatesNeverReplaceTwice(t *testing.T) {
 	}
 	fx.noLeftovers()
 	// A rollback cannot run while an update holds the lock either.
-	rel, _ := AcquireLock(fx.state, time.Now)
+	rel, _ := AcquireLock(fx.state)
 	defer rel()
 	rp := &RollbackPlan{Exe: fx.exe, Backup: fx.exe + ".old"}
 	mustKind(t, fx.u.Rollback(rp), KindLocked)

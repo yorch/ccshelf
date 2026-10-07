@@ -412,7 +412,7 @@ func TestAutoInstall(t *testing.T) {
 	t.Run("another update running: silent", func(t *testing.T) {
 		fx := newFixture(t, "0.1.0")
 		fx.release("v0.1.1", false)
-		rel, _ := AcquireLock(fx.state, time.Now)
+		rel, _ := AcquireLock(fx.state)
 		defer rel()
 		var s said
 		fx.u.Auto(ctx, install(true), s.say)

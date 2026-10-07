@@ -25,6 +25,9 @@ import (
 // under the name cosign (a copy of the binary, see fakeCosignDir), it behaves
 // like "cosign verify-blob" according to cosign.json next to it.
 func TestMain(m *testing.M) {
+	if dir := os.Getenv(lockHelperEnv); dir != "" {
+		os.Exit(lockHelper(dir))
+	}
 	base := strings.TrimSuffix(strings.ToLower(filepath.Base(os.Args[0])), ".exe")
 	switch base {
 	case "cosign":
@@ -34,6 +37,9 @@ func TestMain(m *testing.M) {
 	}
 	os.Exit(m.Run())
 }
+
+// lockHelperEnv makes the test binary act as a lock-racing child process.
+const lockHelperEnv = "CCSHELF_TEST_LOCK_HELPER"
 
 type fakeCosignConfig struct {
 	Identity   string `json:"identity"`
