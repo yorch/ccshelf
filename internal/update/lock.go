@@ -42,7 +42,7 @@ func AcquireLock(dir string) (release func(), err error) {
 		}
 		return nil, fmt.Errorf("locking %s: %w", path, err)
 	}
-	// Who holds it, for a person reading the file; the lock is the kernel's.
+	// The PID is best-effort diagnostic metadata; the kernel lock is authoritative.
 	_ = f.Truncate(0)
 	_, _ = f.WriteAt([]byte(strconv.Itoa(os.Getpid())+"\n"), 0)
 	var once sync.Once
