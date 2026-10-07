@@ -158,8 +158,8 @@ func TestNewWithFlags(t *testing.T) {
 func TestNewWizard(t *testing.T) {
 	h := newHarness(t)
 	h.useOrg(h.exampleOrg())
-	// name, description, parents (base = index 0), plugins, skills; there is no personal MCP registry to pick from.
-	sc := ui.NewScripted("wiz", "Wizard profile", []int{0}, []int{0}, "legacy-helper, other")
+	// name, location, description, parents, plugins, skills, creation confirmation.
+	sc := ui.NewScripted("wiz", 0, "Wizard profile", []int{0}, []int{0}, "legacy-helper, other", true)
 	h.prompt = sc
 	if code := h.run("new"); code != 0 {
 		t.Fatalf("code %d\n%s", code, h.errb)
@@ -254,7 +254,7 @@ func TestInit(t *testing.T) {
 
 func TestInitWizardAndAccount(t *testing.T) {
 	h := newHarness(t)
-	sc := ui.NewScripted("https://example.com/acme/data.git", "v1.0.0", "profiles", "", "work", true)
+	sc := ui.NewScripted("https://example.com/acme/data.git", "v1.0.0", "profiles", "", "work", true, true)
 	h.prompt = sc
 	if code := h.run("init"); code != 0 {
 		t.Fatalf("code %d\n%s", code, h.errb)
@@ -545,14 +545,17 @@ func TestInitUpdateMode(t *testing.T) {
 	// The wizard asks once; the default is no, and the answer is recorded.
 	for answer, want := range map[bool]string{true: "notify", false: "off"} {
 		h = newHarness(t)
-		sc = ui.NewScripted("", "", "", answer) // no repo, no dir, no account, then the update question
+		sc = ui.NewScripted("", "", "", answer, true) // no repo, no dir, no account, the update question, then the write confirmation
 		h.prompt = sc
 		h.mustRun("init")
 		if err := sc.Done(); err != nil {
 			t.Error(err)
 		}
-		if !strings.Contains(sc.Asked[len(sc.Asked)-1], "Check for updates once a day") {
+		if !strings.Contains(sc.Asked[len(sc.Asked)-2], "Check for updates once a day") {
 			t.Errorf("asked %v", sc.Asked)
+		}
+		if !strings.Contains(sc.Asked[len(sc.Asked)-1], "Write this configuration?") {
+			t.Errorf("the last question must be the write confirmation: %v", sc.Asked)
 		}
 		if got := read(h); !strings.Contains(got, want) {
 			t.Errorf("answer %v: config:\n%s", answer, got)
@@ -565,7 +568,7 @@ func TestInitUpdateMode(t *testing.T) {
 	// --force keeps an existing [update] section and does not ask again.
 	h = newHarness(t)
 	h.mustRun("init", "--update-mode", "install")
-	sc = ui.NewScripted("", "", "") // only the three profile questions
+	sc = ui.NewScripted("", "", "", true) // only the three profile questions, then the write confirmation
 	h.prompt = sc
 	h.mustRun("init", "--force")
 	if err := sc.Done(); err != nil {
@@ -574,7 +577,9 @@ func TestInitUpdateMode(t *testing.T) {
 	if got := read(h); !strings.Contains(got, "install") {
 		t.Errorf("--force dropped the update mode:\n%s", got)
 	}
-	if strings.Contains(h.errb.String(), "--update-mode") {
-		t.Errorf("nothing about the update mode was chosen interactively:\n%s", h.errb)
+	// The kept mode is replayed explicitly, plus the writing-only --yes and
+	// --force, so the equivalent command runs without reopening the wizard.
+	if eq := h.errb.String(); !strings.Contains(eq, "--update-mode install") || !strings.Contains(eq, "--yes") || !strings.Contains(eq, "--force") {
+		t.Errorf("the equivalent command must replay the kept update mode, --yes and --force:\n%s", h.errb)
 	}
 }

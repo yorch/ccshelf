@@ -20,7 +20,7 @@ type initFlags struct {
 	gitURL, ref, path, dir  string
 	accountName, accountDir string
 	updateMode              string
-	force                   bool
+	force, yes              bool
 }
 
 func (l *launcher) initCmd() *cobra.Command {
@@ -31,13 +31,15 @@ func (l *launcher) initCmd() *cobra.Command {
 		Long: `Create config.toml and your personal profiles directory. With --git-url the org
 data repo becomes a profile source (pin it with --ref: a tag or a full commit
 id). With --dir another local profiles directory becomes a source. In a
-terminal, anything you did not pass as a flag is asked for, and the equivalent
-flag command is printed at the end. Nothing is fetched here: profiles from a
-shared source are fetched, and need your trust, when you first use them.
+terminal, running without source, account or update values starts the full
+setup wizard. It shows a summary and asks before writing (default no). Partial
+flag runs do not prompt. --yes confirms writing only, never trust. The wizard
+prints an equivalent flag command at the end. Nothing is fetched here: profiles
+from a shared source are fetched, and need your trust, when you first use them.
 
 Automatic updates are off unless you turn them on: --update-mode notify checks
 for a newer release once a day and prints one line when there is one, install
-also installs it (same major version only). In a terminal you are asked once.`,
+also installs it (same major version only). The full wizard asks once.`,
 		Example: `  ccshelf init
   ccshelf init --git-url git@ghe.example.com:acme/claude-marketplace.git --ref v2026.10.1
   ccshelf init --account-name work`,
@@ -49,8 +51,9 @@ also installs it (same major version only). In a terminal you are asked once.`,
 	c.Flags().StringVar(&f.dir, "dir", "", "absolute directory of profiles to add as a dir source")
 	c.Flags().StringVar(&f.accountName, "account-name", "", "also create an account with this name (see: ccshelf account add)")
 	c.Flags().StringVar(&f.accountDir, "account-dir", "", "directory of that account (default ~/.claude-<name>)")
-	c.Flags().StringVar(&f.updateMode, "update-mode", "", "automatic update mode: off, notify or install (default: asked in a terminal, otherwise off)")
+	c.Flags().StringVar(&f.updateMode, "update-mode", "", "automatic update mode: off, notify or install (default: asked in the full wizard, otherwise off)")
 	c.Flags().BoolVar(&f.force, "force", false, "replace an existing configuration file")
+	c.Flags().BoolVar(&f.yes, "yes", false, "confirm writing in the full wizard (never accepts trust)")
 	c.RunE = l.do(func(ctx context.Context, cc *clicore.Context, cmd *cobra.Command, _ []string) error {
 		return l.initConfig(ctx, cc, &f, cmd.Flags().Changed("path"))
 	})
@@ -107,12 +110,43 @@ func (l *launcher) initConfig(ctx context.Context, cc *clicore.Context, f *initF
 	if err := cfg.Validate(); err != nil {
 		return ui.Usage(withHint(fmt.Errorf("configuration: %w", err), "a git source needs --ref (a tag or full commit id) unless trust.require_pin is off"))
 	}
-	if err := config.Save(path, cfg); err != nil {
-		return ui.Failure(fmt.Errorf("writing the configuration: %w", err))
-	}
 	dir, err := profile.PersonalDir()
 	if err != nil {
 		return fmt.Errorf("personal profiles directory: %w", err)
+	}
+	accountDir := ""
+	if f.accountName != "" {
+		if !config.ValidAccountName(f.accountName) {
+			return ui.Usage(fmt.Errorf("invalid --account-name %q", ui.SanitizeLine(f.accountName)))
+		}
+		d := f.accountDir
+		if d == "" {
+			d = "~/.claude-" + f.accountName
+		}
+		accountDir, err = config.ExpandPath(d)
+		if err != nil {
+			return ui.Usage(fmt.Errorf("--account-dir: %w", err))
+		}
+	}
+	if asked {
+		printInitSummary(cc, path, dir, accountDir, cfg, f)
+		if !f.yes {
+			write, err := cc.Prompt.Confirm(ctx, "Write this configuration?", false)
+			if err != nil {
+				return err
+			}
+			if !write {
+				return ui.Failure(errors.New("configuration not written"))
+			}
+		}
+	}
+	// Cancellation must be checked after the final prompt and before any writes,
+	// even if a custom prompter returns success after its context was canceled.
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := config.Save(path, cfg); err != nil {
+		return ui.Failure(fmt.Errorf("writing the configuration: %w", err))
 	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return ui.Failure(fmt.Errorf("creating %s: %w", dir, err))
@@ -121,18 +155,7 @@ func (l *launcher) initConfig(ctx context.Context, cc *clicore.Context, f *initF
 	okf(cc, "personal profiles go in %s", dir)
 
 	if f.accountName != "" {
-		if !config.ValidAccountName(f.accountName) {
-			return ui.Usage(fmt.Errorf("invalid --account-name %q", ui.Sanitize(f.accountName)))
-		}
-		d := f.accountDir
-		if d == "" {
-			d = "~/.claude-" + f.accountName
-		}
-		expanded, err := config.ExpandPath(d)
-		if err != nil {
-			return ui.Usage(fmt.Errorf("--account-dir: %w", err))
-		}
-		plan, err := account.Add(ctx, cfg, f.accountName, expanded, account.Options{Persist: true, ConfigPath: path})
+		plan, err := account.Add(ctx, cfg, f.accountName, accountDir, account.Options{Persist: true, ConfigPath: path})
 		if err != nil {
 			return ui.Failure(fmt.Errorf("adding account %s: %w", f.accountName, err))
 		}
@@ -147,6 +170,9 @@ func (l *launcher) initConfig(ctx context.Context, cc *clicore.Context, f *initF
 	}
 	if asked {
 		rec := ui.NewRecorder("init")
+		if cc.G.ConfigPath != "" {
+			rec.Flag("--config", cc.G.ConfigPath)
+		}
 		if f.gitURL != "" {
 			rec.Flag("--git-url", f.gitURL)
 			rec.Flag("--ref", f.ref)
@@ -163,9 +189,10 @@ func (l *launcher) initConfig(ctx context.Context, cc *clicore.Context, f *initF
 				rec.Flag("--account-dir", f.accountDir)
 			}
 		}
-		if f.updateMode != "" {
-			rec.Flag("--update-mode", f.updateMode)
-		}
+		// Record the effective mode even when kept or off: this makes a wizard
+		// with no optional source/account values replay without starting it again.
+		rec.Flag("--update-mode", cfg.Update.EffectiveMode())
+		rec.Bool("--yes")
 		if f.force {
 			rec.Bool("--force")
 		}
@@ -174,9 +201,40 @@ func (l *launcher) initConfig(ctx context.Context, cc *clicore.Context, f *initF
 	return nil
 }
 
+// printInitSummary writes only single-line sanitized values to the prompt stream.
+func printInitSummary(cc *clicore.Context, path, personalDir, accountDir string, cfg *config.Config, f *initFlags) {
+	line := func(label, value string) { fmt.Fprintf(cc.Streams.Err, "  %s: %s\n", label, ui.SanitizeLine(value)) }
+	fmt.Fprintln(cc.Streams.Err, "Configuration summary (nothing has been written):")
+	line("Config file", path)
+	if f.force {
+		line("Existing config", "replace (--force)")
+	}
+	line("Personal profiles", personalDir)
+	if len(cfg.Sources) == 0 {
+		line("Additional profile sources", "none")
+	}
+	for _, src := range cfg.Sources {
+		if src.Type == config.SourceGit {
+			line("Org data repo", src.URL)
+			line("Pinned ref", src.Ref)
+			line("Profiles folder", src.Path)
+		} else {
+			line("Local profiles", src.Path)
+		}
+	}
+	if f.accountName != "" {
+		line("New account", f.accountName)
+		line("Account directory", accountDir)
+	} else {
+		line("New account", "none (existing Claude account unchanged)")
+	}
+	line("Automatic updates", cfg.Update.EffectiveMode())
+	fmt.Fprintln(cc.Streams.Err, "  No sources are fetched or trusted; shared profiles need separate trust.")
+}
+
 // askInit is the init wizard. It reports whether it asked anything.
 func askInit(ctx context.Context, cc *clicore.Context, f *initFlags, pathGiven, askUpdate bool) (bool, error) {
-	url, err := cc.Prompt.Input(ctx, "Org data repo URL (empty to skip)", "", func(s string) error {
+	url, err := cc.Prompt.Input(ctx, "Org data repo URL (optional; Enter to skip, no fetch or trust here)", "", func(s string) error {
 		if s == "" {
 			return nil
 		}
@@ -205,7 +263,7 @@ func askInit(ctx context.Context, cc *clicore.Context, f *initFlags, pathGiven, 
 		return false, err
 	}
 	f.dir = strings.TrimSpace(dir)
-	name, err := cc.Prompt.Input(ctx, "Account name to create (empty to skip)", "", func(s string) error {
+	name, err := cc.Prompt.Input(ctx, "Separate Claude account name (optional; Enter to keep your existing account)", "", func(s string) error {
 		if s == "" || config.ValidAccountName(s) {
 			return nil
 		}
