@@ -9,6 +9,14 @@
 # release pull request branch and the `pins` job on its branch: pull requests opened
 # with GITHUB_TOKEN do not trigger `pull_request` workflows, and workflow_dispatch is
 # the documented exception. See docs/design/release.md.
+#
+# Job selection (D-44): the `changes` job runs scripts/ci_changes.py, which maps the files a
+# pull request changes to job groups, and the other jobs are gated on its outputs. A skipped
+# job counts as passed in `ci-ok`. The workflow itself has no `paths:` filter, so `ci-ok`
+# always reports. It fails open: a push to main, a merge group and a manual dispatch always
+# run everything (release.yml waits for the push run; the release pull request relies on
+# the dispatched run), and so does a pull request that touches .github/ or a file no rule
+# knows, or whose diff cannot be computed.
 name: ci
 
 on:
@@ -34,8 +42,45 @@ env:
   ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
 
 jobs:
+  # Decides which of the jobs below run. Pull requests only; every other event runs all.
+  # The full history is fetched so `git diff base...head` has a merge base.
+  changes:
+    name: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      go: ${{ steps.classify.outputs.go }}
+      pins: ${{ steps.classify.outputs.pins }}
+      lint: ${{ steps.classify.outputs.lint }}
+      examples: ${{ steps.classify.outputs.examples }}
+      site: ${{ steps.classify.outputs.site }}
+      install: ${{ steps.classify.outputs.install }}
+      mutants: ${{ steps.classify.outputs.mutants }}
+      action: ${{ steps.classify.outputs.action }}
+      matrix: ${{ steps.classify.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # Not conditional on the event: `cond && 0 || 1` always yields 1, because 0 is
+          # falsy in GitHub expressions {R}. A shallow checkout cannot compute the diff, so
+          # every pull request would fail open and nothing would be gated.
+          fetch-depth: 0
+      - name: Classify the changed files
+        id: classify
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: python3 -I scripts/ci_changes.py
+
   lint:
     name: lint
+    needs: changes
+    if: needs.changes.outputs.lint == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -45,9 +90,11 @@ jobs:
         with:
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: needs.changes.outputs.go == 'true'
         with:
           go-version-file: go.mod
       - name: gofmt
+        if: needs.changes.outputs.go == 'true'
         run: |
           unformatted="$(gofmt -l .)"
           if [ -n "$unformatted" ]; then
@@ -56,19 +103,24 @@ jobs:
             exit 1
           fi
       - name: go mod tidy leaves no diff
+        if: needs.changes.outputs.go == 'true'
         run: |
           go mod tidy
           git diff --exit-code -- go.mod go.sum
       - name: go vet
+        if: needs.changes.outputs.go == 'true'
         run: go vet ./...
       - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        if: needs.changes.outputs.go == 'true'
         with:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
       - name: Actions are pinned by full commit SHA
+        if: needs.changes.outputs.pins == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: scripts/check-pins.sh
       - name: actionlint (pinned release binary, checksum verified)
+        if: needs.changes.outputs.pins == 'true'
         run: |
           set -euo pipefail
           archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
@@ -80,8 +132,13 @@ jobs:
       # zizmor (workflow security linter) is optional and not enabled: actionlint plus
       # scripts/check-pins.sh cover the SR5 rules, and CodeQL scans the `actions` language.
 
+  # The matrix comes from the `changes` job: the two experimental arm64 legs run only
+  # off pull requests (push to main, merge group, dispatch). The smoke steps (--version,
+  # --help, shell completions of the built binary) run on every leg.
   test:
     name: test (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     # `experimental` runners: availability of the arm64 hosted runners for this
@@ -92,15 +149,7 @@ jobs:
       contents: read
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - { os: ubuntu-latest, experimental: false, race: true }
-          - { os: ubuntu-24.04-arm, experimental: true, race: true }
-          - { os: macos-latest, experimental: false, race: true } # arm64
-          - { os: macos-15-intel, experimental: false, race: true } # x64
-          - { os: windows-latest, experimental: false, race: true }
-          # The Go race detector does not support windows/arm64.
-          - { os: windows-11-arm, experimental: true, race: false }
+      matrix: ${{ fromJSON(needs.changes.outputs.matrix) }}
     defaults:
       run:
         shell: bash
@@ -133,9 +182,22 @@ jobs:
           path: coverage.out
           if-no-files-found: ignore
           retention-days: 14
+      - name: Build the binary and run --version, --help and shell completions
+        run: |
+          set -euo pipefail
+          go build -trimpath -o "dist/ccshelf$(go env GOEXE)" ./cmd/ccshelf
+          bin="./dist/ccshelf$(go env GOEXE)"
+          "$bin" --version
+          "$bin" --help >/dev/null
+          for shell in bash zsh fish powershell; do
+            out="$("$bin" completion "$shell")"
+            [ -n "$out" ] || { echo "empty completion for $shell" >&2; exit 1; }
+          done
 
   vuln:
     name: govulncheck
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -152,17 +214,17 @@ jobs:
       - name: govulncheck
         run: govulncheck ./...
 
+  # One job cross-compiles all six release targets (a build matrix of six runners cost more
+  # in startup than in compiling). The binaries are uploaded as one artifact; nothing
+  # downloads it (release.yml builds its own).
   build:
-    name: build (${{ matrix.goos }}/${{ matrix.goarch }})
+    name: build (cross-compile)
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        goos: [darwin, linux, windows]
-        goarch: [amd64, arm64]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -170,28 +232,42 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-      - name: Cross-compile
+      - name: Cross-compile the six targets
         env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: "0"
           COMMIT_SHA: ${{ github.sha }}
         run: |
-          set -euo pipefail
-          ext=""
-          if [ "$GOOS" = "windows" ]; then ext=".exe"; fi
+          set -uo pipefail
           pkg="github.com/yorch/ccshelf/internal/version"
-          go build -trimpath \
-            -ldflags "-s -w -X ${pkg}.Version=0.0.0-ci -X ${pkg}.Commit=${COMMIT_SHA}" \
-            -o "dist/ccshelf-${GOOS}-${GOARCH}${ext}" ./cmd/ccshelf
+          failed=""
+          for goos in darwin linux windows; do
+            for goarch in amd64 arm64; do
+              ext=""
+              if [ "$goos" = "windows" ]; then ext=".exe"; fi
+              echo "building ${goos}/${goarch}"
+              if ! GOOS="$goos" GOARCH="$goarch" go build -trimpath \
+                -ldflags "-s -w -X ${pkg}.Version=0.0.0-ci -X ${pkg}.Commit=${COMMIT_SHA}" \
+                -o "dist/ccshelf-${goos}-${goarch}${ext}" ./cmd/ccshelf; then
+                echo "::error::build failed for ${goos}/${goarch}"
+                failed="${failed} ${goos}/${goarch}"
+              fi
+            done
+          done
+          if [ -n "$failed" ]; then
+            echo "Failed targets:${failed}" >&2
+            exit 1
+          fi
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: ccshelf-${{ matrix.goos }}-${{ matrix.goarch }}
+          name: ccshelf-cross-builds
           path: dist/
           retention-days: 7
 
+  # Always runs (it is cheap): the EOL check covers every file in the tree, and the
+  # classifier's own tests must run whenever scripts/ci_changes.py changes.
   docs:
     name: docs
+    needs: changes
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -200,6 +276,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: The job-selection classifier's own tests
+        # discover puts scripts/ on sys.path; `python3 -I file.py` does not (-I implies -P).
+        run: python3 -I -m unittest discover -s scripts -p 'test_ci_changes.py'
       - name: The generated report matches the Markdown
         run: python3 docs/build_report.py --check
       - name: Relative Markdown links resolve
@@ -209,6 +288,8 @@ jobs:
 
   site:
     name: site
+    needs: changes
+    if: needs.changes.outputs.site == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -220,10 +301,11 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-      - name: The website validator's and the docs builder's own tests
+      - name: The website validator's, the docs builder's and the CLI reference generator's own tests
         run: |
           python3 -I scripts/test_check_site.py
           python3 -I scripts/test_build_docs.py
+          python3 -I -m unittest discover -s scripts -p 'test_gen_cli_reference.py'
       - name: The docs command reference matches the real binary
         run: bash scripts/gen-cli-reference.sh --check
       - name: The built website (docs pages included) has no external requests, broken links or missing metadata
@@ -233,6 +315,8 @@ jobs:
 
   examples:
     name: examples
+    needs: changes
+    if: needs.changes.outputs.examples == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -249,44 +333,18 @@ jobs:
       - name: lint, compile --check and catalog build on examples/org-data-repo
         run: scripts/check-examples.sh dist/ccshelf
 
-  smoke:
-    name: smoke (${{ matrix.os }})
+  # The Action's installer script and its offline tests, then (R5) the only job that runs
+  # action/action.yml itself. This job builds the six-target archive
+  # naming for the runner's own OS/arch (same name_template as .goreleaser.yaml, which
+  # action/test/run.sh checks), serves it through a file:/// base-url, installs it with
+  # `uses: ./action` and a sha256 pin (fully offline), and runs `ccshelf version`. The Windows
+  # leg builds a zip so the zip extraction path of install.sh runs on a real Windows runner.
+  action-e2e:
+    name: action-e2e (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.action == 'true'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-      - name: Build
-        run: go build -trimpath -o "dist/ccshelf$(go env GOEXE)" ./cmd/ccshelf
-      - name: --version, --help and shell completions
-        run: |
-          set -euo pipefail
-          bin="./dist/ccshelf$(go env GOEXE)"
-          "$bin" --version
-          "$bin" --help >/dev/null
-          for shell in bash zsh fish powershell; do
-            out="$("$bin" completion "$shell")"
-            [ -n "$out" ] || { echo "empty completion for $shell" >&2; exit 1; }
-          done
-
-  # The Action's installer script and its offline tests, on every OS the Action supports.
-  action-test:
-    name: action-test (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
     permissions:
       contents: read
     strategy:
@@ -302,29 +360,6 @@ jobs:
           persist-credentials: false
       - name: install.sh offline tests
         run: bash action/test/run.sh
-
-  # R5: nothing else runs action/action.yml itself. This job builds the six-target archive
-  # naming for the runner's own OS/arch (same name_template as .goreleaser.yaml, which
-  # action/test/run.sh checks), serves it through a file:/// base-url, installs it with
-  # `uses: ./action` and a sha256 pin (fully offline), and runs `ccshelf version`. The Windows
-  # leg builds a zip so the zip extraction path of install.sh runs on a real Windows runner.
-  action-e2e:
-    name: action-e2e (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
@@ -457,6 +492,8 @@ jobs:
   # under Windows PowerShell 5.1 and PowerShell 7.
   install-test:
     name: install-test (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.install == 'true'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     permissions:
@@ -489,9 +526,6 @@ jobs:
       - name: install.sh offline tests
         if: runner.os != 'Windows'
         run: bash scripts/test_install.sh
-      - name: install.sh mutation tests (each deliberate defect must fail the suite)
-        if: runner.os == 'Linux'
-        run: bash scripts/test_install.sh --mutants
       - name: install.ps1 offline tests (Windows PowerShell 5.1 and PowerShell 7, with a local HTTPS server)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -553,11 +587,30 @@ jobs:
             }
           }
 
+  # The installer's mutation tests (each deliberate defect must fail the suite). They take
+  # about 13 minutes and dominated the critical path, so they run in their own job and only
+  # when the installer or its tests change (and, failing open, on main, merge groups and
+  # dispatch). The mutants edit a copy of the scripts; they need no Go toolchain.
+  install-mutants:
+    name: install-mutants
+    needs: changes
+    if: needs.changes.outputs.mutants == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: install.sh mutation tests
+        run: bash scripts/test_install.sh --mutants
+
   # Single required status check: fails if any needed job failed or was cancelled.
   ci-ok:
     name: ci-ok
     if: always()
-    needs: [lint, test, vuln, build, docs, site, examples, smoke, action-test, action-e2e, install-test]
+    needs: [changes, lint, test, vuln, build, docs, site, examples, action-e2e, install-test, install-mutants]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}

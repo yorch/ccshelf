@@ -9,6 +9,8 @@
 # Platform-sensitive paths: listed explicitly so they stay owned even if the
 # catch-all above is ever narrowed (SR1 to SR5).
 /.github/                 @yorch
+/scripts/ci_changes.py    @yorch
+/scripts/test_ci_changes.py @yorch
 /internal/settings/       @yorch
 /internal/cache/          @yorch
 /internal/trust/          @yorch
