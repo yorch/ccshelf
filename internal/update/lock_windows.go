@@ -23,10 +23,7 @@ func openLockFile(path string) (*os.File, error) {
 }
 
 func lockFile(f *os.File) error {
-	// Keep the OS lock off byte zero: AcquireLock stores a readable PID there
-	// while this handle holds the lock. Windows enforces byte-range locks for
-	// writes through the owning handle too.
-	ol := &windows.Overlapped{Offset: 1}
+	ol := new(windows.Overlapped)
 	err := windows.LockFileEx(windows.Handle(f.Fd()), windows.LOCKFILE_EXCLUSIVE_LOCK|windows.LOCKFILE_FAIL_IMMEDIATELY, 0, 1, 0, ol) //nolint:gosec // a handle
 	if errors.Is(err, windows.ERROR_LOCK_VIOLATION) || errors.Is(err, windows.ERROR_IO_PENDING) {
 		return errWouldBlock
@@ -35,6 +32,6 @@ func lockFile(f *os.File) error {
 }
 
 func unlockFile(f *os.File) error {
-	ol := &windows.Overlapped{Offset: 1}
+	ol := new(windows.Overlapped)
 	return windows.UnlockFileEx(windows.Handle(f.Fd()), 0, 1, 0, ol) //nolint:gosec // a handle
 }
