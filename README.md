@@ -52,6 +52,20 @@ interval = "24h"
 
 For organizations, `ccshelf lint`, `compile`, `catalog build`, `search`, `recommend` and `doctor` work on the org data repo (see [examples/org-data-repo](examples/org-data-repo/README.md) for a starter template). The design is in [docs/](docs/README.md).
 
+### Set up your org repo
+
+`ccshelf catalog init` bootstraps the organization's data repo: a new one in an empty directory, or an existing marketplace repo (`.claude-plugin/marketplace.json` and/or `plugins/`), which it retrofits **without changing any existing file**. It prints a plan (`create`, `skip-exists`, `needs-merge`) and writes `ccshelf.toml`, a marketplace skeleton, a sidecar stub per plugin, `CODEOWNERS`, the pinned `validate`, `catalog` and `release` workflows, a README and `.gitattributes`. There are no built-in profiles. Placeholders (`TODO(ccshelf)`) are reported by `ccshelf lint` as warnings until you fill them in.
+
+```sh
+ccshelf catalog init ./acme-claude --marketplace-name acme --org "Acme Corp" \
+  --platform-owners @acme/platform --dry-run          # print the plan, write nothing
+ccshelf catalog init ./acme-claude --marketplace-name acme --org "Acme Corp" \
+  --platform-owners @acme/platform --yes              # write it
+ccshelf catalog init . --platform-owners @acme/platform --write-suggestions --yes   # adopt an existing repo
+```
+
+On a terminal, missing values are asked for. The design is in [docs/design/catalog-and-org-repo.md](docs/design/catalog-and-org-repo.md).
+
 The project website (static; the /docs pages are generated from the Markdown at build time) lives in [site/](site/); it is checked by `make site-check` and is deployed to GitHub Pages only by hand (`.github/workflows/pages.yml`, see [site/README.md](site/README.md)).
 
 Licensed under the [MIT License](LICENSE).
