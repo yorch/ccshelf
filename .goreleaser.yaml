@@ -47,9 +47,15 @@ archives:
       - LICENSE
       - README.md
 
+# The two installers are published next to the archives and listed in checksums.txt, so the
+# signature of checksums.txt covers them too. `releases/latest/download/install.sh` therefore
+# always serves the script of the newest release. Keep these two lists identical.
 checksum:
   name_template: checksums.txt
   algorithm: sha256
+  extra_files:
+    - glob: scripts/install.sh
+    - glob: scripts/install.ps1
 
 sboms:
   - id: archive-sboms
@@ -91,6 +97,9 @@ release:
     owner: &owner yorch # OWNER
     name: ccshelf
   draft: false
+  extra_files:
+    - glob: scripts/install.sh
+    - glob: scripts/install.ps1
   use_existing_draft: true
   replace_existing_artifacts: true
   mode: append

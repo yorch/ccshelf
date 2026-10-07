@@ -449,11 +449,115 @@ jobs:
             exit 1
           }
 
+  # The end-user installers (scripts/install.sh and scripts/install.ps1): lint, offline tests,
+  # and an end-to-end run. The end-to-end step builds the real binary and an archive named like
+  # goreleaser's for the runner (scripts/make-e2e-release.sh), then runs the REAL installer
+  # against it through a file:/// base URL (pinned and latest) and runs `ccshelf version`.
+  # Fully offline: no cosign, so the SHA-256 path runs. Windows runs the PowerShell tests
+  # under Windows PowerShell 5.1 and PowerShell 7.
+  install-test:
+    name: install-test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: shellcheck the installer, its tests and the release-tree builder
+        if: runner.os != 'Windows'
+        run: |
+          set -euo pipefail
+          if ! command -v shellcheck >/dev/null 2>&1; then
+            # preinstalled on ubuntu-latest; required there
+            if [ "$RUNNER_OS" = "Linux" ]; then echo "shellcheck is missing on this runner" >&2; exit 1; fi
+            echo "::notice::shellcheck is not installed on this runner; skipped"
+            exit 0
+          fi
+          shellcheck -x scripts/install.sh scripts/test_install.sh scripts/make-e2e-release.sh
+      - name: install.sh offline tests
+        if: runner.os != 'Windows'
+        run: bash scripts/test_install.sh
+      - name: install.sh mutation tests (each deliberate defect must fail the suite)
+        if: runner.os == 'Linux'
+        run: bash scripts/test_install.sh --mutants
+      - name: install.ps1 offline tests (Windows PowerShell 5.1 and PowerShell 7, with a local HTTPS server)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: pwsh -NoProfile -File scripts/test_install.ps1
+      - name: install.ps1 tests on PowerShell 7 for Linux (a developer-convenience copy; includes the local HTTPS server tests)
+        if: runner.os == 'Linux'
+        shell: pwsh
+        run: pwsh -NoProfile -File scripts/test_install.ps1
+      - name: Build a release tree for this runner
+        id: release
+        env:
+          E2E_TAG: v0.0.0-ci
+        run: bash scripts/make-e2e-release.sh "${RUNNER_TEMP}/install-e2e" "$E2E_TAG" >>"$GITHUB_OUTPUT"
+      - name: Install with install.sh (pinned, then latest) and run ccshelf version
+        if: runner.os != 'Windows'
+        env:
+          BASE_URL: ${{ steps.release.outputs.base-url }}
+          E2E_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          sh scripts/install.sh --base-url "$BASE_URL" --bin-dir "${RUNNER_TEMP}/bin-pinned" --version "$E2E_TAG"
+          sh scripts/install.sh --base-url "$BASE_URL" --bin-dir "${RUNNER_TEMP}/bin-latest"
+          for d in bin-pinned bin-latest; do
+            out="$("${RUNNER_TEMP}/${d}/ccshelf" version)"
+            echo "$out"
+            case "$out" in
+              "ccshelf v0.0.0-ci "*) ;;
+              *) echo "unexpected version output from ${d}" >&2; exit 1 ;;
+            esac
+          done
+          # A corrupted archive must be refused and must leave nothing behind.
+          rel="${RUNNER_TEMP}/install-e2e/download/${E2E_TAG}"
+          archive="$(find "$rel" -name 'ccshelf_*.tar.gz' | head -n 1)"
+          printf 'corrupt' >>"$archive"
+          status=0
+          sh scripts/install.sh --base-url "$BASE_URL" --bin-dir "${RUNNER_TEMP}/bin-bad" --version "$E2E_TAG" >"${RUNNER_TEMP}/bad.out" 2>&1 || status=$?
+          cat "${RUNNER_TEMP}/bad.out"
+          [ "$status" -ne 0 ] || { echo "a corrupted archive was installed" >&2; exit 1; }
+          grep -q "SHA-256 mismatch" "${RUNNER_TEMP}/bad.out"
+          [ ! -e "${RUNNER_TEMP}/bin-bad/ccshelf" ]
+      - name: Install with install.ps1 under Windows PowerShell and PowerShell 7 and run ccshelf version
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          BASE_URL: ${{ steps.release.outputs.base-url }}
+          E2E_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($shell in @('powershell.exe', 'pwsh')) {
+            foreach ($mode in @('pinned', 'latest')) {
+              $dir = Join-Path $env:RUNNER_TEMP "bin-$shell-$mode"
+              $args2 = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'scripts/install.ps1', '-BaseUrl', $env:BASE_URL, '-BinDir', $dir)
+              if ($mode -eq 'pinned') { $args2 += @('-Version', $env:E2E_TAG) }
+              & $shell @args2
+              if ($LASTEXITCODE -ne 0) { throw "install.ps1 failed under $shell ($mode)" }
+              $out = (& (Join-Path $dir 'ccshelf.exe') version) -join "`n"
+              Write-Host $out
+              if (-not $out.StartsWith('ccshelf v0.0.0-ci ')) { throw "unexpected version output under $shell ($mode)" }
+            }
+          }
+
   # Single required status check: fails if any needed job failed or was cancelled.
   ci-ok:
     name: ci-ok
     if: always()
-    needs: [lint, test, vuln, build, docs, site, examples, smoke, action-test, action-e2e]
+    needs: [lint, test, vuln, build, docs, site, examples, smoke, action-test, action-e2e, install-test]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}

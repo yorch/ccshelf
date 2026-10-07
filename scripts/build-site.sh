@@ -53,8 +53,10 @@ while IFS= read -r f; do
       -e "s|<!--SITE_BASE-->|<base href=\"$site_url/\">|" "$f" >"$tmp"
   if [ -n "$repo_url" ]; then
     # only inside an attribute value (href="...", content="...", data-...="...") and in the visible
-    # `git clone <repo>` command of the install steps; never in other text
-    sed -e "s|=\"$old_re|=\"$repo_url|g" -e "s|git clone $old_re|git clone $repo_url|g" "$tmp" >"$f"
+    # `git clone <repo>`, `curl -fsSL <repo>/...` and `irm <repo>/...` commands of the install steps;
+    # never in other text
+    sed -e "s|=\"$old_re|=\"$repo_url|g" -e "s|git clone $old_re|git clone $repo_url|g" \
+        -e "s|curl -fsSL $old_re|curl -fsSL $repo_url|g" -e "s|irm $old_re|irm $repo_url|g" "$tmp" >"$f"
     /bin/rm -f "$tmp"
   else
     mv "$tmp" "$f"

@@ -326,8 +326,9 @@
 <!-- INSTALL -->
 <section class="sec wrap" id="install" aria-labelledby="h-install">
   <div class="sec-head"><h2 id="h-install">Install and quick start</h2>
-    <p>No public release and no public module path yet, so no binaries and no version numbers. Build from a checkout with Go 1.27 or newer.</p></div>
+    <p>No release is published yet, so build from source today. Once a release is published, one command installs it: the script verifies the download before it installs anything.</p></div>
   <div class="sec-body">
+    <h3 class="sub">Build from source (works today)</h3>
     <div class="cmd">
       <pre id="c-install"><code>git clone https://github.com/yorch/ccshelf
 cd ccshelf
@@ -335,7 +336,21 @@ go build -o ccshelf ./cmd/ccshelf
 ./ccshelf version</code></pre>
       <button class="copy" type="button" data-copy="c-install" hidden>Copy commands</button>
     </div>
-    <p class="fine">Put the binary on your <code>PATH</code>, or run <code>go install ./cmd/ccshelf</code> from the checkout. <code>go install github.com/...@latest</code> will work only after a public home and module path are chosen. The address above is the working repository and is not final.</p>
+    <p class="fine">Needs Go 1.27 or newer. Put the binary on your <code>PATH</code>, or run <code>go install ./cmd/ccshelf</code> from the checkout.</p>
+
+    <h3 class="sub">Once a release is published: Linux and macOS</h3>
+    <div class="cmd">
+      <pre id="c-install-sh"><code>curl -fsSL https://github.com/yorch/ccshelf/releases/latest/download/install.sh | sh</code></pre>
+      <button class="copy" type="button" data-copy="c-install-sh" hidden>Copy command</button>
+    </div>
+    <p class="fine">Installs into <code>~/.local/bin</code>, without sudo, and needs <code>curl</code>. Pin a version and require the signature check with <code>sh -s -- --version v0.1.0 --require-signature</code>. It always checks the archive against the release's <code>checksums.txt</code>, and checks the cosign signature of that file when cosign is installed.</p>
+
+    <h3 class="sub">Once a release is published: Windows</h3>
+    <div class="cmd">
+      <pre id="c-install-ps"><code>irm https://github.com/yorch/ccshelf/releases/latest/download/install.ps1 | iex</code></pre>
+      <button class="copy" type="button" data-copy="c-install-ps" hidden>Copy command</button>
+    </div>
+    <p class="fine">Installs into <code>%LOCALAPPDATA%\Programs\ccshelf</code>. Options (<code>-Version</code>, <code>-AddToPath</code>, <code>-RequireSignature</code>) are in the <a href="https://github.com/yorch/ccshelf#install">README</a>, together with the manual download and verification steps and how to uninstall. The binaries are not notarized or Authenticode-signed yet; ccshelf is unofficial and not affiliated with Anthropic.</p>
 
     <h3 class="sub">Try it</h3>
     <div class="cmd">

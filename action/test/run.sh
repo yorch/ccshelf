@@ -583,6 +583,11 @@ case "$CARGS" in
   *"--proto-redir =https "*) pass "curl redirects are limited to https (--proto-redir =https)" ;;
   *) OUT="$CARGS"; fail "curl redirects are limited to https (--proto-redir =https)" "flag missing" ;;
 esac
+if [ -n "$CARGS" ] && ! printf '%s\n' "$CARGS" | grep -qv '^-q '; then
+  pass "curl ignores ~/.curlrc (-q is the first argument of every call)"
+else
+  OUT="$CARGS"; fail "curl ignores ~/.curlrc (-q is the first argument of every call)" "-q is not first"
+fi
 case "$CARGS" in
   *"--fail "*"--location "*) pass "curl fails on HTTP errors and follows redirects only with the proto limits" ;;
   *) OUT="$CARGS"; fail "curl fails on HTTP errors" "flags missing" ;;

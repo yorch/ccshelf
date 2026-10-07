@@ -179,7 +179,8 @@ fetch() { # name destination
       cp -- "${RELEASE_URL#file://}/${name}" "$dest" || die "cannot copy ${RELEASE_URL}/${name}"
       ;;
     *)
-      curl --fail --location --silent --show-error \
+      # -q first: ignore ~/.curlrc (it could disable certificate checks). Proxy and CA variables stay honored.
+      curl -q --fail --location --silent --show-error \
         --proto '=https' --proto-redir '=https' \
         --connect-timeout 20 --max-time 300 --retry 2 \
         --output "$dest" -- "${RELEASE_URL}/${name}" || die "download failed: ${RELEASE_URL}/${name}"
