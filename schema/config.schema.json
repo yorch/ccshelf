@@ -68,7 +68,9 @@
       "properties": {
         "mode": { "enum": ["off", "notify", "install"], "description": "off (default), notify (one line when a newer release exists) or install (verified update within the same major version)." },
         "interval": { "type": "string", "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|ms|s|m|h))+$", "description": "Go duration, at least 1h, at most 8760h. Default 24h." },
-        "base_url": { "type": "string", "minLength": 1, "description": "GitHub Enterprise Server release source: https://host or https://host/owner/repo. https only; no credentials." }
+        "base_url": { "type": "string", "minLength": 1, "description": "GitHub Enterprise Server release source: https://host or https://host/owner/repo. https only; no credentials." },
+        "cosign_identity_repo": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$", "description": "github.com owner/repo whose release workflow must have signed the release (a trust decision for forks that sign their own releases). Default: the repository this binary was built from. base_url never changes it." },
+        "asset_hosts": { "type": "array", "maxItems": 8, "uniqueItems": true, "description": "Extra hostnames a release download may be redirected to (a GitHub Enterprise Server with its own asset or storage host). Exact lower-case hostnames only; no scheme, port, path, IP address or wildcard. A trust decision: the SHA-256 (and with cosign the signature) is still verified.", "items": { "type": "string", "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]([a-z0-9-]{0,61}[a-z0-9])?$", "maxLength": 253 } }
       }
     }
   }

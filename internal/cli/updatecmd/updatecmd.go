@@ -164,6 +164,14 @@ func (c *command) newUpdater(cc *clicore.Context, cfg *config.Config) (*update.U
 	if err != nil {
 		return nil, err
 	}
+	// The signer identity is the compiled-in repository unless the user named
+	// another one; base_url only moves bytes and never changes who signs.
+	if src, err = src.WithSigner(cfg.Update.CosignIdentityRepo); err != nil {
+		return nil, err
+	}
+	if src, err = src.WithAssetHosts(cfg.Update.AssetHosts); err != nil {
+		return nil, err
+	}
 	stateDir := c.opt.StateDir
 	if stateDir == "" {
 		if stateDir, err = cache.Dir(); err != nil {
@@ -447,8 +455,12 @@ func (c *command) printDryRun(cc *clicore.Context, u *update.Updater, p *update.
 	line(cc, "  download: %s", u.Source.AssetURL(p.Target.Tag, p.Archive.Name))
 	if haveCosign {
 		line(cc, "  verify:   SHA-256 against checksums.txt, and the cosign signature of checksums.txt (%s)", cosign)
+		line(cc, "  signer:   %s", u.Source.CosignIdentity(p.Target.Tag))
 	} else {
 		line(cc, "  verify:   SHA-256 against checksums.txt (cosign was not found: the signature would not be checked)")
+	}
+	if extra := u.Source.ExtraAssetHosts(); len(extra) > 0 {
+		line(cc, "  also trusting these download hosts from [update] asset_hosts: %s", strings.Join(extra, ", "))
 	}
 	line(cc, "  replace:  %s (the previous version is kept as %s)", p.Exe, filepath.Base(rep.Backup))
 	return nil

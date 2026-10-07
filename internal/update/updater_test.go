@@ -858,3 +858,36 @@ func TestNewerMajorIsInstallableWhenAsked(t *testing.T) {
 		t.Error("the automatic update crossed a major version")
 	}
 }
+
+func TestNetworkErrorHints(t *testing.T) {
+	gh, _ := NewSource("yorch/ccshelf", "", false)
+	ghe, _ := NewSource("yorch/ccshelf", "https://ghe.example.com", false)
+	res, _ := NewSource("yorch/ccshelf", "https://octocorp.ghe.com", false)
+	redirect := fmt.Errorf("%w: to https://x, which is neither", ErrRedirect)
+	for name, tc := range map[string]struct {
+		err  error
+		ver  string
+		src  Source
+		want string
+	}{
+		"redirect names asset_hosts": {redirect, "", ghe, "asset_hosts"},
+		"redirect with version":      {redirect, "v1.0.0", ghe, "asset_hosts"},
+		"data residency 404":         {&HTTPError{Status: 404}, "", res, "data residency"},
+		"404 on github.com":          {&HTTPError{Status: 404}, "", gh, "could not get"},
+		"404 on another host":        {&HTTPError{Status: 404}, "", ghe, "could not get"},
+		"404 of a named version":     {&HTTPError{Status: 404}, "v9.9.9", res, "releases page"},
+		"rate limited":               {&HTTPError{Status: 429}, "", gh, "limits unauthenticated"},
+	} {
+		e := networkError(tc.err, tc.ver, tc.src)
+		got := e.Error() + " | " + e.(*Error).Hint()
+		if !strings.Contains(got, tc.want) {
+			t.Errorf("%s: %q does not mention %q", name, got, tc.want)
+		}
+	}
+	if h := downloadError(redirect, "x.tar.gz").(*Error).Hint(); !strings.Contains(h, "asset_hosts") {
+		t.Errorf("download redirect hint = %q", h)
+	}
+	if h := downloadError(errors.New("boom"), "x").(*Error).Hint(); strings.Contains(h, "asset_hosts") {
+		t.Errorf("an ordinary download failure must not suggest asset_hosts: %q", h)
+	}
+}

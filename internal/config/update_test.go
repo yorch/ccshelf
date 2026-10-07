@@ -88,6 +88,21 @@ func TestLoadUpdateRejects(t *testing.T) {
 		"file scheme":     {"[update]\nbase_url = \"file://h/tmp\"\n", "https"},
 		"space":           {"[update]\nbase_url = \"https://ghe.example.com /x\"\n", "whitespace"},
 		"empty base":      {"[update]\nbase_url = \"\"\nmode = \"off\"\n", ""},
+		"interval plus":   {"[update]\ninterval = \"+2h\"\n", "update.interval"},
+		"interval bare":   {"[update]\ninterval = \".5h\"\n", "update.interval"},
+		"interval micro":  {"[update]\ninterval = \"3600000000µs\"\n", "update.interval"},
+		"signer url":      {"[update]\ncosign_identity_repo = \"https://github.com/a/b\"\n", "owner/repo"},
+		"signer host":     {"[update]\ncosign_identity_repo = \"ghe.example.com/a/b\"\n", "owner/repo"},
+		"signer ref":      {"[update]\ncosign_identity_repo = \"a/b@refs/heads/x\"\n", "owner/repo"},
+		"signer wildcard": {"[update]\ncosign_identity_repo = \"a/*\"\n", "owner/repo"},
+		"signer case key": {"[update]\nCosign_identity_repo = \"a/b\"\n", "must be spelled"},
+		"asset scheme":    {"[update]\nasset_hosts = [\"https://a.example.com\"]\n", "asset_hosts"},
+		"asset wildcard":  {"[update]\nasset_hosts = [\"*.example.com\"]\n", "asset_hosts"},
+		"asset port":      {"[update]\nasset_hosts = [\"a.example.com:443\"]\n", "asset_hosts"},
+		"asset ip":        {"[update]\nasset_hosts = [\"10.0.0.1\"]\n", "asset_hosts"},
+		"asset dup":       {"[update]\nasset_hosts = [\"a.example.com\", \"a.example.com\"]\n", "listed twice"},
+		"asset upper":     {"[update]\nasset_hosts = [\"A.example.com\"]\n", "asset_hosts"},
+		"asset many":      {"[update]\nasset_hosts = [\"a.example.com\",\"b.example.com\",\"c.example.com\",\"d.example.com\",\"e.example.com\",\"f.example.com\",\"g.example.com\",\"h.example.com\",\"i.example.com\"]\n", "at most"},
 		"interval number": {"[update]\ninterval = 24\n", "interval"},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -159,5 +174,31 @@ func TestSaveOmitsAbsentUpdateSection(t *testing.T) {
 	b, _ = os.ReadFile(p)
 	if !strings.Contains(string(b), "[update]") || !strings.Contains(string(b), `mode = 'notify'`) && !strings.Contains(string(b), `mode = "notify"`) {
 		t.Errorf("[update] mode not written:\n%s", b)
+	}
+}
+
+func TestLoadUpdateAcceptsSignerAndAssetHosts(t *testing.T) {
+	cfg, err := loadString(t, "[update]\ncosign_identity_repo = \"acme/ccshelf-fork\"\nasset_hosts = [\"assets.ghe.example.com\", \"s3.ghe.example.com\"]\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Update.CosignIdentityRepo != "acme/ccshelf-fork" || len(cfg.Update.AssetHosts) != 2 || !cfg.Update.Present() {
+		t.Errorf("update = %+v", cfg.Update)
+	}
+	if (Update{CosignIdentityRepo: "a/b"}).Present() == false || (Update{AssetHosts: []string{"a.b.c"}}).Present() == false {
+		t.Error("Present must see the new keys")
+	}
+}
+
+// The schema pattern and the Go parser must agree on what an interval is.
+func TestParseUpdateIntervalAgreesWithSchema(t *testing.T) {
+	for s, ok := range map[string]bool{
+		"24h": true, "1h30m": true, "36h": true, "1.5h": true, "90m": true, "3600s": true,
+		"+2h": false, "-2h": false, ".5h": false, "1.h": false, "2": false, "": false, "daily": false, "2H": false, " 2h": false, "3600000000µs": false,
+	} {
+		_, err := ParseUpdateInterval(s)
+		if (err == nil) != ok {
+			t.Errorf("ParseUpdateInterval(%q) error = %v, want ok=%v", s, err, ok)
+		}
 	}
 }

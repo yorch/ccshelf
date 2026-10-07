@@ -261,6 +261,7 @@ func TestConfigExamples(t *testing.T) {
 		"default_account = \"work\"\n[accounts.work]\nconfig_dir = \"~/.claude-work\"\n[trust]\nrequire_pin = true\non_change = \"fail\"\n[ui]\ncolor = \"never\"\n",
 		"[update]\nmode = \"notify\"\ninterval = \"36h\"\nbase_url = \"https://ghe.example.com\"\n",
 		"[update]\nmode = \"install\"\ninterval = \"1h30m\"\n",
+		"[update]\ncosign_identity_repo = \"acme/ccshelf-fork\"\nasset_hosts = [\"assets.ghe.example.com\"]\n",
 		"[[sources]]\ntype = \"git\"\nurl = \"u\"\nref = \"v1\"\npath = \"profiles\"\n[[sources]]\ntype = \"plugin\"\nplugin = \"a@b\"\nmarketplace = \"https://h.example/o/r.git\"\n",
 	}
 	invalid := map[string]string{
@@ -279,6 +280,13 @@ func TestConfigExamples(t *testing.T) {
 		"update chan":   "[update]\nchannel = \"beta\"\n",
 		"update intvl":  "[update]\ninterval = \"daily\"\n",
 		"update type":   "[update]\ninterval = 24\n",
+		"intvl sign":    "[update]\ninterval = \"+2h\"\n",
+		"signer url":    "[update]\ncosign_identity_repo = \"https://github.com/a/b\"\n",
+		"signer ref":    "[update]\ncosign_identity_repo = \"a/b@main\"\n",
+		"asset url":     "[update]\nasset_hosts = [\"https://a.example.com\"]\n",
+		"asset caps":    "[update]\nasset_hosts = [\"A.example.com\"]\n",
+		"asset dup":     "[update]\nasset_hosts = [\"a.example.com\", \"a.example.com\"]\n",
+		"asset string":  "[update]\nasset_hosts = \"a.example.com\"\n",
 	}
 	for i, v := range valid {
 		if errs := check(s, s, decode(t, v), "$"); len(errs) > 0 {

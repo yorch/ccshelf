@@ -214,6 +214,13 @@ func TestDryRun(t *testing.T) {
 	h.opt.LookCosign = func() (string, bool) { return "/usr/bin/cosign", true }
 	h.mustRun("update", "--dry-run")
 	has(t, h.out.String(), "cosign signature of checksums.txt (/usr/bin/cosign)")
+	has(t, h.out.String(), "signer:   https://github.com/yorch/ccshelf/.github/workflows/release.yml@refs/tags/v0.2.0")
+	hasNot(t, h.out.String(), "asset_hosts")
+	// A configured asset host and signer are shown in the plan.
+	h.writeConfig("cosign_identity_repo = \"acme/fork\"\nasset_hosts = [\"assets.ghe.example.com\"]\n")
+	h.mustRun("update", "--dry-run")
+	has(t, h.out.String(), "from [update] asset_hosts: assets.ghe.example.com")
+	has(t, h.out.String(), "signer:   https://github.com/acme/fork/")
 }
 
 func TestVersionFlag(t *testing.T) {
@@ -519,5 +526,58 @@ func TestForceNeverImpliesDowngrade(t *testing.T) {
 	h.mustRun("update", "--force", "--allow-downgrade", "--yes")
 	if h.exeContent() != string(fakeBinary("0.2.0")) {
 		t.Fatalf("--force --allow-downgrade did not install: %q", h.exeContent())
+	}
+}
+
+// The signer identity handed to cosign never depends on base_url (the mirror
+// only moves bytes); only an explicit [update] cosign_identity_repo changes it.
+func TestCosignIdentityDoesNotFollowBaseURL(t *testing.T) {
+	const upstream = "https://github.com/yorch/ccshelf/.github/workflows/release.yml@refs/tags/v0.2.0"
+	run := func(t *testing.T, extra string) (identity string) {
+		t.Helper()
+		h := newHarness(t, "0.1.0")
+		r := h.publish("v0.2.0")
+		r.Assets["checksums.txt.sigstore.json"] = []byte("{}")
+		h.writeConfig(extra)
+		h.opt.LookCosign = func() (string, bool) { return "/fake/cosign", true }
+		h.opt.VerifyCosign = func(_ context.Context, _ string, _ []string, _, _, id, issuer string) error {
+			identity = id
+			if issuer != update.OIDCIssuer {
+				t.Errorf("issuer = %q", issuer)
+			}
+			return nil
+		}
+		h.mustRun("update", "--yes")
+		return identity
+	}
+	t.Run("a mirror host and a foreign repository in base_url", func(t *testing.T) {
+		// The harness base_url is a loopback mirror (a non-github host).
+		if got := run(t, ""); got != upstream {
+			t.Errorf("identity = %q, want %q", got, upstream)
+		}
+	})
+	t.Run("an explicit signer repository", func(t *testing.T) {
+		got := run(t, "cosign_identity_repo = \"acme/ccshelf-fork\"\n")
+		if want := "https://github.com/acme/ccshelf-fork/.github/workflows/release.yml@refs/tags/v0.2.0"; got != want {
+			t.Errorf("identity = %q, want %q", got, want)
+		}
+	})
+}
+
+func TestBaseURLRepoPathDoesNotChangeTheSigner(t *testing.T) {
+	h := newHarness(t, "0.1.0")
+	c := &command{opt: h.opt}
+	cfg := config.Default()
+	cfg.Update.BaseURL = "https://github.com/evil/ccshelf"
+	env := &clicore.Env{Getenv: func(string) string { return "" }, Environ: func() []string { return nil }, Now: time.Now, GOOS: "linux"}
+	u, err := c.newUpdater(&clicore.Context{Env: env, G: &h.g}, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.Source.Repo != "evil/ccshelf" {
+		t.Fatalf("download repo = %q", u.Source.Repo)
+	}
+	if got := u.Source.CosignIdentity("v1.0.0"); !strings.HasPrefix(got, "https://github.com/yorch/ccshelf/") {
+		t.Errorf("identity = %q: base_url must not choose the signer", got)
 	}
 }

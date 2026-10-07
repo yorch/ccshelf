@@ -31,6 +31,12 @@ var repoRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0
 type Source struct {
 	// Repo is the "owner/name" of the repository that publishes releases.
 	Repo string
+	// SignerRepo is the "owner/name" of the repository whose release workflow
+	// must have signed checksums.txt (on github.com, whatever host the bytes
+	// come from). It is the repository this binary was built from, never
+	// derived from the base URL: a mirror only moves bytes. An organization
+	// that signs its own fork's releases sets it explicitly with [WithSigner].
+	SignerRepo string
 	// Web is the scheme and host of the web site, without a path (for
 	// example https://github.com or https://ghe.example.com).
 	Web url.URL
@@ -45,13 +51,18 @@ type Source struct {
 	// tests; production wiring passes [config.LoopbackHTTPAllowed], which is
 	// false except in the end-to-end test build.
 	AllowLoopbackHTTP bool
+
+	// builtinAssetHosts is how many of AssetHosts came from NewSource.
+	builtinAssetHosts int
 }
 
-// NewSource builds the Source for repo. baseURL is "" for github.com, or
-// https://host (a GitHub Enterprise Server; optionally https://host/owner/repo
-// to name a different repository on it).
+// NewSource builds the Source for repo, the repository this binary was
+// released from (the compiled-in version.Repo). baseURL is "" for github.com,
+// or https://host (a GitHub Enterprise Server; optionally
+// https://host/owner/repo to name a different repository to download from).
+// The signer identity stays repo's, whatever baseURL says.
 func NewSource(repo, baseURL string, allowLoopbackHTTP bool) (Source, error) {
-	s := Source{AllowLoopbackHTTP: allowLoopbackHTTP}
+	s := Source{AllowLoopbackHTTP: allowLoopbackHTTP, SignerRepo: repo}
 	web := "https://" + DefaultHost
 	if baseURL != "" {
 		if err := config.ValidateUpdateBaseURL(baseURL, allowLoopbackHTTP); err != nil {
@@ -77,9 +88,55 @@ func NewSource(repo, baseURL string, allowLoopbackHTTP bool) (Source, error) {
 	if strings.EqualFold(wu.Hostname(), DefaultHost) && wu.Port() == "" {
 		s.API = "https://api." + DefaultHost
 		s.AssetHosts = append([]string(nil), githubAssetHosts...)
+		s.builtinAssetHosts = len(s.AssetHosts)
 	} else {
 		s.API = web + "/api/v3"
 	}
+	return s, nil
+}
+
+// WithSigner returns s with the signer repository replaced by signerRepo
+// ("owner/name"; the host is always github.com). It is a trust decision the
+// user makes in [update] cosign_identity_repo. An empty signerRepo keeps s.
+func (s Source) WithSigner(signerRepo string) (Source, error) {
+	if signerRepo == "" {
+		return s, nil
+	}
+	if err := config.ValidateCosignIdentityRepo(signerRepo); err != nil {
+		return Source{}, fmt.Errorf("update cosign_identity_repo: %w", err)
+	}
+	s.SignerRepo = signerRepo
+	return s, nil
+}
+
+// ExtraAssetHosts returns the hosts added with [Source.WithAssetHosts] (not
+// GitHub's own), for display.
+func (s Source) ExtraAssetHosts() []string {
+	if len(s.AssetHosts) <= s.builtinAssetHosts {
+		return nil
+	}
+	return append([]string(nil), s.AssetHosts[s.builtinAssetHosts:]...)
+}
+
+// WithAssetHosts returns s with hosts added to the hosts a download may be
+// redirected to (exact hostnames, already validated by the configuration; they
+// are checked again here). They are additions: the release host and, for
+// github.com, GitHub's asset hosts stay.
+func (s Source) WithAssetHosts(hosts []string) (Source, error) {
+	if len(hosts) == 0 {
+		return s, nil
+	}
+	if len(hosts) > config.MaxUpdateAssetHosts {
+		return Source{}, fmt.Errorf("update asset_hosts: at most %d hosts", config.MaxUpdateAssetHosts)
+	}
+	all := append([]string(nil), s.AssetHosts...)
+	for _, h := range hosts {
+		if err := config.ValidateAssetHost(h); err != nil {
+			return Source{}, fmt.Errorf("update asset_hosts: %w", err)
+		}
+		all = append(all, h)
+	}
+	s.AssetHosts = all
 	return s, nil
 }
 
@@ -91,11 +148,14 @@ func (s Source) Valid() error {
 	if !repoRe.MatchString(s.Repo) {
 		return fmt.Errorf("repository %q is not owner/name", s.Repo)
 	}
+	if !repoRe.MatchString(s.SignerRepo) || strings.Contains(s.SignerRepo, "..") {
+		return fmt.Errorf("signer repository %q is not owner/name", s.SignerRepo)
+	}
 	return nil
 }
 
-// Host returns the web host (with the port, if any); it is the host of the
-// certificate identity a release signature must carry.
+// Host returns the web host (with the port, if any) releases are downloaded
+// from.
 func (s Source) Host() string { return s.Web.Host }
 
 func (s Source) repoAPI(suffix string) string { return s.API + "/repos/" + s.Repo + suffix }
@@ -120,8 +180,10 @@ func (s Source) ReleasePage(tag string) string {
 }
 
 // CosignIdentity is the certificate identity the keyless signature of a
-// release's checksums.txt must carry: the release workflow of the repository
-// at the release tag.
+// release's checksums.txt must carry: the release workflow of the signer
+// repository on github.com at the release tag. It does not depend on the
+// download host or on the repository downloaded from, so a base URL can move
+// the bytes of a release but never change who must have signed it.
 func (s Source) CosignIdentity(tag string) string {
-	return "https://" + s.Web.Host + "/" + s.Repo + "/.github/workflows/release.yml@refs/tags/" + tag
+	return "https://" + DefaultHost + "/" + s.SignerRepo + "/.github/workflows/release.yml@refs/tags/" + tag
 }

@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -130,7 +131,7 @@ func (u *Updater) Discover(ctx context.Context, req Request) (*Plan, error) {
 		rel, err = f.Latest(ctx, req.Prerelease)
 	}
 	if err != nil {
-		return nil, networkError(err, req.Version)
+		return nil, networkError(err, req.Version, u.Source)
 	}
 	return u.PlanFor(rel, req)
 }
@@ -197,9 +198,23 @@ func (u *Updater) locate(p *Plan) {
 	p.Exe = resolved
 }
 
-func networkError(err error, version string) error {
+// downloadError is the failure of fetching an asset; nothing was changed.
+func downloadError(err error, name string) error {
+	if errors.Is(err, ErrRedirect) {
+		return newErr(KindFailure, redirectHint, err, "downloading %s: the download was redirected to a host that is not allowed", name)
+	}
+	return newErr(KindFailure, "nothing was changed; try again", err, "downloading %s", name)
+}
+
+const redirectHint = "if this server serves release assets from another host, list that exact hostname in [update] asset_hosts in config.toml (it is trusted with the download; the SHA-256 is still verified)"
+
+func networkError(err error, version string, src Source) error {
 	var he *HTTPError
 	switch {
+	case errors.Is(err, ErrRedirect):
+		return newErr(KindFailure, redirectHint, err, "the download was redirected to a host that is not allowed")
+	case errors.As(err, &he) && he.Status == http.StatusNotFound && version == "" && !strings.EqualFold(src.Web.Hostname(), DefaultHost) && strings.HasSuffix(strings.ToLower(src.Web.Hostname()), ".ghe.com"):
+		return newErr(KindFailure, "GitHub Enterprise Cloud with data residency (*.ghe.com) keeps its API on api.<subdomain>.ghe.com, which this version does not support; download the release by hand", err, "the release information was not found")
 	case errors.As(err, &he) && he.Status == http.StatusNotFound && version != "":
 		return newErr(KindFailure, "see the releases page for the versions that exist", err, "release %s was not found", version)
 	case errors.As(err, &he) && (he.Status == http.StatusForbidden || he.Status == http.StatusTooManyRequests):
@@ -303,13 +318,13 @@ func (u *Updater) Apply(ctx context.Context, p *Plan, req Request, progress func
 	progress("downloading " + ChecksumsName)
 	sums, err := f.Get(ctx, u.Source.AssetURL(tag, ChecksumsName), "application/octet-stream", MaxChecksumsBytes)
 	if err != nil {
-		return nil, newErr(KindFailure, "nothing was changed; try again", err, "downloading %s", ChecksumsName)
+		return nil, downloadError(err, ChecksumsName)
 	}
 	archivePath := filepath.Join(work, "archive")
 	progress("downloading " + p.Archive.Name)
 	sum, err := downloadHashed(ctx, f, u.Source.AssetURL(tag, p.Archive.Name), archivePath, p.Target, p.Archive.Name)
 	if err != nil {
-		return nil, newErr(KindFailure, "nothing was changed; try again", err, "downloading %s", p.Archive.Name)
+		return nil, downloadError(err, p.Archive.Name)
 	}
 
 	sig := "none"
@@ -402,7 +417,7 @@ func (u *Updater) verifySignature(ctx context.Context, f *Fetcher, cosignPath, w
 	bundle, err := f.Get(ctx, u.Source.AssetURL(tag, SignatureName), "application/octet-stream", MaxChecksumsBytes)
 	if err != nil {
 		var he *HTTPError
-		hint := "cosign is on PATH, so the signature is required; remove cosign from PATH to rely on the SHA-256 check alone, or try again"
+		hint := "cosign is on PATH, so the signature is required; try again, or ask whoever publishes the release to check that it was signed"
 		if errors.As(err, &he) && he.Status == http.StatusNotFound {
 			hint = "this release carries no signature although cosign is installed; do not install it unless you can verify it another way"
 		}
