@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -240,5 +241,77 @@ func TestCatalogInitGitInit(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, ".git", "refs", "heads", "main")); err == nil {
 		t.Error("something was committed")
+	}
+}
+
+func TestCatalogInitNeverWritesIntoClaudeOrCcshelfDirectories(t *testing.T) {
+	s := newSandbox(t)
+	claude := filepath.Join(s.Home, ".claude")
+	cfg := filepath.Join(s.root, "claude-cfg")
+	s.Setenv("CLAUDE_CONFIG_DIR", cfg)
+	for name, dir := range map[string]string{
+		"~/.claude":         filepath.Join(claude, "org"),
+		"CLAUDE_CONFIG_DIR": filepath.Join(cfg, "org"),
+		"ccshelf config":    filepath.Join(s.ConfigDir(), "org"),
+		"ccshelf cache":     filepath.Join(s.CacheDir(), "org"),
+		"above the home":    s.root,
+	} {
+		r := s.run(initFlags(dir, "--yes")...)
+		if r.Code != 2 {
+			t.Errorf("%s: exit %d\n%s%s", name, r.Code, r.Stdout, r.Stderr)
+		}
+		if _, err := os.Stat(filepath.Join(dir, "ccshelf.toml")); err == nil {
+			t.Errorf("%s: wrote into %s", name, dir)
+		}
+	}
+	for _, d := range []string{claude, cfg, s.ConfigDir(), s.CacheDir()} {
+		if _, err := os.Stat(d); err == nil {
+			if got := tree(t, d); len(got) != 0 {
+				t.Errorf("%s was written to: %v", d, got)
+			}
+		}
+	}
+}
+
+func TestCatalogInitFailureJSONListsWhatWasWritten(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("needs a directory that cannot be written")
+	}
+	s := newSandbox(t)
+	dir := filepath.Join(s.Work, "repo")
+	write(t, filepath.Join(dir, "keep.txt"), "x")
+	locked := filepath.Join(dir, ".github")
+	if err := os.MkdirAll(locked, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(locked, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+
+	r := s.run(initFlags(dir, "--yes", "--json", "--mode", "adopt")...)
+	if r.Code != 1 {
+		t.Fatalf("exit %d\n%s%s", r.Code, r.Stdout, r.Stderr)
+	}
+	var env struct {
+		Kind string
+		Data struct {
+			Message string
+			Hint    string
+			Data    struct {
+				Written    []string
+				RolledBack []string `json:"rolled_back"`
+			}
+		}
+	}
+	if err := json.Unmarshal([]byte(r.Stderr), &env); err != nil {
+		t.Fatalf("%v\n%s", err, r.Stderr)
+	}
+	d := env.Data.Data
+	if env.Kind != "error" || len(d.Written) == 0 || strings.Join(d.Written, ",") != strings.Join(d.RolledBack, ",") {
+		t.Errorf("error = %+v", env)
+	}
+	if got := tree(t, dir); len(got) != 1 {
+		t.Errorf("files left behind: %v", got)
 	}
 }
