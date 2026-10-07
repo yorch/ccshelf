@@ -146,6 +146,7 @@ var rules = []Rule{
 	{"CAT045", Warning, "/.github/ is not covered by CODEOWNERS, or workflows, CODEOWNERS, ccshelf.toml, profiles, bundles, catalog, the MCP registry or a marketplace file lack a platform owner (needs lint.platform_owners)."},
 	{"CAT046", Warning, "The sidecar owner is not among the CODEOWNERS owners of the plugin directory."},
 	{"CAT047", Warning, "A CODEOWNERS line is invalid and GitHub ignores it."},
+	{"CAT048", Warning, "A marketplace description or a sidecar value still has the TODO(ccshelf) placeholder written by \"ccshelf catalog init\"."},
 	{"CAT050", Error, "A profile manifest that resolves to plugins has no profile-<name> bundle entry in the marketplace."},
 	{"CAT051", Error, "A profile-<name> bundle entry has no profile manifest."},
 	{"CAT052", Error, "A bundle entry's source is not ./bundles/profile-<name>."},
