@@ -14,47 +14,61 @@
     irm https://github.com/yorch/ccshelf/releases/latest/download/install.ps1 | iex
     & ([scriptblock]::Create((irm https://github.com/yorch/ccshelf/releases/latest/download/install.ps1))) -Version v0.1.0
 
-.PARAMETER Version
-  Release tag to install, such as v0.1.0 (default: the latest release).
-.PARAMETER BinDir
-  Install directory (default: $env:LOCALAPPDATA\Programs\ccshelf). Must be an absolute path and not
-  a symlink or junction.
-.PARAMETER BaseUrl
-  Release download base for GitHub Enterprise Server or a mirror (https only; file:///C:/dir is
-  accepted for a local mirror).
-.PARAMETER RequireSignature
-  Fail when cosign is not installed (default: verify when it is, and say so when it is not).
-.PARAMETER CosignIdentity
-  Certificate identity cosign must see (default: the release workflow of the public repository at
-  the release tag).
-.PARAMETER CosignIssuer
-  Certificate OIDC issuer (default: GitHub Actions).
-.PARAMETER AddToPath
-  Add BinDir to the USER PATH (otherwise the command to do it is printed).
-.PARAMETER DryRun
-  Download and verify, install nothing.
-.PARAMETER Force
-  Replace an existing ccshelf.exe that is not ccshelf.
-.PARAMETER Quiet
-  Print only warnings and errors.
+.PARAMETER CcshelfVersion
+  Alias -Version. Release tag to install, such as v0.1.0 (default: the latest release).
+.PARAMETER CcshelfBinDir
+  Alias -BinDir. Install directory (default: $env:LOCALAPPDATA\Programs\ccshelf). Must be an
+  absolute path and not a symlink or junction. Missing parent folders are created.
+.PARAMETER CcshelfBaseUrl
+  Alias -BaseUrl. Release download base for GitHub Enterprise Server or a mirror (https only;
+  file:///C:/dir is accepted for a local mirror). A mirror is trusted to serve the release you ask
+  for; a mirror's "latest" can name an older signed release.
+.PARAMETER CcshelfRequireSignature
+  Alias -RequireSignature. Fail when cosign is not installed (default: verify when it is, and say
+  so when it is not).
+.PARAMETER CcshelfCosignIdentity
+  Alias -CosignIdentity. Certificate identity cosign must see (default: the release workflow of
+  the public repository at the release tag). Only needed for a release you signed yourself.
+.PARAMETER CcshelfCosignIssuer
+  Alias -CosignIssuer. Certificate OIDC issuer (default: GitHub Actions).
+.PARAMETER CcshelfAddToPath
+  Alias -AddToPath. Add BinDir to the USER PATH (otherwise a hint is printed). %VARIABLE% entries
+  already in it are kept as they are.
+.PARAMETER CcshelfDryRun
+  Alias -DryRun. Download and verify, install nothing.
+.PARAMETER CcshelfForce
+  Alias -Force. Replace an existing ccshelf.exe that is not ccshelf, or a symlink with that name
+  (a directory with that name is never replaced).
+.PARAMETER CcshelfQuiet
+  Alias -Quiet. Print only warnings and errors.
+.PARAMETER CcshelfArchitecture
+  Alias -Architecture. amd64 or arm64: override the detected CPU (for testing and cross-installs).
+
+  The parameters carry a Ccshelf prefix so that running the script through `irm | iex` cannot
+  overwrite a variable of yours; the short names above are aliases and are what the docs use.
 #>
 [CmdletBinding()]
 param(
-  [string]$Version = '',
-  [string]$BinDir = '',
-  [string]$BaseUrl = 'https://github.com/yorch/ccshelf/releases', # OWNER
-  [switch]$RequireSignature,
-  [string]$CosignIdentity = '',
-  [string]$CosignIssuer = 'https://token.actions.githubusercontent.com',
-  [switch]$AddToPath,
-  [switch]$DryRun,
-  [switch]$Force,
-  [switch]$Quiet
+  [Alias('Version')][string]$CcshelfVersion = '',
+  [Alias('BinDir')][string]$CcshelfBinDir = '',
+  [Alias('BaseUrl')][string]$CcshelfBaseUrl = 'https://github.com/yorch/ccshelf/releases', # OWNER
+  [Alias('RequireSignature')][switch]$CcshelfRequireSignature,
+  [Alias('CosignIdentity')][string]$CcshelfCosignIdentity = '',
+  [Alias('CosignIssuer')][string]$CcshelfCosignIssuer = 'https://token.actions.githubusercontent.com',
+  [Alias('AddToPath')][switch]$CcshelfAddToPath,
+  [Alias('DryRun')][switch]$CcshelfDryRun,
+  [Alias('Force')][switch]$CcshelfForce,
+  [Alias('Quiet')][switch]$CcshelfQuiet,
+  [Alias('Architecture')][string]$CcshelfArchitecture = ''
 )
 
-# Everything lives in one function so that the strictness settings below stay local: run through
-# `irm | iex` the script executes in the caller's scope, and must not change the user's session.
-function Install-Ccshelf {
+# Run through `irm | iex` this script executes in the caller's scope, so it must leave nothing
+# behind. The parameters above carry a Ccshelf prefix (the documented short names are aliases) so
+# they can never overwrite a variable of the caller's, and they are removed at the end. The
+# installer itself runs in a child scope: its helper functions, variables and the strictness
+# settings vanish with it.
+try {
+& {
   [CmdletBinding()]
   param(
     [string]$Version,
@@ -66,7 +80,8 @@ function Install-Ccshelf {
     [switch]$AddToPath,
     [switch]$DryRun,
     [switch]$Force,
-    [switch]$Quiet
+    [switch]$Quiet,
+    [string]$Architecture
   )
   Set-StrictMode -Version 2.0
   $ErrorActionPreference = 'Stop'
@@ -138,13 +153,30 @@ function Install-Ccshelf {
   if ($PSVersionTable.PSEdition -eq 'Core' -and -not $IsWindows) {
     Fail 'this installer is for Windows. On Linux and macOS use install.sh (see the README)'
   }
-  $rawArch = $env:PROCESSOR_ARCHITEW6432
-  if (-not $rawArch) { $rawArch = $env:PROCESSOR_ARCHITECTURE }
-  switch ($rawArch) {
-    'AMD64' { $arch = 'amd64' }
-    'ARM64' { $arch = 'arm64' }
-    default { Fail "unsupported CPU architecture '$rawArch': only amd64 and arm64 are supported" }
+  # The CPU of the machine, not of this process: an x64 PowerShell running emulated on Windows on
+  # ARM reports AMD64 in the environment, but the native build is what should be installed.
+  # Order: an explicit -Architecture, then the OS architecture reported by .NET, then WMI, then the
+  # environment (PROCESSOR_ARCHITEW6432 is set for 32-bit processes on a 64-bit OS).
+  function Resolve-Architecture([string]$Override, [string]$OsArch, [string]$CimArch, [string]$Wow64, [string]$ProcArch) {
+    $raw = ''
+    if ($Override) { $raw = $Override }
+    elseif ($OsArch) { $raw = $OsArch }
+    elseif ($CimArch) { $raw = $CimArch }
+    elseif ($Wow64) { $raw = $Wow64 }
+    else { $raw = $ProcArch }
+    switch -Regex ($raw) {
+      '\A(amd64|x64|x86_64|9)\z' { return 'amd64' }
+      '\A(arm64|aarch64|12)\z' { return 'arm64' }
+      default { Fail "unsupported CPU architecture '$raw': only amd64 and arm64 are supported" }
+    }
   }
+  $osArch = ''
+  try { $osArch = [string][System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture } catch { $osArch = '' }
+  $cimArch = ''
+  if (-not $Architecture -and -not $osArch -and (Get-Command Get-CimInstance -ErrorAction SilentlyContinue)) {
+    try { $cimArch = [string](@(Get-CimInstance -ClassName Win32_Processor -ErrorAction Stop)[0].Architecture) } catch { $cimArch = '' }
+  }
+  $arch = Resolve-Architecture $Architecture $osArch $cimArch $env:PROCESSOR_ARCHITEW6432 $env:PROCESSOR_ARCHITECTURE
 
   # TLS 1.2 or newer (Windows PowerShell 5.1 may default to older protocols).
   try {
@@ -225,6 +257,51 @@ function Install-Ccshelf {
     return $rows
   }
 
+  # Runs a native program with $ErrorActionPreference relaxed: on Windows PowerShell 5.1 a native
+  # program that writes to stderr (cosign prints "Verified OK" there) can otherwise turn into a
+  # terminating error although it exited 0. The exit code alone decides. Returns ExitCode and the
+  # merged output lines.
+  function Invoke-Native([string]$Path, [string[]]$ArgList) {
+    $savedPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    $lines = @()
+    $code = -1
+    try {
+      $lines = @(& $Path @ArgList 2>&1 | ForEach-Object { "$_" })
+      $code = $LASTEXITCODE
+    } catch {
+      $lines += "$($_.Exception.Message)"
+      $code = -1
+    } finally { $ErrorActionPreference = $savedPreference }
+    return [pscustomobject]@{ ExitCode = $code; Lines = $lines }
+  }
+
+  # The first line `<program> version` prints, or '' when it prints none within 5 seconds (the
+  # program is stopped then): an existing file named ccshelf.exe is run only to identify it.
+  function Get-VersionLine([string]$Path) {
+    $proc = $null
+    try {
+      $psi = New-Object System.Diagnostics.ProcessStartInfo
+      $psi.FileName = $Path
+      $psi.Arguments = 'version'
+      $psi.UseShellExecute = $false
+      $psi.CreateNoWindow = $true
+      $psi.RedirectStandardInput = $true
+      $psi.RedirectStandardOutput = $true
+      $psi.RedirectStandardError = $true
+      $proc = [System.Diagnostics.Process]::Start($psi)
+      $proc.StandardInput.Close()
+      $first = $proc.StandardOutput.ReadLineAsync()
+      $null = $proc.StandardError.ReadToEndAsync()
+      $done = $first.Wait(5000)
+      if (-not $proc.HasExited) { try { $proc.Kill() } catch { $null = $_ } }
+      if ($done) { return [string]$first.Result }
+      return ''
+    } catch {
+      return ''
+    } finally { if ($proc) { $proc.Dispose() } }
+  }
+
   # ---- work area ----------------------------------------------------------------
   $tmp = Join-Path ([IO.Path]::GetTempPath()) ('ccshelf-install-' + [Guid]::NewGuid().ToString('N'))
   $null = New-Item -ItemType Directory -Path $tmp
@@ -271,8 +348,11 @@ function Install-Ccshelf {
       $bundle = Join-Path $tmp 'checksums.txt.sigstore.json'
       Get-Release "$rel/checksums.txt.sigstore.json" $bundle $maxTextBytes
       Say 'verifying the signature of checksums.txt with cosign'
-      & $cosign.Source verify-blob --bundle $bundle --certificate-identity $CosignIdentity --certificate-oidc-issuer $CosignIssuer $sums
-      if ($LASTEXITCODE -ne 0) {
+      $verify = Invoke-Native $cosign.Source @('verify-blob', '--bundle', $bundle, '--certificate-identity', $CosignIdentity, '--certificate-oidc-issuer', $CosignIssuer, $sums)
+      if ($verify.ExitCode -ne 0 -or -not $Quiet) {
+        foreach ($line in $verify.Lines) { Write-Host $line }
+      }
+      if ($verify.ExitCode -ne 0) {
         Fail "cosign could not verify the signature of checksums.txt for $Version; refusing to install"
       }
       Say "signature verified (identity $CosignIdentity)"
@@ -327,16 +407,21 @@ function Install-Ccshelf {
       }
 
       $target = Join-Path $BinDir 'ccshelf.exe'
-      if (Test-Path -LiteralPath $target) {
+      $existing = Get-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue
+      if ($existing) {
+        $isLink = [bool]($existing.Attributes -band [IO.FileAttributes]::ReparsePoint)
+        # A real directory is never replaced, not even with -Force: moving the new binary "into" it
+        # would report success without installing anything.
+        if ($existing.PSIsContainer -and -not $isLink) {
+          Fail "$target is a directory; refusing to replace it (-Force does not replace directories; move it away and retry)"
+        }
         if ($Force) {
           Say "-Force: replacing $target"
         } else {
-          $targetItem = Get-Item -LiteralPath $target -Force
-          if ($targetItem.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+          if ($isLink) {
             Fail "$target is a symlink; refusing to replace it (use -Force to replace it anyway)"
           }
-          $old = ''
-          try { $old = [string](& $target version 2>$null | Select-Object -First 1) } catch { $old = '' }
+          $old = Get-VersionLine $target
           if ($old -like 'ccshelf *') {
             $oldName = ($old -split ' \(')[0]
             Say "replacing the installed $oldName"
@@ -365,12 +450,23 @@ function Install-Ccshelf {
         } finally { $out.Dispose() }
       } finally { $in.Dispose() }
     } finally { $zip.Dispose() }
+    $verifiedSha = (Get-FileHash -Algorithm SHA256 -LiteralPath $extracted).Hash.ToLowerInvariant()
 
     # ---- install: stage next to the target, then rename into place -----------------------
     $stage = Join-Path $BinDir ".ccshelf.new.$PID.exe"
     if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Force }
     Copy-Item -LiteralPath $extracted -Destination $stage
     $backup = "$target.old"
+    # A symlink or junction named ccshelf.exe (only reachable with -Force) is removed itself: the
+    # move would otherwise follow a link to a directory and put the binary into it.
+    $current = Get-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue
+    if ($current -and ($current.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+      try {
+        try { [IO.Directory]::Delete($target) } catch { [IO.File]::Delete($target) }
+      } catch {
+        Fail "cannot remove the link ${target}: $($_.Exception.Message)"
+      }
+    }
     try {
       Move-Item -LiteralPath $stage -Destination $target -Force
     } catch {
@@ -389,34 +485,67 @@ function Install-Ccshelf {
       Say "the previous binary was in use and was kept as $backup"
     }
     $stage = $null
+    # Whatever the file system did, what is at the target must be our regular file with the
+    # verified bytes.
+    $final = Get-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue
+    if (-not $final -or $final.PSIsContainer -or ($final.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+      Fail "$target is not a regular file after the install; the binary was not installed there"
+    }
+    if ((Get-FileHash -Algorithm SHA256 -LiteralPath $target).Hash.ToLowerInvariant() -cne $verifiedSha) {
+      Fail "the file at $target does not match the verified binary; the install is not trustworthy"
+    }
 
     Say "installed $target"
     if (-not $Quiet) {
-      try { & $target version } catch { Write-Warning "ccshelf-install: installed, but '$target version' failed: $($_.Exception.Message)" }
+      $smoke = Invoke-Native $target @('version')
+      foreach ($line in $smoke.Lines) { Write-Host $line }
+      if ($smoke.ExitCode -ne 0) { Write-Warning "ccshelf-install: installed, but '$target version' failed (exit $($smoke.ExitCode))" }
     }
 
     # ---- PATH (user scope, only when asked) -----------------------------------------------
-    $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-    if (-not $userPath) { $userPath = '' }
-    $onPath = @($userPath -split ';' | Where-Object { $_ -and ($_.TrimEnd('\') -ieq $BinDir) }).Count -gt 0
+    # Read and written through the registry: [Environment]::GetEnvironmentVariable expands %VAR%
+    # entries and SetEnvironmentVariable would store the expanded text as REG_SZ, so the value is
+    # read unexpanded and written back as REG_EXPAND_SZ. (setx would also cut it at 1024
+    # characters; this does not. Some older programs still mishandle a PATH over 2047 characters.)
+    $userPath = ''
+    try {
+      $envKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $false)
+      if ($envKey) {
+        try { $userPath = [string]$envKey.GetValue('Path', '', [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames) } finally { $envKey.Dispose() }
+      }
+    } catch { $userPath = '' }
+    $onPath = @($userPath -split ';' | Where-Object {
+        $_ -and (([Environment]::ExpandEnvironmentVariables($_)).TrimEnd('\', '/') -ieq $BinDir -or $_.TrimEnd('\', '/') -ieq $BinDir)
+      }).Count -gt 0
     if (-not $onPath) {
       if ($AddToPath) {
         $newPath = if ($userPath) { $userPath.TrimEnd(';') + ';' + $BinDir } else { $BinDir }
-        [Environment]::SetEnvironmentVariable('Path', $newPath, 'User')
+        try {
+          $envKey = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Environment')
+          try { $envKey.SetValue('Path', $newPath, [Microsoft.Win32.RegistryValueKind]::ExpandString) } finally { $envKey.Dispose() }
+        } catch {
+          Fail "cannot update the user PATH: $($_.Exception.Message)"
+        }
+        # Tell running programs (Explorer, new terminals) that the environment changed.
+        try { [Environment]::SetEnvironmentVariable('CCSHELF_INSTALL_NOTIFY', $null, 'User') } catch { $null = $_ }
         $env:Path = $env:Path.TrimEnd(';') + ';' + $BinDir
         Say "added $BinDir to your user PATH (new terminals pick it up)"
+        if ($newPath.Length -gt 2047) {
+          Write-Warning 'ccshelf-install: your user PATH is now longer than 2047 characters; some older programs cut it off.'
+        }
       } else {
-        Say "$BinDir is not on your user PATH. Add it with:"
-        Say "  [Environment]::SetEnvironmentVariable('Path', [Environment]::GetEnvironmentVariable('Path','User') + ';$BinDir', 'User')"
-        Say '  (or run this installer again with -AddToPath), then open a new terminal.'
+        Say "$BinDir is not on your user PATH. Run this installer again with -AddToPath"
+        Say '(it edits only your user PATH and keeps %VARIABLE% entries as they are), or add the folder in'
+        Say 'Settings > System > About > Advanced system settings > Environment Variables. Then open a new terminal.'
       }
     }
   } finally {
     if ($stage -and (Test-Path -LiteralPath $stage)) { Remove-Item -LiteralPath $stage -Force -ErrorAction SilentlyContinue }
     if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue }
   }
+} -Version $CcshelfVersion -BinDir $CcshelfBinDir -BaseUrl $CcshelfBaseUrl -RequireSignature:$CcshelfRequireSignature `
+  -CosignIdentity $CcshelfCosignIdentity -CosignIssuer $CcshelfCosignIssuer -AddToPath:$CcshelfAddToPath `
+  -DryRun:$CcshelfDryRun -Force:$CcshelfForce -Quiet:$CcshelfQuiet -Architecture $CcshelfArchitecture
+} finally {
+  Remove-Variable -Name CcshelfVersion, CcshelfBinDir, CcshelfBaseUrl, CcshelfRequireSignature, CcshelfCosignIdentity, CcshelfCosignIssuer, CcshelfAddToPath, CcshelfDryRun, CcshelfForce, CcshelfQuiet, CcshelfArchitecture -ErrorAction SilentlyContinue
 }
-
-Install-Ccshelf -Version $Version -BinDir $BinDir -BaseUrl $BaseUrl -RequireSignature:$RequireSignature `
-  -CosignIdentity $CosignIdentity -CosignIssuer $CosignIssuer -AddToPath:$AddToPath `
-  -DryRun:$DryRun -Force:$Force -Quiet:$Quiet

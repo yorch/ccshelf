@@ -100,10 +100,120 @@ func main() { fmt.Println("not it") }
 import ("os"; "strings")
 func main() {
 	if p := os.Getenv("COSIGN_LOG"); p != "" { os.WriteFile(p, []byte(strings.Join(os.Args[1:], "\n")+"\n"), 0o600) }
+	if os.Getenv("COSIGN_STDERR") != "" { os.Stderr.WriteString("Verified OK (written to stderr)\n") }
 	if os.Getenv("COSIGN_EXIT") != "" { os.Stderr.WriteString("fake cosign: signature invalid\n"); os.Exit(1) }
 }
 ' (Join-Path $cosignDir "cosign$(if ($isWin) { '.exe' } else { '' })")
   $realCosign = Get-Command cosign -CommandType Application -ErrorAction SilentlyContinue
+
+  # ---- a local HTTPS server (self-signed certificate) for the https code path ------------------------
+  $httpsdSource = @'
+package main
+
+import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
+	"fmt"
+	"math/big"
+	"net"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+)
+
+// Usage: httpsd ROOT CERT_OUT PORT_OUT
+// A test-only HTTPS server for the installer tests: a self-signed certificate for 127.0.0.1 is
+// written to CERT_OUT, the port to PORT_OUT. Paths:
+//
+//	/rel/...        the release tree under ROOT
+//	/redir/...      302 to /...      (one hop, same host)
+//	/redir2/...     302 to /redir/... (two hops)
+//	/loop/...       302 to itself
+//	/to-http/...    302 to http://127.0.0.1:1/...
+//	/bigtext/...    2 MiB with a Content-Length
+//	/chunkedtext/.. 2 MiB with no Content-Length
+//	/bigarchive/... the real checksums.txt, but every other file is 151 MiB without a length
+func main() {
+	root, certOut, portOut := os.Args[1], os.Args[2], os.Args[3]
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	tmpl := &x509.Certificate{
+		SerialNumber:          big.NewInt(time.Now().UnixNano()),
+		Subject:               pkix.Name{CommonName: "ccshelf installer test"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(24 * time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+		IPAddresses:           []net.IP{net.ParseIP("127.0.0.1")},
+		DNSNames:              []string{"localhost"},
+	}
+	der, _ := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+	os.WriteFile(certOut, certPEM, 0o644)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		panic(err)
+	}
+	os.WriteFile(portOut, []byte(fmt.Sprint(ln.Addr().(*net.TCPAddr).Port)), 0o644)
+
+	mux := http.NewServeMux()
+	files := http.FileServer(http.Dir(root))
+	mux.Handle("/rel/", http.StripPrefix("/rel", files))
+	redirect := func(prefix, to string) {
+		mux.HandleFunc(prefix, func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, to+strings.TrimPrefix(r.URL.Path, strings.TrimSuffix(prefix, "/")), http.StatusFound)
+		})
+	}
+	redirect("/redir/", "")
+	redirect("/redir2/", "/redir")
+	mux.HandleFunc("/loop/", func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, r.URL.Path, http.StatusFound) })
+	mux.HandleFunc("/to-http/", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "http://127.0.0.1:1"+strings.TrimPrefix(r.URL.Path, "/to-http"), http.StatusFound)
+	})
+	mux.HandleFunc("/bigtext/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", fmt.Sprint(2<<20))
+		w.Write(make([]byte, 2<<20))
+	})
+	mux.HandleFunc("/chunkedtext/", func(w http.ResponseWriter, r *http.Request) {
+		chunk := make([]byte, 64<<10)
+		for i := 0; i < 32; i++ {
+			w.Write(chunk)
+			w.(http.Flusher).Flush()
+		}
+	})
+	mux.HandleFunc("/bigarchive/", func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/checksums.txt") {
+			b, err := os.ReadFile(filepath.Join(root, strings.TrimPrefix(r.URL.Path, "/bigarchive/")))
+			if err != nil {
+				http.NotFound(w, r)
+				return
+			}
+			w.Write(b)
+			return
+		}
+		chunk := make([]byte, 1<<20)
+		for i := 0; i < 151; i++ {
+			if _, err := w.Write(chunk); err != nil {
+				return
+			}
+			w.(http.Flusher).Flush()
+		}
+	})
+	srv := &http.Server{Handler: mux, TLSConfig: &tls.Config{Certificates: []tls.Certificate{{Certificate: [][]byte{der}, PrivateKey: key}}}}
+	srv.ServeTLS(ln, "", "")
+}
+
+'@
+  $httpsdExe = Join-Path $progs "httpsd-server$(if ($isWin) { '.exe' } else { '' })"
+  Build-Go 'httpsd' $httpsdSource $httpsdExe
 
   # ---- release trees -----------------------------------------------------------------------
   $tag = 'v0.0.0-test'
@@ -160,6 +270,45 @@ func main() {
   $rel = Join-Path $root 'rel'
   New-Release $rel $goodZip
   $base = Get-FileUrl $rel
+
+  # Start the HTTPS server over the release tree and make this machine trust its certificate:
+  # Linux through SSL_CERT_FILE (per child process), Windows through the certificate store (only on
+  # a discarded GitHub Actions runner). macOS has no per-process way (it would mean editing the
+  # login keychain), so those tests are skipped there; they run on Linux and Windows.
+  $httpsReady = $false
+  $httpsWhy = ''
+  $httpsProc = $null
+  $trustedCert = $null
+  $trustedStore = $null
+  $certFile = Join-Path $root 'https-cert.pem'
+  $portFile = Join-Path $root 'https-port.txt'
+  $isLinuxHost = (-not $isWin) -and $IsLinux
+  if ($isWin -and $env:GITHUB_ACTIONS -ne 'true') { $httpsWhy = 'trusting a self-signed certificate changes the certificate store: only done on GitHub Actions runners' }
+  elseif ((-not $isWin) -and (-not $isLinuxHost)) { $httpsWhy = 'macOS cannot trust a certificate per process (it would edit the keychain)' }
+  else {
+    $httpsProc = Start-Process -FilePath $httpsdExe -ArgumentList @($rel, $certFile, $portFile) -PassThru `
+      -RedirectStandardOutput (Join-Path $root 'httpsd.out') -RedirectStandardError (Join-Path $root 'httpsd.err')
+    for ($i = 0; $i -lt 100 -and -not ((Test-Path -LiteralPath $portFile) -and (Get-Item -LiteralPath $portFile).Length -gt 0); $i++) { Start-Sleep -Milliseconds 100 }
+    if (-not (Test-Path -LiteralPath $portFile)) { $httpsWhy = 'the test HTTPS server did not start' }
+    elseif ($isWin) {
+      $trustedCert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($certFile)
+      foreach ($loc in @('LocalMachine', 'CurrentUser')) {
+        try {
+          $st = New-Object System.Security.Cryptography.X509Certificates.X509Store('Root', $loc)
+          $st.Open('ReadWrite'); $st.Add($trustedCert); $trustedStore = $st
+          break
+        } catch { $trustedStore = $null }
+      }
+      if ($trustedStore) { $httpsReady = $true } else { $httpsWhy = 'could not add the test certificate to a trusted store' }
+    } else { $httpsReady = $true }
+  }
+  $httpsPort = if ($httpsReady) { (Get-Content -LiteralPath $portFile -Raw).Trim() } else { '0' }
+  $httpsBase = "https://127.0.0.1:$httpsPort"
+  # (a case-sensitive table: Linux has both NO_PROXY and no_proxy)
+  $httpsEnv = New-Object System.Collections.Hashtable ([StringComparer]::Ordinal)
+  foreach ($kv in @(@('SSL_CERT_FILE', $certFile), @('NO_PROXY', '127.0.0.1'), @('no_proxy', '127.0.0.1'), @('HTTPS_PROXY', ''), @('https_proxy', ''), @('HTTP_PROXY', ''), @('http_proxy', ''), @('ALL_PROXY', ''), @('all_proxy', ''))) {
+    $httpsEnv[$kv[0]] = $kv[1]
+  }
 
   # ---- runner ---------------------------------------------------------------------------------
   $script:n = 0
@@ -369,6 +518,86 @@ func main() {
     Inst @('-Version', $tag, '-DryRun', '-BaseUrl', (Get-FileUrl $tamper))
     ExpectFail "[$label] -DryRun still verifies the checksum" 'SHA-256 mismatch'
 
+    # ---- -Architecture and the other architecture's archive
+    $other = if ($arch -eq 'arm64') { 'amd64' } else { 'arm64' }
+    Inst @('-Version', $tag, '-DryRun', '-Architecture', $other)
+    ExpectFail "[$label] -Architecture $other looks for that platform's archive" "windows_$other.zip"
+    Inst @('-Version', $tag, '-DryRun', '-Architecture', $arch)
+    ExpectOk "[$label] -Architecture $arch (the host's own) works" 'nothing was installed'
+    Inst @('-Version', $tag, '-Architecture', 'riscv64')
+    ExpectFail "[$label] an unsupported -Architecture is refused" 'unsupported CPU architecture'
+
+    # ---- a directory or link named ccshelf.exe (-Force must neither install into it nor through it)
+    $dirt = Join-Path $root "dirt-$label"; $null = New-Item -ItemType Directory -Path (Join-Path $dirt "ccshelf$exe") -Force
+    [IO.File]::WriteAllText((Join-Path $dirt "ccshelf$exe/keep"), 'keep')
+    Inst @('-Version', $tag, '-BinDir', $dirt)
+    ExpectFail "[$label] a directory named ccshelf.exe is refused" 'is a directory'
+    Inst @('-Version', $tag, '-BinDir', $dirt, '-Force')
+    ExpectFail "[$label] -Force does not replace a directory named ccshelf.exe" 'is a directory'
+    $inside = @(Get-ChildItem -LiteralPath (Join-Path $dirt "ccshelf$exe") -Force | ForEach-Object { $_.Name })
+    if ($inside.Count -eq 1 -and $inside[0] -eq 'keep') { Pass "[$label] the directory is untouched (nothing was moved into it)" } else { Fail "[$label] the directory is untouched" ($inside -join ',') }
+    try {
+      $outside = Join-Path $root "outside-$label"; $null = New-Item -ItemType Directory -Path $outside
+      $ld = Join-Path $root "linkdir-$label"; $null = New-Item -ItemType Directory -Path $ld
+      $linkPath = Join-Path $ld "ccshelf$exe"
+      try { $null = New-Item -ItemType SymbolicLink -Path $linkPath -Target $outside }
+      catch { if ($isWin) { $null = New-Item -ItemType Junction -Path $linkPath -Target $outside } else { throw } }
+      Inst @('-Version', $tag, '-BinDir', $ld)
+      ExpectFail "[$label] a link to a directory named ccshelf.exe is refused" 'symlink'
+      Inst @('-Version', $tag, '-BinDir', $ld, '-Force')
+      ExpectOk "[$label] -Force replaces a link to a directory" '-Force: replacing'
+      $item = Get-Item -LiteralPath $linkPath -Force
+      if ((-not ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) -and (-not $item.PSIsContainer)) { Pass "[$label] the link itself was replaced by the binary" } else { Fail "[$label] the link itself was replaced by the binary" "$($item.Attributes)" }
+      ExpectInstalled "[$label] the replaced link now runs ccshelf" $ld
+      if (@(Get-ChildItem -LiteralPath $outside -Force).Count -eq 0) { Pass "[$label] nothing was written outside the bin dir through the link" } else { Fail "[$label] nothing was written outside the bin dir through the link" 'files found' }
+
+      $precious = Join-Path $root "precious-$label.txt"; [IO.File]::WriteAllText($precious, 'precious')
+      $lf = Join-Path $root "linkfile-$label"; $null = New-Item -ItemType Directory -Path $lf
+      $null = New-Item -ItemType SymbolicLink -Path (Join-Path $lf "ccshelf$exe") -Target $precious
+      Inst @('-Version', $tag, '-BinDir', $lf, '-Force')
+      ExpectOk "[$label] -Force replaces a link to a file"
+      if ([IO.File]::ReadAllText($precious) -eq 'precious') { Pass "[$label] the file the link pointed to is untouched" } else { Fail "[$label] the file the link pointed to is untouched" 'changed' }
+
+      $dl = Join-Path $root "dangling-$label"; $null = New-Item -ItemType Directory -Path $dl
+      $gone = Join-Path $root "does-not-exist-$label"
+      $null = New-Item -ItemType SymbolicLink -Path (Join-Path $dl "ccshelf$exe") -Target $gone
+      Inst @('-Version', $tag, '-BinDir', $dl)
+      ExpectFail "[$label] a dangling link named ccshelf.exe is refused" 'symlink'
+      Inst @('-Version', $tag, '-BinDir', $dl, '-Force')
+      ExpectOk "[$label] -Force replaces a dangling link"
+      ExpectInstalled "[$label] the dangling link was replaced by a working binary" $dl
+      if (-not (Test-Path -LiteralPath $gone)) { Pass "[$label] the link's missing target was never created" } else { Fail "[$label] the link's missing target was never created" 'exists' }
+    } catch { Skip "[$label] link tests" "cannot create a link: $($_.Exception.Message)" }
+
+    # ---- https: a local server with a self-signed certificate (manual redirects, size caps)
+    if ($httpsReady) {
+      Inst @('-Version', $tag, '-BaseUrl', "$httpsBase/rel") -Env $httpsEnv
+      ExpectOk "[$label] an https base-url installs" 'SHA-256 matches'
+      ExpectInstalled "[$label] the https-downloaded release runs"
+      Inst @('-BaseUrl', "$httpsBase/rel") -Env $httpsEnv
+      ExpectOk "[$label] latest over https" "latest release is $tag"
+      Inst @('-Version', $tag, '-BaseUrl', "$httpsBase/redir/rel") -Env $httpsEnv
+      ExpectOk "[$label] a same-host https redirect is followed"
+      Inst @('-Version', $tag, '-BaseUrl', "$httpsBase/redir2/rel") -Env $httpsEnv
+      ExpectOk "[$label] two https redirects in a row are followed"
+      Inst @('-Version', $tag, '-BaseUrl', "$httpsBase/to-http/rel") -Env $httpsEnv
+      ExpectFail "[$label] an https to http redirect is refused" 'non-https'
+      ExpectNotInstalled "[$label] a refused redirect installs nothing"
+      Inst @('-Version', $tag, '-BaseUrl', "$httpsBase/loop") -Env $httpsEnv
+      ExpectFail "[$label] a redirect loop stops" 'too many redirects'
+      Inst @('-Version', $tag, '-BaseUrl', "$httpsBase/bigtext") -Env $httpsEnv
+      ExpectFail "[$label] a text file over the cap (declared length) is refused" 'larger than 1048576 bytes'
+      Inst @('-Version', $tag, '-BaseUrl', "$httpsBase/chunkedtext") -Env $httpsEnv
+      ExpectFail "[$label] a text file over the cap (streamed, no length) is refused" 'larger than 1048576 bytes'
+      Inst @('-Version', $tag, '-BaseUrl', "$httpsBase/bigarchive") -Env $httpsEnv
+      ExpectFail "[$label] an archive over the cap (streamed) is refused" 'larger than 157286400 bytes'
+      ExpectNotInstalled "[$label] an oversize archive installs nothing"
+      Inst @('-Version', 'v9.9.9', '-BaseUrl', "$httpsBase/rel") -Env $httpsEnv
+      ExpectFail "[$label] an https 404 is an error" 'HTTP 404'
+    } else {
+      Skip "[$label] https tests" $httpsWhy
+    }
+
     # ---- signatures
     if (-not $realCosign) {
       $log = Join-Path $root "cosign-$label.log"
@@ -387,6 +616,9 @@ func main() {
       Inst @() -Env @{ COSIGN_LOG = $log } -PathPrefix $cosignDir
       $a = @(Get-Content -LiteralPath $log)
       if ($script:code -eq 0 -and ($a -contains "https://github.com/yorch/ccshelf/.github/workflows/release.yml@refs/tags/$tag")) { Pass "[$label] latest: the identity names the resolved tag" } else { Fail "[$label] latest identity" ($a -join ' ') $script:out }
+      Inst @('-Version', $tag) -Env @{ COSIGN_LOG = $log; COSIGN_STDERR = '1' } -PathPrefix $cosignDir
+      ExpectOk "[$label] a cosign that writes to stderr and exits 0 is a success" 'signature verified'
+      if ($script:out.Contains('Verified OK (written to stderr)')) { Pass "[$label] cosign's stderr output is shown" } else { Fail "[$label] cosign's stderr output is shown" 'missing' $script:out }
       Inst @('-Version', $tag) -Env @{ COSIGN_LOG = $log; COSIGN_EXIT = '1' } -PathPrefix $cosignDir
       ExpectFail "[$label] cosign present and bad refuses to install" 'cosign could not verify'
       ExpectNotInstalled "[$label] a bad signature installs nothing"
@@ -417,25 +649,127 @@ func main() {
 
     # ---- user PATH (only on a discarded CI runner)
     if ($isWin -and $env:GITHUB_ACTIONS -eq 'true') {
-      $before = [Environment]::GetEnvironmentVariable('Path', 'User')
+      $envKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
+      $beforeRaw = [string]$envKey.GetValue('Path', '', [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+      $beforeKind = try { $envKey.GetValueKind('Path') } catch { [Microsoft.Win32.RegistryValueKind]::ExpandString }
       try {
+        $envKey.SetValue('Path', '%USERPROFILE%\ccshelf-test-keep;C:\existing-entry', [Microsoft.Win32.RegistryValueKind]::ExpandString)
         $pdir = Join-Path $root "pathdir-$label"
         Inst @('-Version', $tag, '-BinDir', $pdir, '-AddToPath')
-        $after = [Environment]::GetEnvironmentVariable('Path', 'User')
-        if ($script:code -eq 0 -and ($after -split ';') -contains $pdir) { Pass "[$label] -AddToPath adds the directory to the user PATH" } else { Fail "[$label] -AddToPath" "PATH: $after" $script:out }
-        Inst @('-Version', $tag, '-BinDir', $pdir)
+        $raw = [string]$envKey.GetValue('Path', '', [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+        $kind = $envKey.GetValueKind('Path')
+        if ($script:code -eq 0 -and ($raw -split ';') -contains $pdir) { Pass "[$label] -AddToPath adds the directory to the user PATH" } else { Fail "[$label] -AddToPath" "PATH: $raw" $script:out }
+        if ($raw.StartsWith('%USERPROFILE%\ccshelf-test-keep;C:\existing-entry;')) { Pass "[$label] -AddToPath keeps %VARIABLE% entries unexpanded" } else { Fail "[$label] -AddToPath keeps %VARIABLE% entries unexpanded" "PATH: $raw" }
+        if ($kind -eq [Microsoft.Win32.RegistryValueKind]::ExpandString) { Pass "[$label] -AddToPath writes the PATH as REG_EXPAND_SZ" } else { Fail "[$label] -AddToPath writes the PATH as REG_EXPAND_SZ" "kind: $kind" }
+        Inst @('-Version', $tag, '-BinDir', $pdir, '-AddToPath')
+        $raw2 = [string]$envKey.GetValue('Path', '', [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+        if ($raw2 -eq $raw) { Pass "[$label] -AddToPath twice adds no duplicate" } else { Fail "[$label] -AddToPath twice adds no duplicate" "PATH: $raw2" }
         if (-not $script:out.Contains('is not on your user PATH')) { Pass "[$label] no PATH hint once the directory is on the user PATH" } else { Fail "[$label] no PATH hint" 'hint printed' $script:out }
-      } finally { [Environment]::SetEnvironmentVariable('Path', $before, 'User') }
+        # An entry that only matches after %VAR% expansion counts as present.
+        $envKey.SetValue('Path', '%LOCALAPPDATA%\Programs\ccshelf-ptest', [Microsoft.Win32.RegistryValueKind]::ExpandString)
+        $viaVar = Join-Path $env:LOCALAPPDATA 'Programs\ccshelf-ptest'
+        Inst @('-Version', $tag, '-BinDir', $viaVar, '-AddToPath')
+        $raw3 = [string]$envKey.GetValue('Path', '', [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+        if ($raw3 -eq '%LOCALAPPDATA%\Programs\ccshelf-ptest') { Pass "[$label] a %VARIABLE% entry that expands to the directory counts as present" } else { Fail "[$label] a %VARIABLE% entry that expands to the directory counts as present" "PATH: $raw3" }
+      } finally {
+        $envKey.SetValue('Path', $beforeRaw, $beforeKind)
+        $envKey.Dispose()
+      }
     } else {
-      Skip "[$label] -AddToPath" 'only run on GitHub Actions Windows runners'
+      Skip "[$label] -AddToPath (REG_EXPAND_SZ, no duplicates)" 'only run on GitHub Actions Windows runners'
     }
     $base = $savedBase
+  }
+
+  # ---- architecture detection (the function is lifted out of the installer and called directly) ------
+  $parseErrors = $null
+  $ast = [System.Management.Automation.Language.Parser]::ParseFile($installSource, [ref]$null, [ref]$parseErrors)
+  $fnAst = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Resolve-Architecture' }, $true)
+  if (-not $fnAst) { Fail 'Resolve-Architecture exists' 'not found in install.ps1' } else {
+    function Fail([string]$Message) { throw $Message }
+    Invoke-Expression $fnAst.Extent.Text
+    $archCases = @(
+      # override, OSArchitecture, WMI, PROCESSOR_ARCHITEW6432, PROCESSOR_ARCHITECTURE, expected
+      @('', 'X64', '', '', 'AMD64', 'amd64'),
+      @('', 'Arm64', '', '', 'AMD64', 'arm64'),          # an emulated x64 PowerShell on Windows on ARM
+      @('', 'Arm64', '', '', 'ARM64', 'arm64'),
+      @('', '', '12', '', 'AMD64', 'arm64'),             # no OSArchitecture: WMI says ARM64
+      @('', '', '9', '', 'ARM64', 'amd64'),
+      @('', '', '', 'ARM64', 'x86', 'arm64'),            # a 32-bit process on ARM64 Windows
+      @('', '', '', 'AMD64', 'x86', 'amd64'),
+      @('', '', '', '', 'AMD64', 'amd64'),
+      @('', '', '', '', 'ARM64', 'arm64'),
+      @('arm64', 'X64', '9', 'AMD64', 'AMD64', 'arm64'), # an explicit -Architecture wins
+      @('amd64', 'Arm64', '12', 'ARM64', 'ARM64', 'amd64')
+    )
+    foreach ($c in $archCases) {
+      $got = Resolve-Architecture $c[0] $c[1] $c[2] $c[3] $c[4]
+      $desc = "architecture [$($c[0])|$($c[1])|$($c[2])|$($c[3])|$($c[4])]"
+      if ($got -eq $c[5]) { Pass "$desc is $($c[5])" } else { Fail $desc "got $got, wanted $($c[5])" }
+    }
+    foreach ($bad in @(@('', 'X86', '', '', 'x86'), @('', 'Arm', '', '', 'ARM'), @('riscv64', '', '', '', 'AMD64'), @('', '', '', '', ''))) {
+      $threw = $false
+      try { $null = Resolve-Architecture $bad[0] $bad[1] $bad[2] $bad[3] $bad[4] } catch { $threw = $_.Exception.Message -like '*unsupported CPU architecture*' }
+      if ($threw) { Pass "architecture [$($bad -join '|')] is unsupported" } else { Fail "architecture [$($bad -join '|')] is unsupported" 'no error' }
+    }
+    Remove-Item Function:Fail -ErrorAction SilentlyContinue
+    Remove-Item Function:Resolve-Architecture -ErrorAction SilentlyContinue
+  }
+
+  # ---- the documented `irm | iex` entry: the text is piped into Invoke-Expression ---------------------------
+  # The default release URL is replaced by the local tree in a copy (the real one is the network).
+  $anchor = "'https://github.com/yorch/ccshelf/releases', # OWNER"
+  $iexText = [IO.File]::ReadAllText($installer)
+  if (-not $iexText.Contains($anchor)) { throw 'iex test anchor not found in install.ps1' }
+  $iexFile = Join-Path $root 'install-iex.ps1'
+  [IO.File]::WriteAllText($iexFile, $iexText.Replace($anchor, "'$base', # OWNER"))
+  foreach ($shell in $shells) {
+    $label = Split-Path -Leaf $shell
+    $iexHome = Join-Path $root "iex-home-$label"; $null = New-Item -ItemType Directory -Path $iexHome
+    $probe = @'
+$Version = 'mine-v'; $BinDir = 'mine-b'; $BaseUrl = 'mine-u'; $Force = 'mine-f'; $Quiet = 'mine-q'; $DryRun = 'mine-d'
+$AddToPath = 'mine-a'; $RequireSignature = 'mine-r'; $CosignIdentity = 'mine-i'; $CosignIssuer = 'mine-s'; $Architecture = 'mine-x'
+function Install-Ccshelf { 'mine-fn' }
+function Say { 'mine-say' }
+$skip = 'LASTEXITCODE', '?', '_', 'Error', 'skip', 'namesBefore', 'fnBefore', 'eapBefore', 'namesAfter', 'fnAfter'
+$namesBefore = @(Get-Variable | ForEach-Object { $_.Name } | Where-Object { $skip -notcontains $_ } | Sort-Object) -join ','
+$fnBefore = @(Get-ChildItem Function: | ForEach-Object { $_.Name } | Sort-Object) -join ','
+$eapBefore = $ErrorActionPreference
+Get-Content -Raw -LiteralPath '@@FILE@@' | Invoke-Expression
+$namesAfter = @(Get-Variable | ForEach-Object { $_.Name } | Where-Object { $skip -notcontains $_ } | Sort-Object) -join ','
+$fnAfter = @(Get-ChildItem Function: | ForEach-Object { $_.Name } | Sort-Object) -join ','
+'VARS=' + (@($Version, $BinDir, $BaseUrl, $Force, $Quiet, $DryRun, $AddToPath, $RequireSignature, $CosignIdentity, $CosignIssuer, $Architecture) -join ',')
+'NAMES-SAME=' + ($namesBefore -eq $namesAfter)
+'NAMES-DIFF=' + (@($namesAfter -split ',' | Where-Object { ($namesBefore -split ',') -notcontains $_ }) -join ',')
+'FUNCS-SAME=' + ($fnBefore -eq $fnAfter)
+'EAP-SAME=' + ($eapBefore -eq $ErrorActionPreference)
+try { $neverDefinedVariable; 'STRICT-LEAK=False' } catch { 'STRICT-LEAK=True' }
+'FN=' + (Install-Ccshelf)
+'SAY=' + (Say)
+'@
+    $probe = $probe.Replace('@@FILE@@', $iexFile)
+    $savedLocal = $env:LOCALAPPDATA
+    $env:LOCALAPPDATA = $iexHome
+    try { $o = (& $shell -NoProfile -Command $probe *>&1 | Out-String) } finally { $env:LOCALAPPDATA = $savedLocal }
+    $want = 'VARS=mine-v,mine-b,mine-u,mine-f,mine-q,mine-d,mine-a,mine-r,mine-i,mine-s,mine-x'
+    if ($o.Contains($want)) { Pass "[$label] irm | iex leaves the caller's -Version/-BinDir/-Force/... variables alone" } else { Fail "[$label] irm | iex leaves the caller's variables alone" 'changed' $o }
+    if ($o.Contains('NAMES-SAME=True')) { Pass "[$label] irm | iex defines no new variable" } else { Fail "[$label] irm | iex defines no new variable" 'new names' $o }
+    if ($o.Contains('FUNCS-SAME=True')) { Pass "[$label] irm | iex defines no function" } else { Fail "[$label] irm | iex defines no function" 'function table changed' $o }
+    if ($o.Contains('FN=mine-fn') -and $o.Contains('SAY=mine-say')) { Pass "[$label] irm | iex does not replace the caller's same-named functions" } else { Fail "[$label] irm | iex does not replace the caller's functions" 'replaced' $o }
+    if ($o.Contains('EAP-SAME=True') -and $o.Contains('STRICT-LEAK=False')) { Pass "[$label] irm | iex leaves ErrorActionPreference and strict mode alone" } else { Fail "[$label] irm | iex leaves ErrorActionPreference and strict mode alone" 'leaked' $o }
+    $iexBin = @(Get-ChildItem -LiteralPath $iexHome -Recurse -Force -Filter "ccshelf$exe" -ErrorAction SilentlyContinue)
+    if ($iexBin.Count -eq 1 -and ((& $iexBin[0].FullName version) -eq 'ccshelf v0.0.0-test fake build')) { Pass "[$label] irm | iex installs into the default directory (under LOCALAPPDATA)" } else { Fail "[$label] irm | iex installs into the default directory" "found $($iexBin.Count)" $o }
   }
 
   # ---- the documented script-block entry does not leak settings, and uses no $PSScriptRoot
   $src = [IO.File]::ReadAllText($installSource)
   if ($src -match 'PSScriptRoot|PSCommandPath|MyInvocation') { Fail 'no dependence on the script path (irm | iex safe)' 'found a script-path variable' } else { Pass 'no dependence on the script path (irm | iex safe)' }
   if ($src -match '(?im)^\s*(Invoke-Expression|iex)\b') { Fail 'no Invoke-Expression in the installer' 'found' } else { Pass 'no Invoke-Expression in the installer' }
+  # The user PATH is read unexpanded and written as REG_EXPAND_SZ (behavior is tested on the Windows runner).
+  if ($src.Contains('DoNotExpandEnvironmentNames') -and $src.Contains('RegistryValueKind]::ExpandString') -and -not ($src -match "GetEnvironmentVariable\('Path', 'User'\)")) {
+    Pass 'the user PATH is read unexpanded and written as ExpandString'
+  } else { Fail 'the user PATH is read unexpanded and written as ExpandString' 'source check failed' }
+  if ($src -match 'function Install-Ccshelf') { Fail 'the installer defines no named function in the caller scope' 'found Install-Ccshelf' } else { Pass 'the installer defines no named function in the caller scope' }
   foreach ($shell in $shells) {
     $label = Split-Path -Leaf $shell
     $sbBin = Join-Path $root "sb-$label"
@@ -444,6 +778,11 @@ func main() {
     if ($o -match 'EAP=Continue' -and (Test-Path -LiteralPath (Join-Path $sbBin "ccshelf$exe"))) { Pass "[$label] the script-block entry installs and leaves the caller's settings alone" } else { Fail "[$label] script-block entry" 'unexpected' $o }
   }
 } finally {
+  if ($httpsProc -and -not $httpsProc.HasExited) { try { $httpsProc.Kill() } catch { $null = $_ } }
+  if ($trustedStore) {
+    try { $trustedStore.Remove($trustedCert) } catch { $null = $_ }
+    $trustedStore.Close()
+  }
   Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
 }
 
