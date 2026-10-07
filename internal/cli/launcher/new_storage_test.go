@@ -366,13 +366,15 @@ func TestNewStorageUnavailableNamespaces(t *testing.T) {
 			case "plugin":
 				h.writeConfig("[[sources]]\ntype = 'plugin'\nplugin = 'profiles@acme'\n")
 			case "local-dir":
+				// A dir source whose path is a regular file must be reported as
+				// unavailable on every OS (D-48 collision checks rely on it).
 				p := filepath.Join(t.TempDir(), "not-a-directory")
 				testutil.WriteFile(t, p, "file")
 				h.writeConfig("[[sources]]\ntype = 'dir'\npath = " + tomlString(p) + "\n")
 			}
 			h.mustRun("new", "personal", "--description", "local only")
 			if !strings.Contains(h.errb.String(), "unavailable") {
-				t.Fatal("missing outage warning")
+				t.Fatalf("missing outage warning; stderr=%q", h.errb.String())
 			}
 			if code := h.run("new", "project", "--scope", "project"); code != ui.ExitFailure {
 				t.Fatalf("unavailable project namespace: %d, %s", code, h.errb)
