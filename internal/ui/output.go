@@ -16,8 +16,9 @@ const minColumn = 8
 // Table writes an aligned table. Cells are sanitized (no terminal escape
 // injection) and flattened to one line. When mode.Width is set, the widest
 // columns are truncated with an ellipsis so rows fit; widths count wide
-// Unicode characters as two columns. In plain mode the header rule and the
-// ellipsis are ASCII. Trailing spaces are not written.
+// Unicode characters as two columns. If even the minimum column widths cannot
+// fit, rows become wrapped, labeled records without truncation. In plain mode
+// the header rule and the ellipsis are ASCII. Trailing spaces are not written.
 func Table(w io.Writer, headers []string, rows [][]string, mode Mode) error {
 	ncol := len(headers)
 	for _, r := range rows {
@@ -58,6 +59,9 @@ func Table(w io.Writer, headers []string, rows [][]string, mode Mode) error {
 				break
 			}
 			widths[wi]--
+		}
+		if sum(widths) > avail {
+			return stackedTable(w, headers, grid, mode)
 		}
 	}
 	var b bytes.Buffer

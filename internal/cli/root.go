@@ -36,8 +36,19 @@ func newRoot(env *clicore.Env) (*cobra.Command, *clicore.Globals) {
 	}
 
 	root := &cobra.Command{
-		Use:           "ccshelf",
-		Short:         "Run Claude Code with a named profile; lint and publish an org's plugin catalog",
+		Use:   "ccshelf",
+		Short: "Run Claude Code with a named profile; lint and publish an org's plugin catalog",
+		Long: `Choose which plugins, skills and MCP servers are active for a Claude Code
+session, or maintain your organization's plugin catalog.
+
+Getting started: init creates your config; new creates a profile; run launches it.
+Run ccshelf without a command in a terminal to pick a profile.
+Flags and arguments work without prompts; use --no-interactive in scripts.`,
+		Example: `  ccshelf init
+  ccshelf new my-profile
+  ccshelf ls
+  ccshelf run my-profile
+  ccshelf show my-profile --json`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Version:       version.String(),
@@ -80,6 +91,7 @@ func newRoot(env *clicore.Env) (*cobra.Command, *clicore.Globals) {
 	root.AddCommand(orgcmd.CommandsWith(get, orgcmd.Options{Catalog: launcher.CatalogProvider(launcher.Options{})})...)
 	root.AddCommand(updatecmd.Commands(get, updatecmd.Options{})...)
 	updatecmd.Hook(root, get, updatecmd.Options{})
+	configureHelp(root)
 	return root, g
 }
 
@@ -89,15 +101,23 @@ func newRoot(env *clicore.Env) (*cobra.Command, *clicore.Globals) {
 func Execute(ctx context.Context, env *clicore.Env, args []string) int {
 	root, g := newRoot(env)
 	root.SetArgs(args)
-	err := root.ExecuteContext(ctx)
+	cmd, err := root.ExecuteContextC(ctx)
 	if err == nil {
 		return ui.ExitOK
 	}
 	code := exitCodeOf(err)
+	if code == ui.ExitUsage {
+		err = withUsageHint(err, cmd, root)
+	}
 	var ee *ui.ExitError
 	if !(errors.As(err, &ee) && ee.Err == nil) {
 		color, interactive := clicore.UIPrefs(g)
 		mode := env.Context(g, color, interactive).Mode
+		// Cobra can reject a command before parsing any flags. Still honor
+		// an explicit --json for these early usage errors.
+		if code == ui.ExitUsage && requestsJSON(args, cmd, root) {
+			mode.JSON = true
+		}
 		if mode.JSON {
 			reportJSON(env.Streams.Err, err, code)
 		} else {

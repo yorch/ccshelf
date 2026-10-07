@@ -136,7 +136,7 @@ func TestExecuteBareCommand(t *testing.T) {
 
 	// Without a terminal: the help, exit 0, nothing started.
 	var o, e bytes.Buffer
-	if code := Execute(context.Background(), testEnv(&o, &e), nil); code != ui.ExitOK || !strings.Contains(o.String(), "Available Commands") {
+	if code := Execute(context.Background(), testEnv(&o, &e), nil); code != ui.ExitOK || !strings.Contains(o.String(), "Profiles:") {
 		t.Fatalf("no tty: %d\n%s%s", code, o.String(), e.String())
 	}
 

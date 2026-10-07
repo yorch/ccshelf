@@ -15,7 +15,7 @@ func TestVersionHelpUnknown(t *testing.T) {
 	contains(t, "--version stdout", r.Stdout, "ccshelf ")
 
 	r = s.mustRun("--help")
-	contains(t, "--help", r.Stdout, "Usage:", "run ", "lint", "catalog", "trust", "Available Commands")
+	contains(t, "--help", r.Stdout, "Usage:", "run ", "lint", "catalog", "trust", "Profiles:", "Setup and utilities:", "Getting started:")
 
 	for _, cmd := range []string{"run", "trust", "doctor", "catalog", "account"} {
 		r = s.mustRun(cmd, "--help")

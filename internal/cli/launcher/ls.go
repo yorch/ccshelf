@@ -2,7 +2,6 @@ package launcher
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/spf13/cobra"
 
@@ -71,8 +70,7 @@ profiles are listed with their error. Use --json for a stable machine-readable f
 			warnf(cc, "this directory has a .ccshelf folder that is not loaded: %s", s.proj.Reason)
 		}
 		if len(rows) == 0 {
-			fmt.Fprintln(cc.Streams.Err, "no profiles found; create one with: ccshelf new <name>")
-			return nil
+			return ui.EmptyState(cc.Streams.Out, "no profiles found", "create one with: ccshelf new <name>; to configure shared sources: ccshelf init --help")
 		}
 		table := make([][]string, 0, len(rows))
 		for _, r := range rows {

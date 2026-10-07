@@ -271,8 +271,7 @@ matches nothing in a real catalog is not an error.`,
 
 func writeSearchText(w io.Writer, mode ui.Mode, d searchJSON) error {
 	if len(d.Matches) == 0 {
-		_, err := fmt.Fprintf(w, "no plugin matches %q\n", ui.SanitizeLine(d.Query))
-		return err
+		return ui.EmptyState(w, fmt.Sprintf("no plugin matches %q", d.Query), "try fewer or broader words; search matches every word in your query")
 	}
 	rows := make([][]string, 0, len(d.Matches))
 	for _, m := range d.Matches {

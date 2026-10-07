@@ -167,8 +167,7 @@ func (l *launcher) accountLsCmd() *cobra.Command {
 			return ui.WriteJSON(cc.Streams.Out, "accounts", rows)
 		}
 		if len(infos) == 0 {
-			fmt.Fprintln(cc.Streams.Err, "no accounts configured; add one with: ccshelf account add <name>")
-			return nil
+			return ui.EmptyState(cc.Streams.Out, "no accounts configured", "accounts are optional; to add one: ccshelf account add <name>")
 		}
 		rows := make([][]string, 0, len(infos))
 		for _, i := range infos {
