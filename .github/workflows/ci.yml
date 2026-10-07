@@ -492,8 +492,12 @@ jobs:
       - name: install.sh mutation tests (each deliberate defect must fail the suite)
         if: runner.os == 'Linux'
         run: bash scripts/test_install.sh --mutants
-      - name: install.ps1 offline tests (Windows PowerShell 5.1 and PowerShell 7)
+      - name: install.ps1 offline tests (Windows PowerShell 5.1 and PowerShell 7, with a local HTTPS server)
         if: runner.os == 'Windows'
+        shell: pwsh
+        run: pwsh -NoProfile -File scripts/test_install.ps1
+      - name: install.ps1 tests on PowerShell 7 for Linux (a developer-convenience copy; includes the local HTTPS server tests)
+        if: runner.os == 'Linux'
         shell: pwsh
         run: pwsh -NoProfile -File scripts/test_install.ps1
       - name: Build a release tree for this runner
