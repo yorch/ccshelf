@@ -255,6 +255,7 @@ ccshelf catalog init . --mode adopt --platform-owners @acme/platform --write-sug
 |---|---|---|
 | `--ccshelf-ref` | `string` | full 40-hex commit SHA of the ccshelf action to pin, or a release tag vX.Y.Z (sets the version only) |
 | `--ccshelf-version` | `string` | ccshelf release tag the action installs, such as v0.1.0 |
+| `--default-branch` | `string` | default branch the catalog workflow publishes from (default: read from an existing repository, else main) |
 | `--dry-run` |  | print the plan and write nothing |
 | `--example-profile` |  | also write profiles/example.toml.sample, an all-comment sample |
 | `--force` |  | replace existing files that differ, after saving <file>.bak (never marketplace.json) |
@@ -273,6 +274,7 @@ ccshelf catalog init . --mode adopt --platform-owners @acme/platform --write-sug
 | `--org` | `string` | display name of the organization (default: the marketplace name) |
 | `--owner` | `string` | default owner of the plugin sidecars (default: the first platform owner) |
 | `--platform-owners` | `strings` | CODEOWNERS owners of everything that runs code or shapes the catalog (@user, @org/team or an email address; repeatable) |
+| `--quiet` |  | do not print the suggested lines of the files that need a merge (they stay in --json and in --write-suggestions) |
 | `--runner-label` | `string` | fallback of runs-on in the workflows when the RUNNER_LABEL variable is unset (default ubuntu-latest) |
 | `--sidecars` | `string` | sidecar files for the plugins found: stub or none (default "stub") |
 | `--write-suggestions` |  | write <name>.ccshelf-suggested files for the files that need a merge |
