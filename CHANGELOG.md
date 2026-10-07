@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.0](https://github.com/yorch/ccshelf/compare/v0.2.0...v0.3.0) (2026-10-07)
+
+
+### Features
+
+* **catalog:** support remote catalog JSON ([#22](https://github.com/yorch/ccshelf/issues/22)) ([2f24dcc](https://github.com/yorch/ccshelf/commit/2f24dcc0e9d289dd2d33f4b3b6edff1b41c3135b))
+* **cli:** polish help, narrow tables and recovery hints ([#20](https://github.com/yorch/ccshelf/issues/20)) ([985269b](https://github.com/yorch/ccshelf/commit/985269b0132bd2599cf30edb42d16c3333b29b50))
+
 ## [0.2.0](https://github.com/yorch/ccshelf/compare/v0.1.0...v0.2.0) (2026-10-07)
 
 
