@@ -216,26 +216,25 @@ func TestHookIsQuietWithoutATerminalCIAndKillSwitch(t *testing.T) {
 		"CI":          func(h *harness) []string { h.tty(); h.env["CI"] = "true"; return nil },
 		"CI false":    func(h *harness) []string { h.tty(); h.env["CI"] = "false"; return nil },
 		"kill switch": func(h *harness) []string { h.tty(); h.env[update.KillSwitchEnv] = "1"; return nil },
+		// stdin and stdout are terminals but stderr goes to a log or a pipe.
+		"stderr not a terminal": func(h *harness) []string { h.tty(); h.stderrTTY = false; return nil },
 	} {
 		for _, mode := range []string{"notify", "install"} {
 			h := newHarness(t, "0.1.0")
-			h.publish("v0.2.0")
+			h.publish("v0.1.1") // a same-minor release: install mode would take it
 			h.writeConfig("mode = \"" + mode + "\"\n")
 			args := append(setup(h), "ls")
 			h.mustRun(args...)
 			hasNot(t, h.errb.String(), "available")
-			switch {
-			case name == "CI" || name == "CI false" || name == "kill switch":
-				if h.hits() != 0 {
-					t.Errorf("%s/%s: %d requests", name, mode, h.hits())
-				}
-			case mode == "notify":
-				if h.hits() != 0 {
-					t.Errorf("%s/%s: notify with nobody to tell contacted the network (%d)", name, mode, h.hits())
-				}
+			hasNot(t, h.errb.String(), "updated")
+			if h.hits() != 0 {
+				t.Errorf("%s/%s: %d requests with nobody to tell or the kill switch set", name, mode, h.hits())
 			}
 			if h.exeContent() != string(fakeBinary("0.1.0")) {
-				t.Errorf("%s/%s: the binary was replaced although v0.2.0 is a new 0.x minor (and CI/kill switch forbid it)", name, mode)
+				t.Errorf("%s/%s: the binary was replaced (a script, cron job or pipeline must never be auto-updated)", name, mode)
+			}
+			if _, err := os.Stat(h.exe + ".old"); err == nil {
+				t.Errorf("%s/%s: a backup exists: something was replaced", name, mode)
 			}
 		}
 	}

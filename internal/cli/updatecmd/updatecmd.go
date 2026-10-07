@@ -49,6 +49,11 @@ type Options struct {
 	// variables of the common runtimes).
 	InContainer func(cc *clicore.Context) bool
 
+	// StderrIsTerminal reports whether the error stream is a terminal
+	// (default: it is an *os.File that is one). The automatic update does
+	// nothing otherwise.
+	StderrIsTerminal func(cc *clicore.Context) bool
+
 	// Test seams passed through to the Updater.
 	VerifyCosign func(ctx context.Context, cosignPath string, environ []string, bundle, checksums, identity, issuer string) error
 	RunVersion   func(ctx context.Context, path string, environ []string) (string, error)

@@ -3,9 +3,11 @@ package updatecmd
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
 	"github.com/yorch/ccshelf/internal/cli/clicore"
 	"github.com/yorch/ccshelf/internal/config"
@@ -72,7 +74,7 @@ func (c *command) auto(cmd *cobra.Command, cachedOnly bool) {
 		Interval:   cfg.Update.EffectiveInterval(),
 		CI:         cc.Getenv("CI") != "",
 		KillSwitch: cc.Getenv(update.KillSwitchEnv) != "",
-		TTY:        canPrompt(cc),
+		TTY:        canPrompt(cc) && c.stderrIsTerminal(cc),
 	}
 	u, err := c.newUpdater(cc, cfg)
 	if err != nil {
@@ -88,4 +90,15 @@ func (c *command) auto(cmd *cobra.Command, cachedOnly bool) {
 		return
 	}
 	u.Auto(ctx, o, say)
+}
+
+// stderrIsTerminal reports whether the error stream is a terminal: the
+// automatic update prints there, and a binary must never be swapped (or a
+// network call made) when stderr goes to a log or a pipe.
+func (c *command) stderrIsTerminal(cc *clicore.Context) bool {
+	if c.opt.StderrIsTerminal != nil {
+		return c.opt.StderrIsTerminal(cc)
+	}
+	f, ok := cc.Streams.Err.(*os.File)
+	return ok && term.IsTerminal(int(f.Fd())) //nolint:gosec // fd fits in int
 }

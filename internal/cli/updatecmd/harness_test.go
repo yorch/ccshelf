@@ -67,6 +67,8 @@ type harness struct {
 	env     map[string]string
 	cur     string
 	lastErr error
+	// stderrTTY is the answer of the StderrIsTerminal seam (default true).
+	stderrTTY bool
 }
 
 func newHarness(t *testing.T, cur string) *harness {
@@ -78,7 +80,7 @@ func newHarness(t *testing.T, cur string) *harness {
 	h := &harness{
 		t: t, srv: updatetest.NewServer(t), out: &bytes.Buffer{}, errb: &bytes.Buffer{}, goos: "linux", cur: cur,
 		binDir: filepath.Join(root, "bin"), state: filepath.Join(root, "cache"), cfgPath: filepath.Join(root, "config.toml"),
-		now: time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC), env: map[string]string{},
+		now: time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC), env: map[string]string{}, stderrTTY: true,
 	}
 	for _, d := range []string{h.binDir, h.state} {
 		if err := os.MkdirAll(d, 0o700); err != nil {
@@ -94,12 +96,13 @@ func newHarness(t *testing.T, cur string) *harness {
 	}
 	inner := h.srv.Client().Transport
 	h.opt = Options{
-		Executable:     func() (string, error) { return h.exe, nil },
-		Client:         &http.Client{Transport: loopbackOnly{inner}, Timeout: 20 * time.Second, CheckRedirect: update.RedirectPolicy(update.Source{})},
-		StateDir:       h.state,
-		CurrentVersion: func() string { return h.cur },
-		RunVersion:     runVersionFromContent,
-		InContainer:    func(*clicore.Context) bool { return false },
+		Executable:       func() (string, error) { return h.exe, nil },
+		Client:           &http.Client{Transport: loopbackOnly{inner}, Timeout: 20 * time.Second, CheckRedirect: update.RedirectPolicy(update.Source{})},
+		StateDir:         h.state,
+		CurrentVersion:   func() string { return h.cur },
+		RunVersion:       runVersionFromContent,
+		InContainer:      func(*clicore.Context) bool { return false },
+		StderrIsTerminal: func(*clicore.Context) bool { return h.stderrTTY },
 	}
 	h.g.ConfigPath = h.cfgPath
 	h.writeConfig("")

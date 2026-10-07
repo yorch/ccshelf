@@ -228,17 +228,18 @@ func TestAutoFailuresAreQuietAndThrottled(t *testing.T) {
 	if fx.srv.hitCount() != n || len(s.lines) != 0 {
 		t.Errorf("a failure must be retried only after the interval: %d requests, %q", fx.srv.hitCount()-n, s.String())
 	}
-	// Install mode without a terminal: fails silently.
+	// A failed automatic install (a release without the asset) says so once
+	// on a terminal and still advances LastCheck.
 	fx2 := newFixture(t, "0.1.0")
-	fx2.release("v0.1.1", false)
-	fx2.srv.handler = fx.srv.handler
+	r := fx2.release("v0.1.1", false)
+	delete(r.assets, ChecksumsName)
 	var s2 said
-	fx2.u.Auto(ctx, install(false), s2.say)
-	if len(s2.lines) != 0 {
-		t.Errorf("no terminal, no warning: %q", s2.String())
-	}
+	fx2.u.Auto(ctx, install(true), s2.say)
 	if st := LoadState(fx2.state, fx2.now); st.LastCheck.IsZero() {
 		t.Error("a failed check must still advance LastCheck so that it is not retried on every command")
+	}
+	if readFile(t, fx2.exe) != string(fakeBinary("0.1.0")) {
+		t.Error("a failed install changed the binary")
 	}
 }
 
@@ -296,16 +297,25 @@ func TestAutoInstall(t *testing.T) {
 			t.Errorf("up to date but said %q", s.String())
 		}
 	})
-	t.Run("installs without a terminal too, never silently ignores the result", func(t *testing.T) {
+	t.Run("does nothing without a terminal: no network, no swap, no output", func(t *testing.T) {
 		fx := newFixture(t, "0.1.0")
 		fx.release("v0.1.1", false)
 		var s said
 		fx.u.Auto(ctx, install(false), s.say)
-		if readFile(t, fx.exe) != string(fakeBinary("0.1.1")) {
-			t.Error("not installed")
+		if fx.srv.hitCount() != 0 {
+			t.Errorf("%d requests without a terminal", fx.srv.hitCount())
 		}
-		if !strings.Contains(s.String(), "ccshelf updated to 0.1.1") || strings.Contains(s.String(), "updating") {
-			t.Errorf("output = %q: the result is reported, the progress line only on a terminal", s.String())
+		if readFile(t, fx.exe) != string(fakeBinary("0.1.0")) {
+			t.Error("a script, cron job or pipeline had its binary swapped")
+		}
+		if _, err := os.Stat(fx.exe + ".old"); err == nil {
+			t.Error("a backup exists: something was replaced")
+		}
+		if len(s.lines) != 0 {
+			t.Errorf("output = %q", s.String())
+		}
+		if st := LoadState(fx.state, fx.now); !st.LastCheck.IsZero() {
+			t.Error("nothing was checked, so no state may be recorded")
 		}
 	})
 	for name, tc := range map[string]struct{ cur, latest string }{

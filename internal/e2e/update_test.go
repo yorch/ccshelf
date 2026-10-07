@@ -233,34 +233,38 @@ func TestUpdateRefusesATamperedRelease(t *testing.T) {
 	}
 }
 
-func TestUpdateAutoInstallHonorsCIAndKillSwitch(t *testing.T) {
-	for name, tc := range map[string]struct {
-		env  map[string]string
-		want string
-	}{
-		"CI":          {map[string]string{"CI": "1"}, "0.0.1"},
-		"kill switch": {map[string]string{"CCSHELF_NO_UPDATE_CHECK": "1"}, "0.0.1"},
-		"plain":       {nil, "0.0.2"},
+// The e2e binary runs with stdin, stdout and stderr redirected, so it is
+// never "somebody looking": even mode = "install" must not contact the server
+// or swap the binary (scripts, cron jobs and pipelines use "ccshelf update
+// --yes"). The positive case needs a terminal and is covered by the unit
+// tests of internal/cli/updatecmd with a faked terminal.
+func TestUpdateAutoInstallNeedsATerminalAndHonorsCIAndKillSwitch(t *testing.T) {
+	for name, env := range map[string]map[string]string{
+		"no terminal": nil,
+		"CI":          {"CI": "1"},
+		"kill switch": {"CCSHELF_NO_UPDATE_CHECK": "1"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			u := newUpdateEnv(t)
 			write(t, filepath.Join(u.ConfigDir(), "config.toml"), "[update]\nmode = \"install\"\nbase_url = \""+u.srv.URL()+"\"\n")
-			for k, v := range tc.env {
+			for k, v := range env {
 				u.Setenv(k, v)
 			}
 			r := u.mustCcshelf("ls")
-			if got := u.version(); got != tc.want {
-				t.Errorf("version = %s, want %s\nstderr: %s", got, tc.want, r.Stderr)
+			if got := u.version(); got != "0.0.1" {
+				t.Errorf("version = %s, want 0.0.1 (nothing may be installed)\nstderr: %s", got, r.Stderr)
 			}
-			if tc.want == "0.0.2" {
-				contains(t, "ls stderr", r.Stderr, "ccshelf updated to 0.0.2", "next time")
-				if fi, err := os.Stat(filepath.Join(u.CacheDir(), "update-state.json")); err != nil {
-					t.Errorf("no state file: %v", err)
-				} else if runtime.GOOS != "windows" && fi.Mode().Perm() != 0o600 {
-					t.Errorf("state file mode = %v, want 0600", fi.Mode().Perm())
-				}
-			} else if len(u.srv.Hits()) != 0 {
+			if len(u.srv.Hits()) != 0 {
 				t.Errorf("the update check contacted the server: %v", u.srv.Hits())
+			}
+			if strings.Contains(r.Stderr, "updated") {
+				t.Errorf("stderr mentions an update: %s", r.Stderr)
+			}
+			if _, err := os.Stat(u.bin + ".old"); err == nil {
+				t.Error("a backup exists: the binary was replaced")
+			}
+			if _, err := os.Stat(filepath.Join(u.CacheDir(), "update-state.json")); err == nil {
+				t.Error("a state file was written although nothing was checked")
 			}
 		})
 	}
@@ -268,7 +272,8 @@ func TestUpdateAutoInstallHonorsCIAndKillSwitch(t *testing.T) {
 
 func TestUpdateDefaultsToNoNetwork(t *testing.T) {
 	u := newUpdateEnv(t)
-	// [update] without a mode: off. Ordinary commands never contact the server.
+	// The config has [update] with a base_url but no mode, and the default mode
+	// is off. Ordinary commands never contact the server.
 	for _, args := range [][]string{{"ls"}, {"version"}, {"doctor", "--help"}} {
 		u.mustCcshelf(args...)
 	}

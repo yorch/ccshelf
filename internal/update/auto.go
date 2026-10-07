@@ -33,7 +33,11 @@ type AutoOptions struct {
 	// CI is true when the CI environment variable is set; KillSwitch when
 	// CCSHELF_NO_UPDATE_CHECK is.
 	CI, KillSwitch bool
-	// TTY is true when a person is looking: only then is a line printed.
+	// TTY is true when a person is looking: standard input, output and error
+	// are all terminals and prompting is allowed (not --json,
+	// --no-interactive). Only then does the automatic path act at all, and
+	// only then is a line printed; scripts and pipelines use "ccshelf update
+	// --yes".
 	TTY bool
 	// CheckTimeout and InstallTimeout override the budgets (tests).
 	CheckTimeout, InstallTimeout time.Duration
@@ -52,18 +56,21 @@ func (o AutoOptions) interval() time.Duration {
 
 // Auto runs the opt-in periodic check. It never fails and never blocks for
 // longer than its time budgets: every error ends in at most one line through
-// say (only when TTY), and the next attempt waits for the interval. mode
-// "notify" prints one line when a newer release exists (and, with nobody to
-// tell, does not even contact the network); "install" also
-// installs a newer release of the same major version (for 0.x, the same minor),
+// say, and the next attempt waits for the interval. It does nothing without
+// an interactive terminal (see [AutoOptions.TTY]) and never when CI or the
+// kill switch is set. mode "notify" prints one line when a newer release
+// exists; "install" also installs a newer release of the same major version (for 0.x, the same minor),
 // never a downgrade and never a pre-release, and only for a binary ccshelf may
 // replace; the new binary takes effect on the next invocation.
 func (u *Updater) Auto(ctx context.Context, o AutoOptions, say func(string)) {
 	if o.off() || IsDevVersion(u.Current) {
 		return
 	}
-	if o.Mode == config.UpdateNotify && !o.TTY {
-		return // nobody to tell: do not even ask the network
+	if !o.TTY {
+		// Nobody to tell (notify) or to see a binary being swapped (install):
+		// do not even ask the network. Scripts, cron jobs and pipelines never
+		// auto-update; "ccshelf update --yes" is their explicit path.
+		return
 	}
 	cur, err := ParseVersion(u.Current)
 	if err != nil {
@@ -161,7 +168,9 @@ func (u *Updater) autoInstall(ctx context.Context, o AutoOptions, rel Release, s
 		}
 		return false
 	}
-	say(fmt.Sprintf("ccshelf updated to %s (the previous version is kept as %s); it takes effect the next time you run ccshelf", res.To, res.Backup))
+	if o.TTY {
+		say(fmt.Sprintf("ccshelf updated to %s (the previous version is kept as %s); it takes effect the next time you run ccshelf", res.To, res.Backup))
+	}
 	return true
 }
 
