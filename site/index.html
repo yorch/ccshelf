@@ -343,7 +343,7 @@ go build -o ccshelf ./cmd/ccshelf
       <pre id="c-install-sh"><code>curl -fsSL https://github.com/yorch/ccshelf/releases/latest/download/install.sh | sh</code></pre>
       <button class="copy" type="button" data-copy="c-install-sh" hidden>Copy command</button>
     </div>
-    <p class="fine">Installs into <code>~/.local/bin</code>, without sudo. Pin a version and require the signature check with <code>sh -s -- --version v0.1.0 --require-signature</code>. It always checks the archive against the release's <code>checksums.txt</code>, and checks the cosign signature of that file when cosign is installed.</p>
+    <p class="fine">Installs into <code>~/.local/bin</code>, without sudo, and needs <code>curl</code>. Pin a version and require the signature check with <code>sh -s -- --version v0.1.0 --require-signature</code>. It always checks the archive against the release's <code>checksums.txt</code>, and checks the cosign signature of that file when cosign is installed.</p>
 
     <h3 class="sub">Once a release is published: Windows</h3>
     <div class="cmd">
