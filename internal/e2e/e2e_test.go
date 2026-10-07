@@ -81,6 +81,11 @@ func setupAndRun(m *testing.M) (int, error) {
 		return 1, err
 	}
 	defer os.RemoveAll(dir)
+	defer func() {
+		if stampedDir != "" {
+			_ = os.RemoveAll(stampedDir)
+		}
+	}()
 	binDir = dir
 	ccshelfBin = filepath.Join(dir, exe("ccshelf"))
 	if err := goBuild(mod, "./cmd/ccshelf", ccshelfBin); err != nil {
@@ -193,9 +198,15 @@ func (s *sandbox) env() []string {
 // try runs ccshelf in dir with stdin; it is safe to call from goroutines (it
 // never touches the test). A non-zero exit is a result, not an error.
 func (s *sandbox) try(ctx context.Context, dir, stdin string, args ...string) (result, error) {
+	return s.tryBin(ctx, ccshelfBin, dir, stdin, args...)
+}
+
+// tryBin is try for another ccshelf binary (the update tests run copies they
+// built and replace).
+func (s *sandbox) tryBin(ctx context.Context, bin, dir, stdin string, args ...string) (result, error) {
 	ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, ccshelfBin, args...) //nolint:gosec // the binary this package built
+	cmd := exec.CommandContext(ctx, bin, args...) //nolint:gosec // a binary this package built
 	cmd.Dir = dir
 	cmd.Env = s.env()
 	cmd.Stdin = strings.NewReader(stdin)
