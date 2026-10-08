@@ -352,3 +352,31 @@ func TestWatchSet(t *testing.T) {
 		t.Errorf("default loneFiles = %v", got)
 	}
 }
+
+// A profiles-only repo ([catalog] enabled = false) has no marketplace or
+// sidecars, and one that is there anyway is neither read nor cached.
+func TestProfilesOnlyOrgConfig(t *testing.T) {
+	f := newFixture(t)
+	f.seed()
+	f.write("ccshelf.toml", "[catalog]\nenabled = false\n"+protectConfig)
+	f.write(".claude-plugin/marketplace.json", "{ not json")
+	f.write("catalog/plugins/x.toml", "owner = \"@acme/x\"\n")
+	f.commit("profiles only")
+	f.git("tag", "v1")
+	s := f.source("v1", "")
+	if err := s.Prepare(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	cfg, found := s.OrgConfig()
+	if !found || cfg.Catalog.Enabled || len(cfg.Protect.Plugins) != 1 {
+		t.Fatalf("OrgConfig = %+v, %v", cfg, found)
+	}
+	for _, rel := range []string{".claude-plugin/marketplace.json", "catalog/plugins/x.toml"} {
+		if _, err := os.Stat(filepath.Join(s.Root(), filepath.FromSlash(rel))); !os.IsNotExist(err) {
+			t.Errorf("%s was written to the cache of a profiles-only source: %v", rel, err)
+		}
+	}
+	if names, err := s.Names(); err != nil || len(names) == 0 {
+		t.Errorf("Names = %v, %v", names, err)
+	}
+}

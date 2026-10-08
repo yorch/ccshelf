@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"net/url"
 	"regexp"
+	"sort"
 	"strings"
 
 	toml "github.com/pelletier/go-toml/v2"
@@ -55,6 +56,9 @@ type Lint struct {
 
 // Catalog configures the catalog build.
 type Catalog struct {
+	// Enabled is false for a profiles-only org data repo: no marketplace, no
+	// sidecars, no bundles and no catalog. It defaults to true.
+	Enabled        bool     `toml:"enabled"`
 	Title          string   `toml:"title"`
 	MetadataSource string   `toml:"metadata_source"`
 	Marketplaces   []string `toml:"marketplaces"`
@@ -89,6 +93,10 @@ type Config struct {
 	Catalog  Catalog  `toml:"catalog"`
 	Profiles Profiles `toml:"profiles"`
 	Protect  Protect  `toml:"protect"`
+
+	// CatalogIgnored lists the [catalog] keys other than enabled that the file
+	// sets while Catalog.Enabled is false: they have no effect, and lint says so.
+	CatalogIgnored []string `toml:"-"`
 }
 
 // SidecarFields returns the field names a sidecar can carry, which are the
@@ -109,6 +117,7 @@ func Default() *Config {
 			MinDescriptionLength:  30,
 		},
 		Catalog: Catalog{
+			Enabled:        true,
 			MetadataSource: SourceSidecar,
 			Marketplaces:   []string{marketplaceDefault},
 
@@ -176,7 +185,29 @@ func Parse(data []byte) (*Config, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
+	if !cfg.Catalog.Enabled {
+		cfg.CatalogIgnored = ignoredCatalogKeys(data)
+	}
 	return cfg, nil
+}
+
+// ignoredCatalogKeys returns the sorted [catalog] keys, other than enabled,
+// that data sets. The data already decoded strictly, so it is valid TOML.
+func ignoredCatalogKeys(data []byte) []string {
+	var raw struct {
+		Catalog map[string]any `toml:"catalog"`
+	}
+	if toml.Unmarshal(data, &raw) != nil {
+		return nil
+	}
+	var keys []string
+	for k := range raw.Catalog {
+		if k != "enabled" {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 var (

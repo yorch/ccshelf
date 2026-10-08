@@ -82,6 +82,9 @@ still produces its catalog (for previews) but the command exits 1.`,
 			if err != nil {
 				return err
 			}
+			if err := requireCatalog(r, "catalog build"); err != nil {
+				return err
+			}
 			target, err := resolveOut(c, r, outDir)
 			if err != nil {
 				return err
@@ -239,6 +242,9 @@ error.`,
 			}
 			cat := r.catalog
 			if cat == nil {
+				if err := requireCatalog(r, "search"); err != nil {
+					return err
+				}
 				built, rep, err := catalog.BuildContext(cmd.Context(), r.root, r.cfg, catalog.Options{Now: c.Now})
 				if err != nil {
 					return fmt.Errorf("building the catalog: %w", err)

@@ -60,6 +60,9 @@ differences and exits 1 when the committed bundles are stale.`,
 			if err != nil {
 				return err
 			}
+			if err := requireCatalog(r, "compile"); err != nil {
+				return err
+			}
 			return runCompile(c, r, check)
 		},
 	}

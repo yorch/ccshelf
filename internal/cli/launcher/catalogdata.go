@@ -112,7 +112,7 @@ func (s *session) catalogCommits(sc config.SourceConfig) []string {
 // (and what makes a directory an org data repo).
 func hasCatalogData(root string) bool {
 	cfg, _, err := orgconfig.Find(root)
-	if err != nil || len(cfg.Catalog.Marketplaces) == 0 {
+	if err != nil || !cfg.Catalog.Enabled || len(cfg.Catalog.Marketplaces) == 0 {
 		return false
 	}
 	_, err = marketplace.LoadFile(root, cfg.Catalog.Marketplaces[0])

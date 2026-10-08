@@ -408,3 +408,113 @@ func TestSymlinkedDirectoryIsLeftAlone(t *testing.T) {
 }
 
 var _ = fs.ErrNotExist
+
+func TestProfilesOnlyPlan(t *testing.T) {
+	p := baseParams()
+	p.MarketplaceName = ""
+	p.ProfilesOnly = true
+	plan, err := Build(newMem(nil), p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var paths []string
+	for _, e := range plan.Entries {
+		paths = append(paths, e.Path)
+	}
+	want := ".gitattributes .github/CODEOWNERS .github/workflows/validate.yml .gitignore README.md ccshelf.toml"
+	if got := strings.Join(paths, " "); got != want {
+		t.Errorf("entries = %s, want %s", got, want)
+	}
+	// Without a platform owner it still asks for that, and never for a marketplace name.
+	p.PlatformOwners = nil
+	_, err = Build(newMem(nil), p)
+	var me *MissingError
+	if !errors.As(err, &me) || strings.Join(me.Flags, ",") != "--platform-owners" {
+		t.Errorf("err = %v", err)
+	}
+}
+
+func TestProfilesOnlyConflicts(t *testing.T) {
+	p := baseParams() // has a marketplace name
+	p.ProfilesOnly = true
+	_, err := Build(newMem(nil), p)
+	var fe *FieldError
+	if !errors.As(err, &fe) || fe.Flag != "--marketplace-name" {
+		t.Errorf("--marketplace-name with --profiles-only: %v", err)
+	}
+	p.MarketplaceName = ""
+	fsys := newMem(map[string]string{".claude-plugin/marketplace.json": `{"name":"x","plugins":[]}`})
+	_, err = Build(fsys, p)
+	if !errors.As(err, &fe) || fe.Flag != "--profiles-only" {
+		t.Errorf("existing marketplace: %v", err)
+	}
+	// An existing profiles-only config without the flag would grow a marketplace.
+	q := baseParams()
+	fsys = newMem(map[string]string{"ccshelf.toml": "[catalog]\nenabled = false\n"})
+	_, err = Build(fsys, q)
+	if !errors.As(err, &fe) || fe.Flag != "--profiles-only" {
+		t.Errorf("disabled catalog without the flag: %v", err)
+	}
+}
+
+func TestProfilesOnlyAdoptExistingConfig(t *testing.T) {
+	p := baseParams()
+	p.MarketplaceName = ""
+	p.ProfilesOnly = true
+	var fe *FieldError
+	// A config without enabled = false: usage error, unless it is replaced.
+	files := map[string]string{"ccshelf.toml": "[lint]\nrequire = [\"owner\"]\n", "README.md": "x"}
+	_, err := Build(newMem(files), p)
+	if !errors.As(err, &fe) || fe.Flag != "--profiles-only" || !strings.Contains(fe.Msg, "enabled = false") {
+		t.Errorf("config without enabled = false: %v", err)
+	}
+	p.Force = true
+	plan, err := Build(newMem(files), p)
+	if err != nil || entryOf(t, plan, "ccshelf.toml").Action != ActionOverwrite {
+		t.Errorf("--force: %v", err)
+	}
+	// An existing profiles-only config is fine.
+	p.Force = false
+	files["ccshelf.toml"] = "[catalog]\nenabled = false\n"
+	if _, err := Build(newMem(files), p); err != nil {
+		t.Errorf("profiles-only config: %v", err)
+	}
+	// A marketplace listed by the config counts as an existing marketplace.
+	files["ccshelf.toml"] = "[catalog]\nenabled = false\nmarketplaces = [\"team/market.json\"]\n"
+	files["team/market.json"] = "{}"
+	if _, err := Build(newMem(files), p); !errors.As(err, &fe) || !strings.Contains(fe.Msg, "team/market.json") {
+		t.Errorf("configured marketplace: %v", err)
+	}
+}
+
+func TestProfilesOnlyNoConfigAndOwner(t *testing.T) {
+	p := baseParams()
+	p.MarketplaceName = ""
+	p.ProfilesOnly = true
+	p.Skip = map[Group]bool{GroupConfig: true}
+	var fe *FieldError
+	if _, err := Build(newMem(nil), p); !errors.As(err, &fe) || fe.Flag != "--no-config" {
+		t.Errorf("--no-config: %v", err)
+	}
+	if _, err := Build(newMem(map[string]string{"ccshelf.toml": "[catalog]\nenabled = false\n"}), p); err != nil {
+		t.Errorf("--no-config with an existing profiles-only config: %v", err)
+	}
+	p.Skip = nil
+	p.Owner = "@acme/x"
+	if _, err := Build(newMem(nil), p); !errors.As(err, &fe) || fe.Flag != "--owner" {
+		t.Errorf("--owner: %v", err)
+	}
+}
+
+func TestProfilesOnlyNotesPluginsDir(t *testing.T) {
+	p := baseParams()
+	p.MarketplaceName = ""
+	p.ProfilesOnly = true
+	plan, err := Build(newMem(map[string]string{"plugins/x/README.md": "x"}), p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.Join(plan.Notes, "\n"), "plugins/ is ignored") {
+		t.Errorf("notes = %v", plan.Notes)
+	}
+}

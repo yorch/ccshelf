@@ -275,3 +275,35 @@ func TestCheckPathsOrderIsStable(t *testing.T) {
 		}
 	}
 }
+
+func TestCatalogEnabled(t *testing.T) {
+	if !Default().Catalog.Enabled {
+		t.Fatal("the catalog must be enabled by default")
+	}
+	cfg, err := Parse([]byte("[catalog]\ntitle = \"T\"\n"))
+	if err != nil || !cfg.Catalog.Enabled || len(cfg.CatalogIgnored) != 0 {
+		t.Errorf("a file that leaves enabled out keeps it true: %+v, %v", cfg, err)
+	}
+	cfg, err = Parse([]byte("[catalog]\nenabled = false\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Catalog.Enabled || len(cfg.CatalogIgnored) != 0 {
+		t.Errorf("enabled = false alone: %+v", cfg)
+	}
+	cfg, err = Parse([]byte("[catalog]\nenabled = false\ntitle = \"T\"\nbase_url = \"https://example.com/\"\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(cfg.CatalogIgnored, ","); got != "base_url,title" {
+		t.Errorf("ignored keys = %q", got)
+	}
+	// Keys set while the catalog is enabled are never reported as ignored.
+	cfg, _ = Parse([]byte("[catalog]\nenabled = true\ntitle = \"T\"\n"))
+	if len(cfg.CatalogIgnored) != 0 {
+		t.Errorf("enabled catalog reports ignored keys: %v", cfg.CatalogIgnored)
+	}
+	if _, err := Parse([]byte("[catalog]\nenabled = \"no\"\n")); err == nil {
+		t.Error("a non-boolean enabled must be rejected")
+	}
+}

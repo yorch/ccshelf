@@ -154,6 +154,67 @@ func LoadData(root string, cfg *orgconfig.Config) (*Data, error) {
 		d.Findings = append(d.Findings, Finding{Severity: Error, Code: code, Message: msg, File: file, Hint: hint})
 	}
 
+	if cfg.Catalog.Enabled {
+		d.loadCatalog(root, cfg, fail)
+	} else {
+		d.noteDisabledCatalog(root, cfg)
+	}
+
+	owners, loc, err := codeowners.Find(root)
+	if err != nil {
+		fail("CAT060", loc, err.Error(), "")
+	}
+	d.Owners, d.OwnersPath = owners, loc
+
+	entries, err := safepath.ReadDir(root, cfg.Profiles.Dir)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+	case err != nil:
+		fail("CAT060", cfg.Profiles.Dir, "cannot list the profiles directory: "+err.Error(), "")
+	default:
+		for _, e := range entries {
+			n := e.Name()
+			if strings.HasSuffix(n, ".toml") && e.Type().IsRegular() {
+				d.Profiles = append(d.Profiles, strings.TrimSuffix(n, ".toml"))
+			}
+		}
+		sort.Strings(d.Profiles)
+	}
+	d.ProfileEmpty = emptyProfiles(root, cfg.Profiles.Dir, d.Profiles)
+	have := map[string]bool{}
+	for _, n := range d.Profiles {
+		have[BundlePrefix+n] = true
+	}
+	for i := range d.Plugins {
+		d.Plugins[i].bundle = have[d.Plugins[i].Plugin.Name]
+	}
+	return d, nil
+}
+
+// noteDisabledCatalog is the whole catalog side of LoadData for a profiles-only
+// repo ([catalog] enabled = false): nothing is read, and the files and keys
+// that would have been used are reported as ignored (CAT061, CAT062).
+func (d *Data) noteDisabledCatalog(root string, cfg *orgconfig.Config) {
+	warn := func(code, file, msg, hint string) {
+		d.Findings = append(d.Findings, Finding{Severity: Warning, Code: code, Message: msg, File: file, Hint: hint})
+	}
+	const hint = "delete it, or remove enabled = false from [catalog] in ccshelf.toml to use the catalog"
+	for _, mf := range cfg.Catalog.Marketplaces {
+		if _, err := safepath.Stat(root, mf); err == nil {
+			warn("CAT061", mf, "marketplace file is ignored because [catalog] enabled = false", hint)
+		}
+	}
+	if st, err := safepath.Stat(root, "bundles"); err == nil && st.IsDir() {
+		warn("CAT061", "bundles", "bundles/ is ignored because [catalog] enabled = false", hint)
+	}
+	if len(cfg.CatalogIgnored) > 0 {
+		warn("CAT062", orgconfig.FileName, "[catalog] keys are ignored because enabled = false: "+strings.Join(cfg.CatalogIgnored, ", "),
+			"remove them, or remove enabled = false to use the catalog")
+	}
+}
+
+// loadCatalog reads the marketplaces, the catalog metadata and the taxonomy.
+func (d *Data) loadCatalog(root string, cfg *orgconfig.Config, fail func(code, file, msg, hint string)) {
 	seen := map[string]bool{}
 	for _, mf := range cfg.Catalog.Marketplaces {
 		data, err := safepath.ReadFile(root, mf, marketplace.MaxFileSize)
@@ -203,36 +264,6 @@ func LoadData(root string, cfg *orgconfig.Config) (*Data, error) {
 		fail("CAT008", cfg.Lint.Taxonomy, err.Error(), "")
 	}
 	d.Taxonomy = tax
-
-	owners, loc, err := codeowners.Find(root)
-	if err != nil {
-		fail("CAT060", loc, err.Error(), "")
-	}
-	d.Owners, d.OwnersPath = owners, loc
-
-	entries, err := safepath.ReadDir(root, cfg.Profiles.Dir)
-	switch {
-	case errors.Is(err, fs.ErrNotExist):
-	case err != nil:
-		fail("CAT060", cfg.Profiles.Dir, "cannot list the profiles directory: "+err.Error(), "")
-	default:
-		for _, e := range entries {
-			n := e.Name()
-			if strings.HasSuffix(n, ".toml") && e.Type().IsRegular() {
-				d.Profiles = append(d.Profiles, strings.TrimSuffix(n, ".toml"))
-			}
-		}
-		sort.Strings(d.Profiles)
-	}
-	d.ProfileEmpty = emptyProfiles(root, cfg.Profiles.Dir, d.Profiles)
-	have := map[string]bool{}
-	for _, n := range d.Profiles {
-		have[BundlePrefix+n] = true
-	}
-	for i := range d.Plugins {
-		d.Plugins[i].bundle = have[d.Plugins[i].Plugin.Name]
-	}
-	return d, nil
 }
 
 func (d *Data) problems(probs []sidecar.Problem) {

@@ -399,6 +399,8 @@ profiles/example.toml.sample, an all-comment sample, is written only with
 --example-profile.
 ```
 
+--profiles-only sets up an org data repo that holds profiles (and prompts/ and mcp/registry.toml) but no plugin marketplace and no catalog: ccshelf.toml gets [catalog] enabled = false, and the command writes ccshelf.toml, .github/CODEOWNERS, a README.md, .gitattributes, .gitignore and only the validate workflow (lint). No marketplace.json, sidecars, catalog.yml or release.yml. --marketplace-name, --owner and --sidecars stub are usage errors with it, and so is a directory that already has a marketplace file. An existing ccshelf.toml must already have [catalog] enabled = false (add it yourself, or use --force to replace the file), and --no-config is refused unless it has.
+
 The workflows call the ccshelf action pinned by full commit SHA. Pass --ccshelf-ref <40-hex SHA> and --ccshelf-version <vX.Y.Z> to pin it (a tag given as --ccshelf-ref sets the version only). Without them the workflows contain a placeholder and fail with a clear message until you pin them.
 
 Flags are the contract: every value can be passed as a flag. In a terminal, the values that are missing are asked for, the plan is shown, and the equivalent flag command is printed. Without a terminal, a missing value is a usage error (exit 2) naming the flag, and writing needs --yes (or --dry-run to print the plan). Nothing is committed, pushed or fetched; --git-init only runs git init when the directory is not a repository yet.
@@ -414,6 +416,7 @@ ccshelf catalog init [dir] [flags]
 ```text
 ccshelf catalog init ./acme-claude --marketplace-name acme --org "Acme Corp" --platform-owners @acme/platform --yes
 ccshelf catalog init . --platform-owners @acme/platform --dry-run
+ccshelf catalog init ./acme-profiles --profiles-only --platform-owners @acme/platform --yes
 ccshelf catalog init . --mode adopt --platform-owners @acme/platform --write-suggestions --yes
 ```
 
@@ -442,6 +445,7 @@ ccshelf catalog init . --mode adopt --platform-owners @acme/platform --write-sug
 | `--org` | `string` | display name of the organization (default: the marketplace name) |
 | `--owner` | `string` | default owner of the plugin sidecars (default: the first platform owner) |
 | `--platform-owners` | `strings` | CODEOWNERS owners of everything that runs code or shapes the catalog (@user, @org/team or an email address; repeatable) |
+| `--profiles-only` |  | set up a repo of profiles only: no marketplace, sidecars, bundles or catalog (ccshelf.toml gets [catalog] enabled = false; only the validate workflow is written) |
 | `--quiet` |  | do not print the suggested lines of the files that need a merge (they stay in --json and in --write-suggestions) |
 | `--runner-label` | `string` | fallback of runs-on in the workflows when the RUNNER_LABEL variable is unset (default ubuntu-latest) |
 | `--sidecars` | `string` | sidecar files for the plugins found: stub or none (default "stub") |

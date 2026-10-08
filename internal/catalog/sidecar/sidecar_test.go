@@ -238,3 +238,23 @@ func TestSchemaMatchesFields(t *testing.T) {
 		t.Errorf("schema problems: %v", probs)
 	}
 }
+
+func TestDisabledCatalogReadsNothing(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "catalog", "plugins"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "catalog", "plugins", "x.toml"), []byte("owner = \"@a/b\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := orgconfig.Default()
+	cfg.Catalog.Enabled = false
+	sc, probs, err := LoadSidecars(root, cfg)
+	if err != nil || len(sc) != 0 || len(probs) != 0 {
+		t.Errorf("LoadSidecars = %v, %v, %v", sc, probs, err)
+	}
+	cfg.Catalog.Enabled = true
+	if sc, _, _ := LoadSidecars(root, cfg); len(sc) != 1 {
+		t.Errorf("enabled catalog reads the sidecar: %v", sc)
+	}
+}

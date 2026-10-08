@@ -75,6 +75,11 @@ type Params struct {
 	BranchSource string
 	// Skip holds the groups not to generate.
 	Skip map[Group]bool
+	// ProfilesOnly sets up an org data repo that holds profiles but no plugin
+	// marketplace and no catalog: ccshelf.toml gets [catalog] enabled = false,
+	// and neither a marketplace, sidecars nor the catalog and release
+	// workflows are generated (--profiles-only).
+	ProfilesOnly bool
 	// ExampleProfile also writes profiles/example.toml.sample.
 	ExampleProfile bool
 	// Force replaces existing files that differ, after saving <file>.bak.
@@ -85,6 +90,9 @@ type Params struct {
 func (p *Params) Enabled(g Group) bool {
 	if g == GroupExampleProfile {
 		return p.ExampleProfile
+	}
+	if p.ProfilesOnly && (g == GroupMarketplace || g == GroupSidecars) {
+		return false
 	}
 	return !p.Skip[g]
 }
@@ -181,6 +189,12 @@ func (p *Params) Validate() error {
 	case "", ModeNew, ModeAdopt:
 	default:
 		return &FieldError{"--mode", fmt.Sprintf("%q is not new or adopt", ui.SanitizeLine(string(p.Mode)))}
+	}
+	if p.ProfilesOnly && p.MarketplaceName != "" {
+		return &FieldError{"--marketplace-name", "cannot be combined with --profiles-only: a profiles-only repo has no marketplace"}
+	}
+	if p.ProfilesOnly && p.Owner != "" {
+		return &FieldError{"--owner", "cannot be combined with --profiles-only: it is the owner of plugin sidecars, and a profiles-only repo has none"}
 	}
 	if p.MarketplaceName != "" && !ValidMarketplaceName(p.MarketplaceName) {
 		return &FieldError{"--marketplace-name", fmt.Sprintf("%q must match %s (lower case letters, digits and hyphens, at most 64 characters)", ui.SanitizeLine(p.MarketplaceName), MarketplaceNameRe)}

@@ -164,6 +164,8 @@ func mutations() []mutation {
 		{"bundle wrong source", "CAT052", Error, "profile-sre", mkt, nil, rep(mkt, `"source": "./bundles/profile-sre"`, `"source": "./plugins/sre-kit"`)},
 		{"bundle sets version", "CAT053", Error, "profile-sre", mkt, nil, rep(mkt, `"name": "profile-sre",`, `"name": "profile-sre",
       "version": "1.0.0",`)},
+		{"stray marketplace", "CAT061", Warning, "", mkt, nil, rep("ccshelf.toml", "[catalog]\n", "[catalog]\nenabled = false\n")},
+		{"ignored catalog keys", "CAT062", Warning, "", "ccshelf.toml", nil, rep("ccshelf.toml", "[catalog]\n", "[catalog]\nenabled = false\n")},
 		{"oversized CODEOWNERS", "CAT060", Error, "", co, nil, write(co, strings.Repeat("#", 3<<20+1))},
 	}
 }
@@ -390,5 +392,55 @@ func TestIsHTTPURL(t *testing.T) {
 	}
 	if IsHTTPURL("https://example.com/" + strings.Repeat("a", 3000)) {
 		t.Error("overlong URL accepted")
+	}
+}
+
+// profilesOnly writes a profiles-only org data repo: no marketplace, no
+// sidecars, no bundles.
+func profilesOnly(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	catalogtest.Write(t, root, "ccshelf.toml", "[catalog]\nenabled = false\n\n[lint]\nplatform_owners = [\"@acme/platform\"]\n")
+	catalogtest.Write(t, root, ".github/CODEOWNERS", "* @acme/platform\n")
+	catalogtest.Write(t, root, "profiles/sre.toml", "name = \"sre\"\ndescription = \"Site reliability engineering\"\n[plugins]\ninclude = [\"sre-kit@acme-tools\"]\n")
+	catalogtest.Write(t, root, "profiles/base.toml", "name = \"base\"\n")
+	return root
+}
+
+func TestProfilesOnlyLintsClean(t *testing.T) {
+	r := run(t, profilesOnly(t), nil)
+	if len(r.Findings) != 0 {
+		t.Fatalf("a profiles-only repo should lint clean, got:\n%s", FormatText(r))
+	}
+}
+
+func TestProfilesOnlyStillChecksOwnership(t *testing.T) {
+	root := profilesOnly(t)
+	catalogtest.Write(t, root, ".github/CODEOWNERS", "/profiles/ @acme/web\n")
+	r := run(t, root, nil)
+	found := false
+	for _, f := range codes(r)["CAT045"] {
+		found = found || strings.Contains(f.Message, "ccshelf.toml")
+	}
+	if !found {
+		t.Errorf("platform owner check on ccshelf.toml is gone:\n%s", FormatText(r))
+	}
+	catalogtest.Remove(t, root, ".github/CODEOWNERS")
+	if len(codes(run(t, root, nil))["CAT043"]) != 1 {
+		t.Error("a profiles-only repo without CODEOWNERS should warn CAT043")
+	}
+}
+
+func TestProfilesOnlyIgnoresStrayCatalogFiles(t *testing.T) {
+	root := profilesOnly(t)
+	catalogtest.Write(t, root, ".claude-plugin/marketplace.json", "{")
+	catalogtest.Write(t, root, "bundles/profile-sre/x", "x")
+	r := run(t, root, nil)
+	c := codes(r)
+	if len(c["CAT001"]) != 0 || len(c["CAT050"]) != 0 {
+		t.Errorf("catalog checks ran on a disabled catalog:\n%s", FormatText(r))
+	}
+	if len(c["CAT061"]) != 2 || r.HasErrors() {
+		t.Errorf("want two CAT061 warnings and no errors, got:\n%s", FormatText(r))
 	}
 }

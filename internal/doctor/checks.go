@@ -85,7 +85,11 @@ func Run(in Input) *Report {
 	r := &Report{Findings: []Finding{}, Skipped: []Skip{}}
 	if in.Catalog == nil {
 		in.Catalog = &catalog.Catalog{}
-		r.Skipped = append(r.Skipped, Skip{Code: "DOC000", Check: "catalog", Reason: "no catalog was supplied"})
+		reason := in.NoCatalogReason
+		if reason == "" {
+			reason = "no catalog was supplied"
+		}
+		r.Skipped = append(r.Skipped, Skip{Code: "DOC000", Check: "catalog", Reason: reason})
 	}
 	for _, c := range checks {
 		fs, skip := c.run(&in)
