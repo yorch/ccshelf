@@ -64,6 +64,16 @@ the source files.
 
 Still undecided: whether the data-only plugin approach works smoothly when `strictKnownMarketplaces` or other policy applies (untested), and how a profile that lists a plugin the user hasn't installed should be reported (current design: report and print the install command, never install silently).
 
+## Creating profiles (`ccshelf new`)
+`ccshelf new <name>` writes exactly one TOML file and nothing else. With the default `--scope user` it goes to the user profiles directory (the XDG/APPDATA location above); with `--scope project` it goes to the nearest Git working-tree root's `.ccshelf/profiles/` (a `.git` directory and a worktree's `.git` file both count), and outside a Git repository to the current directory. Discovery creates nothing and grants no trust.
+
+- **Creation does not grant trust.** Writing a project profile never enables project profiles, writes a trust record or changes configuration. The file stays inert until `trust.trust_project_profiles = true` is set and the folder is reviewed with `ccshelf trust --project`; the command prints that sequence, and warns when the file would land in the home directory, which the runtime does not discover as a project.
+- **Validation before the write.** The candidate is resolved in memory through the ordinary origin, parent, MCP and project-restriction rules, so a missing parent, an unknown MCP server, a restricted inherited value or a schema violation is reported and nothing is written.
+- **Exclusive, confined writes.** The file is created 0600 inside newly created 0700 directories below an opened-directory anchor that refuses symlinks and replacement ancestors; an existing file is never replaced. A project destination must be a plain directory chain. The personal config root may be reached through symlinks (a dotfiles-managed config directory), matching the reader; the `profiles` directory below it must be a plain directory, as the reader also requires, and the writer resolves the root and refuses a symlink at or below it. An uninspectable namespace (a symlinked `.ccshelf`, an unsafe `.git` marker) only narrows the collision evidence: user creation proceeds with a warning, while project creation still fails closed.
+- **Collision and outage policy.** Creation refuses a name that already exists in an accessible personal, local or shared namespace, or in the intended project namespace, because it would shadow it. It never fetches to check a name, inspecting only verified cached git checkouts. When it cannot prove the name is free (an unavailable git source, or a plugin source with no offline namespace cache) project creation fails closed and names the preparation paths, while user creation still succeeds and reports the unavailable source. This is stricter creation behavior only; the runtime resolver's existing shadow rules are unchanged.
+
+A full wizard (no content flags) asks for the location unless `--scope` was given, and ends in the default-no `Create this profile? (does not grant trust)` confirmation; `--yes` answers that question alone. See [cli.md](cli.md), "Wizards and write confirmations".
+
 ## Manifest sketch (`profiles/frontend.toml`)
 A design proposal; field names are not final. See [workflows.md](workflows.md) for how it is used.
 ```toml

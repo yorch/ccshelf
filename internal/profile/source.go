@@ -274,6 +274,17 @@ func (d *dirSource) Names() ([]string, error) {
 	if d.err != nil {
 		return nil, fmt.Errorf("source %s: %w", d.ID(), d.err)
 	}
+	// Check the path first: os.ReadDir can report an empty listing for a file
+	// handle on Windows, which would silently hide an unusable source instead
+	// of reporting it. A missing directory stays an empty namespace.
+	if fi, err := os.Stat(d.dir); err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("listing profiles in %s: %w", d.dir, err)
+	} else if !fi.IsDir() {
+		return nil, fmt.Errorf("%w: %s is not a directory", ErrPath, d.dir)
+	}
 	ents, err := os.ReadDir(d.dir)
 	if err != nil {
 		if os.IsNotExist(err) {

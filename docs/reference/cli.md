@@ -42,7 +42,7 @@ Scripts can rely on these; they never change meaning.
 | [`ccshelf dry-run`](#ccshelf-dry-run) | Print the exact claude command a run would execute |
 | [`ccshelf edit`](#ccshelf-edit) | Open a personal profile in $VISUAL or $EDITOR |
 | [`ccshelf ls`](#ccshelf-ls) | List the profiles of all sources |
-| [`ccshelf new`](#ccshelf-new) | Create a personal profile |
+| [`ccshelf new`](#ccshelf-new) | Create a user or project profile |
 | [`ccshelf run`](#ccshelf-run) | Start claude with a profile |
 | [`ccshelf show`](#ccshelf-show) | Show a resolved profile: parents merged, MCP servers, closure |
 | [`ccshelf trust`](#ccshelf-trust) | Review and trust a shared profile (or a project folder) |
@@ -136,7 +136,7 @@ ccshelf ls [flags]
 
 ## ccshelf new
 
-Create a personal profile file in your profiles directory. --from names a parent profile to extend (repeatable). In a terminal, anything not given as a flag is asked for, and the equivalent flag command is printed at the end.
+Create a separate TOML file in your user profiles directory (default), or with --scope project in the Git root/.ccshelf/profiles (cwd outside Git). --from names a parent profile to extend (repeatable). With no content flags, a terminal offers a wizard and prints its equivalent flag command. Creation never enables or trusts project profiles. --yes confirms creation only.
 
 **Usage**
 
@@ -164,7 +164,9 @@ ccshelf new notes --description "Writing and notes" --skill-off legacy-helper
 | `--model` | `string` | default model |
 | `--owner` | `string` | owner (team or person) |
 | `--plugin` | `stringArray` | plugin to include, name@marketplace (repeatable) |
+| `--scope` | `string` | profile location: user or project (default "user") |
 | `--skill-off` | `stringArray` | standalone skill to turn off (repeatable) |
+| `--yes` |  | skip creation confirmation only (never accepts trust) |
 
 ## ccshelf run
 
@@ -579,9 +581,9 @@ ccshelf completion <bash|zsh|fish|powershell> [flags]
 
 ## ccshelf init
 
-Create config.toml and your personal profiles directory. With --git-url the org data repo becomes a profile source (pin it with --ref: a tag or a full commit id). With --dir another local profiles directory becomes a source. In a terminal, anything you did not pass as a flag is asked for, and the equivalent flag command is printed at the end. Nothing is fetched here: profiles from a shared source are fetched, and need your trust, when you first use them.
+Create config.toml and your personal profiles directory. With --git-url the org data repo becomes a profile source (pin it with --ref: a tag or a full commit id). With --dir another local profiles directory becomes a source. In a terminal, running without source, account or update values starts the full setup wizard. It shows a summary and asks before writing (default no). Partial flag runs do not prompt. --yes confirms writing only, never trust. The wizard prints an equivalent flag command at the end. Nothing is fetched here: profiles from a shared source are fetched, and need your trust, when you first use them.
 
-Automatic updates are off unless you turn them on: --update-mode notify checks for a newer release once a day and prints one line when there is one, install also installs it (same major version only). In a terminal you are asked once.
+Automatic updates are off unless you turn them on: --update-mode notify checks for a newer release once a day and prints one line when there is one, install also installs it (same major version only). The full wizard asks once.
 
 **Usage**
 
@@ -609,7 +611,8 @@ ccshelf init --account-name work
 | `-h`, `--help` |  | help for init |
 | `--path` | `string` | folder inside the repo that holds the profiles (default "profiles") |
 | `--ref` | `string` | tag or full commit id the git source is pinned to |
-| `--update-mode` | `string` | automatic update mode: off, notify or install (default: asked in a terminal, otherwise off) |
+| `--update-mode` | `string` | automatic update mode: off, notify or install (default: asked in the full wizard, otherwise off) |
+| `--yes` |  | confirm writing in the full wizard (never accepts trust) |
 
 ## ccshelf shell-init
 

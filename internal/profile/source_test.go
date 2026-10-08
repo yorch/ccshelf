@@ -121,6 +121,16 @@ func TestDirSourceNotRegular(t *testing.T) {
 	}
 }
 
+func TestDirSourceNamesRefusesAFile(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(p, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if names, err := DirSource(KindOrg, p).Names(); err == nil || len(names) != 0 {
+		t.Fatalf("a file must not be listed as a profiles directory: %v, %v", names, err)
+	}
+}
+
 func TestReadConfined(t *testing.T) {
 	root := mk(t, map[string]string{"a/ok.md": "hi", "a/big.md": strings.Repeat("x", 100), "out.md": "secret"})
 	if b, _, err := readConfined(filepath.Join(root, "a"), "ok.md", 10); err != nil || string(b) != "hi" {
