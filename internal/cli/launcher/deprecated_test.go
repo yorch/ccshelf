@@ -154,3 +154,22 @@ func TestDeprecationWarningIgnoresNonOrgSources(t *testing.T) {
 		t.Errorf("a personal source's sidecar was used:\n%s", h.errb)
 	}
 }
+
+// A profiles-only source ([catalog] enabled = false) has no catalog data: a
+// sidecar that is there anyway (planted after the source was verified) is
+// never read, so it cannot produce a warning.
+func TestNoDeprecationWarningFromAProfilesOnlySource(t *testing.T) {
+	h := newHarness(t)
+	org := h.exampleOrg()
+	testutil.WriteFile(t, filepath.Join(org, "catalog", "plugins", "seo-tools.toml"), deprecatedSidecar)
+	testutil.WriteFile(t, filepath.Join(org, "ccshelf.toml"), "[catalog]\nenabled = false\n[protect]\nplugins = [\"audit-logger@acme\"]\n")
+	h.useOrg(org)
+	trustSeo(t, h)
+	h.errb.Reset()
+	if code := h.run("run", "seo"); code != 0 {
+		t.Fatalf("code %d\n%s", code, h.errb)
+	}
+	if strings.Contains(h.errb.String(), "deprecated") {
+		t.Errorf("a sidecar of a profiles-only source was read:\n%s", h.errb)
+	}
+}

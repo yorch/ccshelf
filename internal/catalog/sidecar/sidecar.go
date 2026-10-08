@@ -275,6 +275,9 @@ var nameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 // an empty map. Per-file problems are returned as Problems; the error is for
 // failures that stop the whole load.
 func LoadSidecars(root string, cfg *orgconfig.Config) (map[string]*Sidecar, []Problem, error) {
+	if !cfg.Catalog.Enabled {
+		return map[string]*Sidecar{}, nil, nil // profiles-only repo: no catalog data is read
+	}
 	if cfg.Catalog.MetadataSource != orgconfig.SourceMarketplace {
 		return loadDir(root)
 	}
@@ -386,6 +389,9 @@ const MaxTaxonomySize = 256 << 10
 // nil and no error when the file does not exist, which turns the taxonomy
 // rules off.
 func LoadTaxonomy(root string, cfg *orgconfig.Config) (*Taxonomy, error) {
+	if !cfg.Catalog.Enabled {
+		return nil, nil
+	}
 	if cfg.Lint.Taxonomy == "" {
 		return nil, nil
 	}

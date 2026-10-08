@@ -35,8 +35,8 @@ func (s *session) deprecationWarnings(r *profile.Resolved) []string {
 		}
 		seenRoot[src.Root()] = true
 		cfg, _, err := orgConfigOf(src)
-		if err != nil {
-			continue
+		if err != nil || !cfg.Catalog.Enabled {
+			continue // a profiles-only source has no catalog data, and none is read
 		}
 		sc, _, err := sidecar.LoadSidecars(src.Root(), cfg)
 		if err != nil {

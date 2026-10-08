@@ -41,8 +41,9 @@ const promptsDir = "prompts"
 
 // watchSet lists what is ever read from a source root: folders (read
 // recursively) and single files, all slash separated and relative to the root.
-// It always holds ccshelf.toml, the profiles folder, the prompts folder, the MCP
-// registry, the catalog sidecar folder (catalog/plugins) and the marketplace
+// It always holds ccshelf.toml, the profiles folder, the prompts folder and the
+// MCP registry, and, unless the org config sets [catalog] enabled = false, the
+// catalog sidecar folder (catalog/plugins) and the marketplace
 // files of catalog.marketplaces; the org config can move the profiles folder
 // and the registry (profiles.dir, profiles.mcp_registry) and name the
 // marketplace files, so the set is built from it. The catalog data is read for
