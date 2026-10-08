@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/yorch/ccshelf/compare/v0.5.0...v0.6.0) (2026-10-08)
+
+
+### Features
+
+* **catalog:** support profiles-only org data repos ([#36](https://github.com/yorch/ccshelf/issues/36)) ([026ef75](https://github.com/yorch/ccshelf/commit/026ef75455f621999b2cfc6fd5a0f068a4266594))
+
 ## [0.5.0](https://github.com/yorch/ccshelf/compare/v0.4.1...v0.5.0) (2026-10-08)
 
 
