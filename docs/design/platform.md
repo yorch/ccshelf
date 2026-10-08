@@ -16,7 +16,7 @@ Decided by the user (2026-10-06): **Go** for the implementation, and **GitHub / 
 | Profile `git` source | Same: use git URLs for GHE. Honor the user's existing git credential helper/SSH config instead of storing tokens. |
 | Tags and bundles | Native bundle resolution uses git tags `<plugin>--v<version>`. CI should create them (`claude plugin tag`), which needs write permission for `GITHUB_TOKEN` on tags. |
 | Usage data | Enterprise Analytics API / OTel exist independently of GitHub. If the catalog job uses the Analytics API, it needs a secret for the API key. |
-| Provenance | **Required on github.com releases (SR5):** keyless signatures (cosign), SLSA provenance and an SBOM. Artifact attestations have limited support on GHE Server, so ship offline-verifiable bundles for GHE Server mirrors. |
+| Provenance | **Required on github.com releases** (see SR5 in [security.md](security.md)). Artifact attestations have limited support on GHE Server, so SR5 ships offline-verifiable bundles for GHE Server mirrors. |
 
 ### Requirement R2: support both GHE Cloud and GHE Server (decided 2026-10-06)
 Design to the lowest common denominator, so nothing assumes github.com or the newest Actions features.
@@ -29,7 +29,7 @@ Design to the lowest common denominator, so nothing assumes github.com or the ne
    - The catalog site must be self-contained (no CDN fonts/scripts).
 5. **Version skew.** GHE Server lags github.com. Avoid features that may not exist on older Server versions (newer Actions syntax, artifact attestations, some Pages options) or make them optional with a fallback. Record the minimum supported GHE Server version once known.
 6. **Auth via the user's git setup.** Git operations run `git` with the existing credential helper or SSH config. API calls (if any) use `GITHUB_TOKEN` in CI or `gh` locally. The tool stores no tokens.
-7. **Marketplace source types.** For GHE hosts use git URL sources. Verify the `github` source type behavior against the marketplace docs for both flavors (open).
+7. **Marketplace source types.** For GHE hosts use git URL sources (see the table above). Verifying the `github` source type for both flavors is open.
 8. **Catalog hosting is pluggable.** Output a plain static directory. Publishing to Pages is one option (differences between Cloud and Server noted above), but any static host works.
 
 Still to verify:
@@ -75,11 +75,11 @@ Everything below is a design assessment. Stage 0 was run on macOS only, so Linux
 | Testing | macOS only so far | CI matrix on macos, ubuntu and windows runners. Use a **fake `claude`** test double (records its arguments and generated files) for unit and integration tests on every OS. Keep the real-`claude` init-event test (Stage 0 method) opt-in because it needs authentication. |
 
 ### Supported targets for the first release (decided 2026-10-06)
-All six: **darwin/arm64, darwin/amd64, linux/amd64, linux/arm64, windows/amd64, windows/arm64**. WSL counts as linux.
+All six: **darwin/arm64, darwin/amd64, linux/amd64, linux/arm64, windows/amd64, windows/arm64**.
 - **Build:** Go cross-compiles all six from one runner (`goreleaser`).
 - **Test in CI:** run unit and fake-`claude` integration tests natively wherever a hosted runner exists: macOS arm64 and Intel, Ubuntu x64 and Windows x64. Ubuntu arm64 and Windows arm64 runners are reportedly available for public repos. Verify this before committing to them. Targets without a native runner are at minimum compile-checked, and flagged "built, not natively tested" in the release notes until a runner is available.
 - **Publish:** release archives for all six, a Homebrew tap (macOS and Linux), and Scoop and WinGet (Windows). Binaries need macOS notarization and Windows signing, or the package manager must cover that.
-- **Not covered by CI:** the real-`claude` integration test stays opt-in (it needs authentication). So the Linux and Windows behavior of `claude` itself (credentials, `cmd /c` for `npx`, managed-settings paths) must be verified manually or in a self-hosted job before we claim support.
+- **Not covered by CI:** the real-`claude` integration test (opt-in, see "Testing" above). So the Linux and Windows behavior of `claude` itself (credentials, `cmd /c` for `npx`, managed-settings paths) must be verified manually or in a self-hosted job before we claim support.
 
 ### Effect on the language choice
 This strengthens **Go**: `os/exec`, build tags for platform differences, `filepath`, `os.UserConfigDir`/cache dirs, trivial cross-compilation, and `goreleaser` publishing to Homebrew, Scoop and WinGet. TypeScript with `bun --compile` remains possible, but Windows signal and console handling are the weaker spot. Shell scripts are out as an implementation (they're fine only as generated aliases).

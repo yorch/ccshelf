@@ -13,18 +13,15 @@ Decided 2026-10-06: the **tool is hosted in a public GitHub repo** (this one), a
 | Changes by | Open-source contributors | The org's platform team |
 
 Consequences:
-- **Reusable CI:** the org data repo's workflow calls the public tool, either `uses: <owner>/ccshelf/action@<full commit SHA>` or a step that downloads a pinned release binary. GHE Cloud can use public actions directly. **GHE Server needs GitHub Connect or a mirror** (e.g. `actions-sync`), or the binary-download variant (also mirrorable to an internal registry). The docs must describe both variants. The logic stays in the binary (R2).
-- **Pin everything (SR5).** The tool runs in the org's CI and on developers' machines. So:
-  - The org data repo pins the tool by full commit SHA (never a moving tag).
-  - The Action embeds the expected SHA-256 of the binary it downloads.
-  - Releases are signed with provenance.
-- **Starter template** (layout below): ship a template/example org data repo (`examples/org-data-repo/`, possibly also a GitHub template repository). It has a sample `marketplace.json`, `profiles/`, a CI workflow and a catalog publish recipe, so adopting takes minutes.
+- **Reusable CI:** the org data repo's workflow calls the public tool, either `uses: <owner>/ccshelf/action@<full commit SHA>` or a step that downloads a pinned release binary. GHE Cloud can use public actions directly. **GHE Server needs GitHub Connect or a mirror** (e.g. `actions-sync`), or the binary-download variant (also mirrorable to an internal registry). The docs must describe both variants. The logic stays in the binary (R2, see [platform.md](platform.md)).
+- **Pin everything (SR5).** The tool runs in the org's CI and on developers' machines, so the org data repo pins the tool by full commit SHA, never a moving tag. The Action checksum and release signing rules are in [security.md](security.md), SR5.
+- **Starter template:** ship `examples/org-data-repo/` (possibly also a GitHub template repository), so adopting takes minutes. "What the tool repo contains" lists its content.
 - **Configuration lives with the adopter, not in the tool:** profile sources (`dir`/`git`, later `plugin`), the catalog metadata schema location and lint rules come from two files, with sane defaults:
   - the org's `ccshelf.toml` in the org data repo
   - the user's own `~/.config/ccshelf/config.toml`.
 
   The tool repo never needs to know about a particular org.
-- **Catalog hosting is the adopter's choice** (R2): the tool outputs a plain static directory. The starter template shows GitHub Pages and an internal static host. We don't pick one for the org.
+- **Catalog hosting is the adopter's choice** (R2, see [platform.md](platform.md)): the starter template shows GitHub Pages and an internal static host.
 - **Telemetry:** none by default. An open-source tool that runs in corporate CI must not phone home.
 - **Security reporting, license and contribution docs** live in the public repo (R4).
 
@@ -40,7 +37,7 @@ The tool repo holds **no real org definitions**, but it does hold **fictional ex
 - **Reusable GitHub Action** and the release and packaging config (goreleaser, Homebrew, Scoop, WinGet).
 - **Tests and fixtures:** the fake `claude` test double, golden files, and fixtures that simulate managed policy.
 - **Docs:** the research notes, `AGENTS.md`, the license, security policy and contribution guide.
-- **Starter template** (`examples/org-data-repo/`): a complete but fictional org data repo (sample `marketplace.json`, a couple of example plugins, profiles such as `frontend` and `sre`, sidecars, org config and CI workflows). Adopters copy it to start, and it doubles as a test fixture.
+- **Starter template** (`examples/org-data-repo/`): a complete but fictional org data repo (sample `marketplace.json`, a couple of example plugins, profiles such as `frontend` and `sre`, sidecars, org config, CI workflows and a catalog publish recipe). Adopters copy it to start, and it doubles as a test fixture.
 
 Never in the tool repo:
 - a real org's plugins, profiles, sidecars, marketplace, taxonomy or MCP server definitions
@@ -103,7 +100,7 @@ acme-claude-marketplace/                 # private repo on GHE (Cloud or Server)
 ├── docs/                                # contributor guide: add a plugin, metadata fields, deprecation
 └── README.md                            # links to the catalog site and the contributor guide
 ```
-Not in the repo: the built catalog (`dist/`, published as an artifact or to a static host) and `catalog.json` (also built). The files above can reproduce them.
+Not in the repo: the built catalog (`dist/`) and `catalog.json` (see "CI workflows").
 
 ## What each part is
 | Path | Written by | Committed? | Purpose |
@@ -119,7 +116,7 @@ Not in the repo: the built catalog (`dist/`, published as an artifact or to a st
 | `dist/`, `catalog.json` | CI | No | Built catalog. |
 
 ## Where catalog metadata lives: a sidecar per plugin (decided 2026-10-06)
-The earlier convention put `owner`, `status`, `when_to_use`, etc. into each marketplace entry's free-form `metadata`. That has a problem: with ~50 plugins in one `marketplace.json`, **`CODEOWNERS` can't route review per entry**. So file ownership can't enforce the decided "authors write, platform team reviews" model. A sidecar file per plugin fixes this: a PR that touches `catalog/plugins/*.toml` requires platform review, while plugin source stays with the author's team.
+D-16 records the decision. The earlier convention put `owner`, `status`, `when_to_use`, etc. into each entry's free-form `metadata`. But with ~50 plugins in one `marketplace.json`, **`CODEOWNERS` can't route review per entry**, so it can't enforce the "authors write, platform team reviews" model. A sidecar file per plugin fixes this: a PR that touches `catalog/plugins/*.toml` requires platform review, while plugin source stays with the author's team.
 
 - `marketplace.json` keeps only what Claude Code reads, plus `category` and `tags`, which are native. Whether the `/plugin` UI searches them is unverified.
 - The catalog is **derived from** `marketplace.json` + sidecars + git data (last change, contributors). Nothing is duplicated into `metadata`.
@@ -200,15 +197,9 @@ mcp_registry = "mcp/registry.toml"
 | `catalog.yml` | merge to main | `ccshelf catalog build`, then publish to the org's chosen host (Pages or any static host) |
 | `release.yml` | manual or scheduled | create a repo tag (for example `v2026.10.1`). Consumers pin profile sources to it |
 
-All steps call the same pinned binary from the public tool repo (R2, R5): `uses: <owner>/ccshelf/action@<full commit SHA>` or a pinned release download whose SHA-256 is verified (SR5).
+All steps call the same pinned binary from the public tool repo (R2, R5), through the Action or a release download (see "Reusable CI" above).
 
-**Workflow security (SR5).**
-- `permissions: {}` at the top of every workflow, granted per job (`contents: write` only for tagging, `pages` and `id-token` only for the catalog).
-- Secrets (for example an Analytics API key) live in a protected environment deployable only from `main`. They are not sent to pull requests from forks.
-- Never interpolate `${{ }}` values from plugin names, versions, descriptions or sidecars into shell. Pass them through `env:` and validate them (for example a semver pattern).
-- Require code-owner review and at least two approvals through a ruleset, and dismiss stale reviews.
-- The catalog build renders sidecar and marketplace text with `textContent` and a strict CSP. It renders Markdown with raw HTML off and only `http` and `https` links. The publish step fails unless Pages visibility is private or internal.
-- PR preview artifacts are built from untrusted content and are not published.
+**Workflow security (SR5).** The rules for these workflows (permissions, secrets, `${{ }}` handling, review rulesets, catalog rendering and PR previews) are in [security.md](security.md), SR5.
 
 ## Setting up the data repo: `ccshelf catalog init` (decided 2026-10-06, D-41)
 `ccshelf catalog init [dir]` bootstraps a **new** org data repo in an empty directory. Or it retrofits an **existing** marketplace repo (one that has `.claude-plugin/marketplace.json` and/or `plugins/`) without changing anything that is already there. It is the organization's one-time setup. `ccshelf init` stays each developer's own configuration. The behavior below is implemented, and unit, golden and end-to-end tests cover it.
@@ -252,7 +243,7 @@ Every group has a `--no-<group>` flag. **`--profiles-only`** (D-52) writes only 
 - `.gitattributes`, `.gitignore`
 - `.github/workflows/validate.yml` with the lint step only (no `compile --check`, no catalog preview, no `catalog.yml`, no `release.yml`).
 
-With `--profiles-only`, `--marketplace-name` is not needed and is a usage error. So are `--owner` and `--sidecars stub`, and so is a directory that already has a marketplace file. An existing `ccshelf.toml` must already have `[catalog] enabled = false` (add it yourself, or `--force` replaces the file after saving `.bak`). Unless it has, the command refuses `--no-config`. The command ignores a `plugins/` directory, with a note. There are **no built-in default profiles** (R5): roles are the organization's choice. The one sample is commented out and carries a `.sample` suffix so that `ccshelf` never loads it. No organization name, host or data is in the templates.
+With `--profiles-only`, `--marketplace-name` is not needed and is a usage error. So are `--owner` and `--sidecars stub`, and so is a directory that already has a marketplace file. An existing `ccshelf.toml` must already have `[catalog] enabled = false` (add it yourself, or `--force` replaces the file after saving `.bak`). Unless it has, the command refuses `--no-config`. The command ignores a `plugins/` directory, with a note. There are **no built-in default profiles** (R5). The one sample is commented out and carries a `.sample` suffix so that `ccshelf` never loads it. No organization name, host or data is in the templates.
 
 ### Placeholders and the lint result
 A sidecar stub has:

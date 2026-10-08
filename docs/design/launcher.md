@@ -38,7 +38,7 @@ The launcher is a compiler plus a process starter. It is never in the data path:
           --resume                                                    # passthrough args
    ```
    The generated settings file hides plugins, skills, connectors and other MCP servers (`enabledPlugins`, `skillOverrides`, `disableClaudeAiConnectors`, `deniedMcpServers` with full server names). So the core path uses no sideload flags. The launcher **validates the generated JSON before every launch**, because Claude Code ignores an invalid settings file silently (exit 0, no message). With `inherit_user_settings = false` it adds `--setting-sources project,local` (this drops the user layer, and the launcher re-adds only what the profile sets). If policy blocks a flag or key, behavior follows `[policy] on_blocked` (`warn` drops that part, `fail` refuses).
-5. **Start `claude` and step aside**. On **Unix, `exec`**: the launcher process is replaced, so terminal job control and exit codes behave exactly as for plain `claude`. On **Windows, spawn** a child with inherited stdio, ignore Ctrl+C in the launcher, forward termination and return the child's exit code. Passthrough works for non-interactive use: `ccshelf run sre -- -p "summarize this repo"`.
+5. **Start `claude` and step aside**: `exec` on Unix, spawn and wait on Windows (see [platform.md](platform.md), "Starting `claude`"). Passthrough works for non-interactive use: `ccshelf run sre -- -p "summarize this repo"`.
 6. **Write nothing shared**: it never touches `~/.claude/settings.json`, `~/.claude.json` or the plugin cache (Claude Code rewrites its own state as usual).
 
 Concurrency: two terminals produce two command lines pointing at two immutable files, so neither reads anything the other wrote (tested on macOS with three parallel sessions).
@@ -59,7 +59,7 @@ The launcher never sets `CLAUDE_CONFIG_DIR`, so all profiles use the same `~/.cl
 | claude.ai connector auth | Yes | Connected once. `strict` hides connectors for a session without affecting their auth. |
 
 Not hidden by a profile: a repo's own `.claude/skills/`, `.claude/agents/` and `.claude/settings.json` still apply. Its `.mcp.json` also applies, unless the profile uses `strict`, which drops project `.mcp.json` servers too. `strict` degrades to a `deniedMcpServers` list in two cases:
-- Managed policy blocks `--strict-mcp-config`.
+- Managed policy blocks `--strict-mcp-config` and the profile has `on_blocked = "warn"`. With `on_blocked = "fail"`, the launcher exits.
 - The org protects an MCP server the profile does not provide.
 
 The list holds the installed plugins' servers (never the profile's own or protected ones). The launcher then warns that servers from the user's own settings or project files stay available. Plugin masking outranks project settings (`--settings` has higher precedence).
@@ -93,7 +93,7 @@ An account switch isolates credentials, user settings, installed plugins and mar
 - **Installed plugins and marketplaces are per config dir**, so each account must install its plugins (`/plugin marketplace add ...` and installs) separately. The launcher's installed-plugin list is also per account. A profile can list plugins that exist in one account but not another. The launcher then reports "not installed in this account".
 - **Plugin cache is duplicated per account.** Do not symlink `plugins/` between accounts: that triggers "corrupted" warnings (#82272, #85325). Accept the duplication, or evaluate `CLAUDE_CODE_PLUGIN_SEED_DIR` (a read-only pre-populated plugin dir for containers, where plugins still must be enabled) as a way to dedupe. Untested.
 - **Org profiles are shared across accounts**, because they come from the profile sources, not from the config dir. The `plugin` source type needs the data-only plugin installed in each account that uses it. `git` and `dir` sources work in any account.
-- **Auth storage differs by OS**: the macOS Keychain entry is keyed per config dir. Linux and Windows keep `.credentials.json` inside the dir. Either way each account has its own login.
+- **Auth storage differs by OS** (see [platform.md](platform.md), "Facts from the docs"). Either way each account has its own login.
 - **Managed settings still apply to every account** (Claude Code reads them from system paths).
 - **Base preferences diverge**: the user layer (`settings.json`) is per account, while profile settings arrive through `--settings` and are common to all accounts.
 

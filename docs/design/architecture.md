@@ -3,7 +3,7 @@
 Code layout of the tool repo, design principles and the Go stack. For the org data repo see [catalog-and-org-repo.md](catalog-and-org-repo.md).
 
 ## Code layout and principles
-**Code layout of the tool repo** (the public repo). [catalog-and-org-repo.md](catalog-and-org-repo.md) describes the org's private data repo. One Go module builds one binary. The module has three packages, and none depends on another except on `core`:
+One Go module builds one binary. The module has three packages, and none depends on another except on `core`:
 
 - `core/`: read `marketplace.json` and installed state (`claude plugin list --json` for installed plugins, `--available` when the catalog needs uninstalled ones), resolve sets. Pure, no side effects.
 - `profiles/`: local per-terminal launcher. Depends on `core`.
@@ -20,14 +20,14 @@ Separate releases. Git plus CI is the registry. There is no server or database. 
 6. **Lead the pitch with routing quality and clutter**, not token cost.
 
 ## Go stack choices (proposed)
-- Module layout: `core/`, `profiles/`, `catalog/` as Go packages in one module. One `ccshelf` binary with subcommands (project and command name `ccshelf`, see [project.md](project.md)). Cobra or a small stdlib-based CLI parser. Stdlib `os/exec`, `encoding/json`, `html/template`, `embed`.
+- One `ccshelf` binary with subcommands (project and command name `ccshelf`, see [project.md](project.md)). Cobra or a small stdlib-based CLI parser. Stdlib `os/exec`, `encoding/json`, `html/template`, `embed`.
 - TOML: a maintained library (`pelletier/go-toml/v2` or `BurntSushi/toml`). Pick one that preserves useful error positions.
 - JSON Schema validation for manifests: a Go validator library, with schemas in `schema/` shared with editors.
 - Git access for `git` sources: shell out to the user's `git` (inherits credential helper/SSH config, important for GHE) rather than embedding a git library.
 - Catalog frontend: generated static HTML plus one small vanilla JS file for filtering. Data in `catalog.json`.
-- Release: `goreleaser`. CI matrix on `macos-latest`, `ubuntu-latest`, `windows-latest` (see cross-platform section).
+- Release: `goreleaser`. CI matrix on `macos-latest`, `ubuntu-latest`, `windows-latest` (see [platform.md](platform.md)).
 - Tests: golden files for generated settings, a fake `claude` binary built from `testdata/`, opt-in real-`claude` integration test.
 
 ## Repo layout
 Tool repo (this one): `core/ profiles/ catalog/ schema/ action/ site/ examples/ docs/`.
-Org data repo: see [catalog-and-org-repo.md](catalog-and-org-repo.md) (marketplace, plugins, `profiles/`, generated `bundles/`, `catalog/` sidecars, org config, CI). The built catalog output is not committed.
+Org data repo: see [catalog-and-org-repo.md](catalog-and-org-repo.md), "Layout".
