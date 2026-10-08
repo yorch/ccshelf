@@ -50,7 +50,7 @@ What is not taken: Changeset files. They need a file per pull request and a Node
 
 ## Decision (D-36)
 
-A bot-maintained **release pull request** derived from conventional commits, using `googleapis/release-please-action` v5.0.0, pinned by full commit SHA {V}. It carries the version bump and the generated `CHANGELOG.md`. Merging it creates the tag and a draft GitHub release, and the existing signed goreleaser pipeline publishes. We chose release-please over `semantic-release` (needs Node and a token with push rights, publishes directly with no reviewable pull request). We also chose it over a script of our own (we would re-implement version rules and changelog formatting). The assessment above rejects Changesets.
+A bot-maintained **release pull request** derived from conventional commits, using `googleapis/release-please-action` v5.0.0, pinned by full commit SHA {V}. It carries the version bump and the generated `CHANGELOG.md`. Merging it creates the tag and a draft GitHub release, and the existing signed goreleaser pipeline publishes. We chose release-please over `semantic-release` (needs Node and a token with push rights, publishes directly with no reviewable pull request). We also chose it over a script of our own (we would re-implement version rules and changelog formatting).
 
 ```
  pull request  --squash-->  main  (subject = pull request title, checked by ci.yml pr-title)
@@ -102,10 +102,10 @@ A bot-maintained **release pull request** derived from conventional commits, usi
 - **Forcing a version** (the first release, 1.0.0, or a correction). Two facts shape this {V: release-please v17.6.0 source}. First, a commit of a hidden type (`chore`, `docs`, ...) yields an empty changelog, and `BaseStrategy.buildReleasePullRequest` then skips the release (`changelogEmpty`, "No user facing commits found ... skipping"). So a `chore:` commit carrying `Release-As:` does **nothing**. Second, `release-as` in the package configuration wins over the commit-derived version. So:
   1. Open a pull request that sets `"release-as": "X.Y.Z"` for the `.` package in `release-please-config.json`. The pull request must itself be releasable: its title is `fix(release): ...` or `feat(release): ...` (a real change, or the title of a change that is in it anyway). Merge it. The release pull request now proposes `X.Y.Z`.
   2. Review and merge the release pull request as usual.
-  3. Remove `release-as` again in a `chore(release): drop release-as` pull request. It is sticky: left in place, it would force the next release to the same version. Do this before merging anything releasable.
+  3. Remove `release-as` again in a `chore(release): drop release-as` pull request, before merging anything releasable. Left in place, the sticky key forces the next release to the same version.
 
   A `Release-As:` footer in a commit message also works for a releasable commit, but this repository does not use it. The commit body reaches `main` only through the squash default, and `pr-title` rejects a pull request description carrying `Release-As:` (see "Pull request titles").
-- **Changelog sections.** Shown: `feat` (Features), `fix` (Bug fixes), `perf` (Performance), `revert` (Reverts). Hidden: `docs`, `test`, `ci`, `build`, `refactor`, `chore`. release-please opens a release pull request only when at least one visible entry exists ("No user facing commits found ... skipping" otherwise {V: `BaseStrategy.buildReleasePullRequest`}). I chose to hide the maintenance types rather than add a "Maintenance" section, because a docs-only or CI-only merge should not produce a release pull request. Consequences: **dependency bumps do not trigger a release** (Dependabot titles are `chore(deps)`). Ship a vulnerability fix in a dependency with a title such as `fix(deps): bump x to 1.2.3 (CVE-...)`. Security fixes are `fix(security): ...`. The old goreleaser "Security" group by regexp is gone.
+- **Changelog sections.** Shown: `feat` (Features), `fix` (Bug fixes), `perf` (Performance), `revert` (Reverts). Hidden: `docs`, `test`, `ci`, `build`, `refactor`, `chore`. release-please opens a release pull request only when at least one visible entry exists (see "Forcing a version") {V: `BaseStrategy.buildReleasePullRequest`}. I chose to hide the maintenance types rather than add a "Maintenance" section, because a docs-only or CI-only merge should not produce a release pull request. Consequences: **dependency bumps do not trigger a release** (Dependabot titles are `chore(deps)`). Ship a vulnerability fix in a dependency with a title such as `fix(deps): bump x to 1.2.3 (CVE-...)`. Security fixes are `fix(security): ...`. The old goreleaser "Security" group by regexp is gone.
 - **No releasable commits** (only hidden types since the last release): no release pull request is opened or updated, nothing is tagged, nothing is built. An existing open release pull request stays as it is.
 - **Hotfix.** A fix is an ordinary `fix:` pull request on `main`. The release pull request then shows the next patch. Merge it. It contains everything on `main` since the last release. This model cannot ship only a fix while unreleased `feat` commits sit on `main`. This is by design:
   - There are no release branches.
@@ -122,7 +122,7 @@ A bot-maintained **release pull request** derived from conventional commits, usi
 | `release-please` job | `GITHUB_TOKEN`: contents, pull-requests, issues write. No checkout, no repository code runs | create and update the release branch and pull request, labels, the tag, the draft release | push to `main` (the ruleset requires pull requests), run anything that signs, reach secrets (none are passed) |
 | `dispatch` job | `GITHUB_TOKEN`: actions write | start `ci.yml` and `release.yml` (`workflow_dispatch`) | change contents |
 | `verify` job | contents read, actions read | read the repository, branches and CI runs (it cannot see draft releases: the API lists them only to tokens with push access) | write |
-| `release` job | contents, id-token, attestations write, **after two reviewers approve the `release` environment, from a `v*` tag only** | check the draft release (exactly one, name and tag_name equal the tag, target equals the tag's commit), build, sign (keyless OIDC), verify the signature with cosign, attest, upload to the draft, publish it | run without approval |
+| `release` job | contents, id-token, attestations write, **after two reviewers approve the `release` environment, from a `v*` tag only** | check the draft release (see "Trust change" below), build, sign (keyless OIDC), verify the signature with cosign, attest, upload to the draft, publish it | run without approval |
 | optional publishers | `HOMEBREW_TAP_TOKEN`, `SCOOP_BUCKET_TOKEN`, `WINGET_TOKEN` on the `release` environment | write to the tap, bucket and winget fork | anything else |
 | `pins` job | contents, pull-requests, actions write | open the checksum pull request and run CI on its branch | merge it |
 
@@ -143,14 +143,14 @@ No personal access token and no GitHub App key is needed. The one place a token 
   - It is equal to the version in `.release-please-manifest.json` at that commit (so a tag cannot name a version no release pull request produced).
   - `ci.yml` succeeded for the commit.
 
-  `verify` also refuses a branch of the same name as the tag (the dispatch API takes a short ref name). The `release` job has `contents: write` (a read-only token is not shown draft releases). It then requires all of these:
+  `verify` also refuses a branch of the same name as the tag (the dispatch API takes a short ref name). The `release` job, which can read drafts because it has `contents: write` (see the token table), requires all of these:
   - Exactly one draft with `tag_name` equal to the tag.
   - Exactly one release with `name` equal to the tag (goreleaser finds its draft by name).
   - The two are the same release.
   - No published release uses the tag.
   - The draft's `target_commitish` resolves to the commit the run started on.
 
-  So a tag that somebody created first at another commit fails closed. These draft checks run after the environment approval, because only that job can read drafts. The two-reviewer approval of the `release` environment is unchanged. It is the control that matters most: nothing is signed or published without it.
+  So a tag that somebody created first at another commit fails closed. These draft checks run after the environment approval. The two-reviewer approval of the `release` environment is unchanged. It is the control that matters most: nothing is signed or published without it.
 - What the new design adds to the attack surface: the release-please action (third party, SHA-pinned, runs with `contents: write` and no repository checkout, no secrets) and the `GITHUB_TOKEN` permission to create tags. A compromised action could create a `v*` tag, but only at a commit already on `main` whose manifest equals the tag, and only once (the ruleset blocks updating a tag and lets only maintainers delete one). It still cannot sign.
 - What it removes: any maintainer typing a version by hand, and an unsigned-but-required "signed tag" rule that could not be enforced.
 - **Rulesets that follow:**
@@ -184,7 +184,7 @@ The `docs` job (report check, link check, EOL check, the classifier's tests) alw
 
 Fail-open is what keeps the release path intact. The `verify` job of `release.yml` waits for a successful `ci.yml` run for the tagged commit, which is the full push-to-`main` run. The dispatched run, also full, covers the release pull request. A unit test asserts that every tracked file is classified (or deliberately fails open), so a new file needs a rule in the same pull request.
 
-**The release pull request.** It changes only `CHANGELOG.md` and `.release-please-manifest.json`, which alone would select just `site`. A native `pull_request` run can still happen on it, for example after a maintainer closes and reopens it or pushes to its branch, or if a GitHub App token is adopted. A cheap green `ci-ok` from that run could supersede a failed full dispatched run on the same commit. The classifier therefore fails open for any pull request whose head branch starts with `release-please--`. So a native run is as complete as the dispatched one, and the two cannot disagree. Nothing skips by branch name. One earlier run that sat in `action_required` is GitHub waiting for approval of a workflow run triggered by a bot-owned pull request {U: not reproduced here}.
+**The release pull request.** It changes only `CHANGELOG.md` and `.release-please-manifest.json`, which alone would select just `site`. A native `pull_request` run can still happen on it, for example after a maintainer closes and reopens it or pushes to its branch, or if a GitHub App token is adopted. A cheap green `ci-ok` from that run could supersede a failed full dispatched run on the same commit. The `release-please--` fail-open rule above makes a native run as complete as the dispatched one, so the two cannot disagree. Nothing skips by branch name. One earlier run that sat in `action_required` is GitHub waiting for approval of a workflow run triggered by a bot-owned pull request {U: not reproduced here}.
 
 **The first real pull request shows whether gating works.** The `changes` job uses `fetch-depth: 0` unconditionally. The form `cond && 0 || 1` always gives 1, because 0 is falsy in GitHub expressions {R}. That would make every diff fail and every pull request run everything. When the diff cannot be computed, the step summary says so in a warning line. A unit test documents the failure in a depth-1 clone.
 
@@ -192,7 +192,7 @@ The test matrix drops the two experimental legs (`ubuntu-24.04-arm`, `windows-11
 
 ## Pull request titles (D-37)
 
-Maintainers squash-merge, so the pull request title becomes the commit subject and the changelog entry. The workflow `pr-title.yml` runs `scripts/check_pr_title.py` (stdlib Python, tests in `scripts/test_check_pr_title.py`) on every pull request, including when the title or description is edited. Its job `pr-title` is a **second required check** next to `ci-ok`. It is a separate workflow so that an edit never re-runs the `ci.yml` matrix (whose `cancel-in-progress` would cancel runs). It has `permissions: {}` at the top, `contents: read` and `pull-requests: read` on the job, and no third-party action. `ci-ok` is unchanged: it does not need `pr-title`, and skipped jobs still count as passed.
+Maintainers squash-merge, so the pull request title becomes the commit subject and the changelog entry. The workflow `pr-title.yml` runs `scripts/check_pr_title.py` (stdlib Python, tests in `scripts/test_check_pr_title.py`) on every pull request, including when the title or description is edited. Its job `pr-title` is a **second required check** next to `ci-ok`. It is a separate workflow so that an edit never re-runs the `ci.yml` matrix (whose `cancel-in-progress` would cancel runs). It has `permissions: {}` at the top, `contents: read` and `pull-requests: read` on the job, and no third-party action. `ci-ok` does not need `pr-title`.
 
 - Format `type(scope)!: description`:
   - Types `feat fix docs test ci build refactor perf chore revert`.
@@ -215,7 +215,7 @@ Maintainers squash-merge, so the pull request title becomes the commit subject a
   2. `pr-title` rejects a description that contains `BEGIN_COMMIT_OVERRIDE`, `BEGIN_NESTED_COMMIT` or a line starting `Release-As:` (any case, after quote or list marks), for everyone except the release bot. The description reaches the script through `env:` (`PR_BODY`), and the script never prints it. Maintainers force a version through `release-as` in the configuration (see "Forcing a version").
   3. The release pull request carries the reminder "Review every changelog entry and the version before merging" (`pull-request-footer`), and the two approvals plus the code owner are the last review.
   **Residual risk:** `pr-title` does not reject a description paragraph that merely looks like a commit (`feat: ...`, `BREAKING CHANGE: ...`), because that check would have false positives, for example in Dependabot release notes. A commit message edited by hand at merge time is outside every check here. Layer 1 neutralises both and layer 3 catches them, but nothing prevents them.
-- Setting to choose once: the repository's squash-merge default message must be **"Pull request title"** (not "title and description", and not "commit messages"). The `!` of the title still marks a breaking change. A breaking change is therefore always visible in the title.
+- With the squash default "Pull request title" (layer 1), the `!` of the title still marks a breaking change. A breaking change is therefore always visible in the title.
 
 ## Failure and rollback
 
@@ -243,8 +243,8 @@ No fixed cadence. The maintainers cut a release when they merge the release pull
 Before the first release (everything under Settings of the tool repository):
 
 1. **Actions > General > Workflow permissions:** enable "Allow GitHub Actions to create and approve pull requests". The default token permission can stay read-only: the workflows request what they need {V: release-please-action README}. **Side effect:** the same setting also lets a workflow token submit an approving review. Mitigate it in the `main` ruleset: require **code-owner review** (CODEOWNERS) from people, so a bot approval does not satisfy it, and enable **"Require approval of the most recent reviewable push"**. No workflow in this repository submits approvals.
-2. **Rulesets:** `main` (required checks `ci-ok` and `pr-title`, pull requests, code-owner review, two approvals, block force push and deletion) and tags `v*` (block update and deletion). For tag creation, see the trust section. **Environment `release`:** deployment tags `v*`, two required reviewers, prevent self-review. Optional publisher secrets live here.
-3. **Pull requests > squash merging:** allow squash merging only, with the default commit message **"Pull request title"** (the description must not reach `main`: see "Pull request titles").
+2. **Rulesets and the environment `release`:** set up `main`, tags `v*` and the environment `release` as listed under "Rulesets that follow" in [Token, tag and signing chain](#token-tag-and-signing-chain). Optional publisher secrets live on the environment.
+3. **Pull requests > squash merging:** allow squash merging only, with the default commit message **"Pull request title"** (not "title and description", and not "commit messages"). The description must not reach `main` (see "Pull request titles").
 4. **Optional:** Settings > Code security > "Immutable releases" {U}.
 5. Check `ci.yml` and `release.yml` are on the default branch (workflow_dispatch needs the file on the default branch to appear), then merge this change.
 
@@ -306,8 +306,8 @@ Read, not run: release-please v17.6.0 source for versioning, initial version, em
 
 Not validated (needs the real repository):
 - A real release.
-- That a read-only token sees no draft releases (taken from the REST documentation and the lead's finding, {R}). This is why the draft checks moved to the `release` job.
-- That the dispatch API would accept `ref=refs/tags/vX.Y.Z`. The REST and `gh workflow run --ref` documentation only say "branch or tag name", so the short name is used, and `verify` fails when a branch has the same name.
+- That a read-only token sees no draft releases (taken from the REST documentation and the lead's finding, {R}).
+- That the dispatch API would accept `ref=refs/tags/vX.Y.Z`. The REST and `gh workflow run --ref` documentation only say "branch or tag name", so the short name is used (see "Trust change").
 - That the dispatched `ci.yml` run satisfies the required check.
 - That a draft release plus `force-tag-creation` makes release-please find the previous release on the next run.
 - That goreleaser publishes the draft that release-please created and appends to its notes as read in its source.

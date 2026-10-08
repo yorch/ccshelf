@@ -122,10 +122,10 @@ In a terminal, bare `ccshelf config` is a menu (add a source, change a pin, remo
   - A write re-encodes the struct, so **comments and layout are lost**. The summary says so when the file has a `#` comment. The command keeps the previous file as `config.toml.bak` (0600, replaced atomically, a symlink at either name is refused).
   - The command compares the bytes read at the start again just before the write. If the file changed meanwhile, nothing is written (exit 1, `changed while editing`).
   - The confirmation diff compares the file as it is with the exact bytes about to be written, so dropped comments, added empty tables and any layout change are visible.
-  - The command validates paths (`~`, `$VAR` in account directories and `claude.path`) as they would expand, but writes them as the user wrote them, so a `set` changes only its own lines. `account add` and `rm` still use the plain, expanding save and keep neither the backup nor the changed-file check.
+  - The command validates paths (`~`, `$VAR` in account directories and `claude.path`) as they would expand, but writes them as the user wrote them, so a `set` changes only its own lines. `account add` and `rm` still use the plain, expanding save (`config.Save`) and keep neither the backup nor the changed-file check.
   - The command refuses duplicate sources (same type and repository, directory or plugin id) with a hint to use `source pin` or `source rm`. It compares git URLs after lower-casing the host and dropping a trailing `/` and `.git`, and `git@host:p` equals `ssh://git@host/p`. Another folder (`--path`) of the same repository is a different source.
   - Validation errors name sources from 1, like `show` and `ls`.
-- **`config edit`** opens a copy (0600, created exclusively in the config folder) in `$VISUAL` or `$EDITOR` and checks it like the real file. Only if the copy is valid does it replace `config.toml` with the text exactly as saved (comments kept, previous file in `.bak`). For an invalid copy, the command prints the errors (with line and column when the parser gives one, and value errors name the key). It leaves the original untouched, keeps the copy and exits 1. If the editor fails, the command keeps the copy and prints its path, as for an invalid copy. A new `config edit` starts from the current file, so copy the fix over. `config edit` may repair a currently invalid file, needs a terminal (`--path` prints the path instead), and does not create a missing file. Account commands (`account add` and `rm`) still use plain `config.Save` without the backup and changed-file check.
+- **`config edit`** opens a copy (0600, created exclusively in the config folder) in `$VISUAL` or `$EDITOR` and checks it like the real file. Only if the copy is valid does it replace `config.toml` with the text exactly as saved (comments kept, previous file in `.bak`). For an invalid copy, the command prints the errors (with line and column when the parser gives one, and value errors name the key). It leaves the original untouched, keeps the copy and exits 1. If the editor fails, the command keeps the copy and prints its path, as for an invalid copy. A new `config edit` starts from the current file, so copy the fix over. `config edit` may repair a currently invalid file, needs a terminal (`--path` prints the path instead), and does not create a missing file.
 
 ### Human-readable presentation (D-42)
 The CLI uses restrained presentation: task-grouped root help, a short getting-started sequence, readable labels, and explicit `hint:` lines rather than banners or emoji. Root help groups commands into profiles, discovery and diagnostics, org data repo maintenance, and setup and utilities. Usage errors point to the failing command's `--help` unless a more specific recovery hint or missing-value instruction is already available.
@@ -135,19 +135,7 @@ Tables keep their aligned layout at normal widths. When the terminal cannot fit 
 An empty profile or account list, a search with no matches, and an empty recommendation result are successful results on stdout, with a next-step `hint:`. Diagnostics and prompts remain on stderr. JSON keeps its existing envelope, collection types and exit codes, without human-only empty-state text. Scripts should use `--json` rather than parse presentation layouts.
 
 ### `update` (D-40)
-`ccshelf update` follows the rules above:
-- Every flag has a prompt-free form.
-- The confirmation is a plain yes/no (default no) because an update accepts no trust.
-- The interactive run prints `Equivalent: ccshelf update --version vX.Y.Z --yes` (plus `--force`, `--allow-downgrade` and `--require-signature` when given, so it replays the same).
-- Without a terminal and without `--yes` it exits 2 naming `--yes` (nothing to confirm, such as "up to date", exits 0).
-
-Exit codes and output:
-- `--require-signature` without cosign exits 1 before any network access.
-- `--check` always exits 0 and has a JSON form (envelope kind `update`, fields `action`, `current`, `latest`, `updateAvailable`, `releaseUrl`, `installMethod`, and for an install `executable`, `backup` and `signature`).
-- Network, verification and permission failures exit 1 with a hint and change nothing.
-- These exit 2: a downgrade without `--allow-downgrade` (`--force` never implies it), a bad `--version` and contradictory flags.
-
-[update.md](update.md) has the command's design, trust model and the automatic update. The `[update]` configuration keys are `mode` (`off` by default, `notify`, `install`), `interval`, `base_url`, `cosign_identity_repo` and `asset_hosts`. The automatic update acts only with a terminal on stdin, stdout and stderr and never under `CI`. `CCSHELF_NO_UPDATE_CHECK` turns it off.
+`ccshelf update` follows the rules above. Its flags, confirmation, `Equivalent:` line, exit codes, `--json` output, trust model and the automatic update (`[update]` keys, terminal and `CI` conditions, `CCSHELF_NO_UPDATE_CHECK`) are in [update.md](update.md).
 
 ### Scope for the first release
 Interactive:
@@ -167,7 +155,7 @@ Not in scope for the first release: a full-screen dashboard or persistent TUI ma
   - minimal dependencies (supply-chain surface)
   - no network use.
 - **Testing:** non-interactive behavior with golden files on every OS. Interactive flows with the scripted `Prompter` in unit tests plus a small pty smoke test per OS (ConPTY on Windows).
-- **Cross-platform:** raw-mode terminal handling differs per OS. The picker must restore the terminal before spawning or replacing the process, which interacts with the Windows spawn-and-wait versus Unix `exec` choice.
+- **Cross-platform:** raw-mode terminal handling differs per OS. The terminal restore of rule 6 interacts with the Windows spawn-and-wait versus Unix `exec` choice.
 - **Security:** prompts must not echo secrets, and an interactive default must never be less safe than the flag default. The implementation:
   - A question has no default unless it opts in (`HasDefault`).
   - Trust confirmations use `ConfirmRisky`, which has no default and needs the typed word `yes`.
