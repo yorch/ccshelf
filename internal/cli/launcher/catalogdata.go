@@ -9,7 +9,6 @@ import (
 	"github.com/yorch/ccshelf/internal/config"
 	"github.com/yorch/ccshelf/internal/marketplace"
 	"github.com/yorch/ccshelf/internal/orgconfig"
-	"github.com/yorch/ccshelf/internal/profile/gitsource"
 	"github.com/yorch/ccshelf/internal/ui"
 )
 
@@ -56,7 +55,7 @@ func (l *launcher) catalogData(ctx context.Context, cc *clicore.Context) (*clico
 			}
 			root, label = s.orgDirSource(i, p).Root(), "dir "+ui.SanitizeLine(p)
 		case config.SourceGit:
-			g, err := newGit(gitsource.Options{URL: sc.URL, Ref: sc.Ref, Subpath: sc.Path, RequirePin: cfg.Trust.RequirePin})
+			g, err := newGit(gitOptions(sc, cfg.Trust.RequirePin))
 			if err != nil {
 				continue
 			}

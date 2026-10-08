@@ -40,7 +40,7 @@ func (l *launcher) configMenu(ctx context.Context, cc *clicore.Context) error {
 		case "add":
 			err = l.sourceAdd(ctx, cc, nil, &sourceAddFlags{})
 		case "pin":
-			err = l.sourcePin(ctx, cc, nil, "", false)
+			err = l.sourcePin(ctx, cc, nil, "", "", false)
 		case "rm":
 			err = l.sourceRm(ctx, cc, nil, false)
 		case "set":
@@ -65,7 +65,7 @@ func (l *launcher) configMenu(ctx context.Context, cc *clicore.Context) error {
 // askSource asks for a new source and records the flags that give the same.
 func askSource(ctx context.Context, cc *clicore.Context, cfg *config.Config) (config.SourceConfig, *ui.Recorder, error) {
 	types := []ui.Option{
-		{Label: "Org data repo (git)", Detail: "a repository of profiles, pinned to a tag or commit", Value: config.SourceGit},
+		{Label: "Org data repo (git)", Detail: "a repository of profiles, pinned to a tag or commit, or tracking a branch", Value: config.SourceGit},
 		{Label: "Local directory", Detail: "an absolute folder of profiles", Value: config.SourceDir},
 		{Label: "Plugin", Detail: "profiles shipped in an installed plugin", Value: config.SourcePlugin},
 	}
@@ -84,17 +84,22 @@ func askSource(ctx context.Context, cc *clicore.Context, cfg *config.Config) (co
 		if err != nil {
 			return src, nil, err
 		}
-		ref, err := cc.Prompt.Input(ctx, "Tag or full commit id to pin it to", "", refValidator(cfg))
+		pin, err := cc.Prompt.Input(ctx, pinPrompt("Tag or full commit id to pin it to"), "", validatePinOrBranch(refValidator(cfg)))
 		if err != nil {
 			return src, nil, err
 		}
+		ref, branch := splitPinInput(pin)
 		path, err := cc.Prompt.Input(ctx, "Folder inside the repo that holds the profiles", "profiles", folderValidator)
 		if err != nil {
 			return src, nil, err
 		}
-		src = config.SourceConfig{Type: config.SourceGit, URL: strings.TrimSpace(url), Ref: ref, Path: path}
+		src = config.SourceConfig{Type: config.SourceGit, URL: strings.TrimSpace(url), Ref: ref, Branch: branch, Path: path}
 		rec.Flag("--git-url", src.URL)
-		rec.Flag("--ref", ref)
+		if branch != "" {
+			rec.Flag("--branch", branch)
+		} else {
+			rec.Flag("--ref", ref)
+		}
 		if path != "profiles" {
 			rec.Flag("--path", path)
 		}
@@ -167,6 +172,9 @@ func pickSource(ctx context.Context, cc *clicore.Context, cfg *config.Config, ti
 		detail := s.Type
 		if s.Ref != "" {
 			detail += " @ " + s.Ref
+		}
+		if s.Branch != "" {
+			detail += " " + branchLabel(s.Branch, trustedBranchCommit(s))
 		}
 		opts = append(opts, ui.Option{Label: fmt.Sprintf("%d. %s", i+1, ui.SanitizeLine(s.SourceLocation())), Detail: ui.SanitizeLine(detail), Value: fmt.Sprint(i + 1)})
 		idx = append(idx, i)

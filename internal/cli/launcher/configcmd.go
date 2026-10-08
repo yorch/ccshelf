@@ -34,7 +34,8 @@ These changes weaken a security setting:
   - turning off pinning
   - trusting project profiles
   - installing updates automatically
-  - adding a source that is not pinned or whose path is a variable
+  - adding a source that tracks a branch, is not pinned or has a path that is
+    a variable
   - changing claude.path or the update source
 Nothing here fetches a source or records trust. Only "ccshelf init" creates
 the file.
@@ -89,22 +90,48 @@ func (l *launcher) configPathCmd() *cobra.Command {
 // ---- show -----------------------------------------------------------------
 
 type configSourceRow struct {
-	Number      int    `json:"number"`
-	Type        string `json:"type"`
-	Name        string `json:"name,omitempty"`
-	URL         string `json:"url,omitempty"`
-	Ref         string `json:"ref,omitempty"`
-	Path        string `json:"path,omitempty"`
-	Plugin      string `json:"plugin,omitempty"`
-	Marketplace string `json:"marketplace,omitempty"`
+	Number int    `json:"number"`
+	Type   string `json:"type"`
+	Name   string `json:"name,omitempty"`
+	URL    string `json:"url,omitempty"`
+	Ref    string `json:"ref,omitempty"`
+	Branch string `json:"branch,omitempty"`
+	// TrustedCommit is, for a branch source, the commit the trust lockfile
+	// recorded last; a run uses it without network access.
+	TrustedCommit string `json:"trusted_commit,omitempty"`
+	Path          string `json:"path,omitempty"`
+	Plugin        string `json:"plugin,omitempty"`
+	Marketplace   string `json:"marketplace,omitempty"`
 }
 
 func sourceRows(cfg *config.Config) []configSourceRow {
 	rows := make([]configSourceRow, 0, len(cfg.Sources))
 	for i, s := range cfg.Sources {
-		rows = append(rows, configSourceRow{Number: i + 1, Type: s.Type, Name: s.Name, URL: s.URL, Ref: s.Ref, Path: s.Path, Plugin: s.Plugin, Marketplace: s.Marketplace})
+		row := configSourceRow{Number: i + 1, Type: s.Type, Name: s.Name, URL: s.URL, Ref: s.Ref, Branch: s.Branch, Path: s.Path, Plugin: s.Plugin, Marketplace: s.Marketplace}
+		if s.Type == config.SourceGit && s.Branch != "" {
+			row.TrustedCommit = trustedBranchCommit(s)
+		}
+		rows = append(rows, row)
 	}
 	return rows
+}
+
+// trustedBranchCommit returns the commit the trust lockfile recorded last for a
+// branch source, or "" (none, or the lockfile cannot be read).
+func trustedBranchCommit(sc config.SourceConfig) string {
+	s := &session{}
+	if c := s.lockedCommits(sc); len(c) > 0 {
+		return c[0]
+	}
+	return ""
+}
+
+// branchLabel describes what a branch source runs: "branch main @ 1a2b3c4".
+func branchLabel(branch, commit string) string {
+	if commit == "" {
+		return "branch " + branch + " (no trusted commit yet)"
+	}
+	return "branch " + branch + " @ " + commit[:min(7, len(commit))]
 }
 
 type configDoc struct {
@@ -124,6 +151,7 @@ type configTrust struct {
 	RequirePin           bool   `json:"require_pin"`
 	OnChange             string `json:"on_change"`
 	TrustProjectProfiles bool   `json:"trust_project_profiles"`
+	BranchCheckInterval  string `json:"branch_check_interval"`
 }
 
 type configUpdate struct {
@@ -155,7 +183,7 @@ type configUI struct {
 func configData(path string, exists bool, cfg *config.Config) configDoc {
 	d := configDoc{
 		Path: path, Exists: exists, Sources: sourceRows(cfg),
-		Trust: configTrust{cfg.Trust.RequirePin, cfg.Trust.OnChange, cfg.Trust.TrustProjectProfiles},
+		Trust: configTrust{cfg.Trust.RequirePin, cfg.Trust.OnChange, cfg.Trust.TrustProjectProfiles, config.FormatInterval(cfg.Trust.EffectiveBranchCheckInterval())},
 		Update: configUpdate{
 			Mode: cfg.Update.EffectiveMode(), Interval: config.FormatInterval(cfg.Update.EffectiveInterval()),
 			BaseURL: cfg.Update.BaseURL, CosignIdentityRepo: cfg.Update.CosignIdentityRepo,
@@ -250,6 +278,9 @@ func printConfig(cc *clicore.Context, path string, exists bool, cfg *config.Conf
 		switch src.Type {
 		case config.SourceGit:
 			field("ref", src.Ref)
+			if src.Branch != "" {
+				field("tracks", branchLabel(src.Branch, trustedBranchCommit(src)))
+			}
 			field("path", src.Path)
 		case config.SourcePlugin:
 			field("marketplace", src.Marketplace)
@@ -261,7 +292,7 @@ func printConfig(cc *clicore.Context, path string, exists bool, cfg *config.Conf
 		title string
 		keys  []string
 	}{
-		{"Trust:", []string{"trust.require_pin", "trust.on_change", "trust.trust_project_profiles"}},
+		{"Trust:", []string{"trust.require_pin", "trust.on_change", "trust.trust_project_profiles", "trust.branch_check_interval"}},
 		{"Update:", []string{"update.mode", "update.interval"}},
 		{"Catalog:", []string{"catalog.remote_url"}},
 	} {
@@ -348,11 +379,15 @@ func (l *launcher) configSourceLsCmd() *cobra.Command {
 			return ui.WriteJSON(cc.Streams.Out, "config-sources", rows)
 		}
 		if len(rows) == 0 {
-			return ui.EmptyState(cc.Streams.Out, "no profile sources configured", "to add one: ccshelf config source add --git-url <url> --ref <tag>")
+			return ui.EmptyState(cc.Streams.Out, "no profile sources configured", "to add one: ccshelf config source add --git-url <url> --ref <tag>  (or --branch <name>)")
 		}
 		table := make([][]string, 0, len(rows))
 		for i, r := range rows {
-			table = append(table, []string{strconv.Itoa(r.Number), r.Type, cfg.Sources[i].SourceLocation(), r.Ref, r.Path})
+			ref := r.Ref
+			if r.Branch != "" {
+				ref = branchLabel(r.Branch, r.TrustedCommit)
+			}
+			table = append(table, []string{strconv.Itoa(r.Number), r.Type, cfg.Sources[i].SourceLocation(), ref, r.Path})
 		}
 		return ui.Table(cc.Streams.Out, []string{"#", "TYPE", "SOURCE", "REF", "PATH"}, table, cc.Mode)
 	})
@@ -360,8 +395,8 @@ func (l *launcher) configSourceLsCmd() *cobra.Command {
 }
 
 type sourceAddFlags struct {
-	gitURL, ref, path, dir, plugin, marketplace string
-	yes                                         bool
+	gitURL, ref, branch, path, dir, plugin, marketplace string
+	yes                                                 bool
 }
 
 func (l *launcher) configSourceAddCmd() *cobra.Command {
@@ -370,7 +405,8 @@ func (l *launcher) configSourceAddCmd() *cobra.Command {
 		Use:   "add",
 		Short: "Add a profile source (git, dir or plugin)",
 		Long: `Add one profile source with exactly one of these flags:
-  - --git-url, with --ref, and --path for the folder inside the repository
+  - --git-url, with --ref or --branch, and --path for the folder inside the
+    repository
   - --dir, an absolute directory
   - --plugin (name@marketplace), with --marketplace and --path
 
@@ -378,11 +414,15 @@ The command checks the source with the rules of the configuration file and
 refuses an exact duplicate. For a duplicate, use "config source pin" or
 "config source rm". The command fetches and trusts nothing.
 
-In a terminal, without any of those flags, the command asks the questions. A
-git source that is not pinned to a tag or full commit is possible only while
-trust.require_pin is off. Adding one weakens a setting and needs --yes without
-a terminal.`,
+In a terminal, without any of those flags, the command asks the questions.
+
+A source with --branch follows a branch, which can move. A run still uses the
+commit you trusted, and every new commit needs your trust again. Adding one
+weakens a setting and needs --yes without a terminal. The same applies to a git
+source that is not pinned to a tag or full commit. That source is possible only
+while trust.require_pin is off.`,
 		Example: `  ccshelf config source add --git-url git@ghe.example.com:acme/claude-marketplace.git --ref v2026.10.1
+  ccshelf config source add --git-url git@ghe.example.com:acme/claude-marketplace.git --branch main --yes
   ccshelf config source add --dir ~/team-profiles
   ccshelf config source add --plugin org-profiles@acme --marketplace acme/claude-marketplace`,
 		Args: cobra.NoArgs,
@@ -390,6 +430,7 @@ a terminal.`,
 	fl := c.Flags()
 	fl.StringVar(&f.gitURL, "git-url", "", "git source: repository URL")
 	fl.StringVar(&f.ref, "ref", "", "git source: tag or full commit id to pin to")
+	fl.StringVar(&f.branch, "branch", "", "git source: branch to track, instead of --ref")
 	fl.StringVar(&f.path, "path", "", "git or plugin source: folder inside the repository or plugin (git default: profiles)")
 	fl.StringVar(&f.dir, "dir", "", "dir source: absolute directory of profiles")
 	fl.StringVar(&f.plugin, "plugin", "", "plugin source: name@marketplace")
@@ -420,7 +461,7 @@ func (l *launcher) sourceAdd(ctx context.Context, cc *clicore.Context, cmd *cobr
 			return err
 		}
 	case !canPrompt(cc):
-		return ui.Usage(ui.MissingFlags("give exactly one of --git-url (with --ref), --dir or --plugin", "--git-url|--dir|--plugin"))
+		return ui.Usage(ui.MissingFlags("give exactly one of --git-url (with --ref or --branch), --dir or --plugin", "--git-url|--dir|--plugin"))
 	}
 	file, err := openConfigFile(cc)
 	if err != nil {
@@ -439,7 +480,7 @@ func (l *launcher) sourceAdd(ctx context.Context, cc *clicore.Context, cmd *cobr
 	for i, ex := range cfg.Sources {
 		if config.SameSource(ex, src) {
 			return ui.Usage(withHint(fmt.Errorf("source %d already is %s %s", i+1, ex.Type, ui.SanitizeLine(ex.SourceLocation())),
-				"to change its ref, use: ccshelf config source pin %d --ref <ref>. To replace it: ccshelf config source rm %d. To add another folder of the same repository, give a different --path", i+1, i+1))
+				"to change its ref or branch, use: ccshelf config source pin %d --ref <ref> or --branch <name>. To replace it: ccshelf config source rm %d. To add another folder of the same repository, give a different --path", i+1, i+1))
 		}
 	}
 	cfg.Sources = append(cfg.Sources, src)
@@ -452,7 +493,7 @@ func (l *launcher) sourceAdd(ctx context.Context, cc *clicore.Context, cmd *cobr
 func sourceHint(src config.SourceConfig) string {
 	switch src.Type {
 	case config.SourceGit:
-		return "a git source needs a remote URL (https://, ssh:// or git@host:path) and --ref (a tag or full commit id) unless trust.require_pin is off. Use --dir for a local folder"
+		return "a git source needs a remote URL (https://, ssh:// or git@host:path) and --ref (a tag or full commit id) or --branch. Use --dir for a local folder"
 	case config.SourceDir:
 		return "a dir source is an absolute path, or one starting with ~"
 	}
@@ -471,19 +512,22 @@ func sourceFromFlags(cmd *cobra.Command, f *sourceAddFlags) (config.SourceConfig
 		if err := config.ValidateGitURL(f.gitURL); err != nil {
 			return config.SourceConfig{}, ui.Usage(withHint(fmt.Errorf("--git-url: %w", err), "%s", sourceHint(config.SourceConfig{Type: config.SourceGit})))
 		}
+		if f.ref != "" && f.branch != "" {
+			return config.SourceConfig{}, ui.Usage(errors.New("give --ref or --branch, not both"))
+		}
 		p := f.path
 		if !changed("path") {
 			p = "profiles"
 		}
-		return config.SourceConfig{Type: config.SourceGit, URL: f.gitURL, Ref: f.ref, Path: p}, nil
+		return config.SourceConfig{Type: config.SourceGit, URL: f.gitURL, Ref: f.ref, Branch: f.branch, Path: p}, nil
 	case f.dir != "":
-		if changed("ref") || changed("path") || changed("marketplace") {
-			return config.SourceConfig{}, ui.Usage(errors.New("--dir takes no --ref, --path or --marketplace"))
+		if changed("ref") || changed("branch") || changed("path") || changed("marketplace") {
+			return config.SourceConfig{}, ui.Usage(errors.New("--dir takes no --ref, --branch, --path or --marketplace"))
 		}
 		return config.SourceConfig{Type: config.SourceDir, Path: f.dir}, nil
 	}
-	if changed("ref") {
-		return config.SourceConfig{}, ui.Usage(errors.New("--ref goes with --git-url, not --plugin"))
+	if changed("ref") || changed("branch") {
+		return config.SourceConfig{}, ui.Usage(errors.New("--ref and --branch go with --git-url, not --plugin"))
 	}
 	if !validPluginID(f.plugin) {
 		return config.SourceConfig{}, ui.Usage(withHint(fmt.Errorf("--plugin %q must be name@marketplace", ui.SanitizeLine(f.plugin)), "%s", sourceHint(config.SourceConfig{Type: config.SourcePlugin})))
@@ -504,30 +548,37 @@ func parseSourceNumber(cfg *config.Config, arg string) (int, error) {
 }
 
 func (l *launcher) configSourcePinCmd() *cobra.Command {
-	var ref string
+	var ref, branch string
 	var yes bool
 	c := &cobra.Command{
 		Use:   "pin [n]",
-		Short: "Change the pinned ref of git source number n",
+		Short: "Change the pinned ref or the tracked branch of git source number n",
 		Long: `Change the tag or full commit id that git source number n (see config source ls)
-is pinned to. The next run that needs a profile from that source fetches the new
+is pinned to, or make it track a branch with --branch. Give --ref or --branch,
+not both. A source can switch between a tag or commit and a branch. A branch can
+move, so a switch to a branch weakens a setting and needs --yes without a
+terminal. The next run that needs a profile from that source fetches the new
 ref. When its commit differs from the one you trusted, the profile needs your
 trust again. This command never records trust. Pinning to something that is not
 a tag or full commit is possible only while trust.require_pin is off, and it
 needs --yes without a terminal.`,
-		Example: "  ccshelf config source pin 1 --ref v2026.11.0",
+		Example: "  ccshelf config source pin 1 --ref v2026.11.0\n  ccshelf config source pin 1 --branch main --yes",
 		Args:    cobra.MaximumNArgs(1),
 	}
 	c.Flags().StringVar(&ref, "ref", "", "the new tag or full commit id")
+	c.Flags().StringVar(&branch, "branch", "", "the branch to track, instead of --ref")
 	c.Flags().BoolVar(&yes, "yes", false, "confirm the write (and a weakening change), but never accept trust")
 	c.RunE = l.do(func(ctx context.Context, cc *clicore.Context, _ *cobra.Command, args []string) error {
-		return l.sourcePin(ctx, cc, args, ref, yes)
+		return l.sourcePin(ctx, cc, args, ref, branch, yes)
 	})
 	return c
 }
 
 // sourcePin is "config source pin"; without an argument it asks.
-func (l *launcher) sourcePin(ctx context.Context, cc *clicore.Context, args []string, ref string, yes bool) error {
+func (l *launcher) sourcePin(ctx context.Context, cc *clicore.Context, args []string, ref, branch string, yes bool) error {
+	if ref != "" && branch != "" {
+		return ui.Usage(errors.New("give --ref or --branch, not both"))
+	}
 	file, err := openConfigFile(cc)
 	if err != nil {
 		return err
@@ -541,7 +592,7 @@ func (l *launcher) sourcePin(ctx context.Context, cc *clicore.Context, args []st
 		}
 	} else {
 		if !canPrompt(cc) {
-			return ui.Usage(withHint(errors.New("missing argument <n>"), "run: ccshelf config source pin <n> --ref <ref>  (ccshelf config source ls lists the numbers)"))
+			return ui.Usage(withHint(errors.New("missing argument <n>"), "run: ccshelf config source pin <n> --ref <ref>  (or --branch <name>; ccshelf config source ls lists the numbers)"))
 		}
 		if idx, err = pickSource(ctx, cc, cfg, "Pin which source?", config.SourceGit); err != nil {
 			return err
@@ -550,32 +601,49 @@ func (l *launcher) sourcePin(ctx context.Context, cc *clicore.Context, args []st
 	}
 	src := &cfg.Sources[idx]
 	if src.Type != config.SourceGit {
-		return ui.Usage(withHint(fmt.Errorf("source %d is a %s source, and only git sources have a ref", idx+1, src.Type), "run: ccshelf config source ls"))
+		return ui.Usage(withHint(fmt.Errorf("source %d is a %s source, and only git sources have a ref or a branch", idx+1, src.Type), "run: ccshelf config source ls"))
 	}
-	if ref == "" {
+	if ref == "" && branch == "" {
 		if !canPrompt(cc) {
-			return ui.Usage(ui.MissingFlags("the tag or full commit id to pin to", "--ref"))
+			return ui.Usage(ui.MissingFlags("the tag or full commit id to pin to, or the branch to track", "--ref|--branch"))
 		}
-		if ref, err = cc.Prompt.Input(ctx, "New tag or full commit id", src.Ref, refValidator(cfg)); err != nil {
+		current := src.Ref
+		if src.Branch != "" {
+			current = config.BranchRefPrefix + src.Branch
+		}
+		answer, err := cc.Prompt.Input(ctx, pinPrompt("New tag or full commit id"), current, validatePinOrBranch(refValidator(cfg)))
+		if err != nil {
 			return err
 		}
+		ref, branch = splitPinInput(answer)
 		asked = true
 	}
-	if cfg.Trust.RequirePin {
-		if err := config.ValidatePin(ref); err != nil {
-			return ui.Usage(fmt.Errorf("--ref: %w", err))
+	if branch != "" {
+		if err := config.ValidateBranch(branch); err != nil {
+			return ui.Usage(fmt.Errorf("--branch: %w", err))
 		}
+		src.Ref, src.Branch = "", branch
+	} else {
+		if cfg.Trust.RequirePin {
+			if err := config.ValidatePin(ref); err != nil {
+				return ui.Usage(fmt.Errorf("--ref: %w", err))
+			}
+		}
+		src.Ref, src.Branch = ref, ""
 	}
-	src.Ref = ref
 	var rec *ui.Recorder
 	if asked {
 		rec = ui.NewRecorder("config", "source", "pin", strconv.Itoa(idx+1))
-		rec.Flag("--ref", ref)
+		if branch != "" {
+			rec.Flag("--branch", branch)
+		} else {
+			rec.Flag("--ref", ref)
+		}
 		rec.Bool("--yes")
 	}
 	return l.commitConfig(ctx, cc, &writePlan{
 		file: file, next: cfg, yes: yes, rec: rec,
-		note: "Nothing is fetched or trusted here. If the new ref resolves to a different commit, profiles from this source need your trust again on the next run.",
+		note: "Nothing is fetched or trusted here. If the new ref or branch resolves to a different commit, profiles from this source need your trust again on the next run.",
 	})
 }
 
@@ -662,6 +730,7 @@ Values:
   - trust.on_change: prompt or fail
   - update.mode: off, notify or install
   - update.interval: a duration such as 24h (1h to one year)
+  - trust.branch_check_interval: a duration such as 24h (1h to one year)
   - catalog.remote_url: an https URL
   - default_account: an account name
   - ui.color: auto, always or never

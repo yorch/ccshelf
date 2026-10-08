@@ -17,7 +17,6 @@ import (
 	"github.com/yorch/ccshelf/internal/cli/clicore"
 	"github.com/yorch/ccshelf/internal/config"
 	"github.com/yorch/ccshelf/internal/profile"
-	"github.com/yorch/ccshelf/internal/profile/gitsource"
 	"github.com/yorch/ccshelf/internal/ui"
 )
 
@@ -453,7 +452,7 @@ func (s *session) newNamespaces(ctx context.Context, prepared bool, destination 
 			switch sc.Type {
 			case config.SourceGit:
 				label := fmt.Sprintf("sources[%d] (git %s)", i, ui.Sanitize(sc.URL))
-				g, err := factory(gitsource.Options{URL: sc.URL, Ref: sc.Ref, Subpath: sc.Path, RequirePin: s.cfg.Trust.RequirePin})
+				g, err := factory(gitOptions(sc, s.cfg.Trust.RequirePin))
 				if err == nil {
 					err = s.prepareNewCached(ctx, g, sc)
 				}

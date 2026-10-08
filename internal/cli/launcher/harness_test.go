@@ -55,6 +55,8 @@ type harness struct {
 	spawnCode int
 	spawnHook func(args []string)
 	newGit    GitFactory
+	// now, when set, is the clock the commands see.
+	now time.Time
 	// spawnCtx is the context the last Spawn received; ctx, when set, is the
 	// context commands run under; lastErr is the error of the last run.
 	spawnCtx context.Context
@@ -107,11 +109,16 @@ func (h *harness) writeManaged(content string) {
 func (h *harness) build() *cobra.Command {
 	no := false
 	env := &clicore.Env{
-		Streams:  ui.Streams{In: strings.NewReader(h.in), Out: h.out, Err: h.errb},
-		Getenv:   os.Getenv,
-		Environ:  os.Environ,
-		Getwd:    func() (string, error) { return h.cwd, nil },
-		Now:      func() time.Time { return time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC) },
+		Streams: ui.Streams{In: strings.NewReader(h.in), Out: h.out, Err: h.errb},
+		Getenv:  os.Getenv,
+		Environ: os.Environ,
+		Getwd:   func() (string, error) { return h.cwd, nil },
+		Now: func() time.Time {
+			if !h.now.IsZero() {
+				return h.now
+			}
+			return time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)
+		},
 		GOOS:     h.goos,
 		Prompter: h.prompt,
 	}
