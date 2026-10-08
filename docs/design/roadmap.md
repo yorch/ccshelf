@@ -2,7 +2,7 @@
 
 Staged plan. Decisions and open questions are in [../DECISIONS.md](../DECISIONS.md).
 
-**Direction (decided 2026-10-06, after the adversarial review): evidence first, then trimmed scope.** This supersedes the earlier "both tracks in parallel" build order. The review's verdict was that the mechanism is sound but the plan was wider than its evidence. It also found that the benefit the pitch rests on (better skill routing, less clutter) was never measured.
+**Direction (decided 2026-10-06, after the adversarial review): evidence first, then trimmed scope** (D-19, which supersedes the "both tracks in parallel" build order, S-01). The review's verdict was that the mechanism is sound but the plan was wider than its evidence. It also found that the benefit the pitch rests on (better skill routing, less clutter) was never measured.
 
 ## Phase 0: evidence (before writing product code)
 1. **Routing eval.** Run 20 or more realistic prompts on a real plugin setup of the size the project targets (for example with `claude plugin eval` or `-p` runs). Compare the full set with a masked profile. Record which skill or plugin fires and whether it was the intended one. Fix the success criterion before running. The launcher is worth building only if the masked set measurably improves correct-first-try activation or reduces wrong-skill activations. If it does not, the launcher is documented as an alias recipe (`dry-run` prints the exact command) and not built as a product.
@@ -14,11 +14,7 @@ Staged plan. Decisions and open questions are in [../DECISIONS.md](../DECISIONS.
 3. **Bundle and masking prototype (T7).** Does masking a plugin that an installed bundle depends on break the bundle? It needs a second config directory and a login only the user can do. It also settles whether `profile = bundle` stays the bridge between the launcher and the catalog.
 4. **Stage 0 on Linux and Windows** (including `windows-11-arm` if a runner is used), repeating T1, T2 and the concurrency check, plus the MCP `cmd /c` question.
 5. **Measure MCP and connector removal** through the settings keys (the one measurement that suggested a real saving).
-6. **Kill and obsolescence criteria,** written down now and reviewed at every Claude Code minor release:
-   - A native allowlist or default-deny `enabledPlugins` mode.
-   - A native task-scoped profiles feature (not #91770, which is about accounts).
-   - A faceted `/plugin` Discover.
-   - An existing tool that covers the gaps.
+6. **Kill and obsolescence criteria,** written down now and reviewed at every Claude Code minor release (K1 to K12 below).
 
 ## Phase 1: MVP, if Phase 0 supports it
 - **Launcher:** `run`, `show`, `dry-run`, `ls`, `dir` sources only, `extends`, default-deny masking regenerated on every launch, settings validation before launch, `exec` on Unix and spawn on Windows. Closed schema from SR1. macOS and Linux first. Windows: compile-checked, and tested once Phase 0 item 4 passes.
@@ -41,7 +37,7 @@ Staged plan. Decisions and open questions are in [../DECISIONS.md](../DECISIONS.
 - The interactive wizards beyond the picker.
 
 ## What changed from the earlier roadmap
-Both tracks in parallel became evidence first. The shared `core/` is built only as far as the MVP needs. The catalog track starts with `CATALOG.md`, not the site. Open source remains the direction, but the scaffolding is gated on employer approval.
+The shared `core/` is built only as far as the MVP needs. The catalog track starts with `CATALOG.md`, not the site (Phase 1). Open source remains the direction, but the scaffolding is gated on employer approval.
 
 ## Kill and obsolescence criteria (Phase 0.6, written 2026-10-06)
 
@@ -89,9 +85,7 @@ Check at every Claude Code minor release, and at least monthly:
   3. Mark the superseded rows.
 
 ## Non-goals (for now)
-Deferred to Phase 2: accounts, the trust lockfile and git sources, `compile` and committed bundles, `recommend`, the static catalog site and taxonomy.
-
-Other non-goals:
+Phase 2 lists the deferred items. Other non-goals:
 - A registry server/DB.
 - Vector search.
 - A full-screen TUI dashboard (interactive prompts and pickers are in scope, see R6).

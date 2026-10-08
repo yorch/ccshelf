@@ -16,7 +16,7 @@ $ ccshelf run sre
 profile: sre (extends base)       plugins: 6 on / 10 masked  mcp: pagerduty, grafana
 claude> ...
 ```
-- Each run writes a generated settings file (content-addressed, in the launcher's own cache dir, so concurrent runs never collide). Then it starts `claude --settings <file>` and passes back its exit code. The same on macOS, Linux and Windows by design (only macOS has been tested). The launcher modifies nothing shared (`~/.claude/settings.json`, `~/.claude.json`, plugin cache), so the two terminals can't affect each other. *(masking and parallel runs tested)*
+- Each run writes a content-addressed settings file, starts `claude --settings <file>` and passes back its exit code (see [launcher.md](launcher.md)). The same on macOS, Linux and Windows by design (only macOS has been tested). The launcher modifies nothing shared, so the two terminals can't affect each other. *(masking and parallel runs tested)*
 - The launcher masks plugins not in the profile with `enabledPlugins:false`. The list comes from `claude plugin list --json` (cached for up to five minutes and re-read when installed plugins or managed settings change), so a plugin you installed yesterday doesn't leak into the profile. *(masking tested on macOS)*
 - Extra arguments pass through: `ccshelf run sre -- --model opus`.
 
@@ -45,7 +45,7 @@ $ ccshelf diff frontend my-frontend
 - plugins.include: playwright@acme
 $ ccshelf run my-frontend
 ```
-Personal profiles live outside the repo and can `extends` org profiles. At any level of the chain, a `plugins.exclude` beats a plugin include and a `skills.off` beats `skills.name_only`. So a child cannot re-include what a parent excluded.
+Personal profiles live outside the repo and can `extends` org profiles. A child cannot re-include what a parent excluded (see the `extends` rule in [profiles.md](profiles.md)).
 
 ## 4. New hire onboarding
 1. They open the internal catalog page (linked from the README) and pick the role: "Backend engineer".
@@ -136,7 +136,7 @@ sre changed since you last accepted it:
   + mcp.servers: pagerduty-ro (command: npx -y @acme/pagerduty-mcp)
 accept? [y/N]
 ```
-The launcher only loads org profiles from sources the org already trusts (an allowlisted marketplace, or a pinned git ref). See "Profile sources and sharing" in [profiles.md](profiles.md).
+For the sources and trust rules, see "Profile sources and sharing" in [profiles.md](profiles.md) and SR2 in [security.md](security.md).
 
 ## 12. Interactive and scripted use of the same command
 In a terminal, with no arguments, `ccshelf` offers a picker. With flags it never asks anything.
