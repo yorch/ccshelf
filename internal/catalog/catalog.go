@@ -81,7 +81,7 @@ type Entry struct {
 }
 
 // ProfileInfo describes a profile for the catalog. The profiles package parses
-// profile manifests; the caller fills this in.
+// profile manifests, and the caller fills this in.
 type ProfileInfo struct {
 	Name        string   `json:"name"`
 	Description string   `json:"description,omitempty"`
@@ -107,21 +107,20 @@ type Catalog struct {
 
 // Options tune Build.
 type Options struct {
-	// Now, when set, stamps GeneratedAt and drives the lint's review dates;
-	// without it the catalog has no timestamp and the lint uses the wall clock.
+	// Now, when set, stamps GeneratedAt and drives the lint's review dates.
+	// Without it, the catalog has no timestamp and the lint uses the wall clock.
 	Now func() time.Time
-	// GitData adds last-change, author-count and changed-since-tag data. It is
-	// also enabled by catalog.git_data in ccshelf.toml.
+	// GitData adds last-change, author-count and changed-since-tag data.
+	// catalog.git_data in ccshelf.toml also enables it.
 	GitData bool
-	// Profiles are shown in the catalog; supplied by the caller.
+	// Profiles are the profiles that the catalog shows. The caller supplies them.
 	Profiles []ProfileInfo
 }
 
-// Build loads the repo at root and builds the catalog. The lint report is
-// returned alongside: a repo with lint errors still produces a catalog, so a
-// preview can be built and the findings shown next to it. The error is only
-// for failures that stop the build (unusable root, git data requested but
-// failing).
+// Build loads the repo at root and builds the catalog. Build also returns the
+// lint report: a repo with lint errors still produces a catalog, so a preview
+// can show the findings next to it. The error is only for failures that stop
+// the build (unusable root, git data requested but failing).
 func Build(root string, cfg *orgconfig.Config, opt Options) (*Catalog, *lint.Report, error) {
 	return BuildContext(context.Background(), root, cfg, opt)
 }
@@ -246,7 +245,7 @@ func addGitData(ctx context.Context, root string, c *Catalog, dirs map[string]st
 	if shallow, err := gitdata.IsShallow(ctx, root); err != nil {
 		return err
 	} else if shallow {
-		return fmt.Errorf("%w; fetch the full history (in GitHub Actions: actions/checkout with fetch-depth: 0, with fetch-tags if tags are needed) or turn catalog.git_data off", gitdata.ErrShallow)
+		return fmt.Errorf("%w: fetch the full history (in GitHub Actions: actions/checkout with fetch-depth: 0, with fetch-tags if tags are needed) or turn catalog.git_data off", gitdata.ErrShallow)
 	}
 	var list []string
 	seen := map[string]bool{}

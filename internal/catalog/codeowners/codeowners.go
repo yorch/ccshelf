@@ -46,7 +46,7 @@ type File struct {
 var ownerRe = regexp.MustCompile(`^(@[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)?|[^@\s]+@[^@\s]+\.[^@\s]+)$`)
 
 // Parse parses CODEOWNERS content. It fails only when the input is larger
-// than MaxSize; syntax problems are reported in File.Issues.
+// than MaxSize. It reports syntax problems in File.Issues.
 func Parse(data []byte) (*File, error) {
 	if len(data) > MaxSize {
 		return nil, fmt.Errorf("CODEOWNERS is larger than %d bytes", MaxSize)
@@ -115,7 +115,7 @@ func Find(root string) (*File, string, error) {
 }
 
 // Match returns the last rule that matches path, or false. path is a
-// slash-separated file path relative to the repository root; to ask about a
+// slash-separated file path relative to the repository root. To ask about a
 // directory, pass a file path inside it.
 func (f *File) Match(path string) (Rule, bool) {
 	path = normalize(path)
@@ -160,10 +160,10 @@ func unescapeHash(p string) string {
 func compile(pattern string) (*regexp.Regexp, string) {
 	p := unescapeHash(pattern)
 	if strings.HasPrefix(p, "!") {
-		return nil, fmt.Sprintf("pattern %q: negation with ! is not supported by CODEOWNERS", pattern)
+		return nil, fmt.Sprintf("pattern %q: CODEOWNERS does not support negation with !", pattern)
 	}
 	if hasUnescaped(p, "[]") {
-		return nil, fmt.Sprintf("pattern %q: character ranges with [ ] are not supported by CODEOWNERS", pattern)
+		return nil, fmt.Sprintf("pattern %q: CODEOWNERS does not support character ranges with [ ]", pattern)
 	}
 	dirOnly := strings.HasSuffix(p, "/")
 	p = strings.TrimRight(p, "/")

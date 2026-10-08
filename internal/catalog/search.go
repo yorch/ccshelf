@@ -29,10 +29,11 @@ const (
 )
 
 // Search scores the catalog entries against a query and returns the best
-// limit matches (all of them when limit <= 0). The query is split into words;
-// every word must match somewhere (case-insensitive substring) or the entry is
-// left out. A word scores per field it matches: name (exact, prefix or
-// substring), display name, tags, category, when_to_use, description and
+// limit matches (all of them when limit <= 0). Search splits the query into
+// words. Every word must match somewhere (case-insensitive substring), or
+// Search leaves the entry out. A word scores per field it matches: name
+// (exact, prefix or substring), display name, tags, category, when_to_use,
+// description and
 // owner. Deprecated plugins score a little lower. Ties sort by name, so the
 // order is deterministic. An empty query returns every entry by name.
 func Search(c *Catalog, query string, limit int) []Match {

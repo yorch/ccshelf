@@ -79,7 +79,7 @@ func (r *Report) Sort() {
 
 // Options tune a run.
 type Options struct {
-	// Now is the clock for review dates; time.Now when nil.
+	// Now is the clock for review dates. When it is nil, the lint uses time.Now.
 	Now func() time.Time
 }
 
@@ -110,7 +110,7 @@ var rules = []Rule{
 	{"CAT002", Error, "Two marketplace entries use the same plugin name."},
 	{"CAT003", Error, "Plugin name starts with a reserved prefix (claude-, anthropic-, cc-plugin-)."},
 	{"CAT004", Warning, "Plugin name contains the whole word \"claude\"."},
-	{"CAT005", Error, "Marketplace entry has no description (external-source plugins need one because their contents cannot be inspected)."},
+	{"CAT005", Error, "Marketplace entry has no description (external-source plugins need one because the lint cannot inspect their contents)."},
 	{"CAT006", Warning, "Description is shorter than lint.min_description_length."},
 	{"CAT007", Warning, "Marketplace entry has no author."},
 	{"CAT008", Error, "The taxonomy file cannot be read or is malformed."},
@@ -122,7 +122,7 @@ var rules = []Rule{
 	{"CAT014", Error, "Status is not active, experimental or deprecated."},
 	{"CAT015", Error, "A deprecated plugin lacks a field required by lint.require_when_deprecated."},
 	{"CAT016", Error, "superseded_by names a plugin that does not exist."},
-	{"CAT017", Error, "superseded_by points to the plugin itself, to a deprecated plugin, or forms a cycle."},
+	{"CAT017", Error, "superseded_by points to the plugin itself or to a deprecated plugin, or makes a cycle."},
 	{"CAT018", Error, "review_by is not YYYY-MM-DD, or an active plugin has none while lint.require lists review_by."},
 	{"CAT019", Warning, "review_by is older than lint.max_review_age_days before today (stale)."},
 	{"CAT020", Info, "review_by has passed but is within lint.max_review_age_days."},
@@ -135,15 +135,15 @@ var rules = []Rule{
 	{"CAT027", Warning, "A relevance pattern uses features Go's RE2 lacks (lookaround, backreferences, possessive quantifiers)."},
 	{"CAT028", Error, "docs is not an http or https URL."},
 	{"CAT030", Error, "A local plugin source directory does not exist."},
-	{"CAT031", Info, "External-source plugin: its contents cannot be inspected."},
+	{"CAT031", Info, "External-source plugin: the lint cannot inspect its contents."},
 	{"CAT032", Error, "A local plugin source path is absolute, contains .., or leaves the repository."},
 	{"CAT033", Error, "A local plugin's plugin.json cannot be read or is malformed."},
 	{"CAT040", Info, "Plugin ships hooks, which run on developers' machines."},
 	{"CAT041", Info, "Plugin ships MCP or LSP servers, which run on developers' machines."},
 	{"CAT042", Error, "CODEOWNERS does not give a platform owner the files that run code: hooks, .mcp.json, .lsp.json, plugin.json declaring hooks or servers, declared config paths (error), and scripts they reference (warning). Needs lint.platform_owners."},
 	{"CAT043", Warning, "No CODEOWNERS file was found."},
-	{"CAT044", Warning, "A plugin directory, or a directory beside the plugin directories without a marketplace entry, is not covered by CODEOWNERS."},
-	{"CAT045", Warning, "/.github/ is not covered by CODEOWNERS, or workflows, CODEOWNERS, ccshelf.toml, profiles, bundles, catalog, the MCP registry or a marketplace file lack a platform owner (needs lint.platform_owners)."},
+	{"CAT044", Warning, "CODEOWNERS does not cover a plugin directory, or a directory beside the plugin directories without a marketplace entry."},
+	{"CAT045", Warning, "CODEOWNERS does not cover /.github/, or workflows, CODEOWNERS, ccshelf.toml, profiles, bundles, catalog, the MCP registry or a marketplace file have no platform owner (needs lint.platform_owners)."},
 	{"CAT046", Warning, "The sidecar owner is not among the CODEOWNERS owners of the plugin directory."},
 	{"CAT047", Warning, "A CODEOWNERS line is invalid and GitHub ignores it."},
 	{"CAT048", Warning, "A marketplace description or a sidecar value still has the TODO(ccshelf) placeholder written by \"ccshelf catalog init\"."},
@@ -152,6 +152,6 @@ var rules = []Rule{
 	{"CAT052", Error, "A bundle entry's source is not ./bundles/profile-<name>."},
 	{"CAT053", Error, "A bundle entry sets version (the commit SHA is the version, decision D-17)."},
 	{"CAT060", Error, "A file the lint needs cannot be read safely (outside the repo, too large, not a regular file)."},
-	{"CAT061", Warning, "A marketplace file or bundles/ exists although [catalog] enabled = false; the lint ignores it."},
-	{"CAT062", Warning, "[catalog] keys other than enabled are set although enabled = false; they have no effect."},
+	{"CAT061", Warning, "A marketplace file or bundles/ exists although [catalog] enabled = false. The lint ignores it."},
+	{"CAT062", Warning, "[catalog] sets keys other than enabled although enabled = false. These keys have no effect."},
 }

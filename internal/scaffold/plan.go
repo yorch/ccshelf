@@ -33,8 +33,8 @@ const (
 	// ActionMerge leaves an existing file alone and carries a Suggestion of
 	// what to add to it.
 	ActionMerge Action = "needs-merge"
-	// ActionOverwrite replaces an existing file after saving <file>.bak; it is
-	// planned only with Params.Force.
+	// ActionOverwrite replaces an existing file after saving <file>.bak. Build
+	// plans it only with Params.Force.
 	ActionOverwrite Action = "overwrite"
 )
 
@@ -75,8 +75,8 @@ type Plan struct {
 }
 
 // MarkerFiles returns the files this plan creates or replaces that contain
-// the TODO(ccshelf) placeholder, sorted. The README is not counted: it quotes
-// the marker to explain it.
+// the TODO(ccshelf) placeholder, sorted. It does not count the README: the
+// README quotes the marker to explain it.
 func (p *Plan) MarkerFiles() []string {
 	var out []string
 	for _, e := range p.Entries {
@@ -100,7 +100,8 @@ func (p *Plan) Count(a Action) int {
 }
 
 // Changes reports whether Apply would write anything: a create or an
-// overwrite (suggestions are written only on request and are not counted).
+// overwrite (Apply writes suggestions only on request, and Changes does not
+// count them).
 func (p *Plan) Changes() bool { return p.Count(ActionCreate)+p.Count(ActionOverwrite) > 0 }
 
 // target is a plugin that gets a sidecar stub.
@@ -186,11 +187,11 @@ func (b *builder) run() error {
 		b.addWorkflow(w)
 	}
 	if b.p.BranchSource != "" && b.p.Enabled(GroupWorkflows) {
-		b.note("the default branch %s of the workflows was read from %s of the existing repository (read only); pass --default-branch to use another", b.p.branch(), b.p.BranchSource)
+		b.note("the default branch %s of the workflows comes from %s of the existing repository (read only): pass --default-branch to use another", b.p.branch(), b.p.BranchSource)
 	}
 	if len(b.plan.PinFiles) > 0 {
 		sort.Strings(b.plan.PinFiles)
-		b.addTodoOnce("pin the ccshelf action in " + strings.Join(b.plan.PinFiles, " and ") + ": a full 40-character commit SHA and the matching version (or re-run with --ccshelf-ref <sha> --ccshelf-version <tag>), then delete the guard job and its needs line; until then the guard job fails with a clear message and the other jobs are skipped")
+		b.addTodoOnce("pin the ccshelf action in " + strings.Join(b.plan.PinFiles, " and ") + ": a full 40-character commit SHA and the matching version (or re-run with --ccshelf-ref <sha> --ccshelf-version <tag>), then delete the guard job and its needs line (until then, the guard job fails with a clear message and the other jobs are skipped)")
 	}
 	b.addReadme()
 	b.addLines(pathAttributes, GroupGitattributes, "gitattributes.tmpl")
@@ -213,7 +214,7 @@ func (b *builder) writeCollision() error {
 		}
 	}
 	if pair := pathCollision(paths); pair != "" {
-		return fmt.Errorf("%s differ only in letter case, so they would be one file on Windows and on the default macOS file system; rename one of the plugins (nothing was written)", pair)
+		return fmt.Errorf("%s differ only in letter case, so they would be one file on Windows and on the default macOS file system: rename one of the plugins (nothing was written)", pair)
 	}
 	return nil
 }
@@ -252,7 +253,7 @@ func (b *builder) detectMode() error {
 	}
 	switch {
 	case b.p.Mode == ModeNew && !empty:
-		return &FieldError{"--mode", "the directory is not empty; use --mode adopt to add the missing files without changing existing ones"}
+		return &FieldError{"--mode", "the directory is not empty: use --mode adopt to add the missing files without changing existing ones"}
 	case b.p.Mode != "":
 		b.plan.Mode = b.p.Mode
 	case empty:
@@ -274,7 +275,7 @@ func (b *builder) readExisting(path string) (data []byte, seen bool) {
 	case errors.Is(err, fs.ErrNotExist):
 		return nil, false
 	default:
-		b.note("%s exists but was not read: %s", path, ui.SanitizeLine(err.Error()))
+		b.note("%s exists but ccshelf did not read it: %s", path, ui.SanitizeLine(err.Error()))
 		return nil, true
 	}
 }
@@ -285,9 +286,9 @@ func (b *builder) load() error {
 		b.mktSeen = true
 		if data != nil {
 			if m, err := marketplace.Parse(data); err != nil {
-				b.note("%s exists but is not a valid marketplace file (%s); it is left alone and no sidecars are generated from it", pathMarketplace, ui.SanitizeLine(err.Error()))
+				b.note("%s exists but is not a valid marketplace file (%s), so ccshelf leaves it alone and generates no sidecars from it", pathMarketplace, ui.SanitizeLine(err.Error()))
 			} else if _, err := marketplace.ExactKeys(data); err != nil {
-				b.note("%s exists but is ambiguous (%s); it is left alone and no sidecars are generated from it", pathMarketplace, ui.SanitizeLine(err.Error()))
+				b.note("%s exists but is ambiguous (%s), so ccshelf leaves it alone and generates no sidecars from it", pathMarketplace, ui.SanitizeLine(err.Error()))
 			} else {
 				b.mkt = m
 			}
@@ -295,19 +296,19 @@ func (b *builder) load() error {
 	}
 	b.name = b.p.MarketplaceName
 	if b.p.ProfilesOnly && b.mktSeen {
-		return &FieldError{"--profiles-only", pathMarketplace + " already exists, so this repo has a plugin marketplace; use catalog init without --profiles-only, or remove the file"}
+		return &FieldError{"--profiles-only", pathMarketplace + " already exists, so this repo has a plugin marketplace: use catalog init without --profiles-only, or remove the file"}
 	}
 	if b.mkt != nil {
 		switch {
 		case ValidMarketplaceName(b.mkt.Name):
 			if b.p.MarketplaceName != "" && b.p.MarketplaceName != b.mkt.Name {
-				return &FieldError{"--marketplace-name", fmt.Sprintf("%s already names the marketplace %q; leave the flag out or pass that name", pathMarketplace, b.mkt.Name)}
+				return &FieldError{"--marketplace-name", fmt.Sprintf("%s already names the marketplace %q: leave the flag out or pass that name", pathMarketplace, b.mkt.Name)}
 			}
 			b.name = b.mkt.Name
 		default:
 			// The name is untrusted text that would end up in generated files:
 			// it is never used. The file itself is left alone.
-			b.note("%s names the marketplace %q, which is not a valid marketplace name (%s); it is not used: pass --marketplace-name for the generated files (the file itself is not changed)", pathMarketplace, ui.SanitizeLine(b.mkt.Name), MarketplaceNameRe)
+			b.note("%s names the marketplace %q, which is not a valid marketplace name (%s), so ccshelf does not use it: pass --marketplace-name for the generated files (ccshelf does not change the file itself)", pathMarketplace, ui.SanitizeLine(b.mkt.Name), MarketplaceNameRe)
 		}
 	}
 	b.cfg = orgconfig.Default()
@@ -315,11 +316,11 @@ func (b *builder) load() error {
 		b.cfgSeen = true
 		if data != nil {
 			if c, err := orgconfig.Parse(data); err != nil {
-				b.note("%s exists but is not valid (%s); it is left alone and the default lint.require is assumed for the sidecars", pathConfig, ui.SanitizeLine(firstLine(err.Error())))
+				b.note("%s exists but is not valid (%s), so ccshelf leaves it alone and uses the default lint.require for the sidecars", pathConfig, ui.SanitizeLine(firstLine(err.Error())))
 			} else {
 				b.cfg = c
 				if !c.Catalog.Enabled && !b.p.ProfilesOnly {
-					return &FieldError{"--profiles-only", pathConfig + " has [catalog] enabled = false, so this is a profiles-only repo; pass --profiles-only (without it the marketplace, sidecars and catalog workflows would be added)"}
+					return &FieldError{"--profiles-only", pathConfig + " has [catalog] enabled = false, so this is a profiles-only repo: pass --profiles-only (without it, ccshelf would add the marketplace, sidecars and catalog workflows)"}
 				}
 			}
 		}
@@ -353,7 +354,7 @@ func (b *builder) load() error {
 func (b *builder) checkProfilesOnly() error {
 	for _, m := range b.cfg.Catalog.Marketplaces {
 		if _, err := b.fs.Lstat(m); err == nil {
-			return &FieldError{"--profiles-only", m + " already exists, so this repo has a plugin marketplace; use catalog init without --profiles-only, or remove the file"}
+			return &FieldError{"--profiles-only", m + " already exists, so this repo has a plugin marketplace: use catalog init without --profiles-only, or remove the file"}
 		}
 	}
 	disabled := b.cfgSeen && !b.cfg.Catalog.Enabled
@@ -363,10 +364,10 @@ func (b *builder) checkProfilesOnly() error {
 	case !b.p.Enabled(GroupConfig):
 		return &FieldError{"--no-config", "cannot be combined with --profiles-only unless " + pathConfig + " already has [catalog] enabled = false: nothing else records that the repo has no marketplace, and its own lint workflow would fail with CAT001"}
 	default:
-		return &FieldError{"--profiles-only", pathConfig + " exists without [catalog] enabled = false, so ccshelf lint would fail with CAT001 here; add enabled = false under [catalog] in it yourself, or pass --force to replace it (the old file is saved as " + pathConfig + BackupSuffix + ")"}
+		return &FieldError{"--profiles-only", pathConfig + " exists without [catalog] enabled = false, so ccshelf lint would fail with CAT001 here: add enabled = false under [catalog] in it yourself, or pass --force to replace it (ccshelf saves the old file as " + pathConfig + BackupSuffix + ")"}
 	}
 	if _, err := b.fs.Lstat("plugins"); err == nil {
-		b.note("plugins/ is ignored: a profiles-only repo does not catalog plugins")
+		b.note("ccshelf ignores plugins/: a profiles-only repo does not catalog plugins")
 	}
 	return nil
 }
@@ -443,15 +444,15 @@ func (b *builder) computeTargets() {
 			continue // generated bundles have no sidecar
 		}
 		if ok, why := portableName(p.Name); !ok {
-			b.note("the marketplace entry %q was skipped: %s, so it cannot be a sidecar file name", ui.SanitizeLine(p.Name), why)
+			b.note("ccshelf skips the marketplace entry %q: %s, so it cannot be a sidecar file name", ui.SanitizeLine(p.Name), why)
 			continue
 		}
 		if dir != "" && !safeSourceDir(dir) {
-			b.note("the source %q of the marketplace entry %q is not a plain directory below the repository (letters, digits, . _ - and / only, no \"..\"): its sidecar is generated, but no CODEOWNERS rule is", ui.SanitizeLine(dir), p.Name)
+			b.note("the source %q of the marketplace entry %q is not a plain directory below the repository (letters, digits, . _ - and / only, no \"..\"): ccshelf generates its sidecar, but no CODEOWNERS rule", ui.SanitizeLine(dir), p.Name)
 			dir = ""
 		}
 		if prev, dup := seenTargets[p.Name]; dup {
-			b.note("the marketplace entry %q is listed twice (%s and %s); only the first gets a sidecar", p.Name, prev, ui.SanitizeLine(p.Source.Summary()))
+			b.note("the marketplace lists the entry %q twice (%s and %s): only the first gets a sidecar", p.Name, prev, ui.SanitizeLine(p.Source.Summary()))
 			continue
 		}
 		seenTargets[p.Name] = ui.SanitizeLine(p.Source.Summary())
@@ -545,7 +546,7 @@ func (b *builder) file(path string, g Group, k kind, content gen, rules func() [
 		return
 	case fi.Mode()&fs.ModeSymlink != 0:
 		if b.p.Force {
-			add(Entry{Action: actionConflict, Reason: "is a symbolic link; --force does not replace links"})
+			add(Entry{Action: actionConflict, Reason: "is a symbolic link, and --force does not replace links"})
 			return
 		}
 		add(Entry{Action: ActionSkip, Reason: "is a symbolic link; left alone"})
@@ -570,12 +571,12 @@ func (b *builder) file(path string, g Group, k kind, content gen, rules func() [
 	}
 	if b.p.Force && ok {
 		if _, err := b.fs.Lstat(path + BackupSuffix); err == nil {
-			add(Entry{Action: actionConflict, Reason: "the backup " + path + BackupSuffix + " already exists; move it away or remove it first"})
+			add(Entry{Action: actionConflict, Reason: "the backup " + path + BackupSuffix + " already exists: move it away or remove it first"})
 			return
 		}
 		add(Entry{
 			Action: ActionOverwrite, Content: want, Old: old, OldMode: fi.Mode().Perm(),
-			Reason: "replaces the existing file; the old one is saved as " + path + BackupSuffix,
+			Reason: "replaces the existing file and saves the old one as " + path + BackupSuffix,
 		})
 		return
 	}
@@ -615,7 +616,7 @@ func (b *builder) noteBlockedSuggestion(path string) {
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
 	case err != nil || !isOurSuggestion(data):
-		b.note("%s exists and was not written by ccshelf: --write-suggestions does not replace it (move it away first)", sp)
+		b.note("%s exists and ccshelf did not write it: --write-suggestions does not replace it (move it away first)", sp)
 	}
 }
 
@@ -719,6 +720,6 @@ func (b *builder) addExampleProfile() {
 	}, nil)
 }
 
-// Placeholder is the text written into values a person must fill in; lint
-// reports it as CAT048.
+// Placeholder is the text written into values a person must fill in. The
+// lint reports it as CAT048.
 const Placeholder = lint.PlaceholderMarker

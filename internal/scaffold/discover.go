@@ -171,7 +171,7 @@ func discoverPlugins(fsys FS) (found []foundPlugin, notes []string) {
 		return nil, nil
 	}
 	if err != nil {
-		return nil, []string{fmt.Sprintf("%s could not be read, so no plugins were discovered: %s", pluginsDir, ui.SanitizeLine(err.Error()))}
+		return nil, []string{fmt.Sprintf("ccshelf could not read %s, so it found no plugins: %s", pluginsDir, ui.SanitizeLine(err.Error()))}
 	}
 	names := map[string]string{}
 	for _, e := range ents {

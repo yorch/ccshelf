@@ -130,7 +130,7 @@ func checkDir(d string) error {
 }
 
 // Collect returns history data for each directory (repo-relative, slash
-// separated). Directories without commits are returned with a zero Info.
+// separated). It returns a zero Info for directories without commits.
 func Collect(ctx context.Context, root string, dirs []string) (map[string]Info, error) {
 	out := make(map[string]Info, len(dirs))
 	for _, d := range dirs {
@@ -172,8 +172,8 @@ func Collect(ctx context.Context, root string, dirs []string) (map[string]Info, 
 var ErrShallow = errors.New("the repository is a shallow clone, so last-change dates, author counts and tags would be wrong")
 
 // IsShallow reports whether root is a shallow clone. Old git versions that do
-// not know --is-shallow-repository print the option back; that counts as not
-// shallow.
+// not know --is-shallow-repository print the option back. IsShallow counts
+// that as not shallow.
 func IsShallow(ctx context.Context, root string) (bool, error) {
 	out, err := run(ctx, root, "rev-parse", "--is-shallow-repository")
 	if err != nil {
@@ -255,8 +255,8 @@ func ChangedSince(ctx context.Context, root, tag string, dirs []string) ([]strin
 	return changed, nil
 }
 
-// Init runs "git init" in dir with the initial branch main. It is used by
-// "ccshelf catalog init --git-init" and only when dir is not a repository yet:
+// Init runs "git init" in dir with the initial branch main. "ccshelf catalog
+// init --git-init" uses it, and only when dir is not a repository yet:
 // it creates .git and nothing else, and never commits, fetches or pushes. The
 // directory must exist. Like every call here, it runs with the user's global
 // and system git configuration switched off.
@@ -272,7 +272,7 @@ func Init(ctx context.Context, dir string) error {
 // EnclosingWorkTree returns the top-level directory of the work tree that
 // contains dir (or, when dir does not exist yet, its nearest existing parent),
 // or "" when there is none. "git init" in such a directory creates a nested
-// repository. It is read-only; the result is untrusted text.
+// repository. It is read-only. The result is untrusted text.
 func EnclosingWorkTree(ctx context.Context, dir string) string {
 	d := filepath.Clean(dir)
 	for {
@@ -296,8 +296,8 @@ func EnclosingWorkTree(ctx context.Context, dir string) string {
 // dir, and where it was read from: the branch that the remote "origin" points
 // at ("origin/HEAD", set by a clone), else the branch that HEAD names ("HEAD",
 // which works before the first commit). It returns "" when neither exists
-// (a detached HEAD, no repository). It is read-only and makes no network call;
-// the name is untrusted text that the caller validates. dir must be the root
+// (a detached HEAD, no repository). It is read-only and makes no network call.
+// The name is untrusted text that the caller validates. dir must be the root
 // of the repository: git would otherwise read a parent repository.
 func DefaultBranch(ctx context.Context, dir string) (branch, source string) {
 	if out, err := run(ctx, dir, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"); err == nil {

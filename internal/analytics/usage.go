@@ -7,10 +7,10 @@ import (
 
 // Counts are the usage numbers of one plugin over the window.
 type Counts struct {
-	// Installs is the number of installs (API: distinct installing users;
+	// Installs is the number of installs (API: distinct installing users,
 	// OTel: plugin_installed events).
 	Installs int64 `json:"installs"`
-	// Invocations is the number of uses (API: invocation_count; OTel:
+	// Invocations is the number of uses (API: invocation_count, OTel:
 	// skill_activated events).
 	Invocations int64 `json:"invocations"`
 	// Loads is the number of plugin_loaded events (OTel only).
@@ -31,7 +31,7 @@ type Usage struct {
 	// PerPlugin is keyed by plugin id (name@marketplace) when known, else by
 	// plugin name.
 	PerPlugin map[string]Counts `json:"per_plugin"`
-	// From and To are YYYY-MM-DD; To is inclusive for OTel data and
+	// From and To are YYYY-MM-DD. To is inclusive for OTel data and
 	// exclusive for API data (it echoes the request). Either may be empty.
 	From string `json:"from,omitempty"`
 	To   string `json:"to,omitempty"`
@@ -55,8 +55,8 @@ func (u *Usage) add(key string, c Counts) {
 }
 
 // Lookup finds the counts of a plugin given as name@marketplace or as a bare
-// name. An exact key wins; otherwise the counts of every key with the same
-// name part are summed, so usage reported by name matches an id and the other
+// name. An exact key wins. Otherwise Lookup sums the counts of every key with
+// the same name part, so usage reported by name matches an id and the other
 // way round. found is false when no key matches.
 func (u *Usage) Lookup(id string) (c Counts, found bool) {
 	if u == nil {
