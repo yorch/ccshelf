@@ -235,7 +235,7 @@ func (t *Target) checkSymlinks(o TargetOptions) error {
 					return &TargetError{Msg: fmt.Sprintf("inspecting %s: %v", ui.SanitizeLine(cur), err)}
 				}
 				if fi.Mode()&fs.ModeSymlink != 0 {
-					return &TargetError{Msg: fmt.Sprintf("%s is a symbolic link: refusing to write through it", ui.SanitizeLine(cur))}
+					return &TargetError{Msg: fmt.Sprintf("%s is a symbolic link, so ccshelf refuses to write through it", ui.SanitizeLine(cur))}
 				}
 				if !fi.IsDir() {
 					return &TargetError{Msg: fmt.Sprintf("%s is not a directory", ui.SanitizeLine(cur))}
@@ -250,7 +250,7 @@ func (t *Target) checkSymlinks(o TargetOptions) error {
 	case err != nil:
 		return &TargetError{Msg: fmt.Sprintf("inspecting %s: %v", ui.SanitizeLine(t.Dir), err)}
 	case t.explicit && fi.Mode()&fs.ModeSymlink != 0:
-		return &TargetError{Msg: fmt.Sprintf("%s is a symbolic link: refusing to write through it (pass the real directory)", ui.SanitizeLine(t.Dir))}
+		return &TargetError{Msg: fmt.Sprintf("%s is a symbolic link, so ccshelf refuses to write through it (pass the real directory)", ui.SanitizeLine(t.Dir))}
 	}
 	if st, err := os.Stat(t.Dir); err != nil || !st.IsDir() {
 		return &TargetError{Msg: fmt.Sprintf("%s is not a directory", ui.SanitizeLine(t.Dir))}

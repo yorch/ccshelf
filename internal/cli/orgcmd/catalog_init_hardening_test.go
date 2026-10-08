@@ -150,7 +150,7 @@ func TestCatalogInitDoesNotReplaceAForeignSuggestionFile(t *testing.T) {
 	if read(t, dir, ".github/CODEOWNERS.ccshelf-suggested") != "the user's own notes\n" {
 		t.Error("a file the user wrote was replaced")
 	}
-	if !strings.Contains(r.out, "was not written by ccshelf") {
+	if !strings.Contains(r.out, "ccshelf did not write it") {
 		t.Errorf("no note:\n%s", r.out)
 	}
 	r = h.run(append(args, "--json")...)

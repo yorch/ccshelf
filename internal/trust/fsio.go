@@ -30,7 +30,7 @@ func readStateFile(path string) ([]byte, error) {
 		}
 	}
 	if fi.Mode()&os.ModeSymlink != 0 {
-		return nil, fmt.Errorf("%s is a symlink. Refusing to follow it", path)
+		return nil, fmt.Errorf("%s is a symlink, so ccshelf refuses to follow it", path)
 	}
 	if !fi.Mode().IsRegular() {
 		return nil, fmt.Errorf("%s is not a regular file", path)
@@ -95,7 +95,7 @@ func writeStateFile(path string, data []byte) error {
 	}
 	if fi, err := os.Lstat(path); err == nil {
 		if fi.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf("%s is a symlink. Refusing to write through it", path)
+			return fmt.Errorf("%s is a symlink, so ccshelf refuses to write through it", path)
 		}
 		if !fi.Mode().IsRegular() {
 			return fmt.Errorf("%s is not a regular file", path)

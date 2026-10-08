@@ -394,8 +394,8 @@ func HasComment(raw []byte) bool {
 	return false
 }
 
-// SaveChecked and SaveRawChecked return ErrChangedWhileEditing when the file
-// no longer holds the bytes that the change was based on.
+// ErrChangedWhileEditing is the error that SaveChecked and SaveRawChecked
+// return when the file no longer holds the bytes that the change was based on.
 var ErrChangedWhileEditing = errors.New("the configuration file changed while it was being edited")
 
 // BackupPath returns the name of the backup kept next to path.

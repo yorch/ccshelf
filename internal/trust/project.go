@@ -34,7 +34,8 @@ const (
 	projectHashDomain = "ccshelf-project-v1"
 )
 
-// Trust returns ErrNoProjectFolder when root has no .ccshelf folder.
+// ErrNoProjectFolder is the error that Trust returns when root has no .ccshelf
+// folder.
 var ErrNoProjectFolder = errors.New("the repository has no .ccshelf folder")
 
 // ProjectRecord is one trusted repository.

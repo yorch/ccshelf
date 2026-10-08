@@ -15,7 +15,7 @@ These flags are accepted by every command. Flags of ccshelf itself go before a p
 | `--config` | `string` | path to the user config file |
 | `--json` |  | machine-readable output where supported |
 | `--no-color` |  | disable color |
-| `--no-interactive` |  | never prompt; fail naming the missing flag |
+| `--no-interactive` |  | never prompt, and fail with the name of the missing flag |
 | `--plain` |  | line-oriented output and prompts |
 | `--root` | `string` | org data repo root (default: current directory) |
 | `-h`, `--help` |  | help for ccshelf |
@@ -77,7 +77,7 @@ Scripts can rely on these; they never change meaning.
 
 ## ccshelf diff
 
-Compare two profiles after their parents are merged: plugins, skills, MCP servers, environment variable names and session defaults. "+" marks what b adds to a and "-" what b lacks. Environment values and prompt text are never printed. The exit code is 0 whether or not they differ; --json has an "identical" field.
+Compare two profiles after their parents are merged: plugins, skills, MCP servers, environment variable names and session defaults. "+" marks what b adds to a and "-" what b lacks. Environment values and prompt text are never printed. The exit code is 0 whether or not they differ. --json has an "identical" field.
 
 **Usage**
 
@@ -93,7 +93,7 @@ ccshelf diff [profile-a] [profile-b] [flags]
 
 ## ccshelf dry-run
 
-Run the whole pipeline of "run" (including the trust check) and print the exact claude command instead of starting it. The generated settings, MCP config and prompt files are written to the private cache so the printed command is valid. Environment values from profiles are never printed.
+Run the whole pipeline of "run" (including the trust check) and print the exact claude command instead of starting it. The command writes the generated settings, MCP config and prompt files to the private cache, so the printed command is valid. It never prints environment values from profiles.
 
 **Usage**
 
@@ -183,9 +183,9 @@ ccshelf new notes --description "Writing and notes" --skill-off legacy-helper
 
 Start claude with a profile: the plugins, skills and MCP servers it names.
 
-Arguments after the profile name (and after -- when no profile is given) are passed to claude unchanged, so flags of ccshelf itself must come before the profile name: ccshelf run --account work sre --resume.
+ccshelf passes the arguments after the profile name (and after -- when no profile is given) to claude unchanged. Thus flags of ccshelf itself must come before the profile name: ccshelf run --account work sre --resume.
 
-Without a profile name, a terminal gets a picker; anything else exits with code 2. A profile from a shared source must be trusted first (exit code 4 otherwise); --yes never accepts trust, only an interactive confirmation of the printed closure or "ccshelf trust <profile> --accept <closure-hash>" does.
+Without a profile name, a terminal gets a picker. Anything else exits with code 2. You must trust a profile from a shared source first (exit code 4 otherwise). --yes never accepts trust. Only an interactive confirmation of the printed closure or "ccshelf trust <profile> --accept <closure-hash>" accepts it.
 
 **Usage**
 
@@ -226,15 +226,15 @@ ccshelf show [profile] [flags]
 
 ## ccshelf trust
 
-Show what a profile's closure runs (MCP servers, prompts, plugins, environment names) and record it as trusted. In a terminal you are asked to confirm what is shown. For scripts, name exactly what you accept:
+Show what a profile's closure runs (MCP servers, prompts, plugins, environment names) and record it as trusted. In a terminal, the command asks you to confirm what it shows. For scripts, name exactly what you accept:
 
 ```text
 ccshelf trust <profile> --accept <closure-hash>
 ```
 
-The hash is printed by "ccshelf trust <profile>" and "ccshelf show <profile>". --yes does not exist here: trust is never accepted by default.
+"ccshelf trust <profile>" and "ccshelf show <profile>" print the hash. --yes does not exist here: trust is never accepted by default.
 
---project reviews the repository's .ccshelf folder (loaded only when trust.trust_project_profiles is true); --accept then takes the folder hash. --revoke removes the records of a profile (or of the project folder).
+--project reviews the repository's .ccshelf folder (loaded only when trust.trust_project_profiles is true). With --project, --accept takes the folder hash. --revoke removes the records of a profile (or of the project folder).
 
 **Usage**
 
@@ -255,11 +255,25 @@ ccshelf trust [profile] [flags]
 
 Analyze the org data repo (--root, default the current directory): overlapping plugins, plugins in no profile, deprecated plugins in use, stale or missing review dates and owners, protected plugins that a profile masks, and plugins that need platform review.
 
-Checks that need more input are skipped and listed as skipped, never silently passed: --installed reads 'claude plugin list' (read only), --usage-file reads an OpenTelemetry JSONL export, --usage-api asks the Enterprise Analytics API (needs the admin key in CCSHELF_ANALYTICS_KEY; this is the only network call), --skills-dir lists the standalone skills in a directory (read only; each subdirectory with a SKILL.md is a skill; ccshelf never reads ~/.claude on its own), and --policy reads the machine's managed Claude Code policy (read only, never bypassed) and prints the capability matrix.
+The command skips the checks that need more input and lists them as skipped. It never passes them silently. These flags give the input:
 
-With --policy every profile's needs (extra MCP servers, strict MCP, dropping user settings, a system prompt file, hiding claude.ai connectors, and the marketplaces of its plugins) are checked against the policy that could be read. Exit code 3 when the policy blocks something a profile needs (POL002, POL005, POL006); a feature whose state is unknown is a warning, never a failure. A policy that exists but could not be read is a warning, and exit 3 only with --strict.
+```text
+- --installed reads 'claude plugin list' (read only).
+- --usage-file reads an OpenTelemetry JSONL export.
+- --usage-api asks the Enterprise Analytics API. It needs the admin key in
+  CCSHELF_ANALYTICS_KEY. This is the only network call.
+- --skills-dir lists the standalone skills in a directory (read only). Each
+  subdirectory with a SKILL.md is a skill. ccshelf never reads ~/.claude on
+  its own.
+- --policy reads the machine's managed Claude Code policy (read only, never
+  bypassed) and prints the capability matrix.
+```
 
-Exit code 1 for error findings, and when the directory is not an org data repo (its marketplace file cannot be read). With --policy and no --root, a directory that is not an org data repo is not an error: only the policy part runs (the capability matrix and the policy findings that do not need profiles; the checks that need the catalog are listed as skipped), because the managed policy belongs to the machine, not to a repository. A developer who reaches the org through a git source can use it that way.
+With --policy, the command checks the needs of every profile against the policy that it could read. The needs are extra MCP servers, strict MCP, dropping user settings, a system prompt file, hiding claude.ai connectors, and the marketplaces of its plugins. The exit code is 3 when the policy blocks something a profile needs (POL002, POL005, POL006). A feature whose state is unknown is a warning, never a failure. A policy that exists but could not be read is a warning. It gives exit code 3 only with --strict.
+
+The exit code is 1 for error findings, and when the directory is not an org data repo (its marketplace file cannot be read).
+
+With --policy and no --root, a directory that is not an org data repo is not an error, because the managed policy belongs to the machine, not to a repository. Only the policy part runs: the capability matrix and the policy findings that do not need profiles. The command lists the checks that need the catalog as skipped. A developer who reaches the org through a git source can use it that way.
 
 **Usage**
 
@@ -282,9 +296,9 @@ ccshelf doctor [flags]
 
 ## ccshelf recommend
 
-Look at a project directory (--dir, default the current directory) and suggest plugins and profiles of the org data repo (--root, default the current directory) whose relevance signals and when_to_use text match it. The rules are deterministic and there is no model call. Only file names and a few small manifest files of the project are read.
+Look at a project directory (--dir, default the current directory) and suggest plugins and profiles of the org data repo (--root, default the current directory) whose relevance signals and when_to_use text match it. The rules are deterministic and there is no model call. The command reads only file names and a few small manifest files of the project.
 
-Outside an org data repo (the marketplace file of ccshelf.toml cannot be read) and without --root, [catalog].remote_url in the user config is retrieved over HTTPS when set; otherwise it uses the catalog data of the organization's source from its local directory or verified git cache. Remote JSON can recommend profiles; plugin recommendations need marketplace relevance rules from the org data repo.
+Outside an org data repo (the marketplace file of ccshelf.toml cannot be read) and without --root, the command gets [catalog].remote_url of the user config over HTTPS when it is set. Otherwise it uses the catalog data of the organization's source from its local directory or verified git cache. Remote JSON can recommend profiles. Plugin recommendations need marketplace relevance rules from the org data repo.
 
 **Usage**
 
@@ -302,7 +316,7 @@ ccshelf recommend [flags]
 
 ## ccshelf search
 
-Search the catalog of the org data repo (--root, default the current directory). Every word of the query must match a field (name, display name, tags, category, when_to_use, description or owner); better matches come first, ties by name.
+Search the catalog of the org data repo (--root, default the current directory). Every word of the query must match a field (name, display name, tags, category, when_to_use, description or owner). Better matches come first. Equal matches sort by name.
 
 Outside an org data repo and without --root, [catalog].remote_url in the user config takes precedence and retrieves catalog.json over HTTPS for this search. Otherwise search reads a configured org source from its local directory or verified git cache. A query that matches nothing in a real catalog is not an error.
 
@@ -345,11 +359,28 @@ ccshelf catalog [command]
 
 ## ccshelf catalog build
 
-Build the catalog from the org data repo and write it into --out (default dist/catalog, relative to the current directory): catalog.json, CATALOG.md and, unless --no-site, the static site (index.html, app.js, style.css; with --no-site the files of an earlier site build are removed from --out). Nothing is written outside --out, and the output is published files: directories 0755, files 0644.
+Build the catalog from the org data repo and write it into --out (default dist/catalog, relative to the current directory):
 
---out must not be the repo root or contain it, must not lie inside the repo's source directories (profiles, bundles, catalog, plugins, .github and so on) and must not pass through a symbolic link below the working directory or the repo root. A directory that is not an org data repo (its marketplace file cannot be read or parsed) is an error, exit 1, and nothing is written.
+```text
+- catalog.json
+- CATALOG.md
+- the static site (index.html, app.js, style.css), unless --no-site
+```
 
-The catalog has no timestamp unless --timestamp is given, so the output is reproducible. Lint findings are printed to stderr; a repo with lint errors still produces its catalog (for previews) but the command exits 1.
+With --no-site, the command removes the files of an earlier site build from --out. The command writes nothing outside --out. The output is published files: directories 0755, files 0644.
+
+--out must not:
+
+```text
+- be the repo root or contain it
+- be inside the repo's source directories (profiles, bundles, catalog,
+  plugins, .github and so on)
+- pass through a symbolic link below the working directory or the repo root
+```
+
+A directory that is not an org data repo (its marketplace file cannot be read or parsed) is an error (exit 1), and the command writes nothing.
+
+The catalog has no timestamp unless you give --timestamp, so the output is reproducible. The command prints lint findings to stderr. A repo with lint errors still produces its catalog (for previews), but the command exits 1.
 
 **Usage**
 
@@ -369,41 +400,53 @@ ccshelf catalog build [flags]
 
 ## ccshelf catalog init
 
-Bootstrap an org data repo in dir (default: --root, else the current directory). This is the organization's setup; "ccshelf init" is each developer's own.
+Bootstrap an org data repo in dir (default: --root, else the current directory). This is the organization's setup. "ccshelf init" is each developer's own.
 
 Modes (detected, or forced with --mode):
 
 ```text
 new    an empty or missing directory (a lone .git counts as empty).
 adopt  a directory with content, such as a marketplace repo that has
-       .claude-plugin/marketplace.json and/or plugins/. Nothing existing is
-       changed: the command prints a plan and only creates files that are
-       missing. An existing file is reported as skip-exists (and as
-       up to date when it already equals what would be written), or as
-       needs-merge for CODEOWNERS, .gitattributes and .gitignore, with the
-       lines to add; --write-suggestions saves them next to the file as
-       <name>.ccshelf-suggested. A marketplace.json is never rewritten.
-       --force replaces the other differing files after saving <file>.bak.
+       .claude-plugin/marketplace.json and/or plugins/. The command changes
+       nothing that exists. It prints a plan and only creates the files
+       that are missing. It reports an existing file as one of these:
+         - skip-exists (and up to date when it already equals what the
+           command would write)
+         - needs-merge for CODEOWNERS, .gitattributes and .gitignore, with
+           the lines to add. --write-suggestions saves them next to the
+           file as <name>.ccshelf-suggested.
+       The command never rewrites a marketplace.json. --force replaces the
+       other differing files after it saves <file>.bak.
 ```
 
-Generated files (each group can be left out with a --no-<group> flag):
+Generated files (a --no-<group> flag leaves out its group):
 
 ```text
-ccshelf.toml, .claude-plugin/marketplace.json (a skeleton; in adopt mode it
-lists the plugins found under plugins/), catalog/plugins/<name>.toml (a stub
-per plugin: the owner from CODEOWNERS or --owner, status experimental, and
-TODO(ccshelf) placeholders that ccshelf lint reports as warnings, CAT048),
-.github/CODEOWNERS, .github/workflows/{validate,catalog,release}.yml,
-README.md, .gitattributes and .gitignore. ccshelf has no built-in profiles:
-profiles/example.toml.sample, an all-comment sample, is written only with
---example-profile.
+- ccshelf.toml
+- .claude-plugin/marketplace.json: a skeleton. In adopt mode, it lists the
+  plugins found under plugins/.
+- catalog/plugins/<name>.toml: a stub per plugin with the owner from
+  CODEOWNERS or --owner, status experimental, and TODO(ccshelf)
+  placeholders that ccshelf lint reports as warnings (CAT048).
+- .github/CODEOWNERS
+- .github/workflows/{validate,catalog,release}.yml
+- README.md, .gitattributes and .gitignore
 ```
 
---profiles-only sets up an org data repo that holds profiles (and prompts/ and mcp/registry.toml) but no plugin marketplace and no catalog: ccshelf.toml gets [catalog] enabled = false, and the command writes ccshelf.toml, .github/CODEOWNERS, a README.md, .gitattributes, .gitignore and only the validate workflow (lint). No marketplace.json, sidecars, catalog.yml or release.yml. --marketplace-name, --owner and --sidecars stub are usage errors with it, and so is a directory that already has a marketplace file. An existing ccshelf.toml must already have [catalog] enabled = false (add it yourself, or use --force to replace the file), and --no-config is refused unless it has.
+ccshelf has no built-in profiles. The command writes profiles/example.toml.sample, an all-comment sample, only with --example-profile.
 
-The workflows call the ccshelf action pinned by full commit SHA. Pass --ccshelf-ref <40-hex SHA> and --ccshelf-version <vX.Y.Z> to pin it (a tag given as --ccshelf-ref sets the version only). Without them the workflows contain a placeholder and fail with a clear message until you pin them.
+--profiles-only sets up an org data repo that holds profiles (and prompts/ and mcp/registry.toml) but no plugin marketplace and no catalog. ccshelf.toml gets [catalog] enabled = false. The command writes ccshelf.toml, .github/CODEOWNERS, a README.md, .gitattributes, .gitignore and only the validate workflow (lint). It writes no marketplace.json, sidecars, catalog.yml or release.yml. These are usage errors with --profiles-only:
 
-Flags are the contract: every value can be passed as a flag. In a terminal, the values that are missing are asked for, the plan is shown, and the equivalent flag command is printed. Without a terminal, a missing value is a usage error (exit 2) naming the flag, and writing needs --yes (or --dry-run to print the plan). Nothing is committed, pushed or fetched; --git-init only runs git init when the directory is not a repository yet.
+```text
+- --marketplace-name, --owner and --sidecars stub
+- a directory that already has a marketplace file
+```
+
+An existing ccshelf.toml must already have [catalog] enabled = false. Add it yourself, or use --force to replace the file. The command refuses --no-config unless the file has it.
+
+The workflows call the ccshelf action pinned by full commit SHA. Pass --ccshelf-ref <40-hex SHA> and --ccshelf-version <vX.Y.Z> to pin it. A tag given as --ccshelf-ref sets the version only. Without them, the workflows contain a placeholder and fail with a clear message until you pin them.
+
+Flags are the contract: you can give every value as a flag. In a terminal, the command asks for the missing values, shows the plan and prints the equivalent flag command. Without a terminal, a missing value is a usage error (exit 2) that names the flag. Writing needs --yes (or --dry-run to print the plan). The command commits, pushes and fetches nothing. --git-init only runs git init when the directory is not a repository yet.
 
 **Usage**
 
@@ -444,8 +487,8 @@ ccshelf catalog init . --mode adopt --platform-owners @acme/platform --write-sug
 | `--no-workflows` |  | do not generate the .github/workflows files |
 | `--org` | `string` | display name of the organization (default: the marketplace name) |
 | `--owner` | `string` | default owner of the plugin sidecars (default: the first platform owner) |
-| `--platform-owners` | `strings` | CODEOWNERS owners of everything that runs code or shapes the catalog (@user, @org/team or an email address; repeatable) |
-| `--profiles-only` |  | set up a repo of profiles only: no marketplace, sidecars, bundles or catalog (ccshelf.toml gets [catalog] enabled = false; only the validate workflow is written) |
+| `--platform-owners` | `strings` | CODEOWNERS owners of everything that runs code or shapes the catalog (@user, @org/team or an email address, repeatable) |
+| `--profiles-only` |  | set up a repo of profiles only: no marketplace, sidecars, bundles or catalog (ccshelf.toml gets [catalog] enabled = false, and the command writes only the validate workflow) |
 | `--quiet` |  | do not print the suggested lines of the files that need a merge (they stay in --json and in --write-suggestions) |
 | `--runner-label` | `string` | fallback of runs-on in the workflows when the RUNNER_LABEL variable is unset (default ubuntu-latest) |
 | `--sidecars` | `string` | sidecar files for the plugins found: stub or none (default "stub") |
@@ -454,9 +497,9 @@ ccshelf catalog init . --mode adopt --platform-owners @acme/platform --write-sug
 
 ## ccshelf compile
 
-Compile every profile of the org data repo into a profile bundle: a plugin under bundles/profile-<name>/ whose dependencies are the profile's resolved plugins. Profiles that resolve to no plugins (abstract bases) are skipped.
+Compile every profile of the org data repo into a profile bundle: a plugin under bundles/profile-<name>/ whose dependencies are the profile's resolved plugins. The command skips profiles that resolve to no plugins (abstract bases).
 
-The whole bundles/ tree is generated output: files that are not produced by a profile are removed. With --check nothing is written; the command prints the differences and exits 1 when the committed bundles are stale.
+The whole bundles/ tree is generated output. The command removes the files that no profile produces. With --check, the command writes nothing. It prints the differences and exits 1 when the committed bundles are stale.
 
 **Usage**
 
@@ -468,14 +511,14 @@ ccshelf compile [flags]
 
 | Flag | Value | Description |
 |---|---|---|
-| `--check` |  | write nothing; exit 1 when the bundles are stale |
+| `--check` |  | write nothing, and exit 1 when the bundles are stale |
 | `-h`, `--help` |  | help for compile |
 
 ## ccshelf lint
 
 Check the org data repo (--root, default the current directory) against its ccshelf.toml: marketplace entries, catalog sidecars, taxonomy, review dates, CODEOWNERS coverage of hooks and MCP servers, profile manifests and their profile-* bundle entries.
 
-Formats: text (default), json (same as the global --json: the common {"version","kind":"lint","data":{"summary","findings"}} envelope) and github (workflow annotations, one ::error/::warning/::notice line per finding). Exit code 1 when there is any error finding (with --strict, any warning too).
+Formats: text (default), json (same as the global --json: the common {"version","kind":"lint","data":{"summary","findings"}} envelope) and github (workflow annotations, one ::error/::warning/::notice line per finding). The exit code is 1 when there is any error finding (with --strict, also any warning).
 
 **Usage**
 
@@ -596,9 +639,19 @@ ccshelf completion <bash|zsh|fish|powershell> [flags]
 
 ## ccshelf config
 
-Show the effective configuration, and add, pin or remove profile sources and change a few settings in place, without editing config.toml by hand. Every subcommand works with flags alone; in a terminal, "ccshelf config" alone opens a menu, and a change is shown and confirmed (default no) before it is written.
+Show the effective configuration, and add, pin or remove profile sources and change a few settings in place, without editing config.toml by hand. Every subcommand works with flags alone. In a terminal, "ccshelf config" alone opens a menu, and the command shows a change and asks you to confirm it (default no) before it writes it.
 
-Changes are written by re-encoding the file: comments and layout are lost, and the previous file is kept as config.toml.bak. A change that weakens a security setting (turning off pinning, trusting project profiles, installing updates automatically, adding a source that is not pinned or whose path is a variable, or changing claude.path or the update source) needs --yes when there is no terminal. Nothing here fetches a source or records trust. Only "ccshelf init" creates the file.
+The command writes a change by encoding the file again. Comments and layout are lost, and the command keeps the previous file as config.toml.bak. When there is no terminal, a change that weakens a security setting needs --yes. These changes weaken a security setting:
+
+```text
+- turning off pinning
+- trusting project profiles
+- installing updates automatically
+- adding a source that is not pinned or whose path is a variable
+- changing claude.path or the update source
+```
+
+Nothing here fetches a source or records trust. Only "ccshelf init" creates the file.
 
 Settings you can change with "config set": trust.on_change, trust.require_pin, trust.trust_project_profiles, update.mode, update.interval, catalog.remote_url, default_account, ui.color, ui.interactive. Anything else (accounts, claude.path, the update source) has its own command or needs "ccshelf config edit".
 
@@ -638,7 +691,7 @@ ccshelf config edit
 
 ## ccshelf config edit
 
-Open a copy of config.toml (mode 0600, in the same folder) in the editor named by $VISUAL or $EDITOR (split on spaces, quotes group words, never run through a shell). When the editor exits, the copy is checked like the real file. Only if it is valid does it replace config.toml (comments are kept: the text is written as you saved it), and the previous file is kept as config.toml.bak. If it is invalid, the errors are printed with line numbers, config.toml is left untouched and the copy is kept so you can fix it. It needs a terminal and an existing file (ccshelf init creates it).
+Open a copy of config.toml (mode 0600, in the same folder) in the editor named by $VISUAL or $EDITOR (split on spaces, quotes group words, never run through a shell). When the editor exits, the command checks the copy like the real file. The copy replaces config.toml only if it is valid. Comments are kept, because the command writes the text as you saved it. It keeps the previous file as config.toml.bak. If the copy is invalid, the command prints the errors with line numbers, does not touch config.toml and keeps the copy so you can fix it. The command needs a terminal and an existing file (ccshelf init creates it).
 
 --path prints the file name instead, for scripts and for editors you start yourself.
 
@@ -654,7 +707,7 @@ ccshelf config edit [flags]
 |---|---|---|
 | `-h`, `--help` |  | help for edit |
 | `--path` |  | print the configuration file path instead of opening it |
-| `--yes` |  | confirm the write after the check; never accepts trust |
+| `--yes` |  | confirm the write after the check, but never accept trust |
 
 ## ccshelf config path
 
@@ -674,7 +727,20 @@ ccshelf config path [flags]
 
 ## ccshelf config set
 
-Change one setting of the configuration. The keys are: trust.on_change, trust.require_pin, trust.trust_project_profiles, update.mode, update.interval, catalog.remote_url, default_account, ui.color, ui.interactive. Values: true or false; trust.on_change prompt or fail; update.mode off, notify or install; update.interval a duration such as 24h (1h to one year); an https URL for catalog.remote_url; an account name for default_account; ui.color auto, always or never; ui.interactive auto or never. Anything else is refused: accounts and sources have their own commands, and the rest needs "config edit".
+Change one setting of the configuration. The keys are: trust.on_change, trust.require_pin, trust.trust_project_profiles, update.mode, update.interval, catalog.remote_url, default_account, ui.color, ui.interactive. Values:
+
+```text
+- true or false
+- trust.on_change: prompt or fail
+- update.mode: off, notify or install
+- update.interval: a duration such as 24h (1h to one year)
+- catalog.remote_url: an https URL
+- default_account: an account name
+- ui.color: auto, always or never
+- ui.interactive: auto or never
+```
+
+The command refuses anything else. Accounts and sources have their own commands, and the rest needs "config edit".
 
 Turning trust.require_pin off, trust.trust_project_profiles on, or update.mode to install weakens a security setting and needs --yes without a terminal.
 
@@ -697,11 +763,11 @@ ccshelf config set trust.on_change fail
 | Flag | Value | Description |
 |---|---|---|
 | `-h`, `--help` |  | help for set |
-| `--yes` |  | confirm the write (and a weakening change); never accepts trust |
+| `--yes` |  | confirm the write (and a weakening change), but never accept trust |
 
 ## ccshelf config show
 
-Print the sources (numbered from 1; the numbers are the ones config source pin and rm take), trust, update, catalog, accounts and ui settings. A value the file does not set is marked (default). A missing file shows the defaults.
+Print the sources (numbered from 1, with the numbers that config source pin and rm take), trust, update, catalog, accounts and ui settings. The command marks a value that the file does not set with (default). A missing file shows the defaults.
 
 **Usage**
 
@@ -717,7 +783,7 @@ ccshelf config show [flags]
 
 ## ccshelf config source
 
-Change the [[sources]] of the configuration. Sources are numbered from 1 in the order of "config source ls"; the order carries no meaning. Nothing is fetched and no trust is recorded: shared profiles are fetched, and need your trust, when you first use them.
+Change the [[sources]] of the configuration. Sources are numbered from 1 in the order of "config source ls". The order carries no meaning. The command fetches nothing and records no trust. ccshelf fetches shared profiles when you first use them, and they need your trust then.
 
 **Usage**
 
@@ -742,9 +808,17 @@ ccshelf config source [command]
 
 ## ccshelf config source add
 
-Add one profile source: exactly one of --git-url (with --ref, and --path for the folder inside the repository), --dir (an absolute directory) or --plugin (name@marketplace, with --marketplace and --path). The source is checked with the rules of the configuration file, and an exact duplicate is refused: use "config source pin" or "config source rm". Nothing is fetched or trusted.
+Add one profile source with exactly one of these flags:
 
-In a terminal, without any of those flags, the questions are asked. Adding a git source that is not pinned to a tag or full commit (possible only while trust.require_pin is off) weakens a setting and needs --yes without a terminal.
+```text
+- --git-url, with --ref, and --path for the folder inside the repository
+- --dir, an absolute directory
+- --plugin (name@marketplace), with --marketplace and --path
+```
+
+The command checks the source with the rules of the configuration file and refuses an exact duplicate. For a duplicate, use "config source pin" or "config source rm". The command fetches and trusts nothing.
+
+In a terminal, without any of those flags, the command asks the questions. A git source that is not pinned to a tag or full commit is possible only while trust.require_pin is off. Adding one weakens a setting and needs --yes without a terminal.
 
 **Usage**
 
@@ -771,11 +845,11 @@ ccshelf config source add --plugin org-profiles@acme --marketplace acme/claude-m
 | `--path` | `string` | git or plugin source: folder inside the repository or plugin (git default: profiles) |
 | `--plugin` | `string` | plugin source: name@marketplace |
 | `--ref` | `string` | git source: tag or full commit id to pin to |
-| `--yes` |  | confirm the write (and a weakening change); never accepts trust |
+| `--yes` |  | confirm the write (and a weakening change), but never accept trust |
 
 ## ccshelf config source ls
 
-List the [[sources]] with the numbers that config source pin and rm take. Your personal profiles directory is always searched and is not listed.
+List the [[sources]] with the numbers that config source pin and rm take. ccshelf always searches your personal profiles directory, and the list does not show it.
 
 **Usage**
 
@@ -793,7 +867,7 @@ ccshelf config source ls [flags]
 
 ## ccshelf config source pin
 
-Change the tag or full commit id that git source number n (see config source ls) is pinned to. The next run that needs a profile from that source fetches the new ref, and when its commit differs from the one you trusted the profile needs your trust again; this command never records trust. Pinning to something that is not a tag or full commit is possible only while trust.require_pin is off and needs --yes without a terminal.
+Change the tag or full commit id that git source number n (see config source ls) is pinned to. The next run that needs a profile from that source fetches the new ref. When its commit differs from the one you trusted, the profile needs your trust again. This command never records trust. Pinning to something that is not a tag or full commit is possible only while trust.require_pin is off, and it needs --yes without a terminal.
 
 **Usage**
 
@@ -813,11 +887,11 @@ ccshelf config source pin 1 --ref v2026.11.0
 |---|---|---|
 | `-h`, `--help` |  | help for pin |
 | `--ref` | `string` | the new tag or full commit id |
-| `--yes` |  | confirm the write (and a weakening change); never accepts trust |
+| `--yes` |  | confirm the write (and a weakening change), but never accept trust |
 
 ## ccshelf config source rm
 
-Remove the source with number n (see config source ls). Profiles from it no longer appear. Trust records already made for its profiles are kept as they are and are not deleted.
+Remove the source with number n (see config source ls). Profiles from it no longer appear. The command keeps the trust records already made for its profiles as they are, and does not delete them.
 
 **Usage**
 
@@ -838,11 +912,11 @@ ccshelf config source rm 2
 | Flag | Value | Description |
 |---|---|---|
 | `-h`, `--help` |  | help for rm |
-| `--yes` |  | confirm the write; never accepts trust |
+| `--yes` |  | confirm the write, but never accept trust |
 
 ## ccshelf config unset
 
-Put one setting back to its default (the same keys as config set). The key is removed from the file where it can be, and otherwise written with its default.
+Put one setting back to its default (the same keys as config set). The command removes the key from the file where it can. Otherwise it writes the key with its default.
 
 **Usage**
 
@@ -861,13 +935,21 @@ ccshelf config unset update.interval
 | Flag | Value | Description |
 |---|---|---|
 | `-h`, `--help` |  | help for unset |
-| `--yes` |  | confirm the write; never accepts trust |
+| `--yes` |  | confirm the write, but never accept trust |
 
 ## ccshelf init
 
-Create config.toml and your personal profiles directory. With --git-url the org data repo becomes a profile source (pin it with --ref: a tag or a full commit id). With --dir another local profiles directory becomes a source. In a terminal, running without source, account or update values starts the full setup wizard. It shows a summary and asks before writing (default no). Partial flag runs do not prompt. --yes confirms writing only, never trust. The wizard prints an equivalent flag command at the end. Nothing is fetched here: profiles from a shared source are fetched, and need your trust, when you first use them.
+Create config.toml and your personal profiles directory. With --git-url the org data repo becomes a profile source (pin it with --ref: a tag or a full commit id). With --dir another local profiles directory becomes a source. In a terminal, running without source, account or update values starts the full setup wizard. It shows a summary and asks before writing (default no). Partial flag runs do not prompt. --yes confirms writing only, never trust. The wizard prints an equivalent flag command at the end. Nothing is fetched here. ccshelf fetches profiles from a shared source when you first use them, and they need your trust then.
 
-Automatic updates are off unless you turn them on: --update-mode notify checks for a newer release once a day and prints one line when there is one, install also installs it (same major version only). The full wizard asks once.
+Automatic updates are off unless you turn them on:
+
+```text
+- --update-mode notify checks for a newer release once a day and prints one
+  line when there is one.
+- --update-mode install also installs it (same major version only).
+```
+
+The full wizard asks once.
 
 **Usage**
 
@@ -908,7 +990,7 @@ ccshelf shell-init fish | source          fish
 ccshelf shell-init pwsh | Out-String | Invoke-Expression
 ```
 
-Only profiles from local directories are listed, so starting a shell never touches the network; add others with --profile. For cmd.exe, --write-cmd-shims <dir> writes cs-<profile>.cmd files into a directory on PATH.
+Only profiles from local directories are listed, so starting a shell never touches the network. Add others with --profile. For cmd.exe, --write-cmd-shims <dir> writes cs-<profile>.cmd files into a directory on PATH.
 
 **Usage**
 
@@ -928,9 +1010,14 @@ ccshelf shell-init [bash|zsh|fish|pwsh|cmd] [flags]
 
 Download the newest ccshelf release, verify it and replace this binary.
 
-The archive's SHA-256 must match checksums.txt of the same release, fetched over HTTPS without credentials. If cosign is on PATH the keyless signature of checksums.txt is verified as well, against the project's release workflow, and a mismatch stops the update; --require-signature makes a missing cosign an error. The previous binary is kept as <name>.old; --rollback restores it.
+The archive's SHA-256 must match checksums.txt of the same release. The command gets checksums.txt over HTTPS without credentials. If cosign is on PATH, the command also verifies the keyless signature of checksums.txt against the project's release workflow. A mismatch stops the update. With --require-signature, a missing cosign is an error. The command keeps the previous binary as <name>.old. --rollback restores it.
 
-Nothing contacts the network unless you run this command or set [update] mode in config.toml (off by default). A copy installed by Homebrew, Scoop, WinGet, "go install" or a system package, and development builds, are not replaced unless you pass --force; the right command is printed instead.
+Nothing contacts the network unless you run this command or set [update] mode in config.toml (off by default). Without --force, the command does not replace these, and prints the correct command instead:
+
+```text
+- a copy installed by Homebrew, Scoop, WinGet, "go install" or a system package
+- a development build
+```
 
 **Usage**
 
@@ -953,7 +1040,7 @@ ccshelf update --rollback
 |---|---|---|
 | `--allow-downgrade` |  | allow --version to install an older release |
 | `--check` |  | only report the current and latest version (exit 0 either way) |
-| `--dry-run` |  | show what would be downloaded, verified and replaced; change nothing |
+| `--dry-run` |  | show what the update would download, verify and replace, and change nothing |
 | `--force` |  | also replace a package-managed or development build, or reinstall the same version (never installs an older release) |
 | `-h`, `--help` |  | help for update |
 | `--prerelease` |  | consider pre-releases when looking for the latest |

@@ -20,7 +20,7 @@ import (
 // DefaultPath is the profiles folder inside the plugin when Options.Path is empty.
 const DefaultPath = "profiles"
 
-// Names, Open and Root return ErrNotPrepared before Prepare.
+// ErrNotPrepared is the error that Names, Open and Root return before Prepare.
 var ErrNotPrepared = errors.New("plugin source is not prepared. Call Prepare first")
 
 // ErrNotInstalled is returned when the plugin is not installed.
