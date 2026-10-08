@@ -193,7 +193,7 @@ When it acts, after a command that **succeeded**, for every command except `run`
   - The copy is not a package-managed or development build.
   - The directory is writable.
 
-  It has its own 60 s budget (an archive is downloaded). It prints a progress line and one result line (terminal only, like everything automatic): `ccshelf updated to 0.1.1 (...); it takes effect the next time you run ccshelf`. The running process is not replaced. A new major (or a new 0.x minor) is only announced, like `notify`.
+  It has its own 60 s budget (an archive is downloaded). It prints a progress line and one result line (terminal only, like everything automatic): `ccshelf updated to 0.1.1 (...). The new version takes effect the next time you run ccshelf`. The running process is not replaced. A new major (or a new 0.x minor) is only announced, like `notify`.
 - `run` and `dry-run` (which `exec` claude and must stay fast) make **no network call**. In `notify` mode they print the cached notice from the state file, once per 24 hours. In `install` mode they print nothing.
 
 State is `update-state.json` in the cache directory (0700 directory, 0600 file, written atomically, never followed through a symlink): `last_check`, `latest` and `notified_at`. No identifier of the user or machine is stored or sent. A corrupt, unknown-keyed, oversized or implausible file (a time in the future, a version that does not parse) is ignored and treated as a first run.
