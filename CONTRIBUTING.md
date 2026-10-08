@@ -68,6 +68,7 @@ Also: never bypass or probe managed policy by trial, no telemetry, and no networ
 - Record decisions, supersessions and open questions in `docs/DECISIONS.md` (never delete a row). Use the glossary terms consistently: profile, profile bundle, catalog, sidecar, marketplace, tool repo, org data repo, account.
 - Mark factual claims about Claude Code with `{V}` verified, `{R}` reported or `{U}` unverified.
 - Examples are fictional and labeled as mockups until the behavior exists.
+- Write messages, help text and docs in the plain style of [AGENTS.md](AGENTS.md#writing-style-asd-ste100): short active sentences, no semicolons, one name for one thing, and no lost hedges or conditions.
 
 ## Workflow rules (SR5)
 

@@ -43,6 +43,37 @@ Guidance for AI coding agents (and humans) working in this repo, the public **to
 - **The HTML report is generated, not edited.** `docs/report.html` is built from the Markdown by `python3 docs/build_report.py` (Python 3, standard library only). Never edit `report.html` by hand; edit the Markdown or the build inputs under `docs/report/` and rebuild. Rebuild and commit `report.html` in the same commit as the Markdown change. The report must stay a single self-contained file: no external requests or CDN, light and dark themes, works at phone width, keyboard accessible, respects reduced motion. After a rebuild, load the page and check every tab.
 - Markdown subset the generator understands: headings, paragraphs, lists (including task lists), GFM tables, fenced code, inline code, bold, italic, strikethrough, links, and the `{V}` `{R}` `{U}` markers. Keep to it.
 
+## Writing style (ASD-STE100)
+Text that people and agents read follows the structural rules of ASD-STE100 Simplified Technical English (Issue 9, 2025). We use the rules only. We do not use the STE dictionary, because its license does not let this repo copy it (D-53). Never call our text "STE-compliant".
+
+- **Strict mode** is for text where a wrong reading has a cost:
+  - CLI error messages, warnings, prompts and `--help` text (command `Short` and `Long`, flag usage).
+  - Lint finding messages and hints.
+  - Descriptions in `schema/` and the inputs and outputs in `action/action.yml`.
+  - This file.
+- **STE-flavored mode** is for `README.md`, `SECURITY.md`, `CONTRIBUTING.md`, `docs/design/`, `site/`, new rows in `docs/DECISIONS.md` and pull request descriptions. It uses the rules below except the last one.
+- **Out of scope:** `docs/research/` (dated findings, changed only to correct them) and the text of existing decision rows.
+- Change text when you touch it for another reason. Do not rewrite a whole file only for style.
+
+The rules:
+1. Write one instruction in one sentence. Keep an instruction to 20 words or fewer and a description to 25 words or fewer.
+2. Use the active voice. Name the actor, unless the actor is unknown or not important.
+3. Use simple tenses. Keep a compound tense ("may have failed", "has completed") only when the simple tense loses meaning.
+4. Do not use semicolons. Write two sentences.
+5. Use a one-word verb, not a phrasal verb ("start", not "spin up"). Use the verb, not its noun form ("check the file", not "do a check of the file").
+6. Use one name for one thing. Use the glossary terms from `docs/README.md`.
+7. Use a list for three or more steps or conditions.
+8. Do not use marketing words such as "seamless", "robust" or "powerful".
+9. Strict mode only: use one word for one action everywhere (for example "refuse", not "refuse", "reject" and "deny" for the same thing).
+
+Do not lose meaning:
+- Keep each hedge at its strength. "May fail" stays "may fail".
+- Keep each condition, exception, number and `{V}` `{R}` `{U}` marker. If a short sentence loses one, keep the long sentence.
+- Do not add a fact that the original text does not state.
+- Do not change identifiers, flags, paths, exit codes or quoted output for style. Go error strings keep the Go conventions (lowercase start, no final period). When a test or golden file checks a message, update it in the same commit.
+
+Tools: the `asd-ste100` skill (`github.com/danyuchn/asd-ste100-skill`, MIT) applies these rules. It is not part of this repo. Install it in your own setup, for example through a ccshelf profile. Its `scripts/ste-lint.py` finds structural problems with regular expressions, so check each passive-voice finding yourself. CI does not run it.
+
 ## Website conventions
 - `site/` is the project website: hand-written HTML, two stylesheets (`site.css`, `docs.css`), a few plain scripts (`site.js`, `demo-data.js`, and `docs.js` and `docs-search.js` for the docs), system fonts, no framework and no external request of any kind. It has one build step: `scripts/build-site.sh` copies `site/`, generates the `/docs` pages from the Markdown and fills in the deploy-time addresses, into the gitignored `dist/site`. All URLs are relative so it works from `file://` and a Pages project subpath. The repository address lives in one place (the `href` of `#repo` in `site/index.html`, `REPO_URL`); never hard-code it elsewhere.
 - A strict `<meta>` CSP forbids inline scripts, styles and handlers. Run `make site-check` (or `bash scripts/check-site.sh`, which builds `dist/site` first) after any edit; every claim on the page must be traceable to `docs/`.
