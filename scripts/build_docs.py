@@ -58,7 +58,7 @@ cs = _load("ccshelf_check_site", os.path.join(HERE, "check_site.py"))
 # (group, nav label, markdown file relative to docs/, output path relative to docs/, description or "")
 PAGES: list[tuple[str, str, str, str, str]] = [
     ("Start", "Overview", "README.md", "index.html",
-     "Design notes, decision records and research for ccshelf, published from the Markdown in the repository. Not a user manual; not released yet."),
+     "Design notes, decision records and research for ccshelf, published from the Markdown in the repository. Not a user manual."),
     ("Reference", "Command reference", "reference/cli.md", "reference/cli.html",
      "Every ccshelf command, flag and exit code, generated from the help output of the real binary."),
     ("Design", "Architecture", "design/architecture.md", "design/architecture.html",
@@ -576,7 +576,7 @@ class Builder:
 <footer class="foot" id="source">
   <div class="wrap foot-in">
     <p>These notes are published from the Markdown in <a href="{attr(self.repo_url)}" rel="external noopener">the ccshelf repository</a>: <a href="{src_href}" rel="external noopener">view the source of this page</a>. Unofficial: not affiliated with Anthropic. Open source under the MIT License.</p>
-    <p class="fine">Design notes and decision records, not a user manual. ccshelf is not released yet. Plugin names, teams and the <code>acme</code> organization in examples are fictional.</p>
+    <p class="fine">Design notes and decision records, not a user manual. Plugin names, teams and the <code>acme</code> organization in examples are fictional.</p>
     <p class="credit">Made by <a href="https://github.com/yorch" rel="author external noopener">Jorge Barnaby</a>.</p>
   </div>
 </footer>

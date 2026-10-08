@@ -7,7 +7,7 @@ Guidance for AI coding agents (and humans) that work in this repo, the public **
 1. **Launcher (profiles):** starts `claude` with a named profile (a set of plugins, standalone skills and MCP servers), so different terminals can run different sets at once.
 2. **Catalog (discoverability):** metadata lint plus a generated static catalog for an organization's git-based plugin marketplace.
 
-**Status:** implemented and in adversarial review. Not released. The repo layout:
+**Status:** implemented, released and in adversarial review. The release process is in "Releasing". The repo layout:
 - Go code: `cmd/ccshelf` and `internal/`.
 - Schemas: `schema/`.
 - The Action: `action/`.

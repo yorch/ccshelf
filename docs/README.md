@@ -1,9 +1,9 @@
 # ccshelf: research and design notes
 
-**Status (2026-10-06):** implemented (launcher, catalog, Action, starter template, CI and release workflows) and reviewed in several adversarial rounds. Not released. Known gaps:
+**Status (2026-10-08):** implemented (launcher, catalog, Action, starter template, CI and release workflows), reviewed in several adversarial rounds, and released. The GitHub releases page has the current version. Known gaps:
 
 - Only macOS has run real Stage 0 experiments.
-- The Windows code paths compile and vet but have not run on Windows.
+- The Windows code paths run only in CI (`windows-latest` and `windows-11-arm`), not on a developer machine.
 - The Phase 0 evidence items are still open.
 
 See the [roadmap](design/roadmap.md) and the [decision log](DECISIONS.md) (D-22).

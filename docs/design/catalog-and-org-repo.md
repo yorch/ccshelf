@@ -52,7 +52,7 @@ Two choices:
 ## Structure of the org data repo
 
 
-This describes the **private repo an adopting organization keeps** (R5): its marketplace, profiles and catalog data. The public tool repo (this one) ships a starter template of it in `examples/org-data-repo/` once code starts. Everything here is a design proposal except where marked decided. Names are provisional. The `ccshelf` commands shown don't exist yet.
+This describes the **private repo an adopting organization keeps** (R5): its marketplace, profiles and catalog data. The public tool repo (this one) ships a starter template of it in `examples/org-data-repo/` once code starts. Everything here is a design proposal except where marked decided. Names are provisional. The `ccshelf` commands shown exist ([CLI reference](../reference/cli.md)).
 
 ## Principles
 1. **Native first.** `marketplace.json` and plugin folders stay exactly what Claude Code expects, so `/plugin` works with the repo unchanged.
@@ -149,7 +149,7 @@ An organization can keep only profiles (plus `prompts/` and `mcp/registry.toml`)
 `ccshelf catalog init --profiles-only` sets such a repo up (see below). It is a repo for the roles of an organization whose plugins come from marketplaces that live elsewhere.
 
 ## Generated bundles
-`ccshelf compile` writes `bundles/profile-<name>/.claude-plugin/plugin.json` (name, version, `dependencies`) from `profiles/<name>.toml`. Because marketplaces serve files from git, these are committed. CI runs `ccshelf compile --check` and fails the PR if a committed bundle differs from what would be generated. A person writes the `marketplace.json` entry for each bundle (name, `source: ./bundles/profile-frontend`, category `profile`) by hand once. `lint` checks that every profile has an entry and every bundle entry has a profile. (Alternative: generate those entries into `marketplace.json`. Rejected for now, because mixing generated and hand-written entries in one JSON file invites merge conflicts.)
+`ccshelf compile` writes `bundles/profile-<name>/.claude-plugin/plugin.json` (`name` and `dependencies`, with no version: the commit SHA is the version) from `profiles/<name>.toml`. Because marketplaces serve files from git, these are committed. CI runs `ccshelf compile --check` and fails the PR if a committed bundle differs from what would be generated. A person writes the `marketplace.json` entry for each bundle (name, `source: ./bundles/profile-frontend`, category `profile`) by hand once. `lint` checks that every profile has an entry and every bundle entry has a profile. (Alternative: generate those entries into `marketplace.json`. Rejected for now, because mixing generated and hand-written entries in one JSON file invites merge conflicts.)
 
 ## Org config (`ccshelf.toml`)
 ```toml
@@ -319,7 +319,7 @@ The templates live in `internal/scaffold/templates/` and are embedded into the b
 
 ## Consumption
 - **Plugins:** users add the marketplace natively (`extraKnownMarketplaces` or `/plugin marketplace add <git URL>`), and bundles install profile plugin sets in one step.
-- **Profiles:** users configure a `git` source pointing at this org data repo at a pinned tag, or a local clone as a `dir` source (see [profiles.md](profiles.md), "Profile sources and sharing"). The `plugin` source (profiles shipped inside a plugin) comes later.
+- **Profiles:** users configure a `git` source pointing at this org data repo at a pinned tag, or a local clone as a `dir` source (see [profiles.md](profiles.md), "Profile sources and sharing"). The `plugin` source (profiles shipped inside a plugin) also exists. It is newer than `dir` and `git`.
 - **Catalog:** the published site, and `ccshelf search` or `ccshelf doctor` reading the same data locally. `ccshelf search` can also read the published `catalog.json` directly when the user's `config.toml` sets `[catalog] remote_url`. This is useful when developers should not need an org data repo checkout.
 
 ## Variants

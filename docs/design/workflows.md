@@ -1,6 +1,6 @@
 # Example workflows
 
-Illustrative only. Nothing is built yet: the command is `ccshelf`, the outputs are mockups of the intended behavior, and plugin names are fictional (`@official` stands for the official marketplace). Stage 0 confirmed the behavior marked *(tested)* (see [stage0.md](../research/stage0.md)). The rest is design intent. The manifest fields used below are explained in [profiles.md](profiles.md).
+Illustrative only. The commands exist, but the outputs are mockups and can differ from the real output, and plugin names are fictional (`@official` stands for the official marketplace). Stage 0 confirmed the behavior marked *(tested)* (see [stage0.md](../research/stage0.md)). The rest is design intent. The manifest fields used below are explained in [profiles.md](profiles.md).
 
 ## 1. Daily use: two terminals, two profiles
 You work on a React app in the morning and debug production in the afternoon, and sometimes both at once.
@@ -122,7 +122,7 @@ function cf { ccshelf run frontend -- @args }
 ## 11. Sharing profiles centrally
 Platform owner publishes, everyone else consumes.
 1. The org data repo contains `profiles/*.toml`. CI runs `ccshelf lint` on every PR, and the platform team tags a release (for example `v2026.10.1`) when profiles change.
-2. A user (or `ccshelf init` with the repo URL, proposed) adds the org data repo as a `git` source pinned to that tag in `~/.config/ccshelf/config.toml`. A team could also ship a config for it in a project repo. (A `plugin` source, with profiles shipped inside a data-only plugin, is planned for a later release.)
+2. A user (or `ccshelf init` with the repo URL, proposed) adds the org data repo as a `git` source pinned to that tag in `~/.config/ccshelf/config.toml`. A team could also ship a config for it in a project repo. (A `plugin` source, with profiles shipped inside a data-only plugin, also exists. It is newer than `dir` and `git`, see [profiles.md](profiles.md).)
 3. `ccshelf ls` shows profiles from all sources, labeled by origin (personal, project, org). A personal profile with the same name wins.
 4. When the pinned tag moves and a profile adds an MCP command or env value, the launcher shows the diff and asks before accepting: `ccshelf trust sre`. The launcher stores accepted hashes in a lockfile.
 ```
