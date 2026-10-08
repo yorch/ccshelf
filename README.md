@@ -21,9 +21,9 @@ The installers below fetch the latest release. Both installers:
 - send no telemetry.
 - write only into the install directory (created with any missing parent folders) and a private temporary directory. They remove the temporary directory afterwards.
 
-The Windows script edits your user `PATH` only with `-AddToPath`. `install.sh` needs `curl` (for example `apk add curl` or `apt install curl`). It ignores `~/.curlrc`, honors the usual proxy and CA environment variables and never turns TLS verification off.
+"What the installer verifies" in [SECURITY.md](SECURITY.md#what-the-installer-verifies) gives every check and its limits.
 
-**Linux and macOS** (amd64 and arm64, and WSL counts as Linux). Installs into `~/.local/bin`:
+**Linux and macOS** (amd64 and arm64, and WSL counts as Linux). Installs into `~/.local/bin`. `install.sh` needs `curl` (for example `apk add curl` or `apt install curl`):
 
 ```sh
 curl -fsSL https://github.com/yorch/ccshelf/releases/latest/download/install.sh | sh
@@ -35,7 +35,7 @@ Pin a version, choose a directory, or require the signature check (options go af
 curl -fsSL https://github.com/yorch/ccshelf/releases/latest/download/install.sh | sh -s -- --version v0.2.0 --bin-dir "$HOME/bin" --require-signature
 ```
 
-Prefer to read it first? `curl -fsSLO https://github.com/yorch/ccshelf/releases/latest/download/install.sh`, read it, then `sh install.sh`. `sh install.sh --help` lists every option (`--base-url` for a mirror of the public release, such as one hosted on your GitHub Enterprise Server, `--dry-run`, `--quiet`, `--force`). The installer trusts a mirror to serve the release you ask for. The mirror's `latest` can name an older release that is still validly signed. `--cosign-identity` and `--cosign-issuer` matter only for a release you signed yourself. The installer checks a mirror of the public release with the default identity.
+Prefer to read it first? `curl -fsSLO https://github.com/yorch/ccshelf/releases/latest/download/install.sh`, read it, then `sh install.sh`. `sh install.sh --help` lists every option (`--base-url` for a mirror of the public release, such as one hosted on your GitHub Enterprise Server, `--dry-run`, `--quiet`, `--force`, `--cosign-identity`, `--cosign-issuer`).
 
 **Windows** (amd64 and arm64, with Windows PowerShell 5.1 or PowerShell 7). Installs into `%LOCALAPPDATA%\Programs\ccshelf`:
 
@@ -43,36 +43,15 @@ Prefer to read it first? `curl -fsSLO https://github.com/yorch/ccshelf/releases/
 irm https://github.com/yorch/ccshelf/releases/latest/download/install.ps1 | iex
 ```
 
-With options (`-Version`, `-BinDir`, `-BaseUrl`, `-RequireSignature`, `-AddToPath`, `-DryRun`, `-Force`). The `irm | iex` form leaves your session alone: it defines no variable or function and changes no preference. `-AddToPath` writes your user `PATH` back as an expandable value, so `%VARIABLE%` entries stay as they are:
+With options (`-Version`, `-BinDir`, `-BaseUrl`, `-RequireSignature`, `-AddToPath`, `-DryRun`, `-Force`). The `irm | iex` form leaves your session alone: it defines no variable or function and changes no preference. The script edits your user `PATH` only with `-AddToPath`:
 
 ```powershell
 & ([scriptblock]::Create((irm https://github.com/yorch/ccshelf/releases/latest/download/install.ps1))) -Version v0.2.0 -AddToPath
 ```
 
-**What the installers check.**
-- The installer fetches the release's `checksums.txt` from the same release as the archive.
-- The archive must match exactly one line in it (SHA-256, always).
-- The archive may contain only `ccshelf` (`ccshelf.exe`), `LICENSE` and `README.md`.
-- When [cosign](https://docs.sigstore.dev/cosign/) is on your `PATH`, the installer first verifies the signature of `checksums.txt` against the release workflow's exact identity. A failure stops the install.
-- `--require-signature` (`-RequireSignature`) turns a missing cosign into an error too.
+**Verify by hand.** Follow "Verifying a release" in [SECURITY.md](SECURITY.md#verifying-a-release). Then extract the binary with `tar -xzf ccshelf_X.Y.Z_<os>_<arch>.tar.gz ccshelf` (on Windows, `Expand-Archive` the .zip). On Windows, compare `(Get-FileHash -Algorithm SHA256 <archive>).Hash` with the archive's line in `checksums.txt`.
 
-Without cosign, the installer says so. The checksum then detects corruption, not a tampered release, because both files come from the same place. See [SECURITY.md](SECURITY.md) for what this does and does not prove.
-
-**By hand.** Download the archive for your platform, `checksums.txt` and `checksums.txt.sigstore.json` from the release page, then:
-
-```sh
-cosign verify-blob \
-  --bundle checksums.txt.sigstore.json \
-  --certificate-identity 'https://github.com/yorch/ccshelf/.github/workflows/release.yml@refs/tags/vX.Y.Z' \
-  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  checksums.txt
-sha256sum --check --ignore-missing checksums.txt    # macOS: shasum -a 256 --check --ignore-missing checksums.txt
-tar -xzf ccshelf_X.Y.Z_<os>_<arch>.tar.gz ccshelf   # Windows: Expand-Archive the .zip
-```
-
-On Windows, compare `(Get-FileHash -Algorithm SHA256 <archive>).Hash` with the archive's line in `checksums.txt`. Releases also carry a GitHub build provenance attestation (`gh attestation verify <archive> --repo yorch/ccshelf`) and an SBOM per archive.
-
-**Notes.** The binaries are not notarized (macOS) or Authenticode-signed (Windows) yet. A file fetched by `curl` or the installers carries no quarantine mark, so Gatekeeper does not stop it. A browser download carries the mark, and macOS may ask you to allow it in System Settings (or run `xattr -d com.apple.quarantine ccshelf`). Windows SmartScreen may warn about a downloaded `.exe`. Unofficial: not affiliated with Anthropic.
+**Notes.** The binaries are not notarized (macOS) or Authenticode-signed (Windows) yet. A file fetched by `curl` or the installers carries no quarantine mark, so Gatekeeper does not stop it. A browser download carries the mark, and macOS may ask you to allow it in System Settings (or run `xattr -d com.apple.quarantine ccshelf`). Windows SmartScreen may warn about a downloaded `.exe`.
 
 **Uninstall.**
 - Delete the binary: `rm ~/.local/bin/ccshelf`, or the directory you chose.
@@ -107,7 +86,7 @@ ccshelf update --rollback  # restore the previous binary kept as ccshelf.old
 ccshelf update --yes       # the scripted form: no question (the automatic update never acts in scripts)
 ```
 
-The archive's SHA-256 must match `checksums.txt` of the same release. With [cosign](https://docs.sigstore.dev/cosign/) on `PATH`, `ccshelf update` checks its keyless signature too. `--require-signature` insists on the signature, and ccshelf checks that flag before anything else. The signature must come from the release workflow of the repository this binary was built from, whatever `base_url` says. A fork that signs its own releases names itself in `cosign_identity_repo`.
+Before it replaces anything, `ccshelf update` checks the archive's SHA-256 against `checksums.txt` of the same release, and the keyless signature when [cosign](https://docs.sigstore.dev/cosign/) is on `PATH`. `--require-signature` insists on the signature. "Network use and updates" in [SECURITY.md](SECURITY.md#network-use-and-updates) lists every check and what ccshelf sends.
 
 `--force` never installs an older release than the one you run. `--allow-downgrade` does. ccshelf leaves these copies to their package manager and prints the command (`--force` overrides):
 - a copy installed with Homebrew, Scoop, WinGet or `go install`.
@@ -122,12 +101,7 @@ mode = "notify"   # off (default) | notify (one line when a release exists) | in
 interval = "24h"
 ```
 
-`install` takes only a newer stable release of the same major version (for 0.x, the same minor). Both modes:
-- act only in an interactive terminal (stdin, stdout and stderr all terminals).
-- never act in scripts, cron jobs or pipelines.
-- never act when `CI` is set.
-
-`CCSHELF_NO_UPDATE_CHECK=1` turns them off. Details: [docs/design/update.md](docs/design/update.md).
+`install` takes only a newer stable release of the same major version (for 0.x, the same minor). Both modes act only in an interactive terminal (stdin, stdout and stderr all terminals), so never in scripts, cron jobs, pipelines or when `CI` is set. `CCSHELF_NO_UPDATE_CHECK=1` turns them off. Details: [docs/design/update.md](docs/design/update.md).
 
 For organizations, `ccshelf lint`, `compile`, `catalog build`, `search`, `recommend` and `doctor` work on the org data repo (see [examples/org-data-repo](examples/org-data-repo/README.md) for a starter template). The design is in [docs/](docs/README.md).
 
