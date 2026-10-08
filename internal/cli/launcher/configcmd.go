@@ -524,7 +524,7 @@ func (l *launcher) sourcePin(ctx context.Context, cc *clicore.Context, args []st
 	}
 	cfg := file.clone()
 	asked := false
-	idx := -1
+	var idx int
 	if len(args) == 1 {
 		if idx, err = parseSourceNumber(cfg, args[0]); err != nil {
 			return err

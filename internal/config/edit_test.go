@@ -310,7 +310,8 @@ func TestDirSourceRefusesWorkingDirectoryVariables(t *testing.T) {
 			t.Errorf("Load accepted %s", p)
 		}
 	}
-	for _, p := range []string{"$HOME/profiles", "${HOME}/p", "$PWDX/p", "~/p", "/abs"} {
+	// An absolute path in the host's own form: "/abs" is not absolute on Windows.
+	for _, p := range []string{"$HOME/profiles", "${HOME}/p", "$PWDX/p", "~/p", t.TempDir()} {
 		c := Default()
 		c.Sources = []SourceConfig{{Type: SourceDir, Path: p}}
 		if err := c.Validate(); err != nil {
