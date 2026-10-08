@@ -14,7 +14,7 @@ Guidance for AI coding agents (and humans) that work in this repo, the public **
 - The starter template: `examples/org-data-repo/`.
 - The notes: `docs/`.
 
-Read `docs/README.md` (overview and glossary) first. Then read `docs/DECISIONS.md` (what we decided, why, and what is open). Then read `docs/design/roadmap.md`.
+Read these in order: `docs/README.md` (overview and glossary), `docs/DECISIONS.md` (what we decided, why, and what is open), `docs/design/roadmap.md`.
 
 ## Decided requirements (decided by the user; reopen when evidence changes, and record why in the notes)
 - **R1:** macOS, Linux and native Windows. Six targets: darwin, linux and windows, each arm64 and amd64. WSL counts as Linux.
@@ -165,10 +165,7 @@ Every commit message and pull request title **must** use [Conventional Commits](
 ## Releasing
 - **Never create, move or delete a `v*` tag, never edit `.release-please-manifest.json` or `CHANGELOG.md`, and never create a GitHub release by hand.** A bot maintains a release pull request (`chore(main): release X.Y.Z`) from the squash-merged pull request titles. Merging it tags and starts the signed release (design: `docs/design/release.md`, decisions D-36 and D-37).
 - **Merge the release pull request, and approve the `release` environment, only when the user asks.** Do not run `gh workflow run release.yml` with `dry-run=false` unless the user asks. A dry run (the default) is fine.
-- **The pull request title is the changelog entry.** `scripts/check_pr_title.py` is the rule, and `ci-ok` fails otherwise. Write the title as `type(scope)!: description` with:
-  - a type from `feat fix docs test ci build refactor perf chore revert`.
-  - a lowercase description, no trailing period.
-  - at most 72 characters.
+- **The pull request title is the changelog entry.** Write it in the format of "Commits and pull requests", with at most 72 characters. `scripts/check_pr_title.py` is the rule, and `ci-ok` fails otherwise.
 - **Release entries:** only `feat`, `fix`, `perf`, `revert` and breaking changes (`!`) are listed and cause a release. Use `fix(deps):` for a dependency fix that must ship. Use `fix(security):` for security fixes.
 - Version strings: the tag is the version (`-ldflags`). There is nothing to bump in Go, docs or the Action.
 - To force a version, ask the user. The method: set `release-as` in `release-please-config.json` through a `fix:`/`feat:` titled pull request, and remove it afterwards. Never use a `Release-As:` line in a description: `pr-title` rejects it, as it does `BEGIN_COMMIT_OVERRIDE`.
