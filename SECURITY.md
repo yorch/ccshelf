@@ -109,7 +109,7 @@ The release workflow refuses a tag:
 - whose version differs from `.release-please-manifest.json` at that commit.
 - that shares its name with a branch.
 - whose commit has no green `ci.yml` run.
-- that has no single draft release named like the tag, or whose draft targets another commit than the tag (a squatted tag). The job that holds the write token makes this check, because only that job can see draft releases.
+- that has no single draft release named like the tag, or whose draft targets another commit than the tag (a squatted tag).
 
 Nothing is signed until two required reviewers (with "prevent self-review") approve the `release` environment. That environment only accepts `v*` tags.
 
@@ -119,13 +119,7 @@ The tool repository must keep the rulesets listed under "Required repository rul
 - `main` protected (required `ci-ok`, code-owner review, two approvals).
 - the `release` environment.
 
-release-please derives the release pull request from pull request titles. It also reads the pull request description (`BEGIN_COMMIT_OVERRIDE`, `Release-As:`). So:
-
-- the squash default must be "Pull request title".
-- `pr-title` rejects those markers.
-- reviewers must review the release pull request (every entry and the version) like code.
-
-See "Pull request titles" in the design note.
+release-please derives the release pull request from pull request titles, but it also reads the pull request description. "Pull request titles" in [docs/design/release.md](docs/design/release.md) gives the controls against that. The main one is the squash default "Pull request title".
 
 The trade-off, in short: a compromised release-please action could create a `v*` tag at a commit already on `main` that matches the manifest, but it could not sign or publish it. Tag creation is restricted by the checks above and the environment approval, not by tag-creation rules (see [docs/design/release.md](docs/design/release.md) for the analysis and the optional GitHub App variant).
 
@@ -186,13 +180,8 @@ Every release publishes `scripts/install.sh` (Linux and macOS) and `scripts/inst
 - `curl ... | sh` runs a script fetched over https from the same release host. That is as trustworthy as that host and your TLS roots. Download the script first, read it, and check its hash against `checksums.txt` if you want more.
 - cosign needs the Sigstore trusted root, so the signature check is not offline. See the mirrored `--trusted-root` note above. The installers do not pass it.
 - The installers do not verify the GitHub build provenance attestation or the SBOMs (`gh attestation verify` does, see above). They do not stop you from pinning an older release.
-- The macOS and Windows binaries are not notarized or Authenticode-signed. On Windows, the installer does not check directory ownership and permissions. There, the default directory is under your profile.
-- The installer runs `ccshelf version` once after installing. It must decide whether it may replace an existing `ccshelf`:
-  1. It first reads the file without running it. The file must contain the text `ccshelf`.
-  2. Only then does it run `version` under a 5-second limit.
-  3. Where there is no `timeout` command (stock macOS), it does not run the file at all, and the text check alone decides.
-
-  The installer never executes an existing file that does not contain that text.
+- On Windows, the installer does not check directory ownership and permissions. There, the default directory is under your profile.
+- The installer runs `ccshelf version` once after installing. To decide whether it may replace an existing `ccshelf`, it first reads the file without running it, and the file must contain the text `ccshelf`. Only then does it run `version`, under a 5-second limit. Where there is no `timeout` command (stock macOS), the text check alone decides. The installer never executes an existing file that does not contain that text.
 - The installer trusts a mirror given with `--base-url` to serve the release you ask for. A mirror's `latest` can name an older release that carries a valid signature (a downgrade through the mirror). Pin `--version` to avoid it.
 - On Windows, the installer changes the user `PATH` only with `-AddToPath`, through the registry. It reads the value unexpanded and writes it back as an expandable value, so `%VARIABLE%` entries survive. A `PATH` over 2047 characters earns a warning (some older programs cut it off).
 
