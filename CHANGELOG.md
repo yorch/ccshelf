@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/yorch/ccshelf/compare/v0.4.1...v0.5.0) (2026-10-08)
+
+
+### Features
+
+* **config:** add a config command to change settings after init ([#34](https://github.com/yorch/ccshelf/issues/34)) ([4e2ff90](https://github.com/yorch/ccshelf/commit/4e2ff90ee55bbb8fd4f23145e9ee35108173a243))
+
 ## [0.4.1](https://github.com/yorch/ccshelf/compare/v0.4.0...v0.4.1) (2026-10-08)
 
 
