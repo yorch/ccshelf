@@ -168,3 +168,36 @@ func TestCatalogDisabledStrayAndCommands(t *testing.T) {
 		t.Errorf("lint --strict should fail on the CAT061 warning: %d", r.code)
 	}
 }
+
+func TestProfilesOnlyCLIConflicts(t *testing.T) {
+	h := newHarness(t, "")
+	dir := filepath.Join(h.cwd, "p")
+	for _, extra := range [][]string{{"--no-config"}, {"--owner", "@acme/x"}} {
+		if r := h.run(poArgs(dir, append(extra, "--dry-run")...)...); r.code != 2 {
+			t.Errorf("%v: code %d\n%s", extra, r.code, r.err)
+		}
+	}
+	dir2 := filepath.Join(h.cwd, "existing")
+	write(t, dir2, "ccshelf.toml", "[lint]\nmax_review_age_days = 90\n")
+	r := h.run(poArgs(dir2, "--yes")...)
+	if r.code != 2 || !strings.Contains(r.err, "enabled = false") {
+		t.Errorf("existing config without the switch: code %d\n%s", r.code, r.err)
+	}
+	write(t, dir2, "plugins/x/README.md", "x")
+	r = h.run(poArgs(dir2, "--yes", "--force")...)
+	if r.code != 0 || !strings.Contains(r.out, "plugins/ is ignored") {
+		t.Errorf("--force: code %d\n%s\n%s", r.code, r.out, r.err)
+	}
+}
+
+func TestDoctorJSONExplainsSkippedCatalog(t *testing.T) {
+	h := newHarness(t, "")
+	dir := filepath.Join(h.cwd, "org")
+	if r := h.run(poArgs(dir, "--yes")...); r.code != 0 {
+		t.Fatalf("%d\n%s", r.code, r.err)
+	}
+	r := newHarness(t, dir).run("doctor", "--json")
+	if r.code != 0 || !strings.Contains(r.out, "DOC000") || !strings.Contains(r.out, "[catalog] enabled = false") {
+		t.Errorf("code %d\n%s\n%s", r.code, r.out, r.err)
+	}
+}

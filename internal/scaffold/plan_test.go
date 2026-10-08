@@ -456,3 +456,65 @@ func TestProfilesOnlyConflicts(t *testing.T) {
 		t.Errorf("disabled catalog without the flag: %v", err)
 	}
 }
+
+func TestProfilesOnlyAdoptExistingConfig(t *testing.T) {
+	p := baseParams()
+	p.MarketplaceName = ""
+	p.ProfilesOnly = true
+	var fe *FieldError
+	// A config without enabled = false: usage error, unless it is replaced.
+	files := map[string]string{"ccshelf.toml": "[lint]\nrequire = [\"owner\"]\n", "README.md": "x"}
+	_, err := Build(newMem(files), p)
+	if !errors.As(err, &fe) || fe.Flag != "--profiles-only" || !strings.Contains(fe.Msg, "enabled = false") {
+		t.Errorf("config without enabled = false: %v", err)
+	}
+	p.Force = true
+	plan, err := Build(newMem(files), p)
+	if err != nil || entryOf(t, plan, "ccshelf.toml").Action != ActionOverwrite {
+		t.Errorf("--force: %v", err)
+	}
+	// An existing profiles-only config is fine.
+	p.Force = false
+	files["ccshelf.toml"] = "[catalog]\nenabled = false\n"
+	if _, err := Build(newMem(files), p); err != nil {
+		t.Errorf("profiles-only config: %v", err)
+	}
+	// A marketplace listed by the config counts as an existing marketplace.
+	files["ccshelf.toml"] = "[catalog]\nenabled = false\nmarketplaces = [\"team/market.json\"]\n"
+	files["team/market.json"] = "{}"
+	if _, err := Build(newMem(files), p); !errors.As(err, &fe) || !strings.Contains(fe.Msg, "team/market.json") {
+		t.Errorf("configured marketplace: %v", err)
+	}
+}
+
+func TestProfilesOnlyNoConfigAndOwner(t *testing.T) {
+	p := baseParams()
+	p.MarketplaceName = ""
+	p.ProfilesOnly = true
+	p.Skip = map[Group]bool{GroupConfig: true}
+	var fe *FieldError
+	if _, err := Build(newMem(nil), p); !errors.As(err, &fe) || fe.Flag != "--no-config" {
+		t.Errorf("--no-config: %v", err)
+	}
+	if _, err := Build(newMem(map[string]string{"ccshelf.toml": "[catalog]\nenabled = false\n"}), p); err != nil {
+		t.Errorf("--no-config with an existing profiles-only config: %v", err)
+	}
+	p.Skip = nil
+	p.Owner = "@acme/x"
+	if _, err := Build(newMem(nil), p); !errors.As(err, &fe) || fe.Flag != "--owner" {
+		t.Errorf("--owner: %v", err)
+	}
+}
+
+func TestProfilesOnlyNotesPluginsDir(t *testing.T) {
+	p := baseParams()
+	p.MarketplaceName = ""
+	p.ProfilesOnly = true
+	plan, err := Build(newMem(map[string]string{"plugins/x/README.md": "x"}), p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.Join(plan.Notes, "\n"), "plugins/ is ignored") {
+		t.Errorf("notes = %v", plan.Notes)
+	}
+}

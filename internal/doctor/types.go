@@ -69,6 +69,9 @@ type ProfileView struct {
 // whose input is missing is skipped and listed in Report.Skipped.
 type Input struct {
 	Catalog *catalog.Catalog
+	// NoCatalogReason says why Catalog is nil, for the DOC000 skip entry; empty
+	// gives the generic reason.
+	NoCatalogReason string
 	// Lint is the lint report of the org data repo (optional).
 	Lint     *lint.Report
 	Profiles []ProfileView

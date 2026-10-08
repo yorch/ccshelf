@@ -193,6 +193,9 @@ func (p *Params) Validate() error {
 	if p.ProfilesOnly && p.MarketplaceName != "" {
 		return &FieldError{"--marketplace-name", "cannot be combined with --profiles-only: a profiles-only repo has no marketplace"}
 	}
+	if p.ProfilesOnly && p.Owner != "" {
+		return &FieldError{"--owner", "cannot be combined with --profiles-only: it is the owner of plugin sidecars, and a profiles-only repo has none"}
+	}
 	if p.MarketplaceName != "" && !ValidMarketplaceName(p.MarketplaceName) {
 		return &FieldError{"--marketplace-name", fmt.Sprintf("%q must match %s (lower case letters, digits and hyphens, at most 64 characters)", ui.SanitizeLine(p.MarketplaceName), MarketplaceNameRe)}
 	}

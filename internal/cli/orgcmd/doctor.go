@@ -179,6 +179,10 @@ func runDoctor(ctx context.Context, c *clicore.Context, r *repo, o doctorOptions
 		Catalog: cat, Lint: lrep, Profiles: views, Org: r.cfg,
 		Now: c.Now(), ReviewMaxAgeDays: r.cfg.Lint.MaxReviewAgeDays,
 	}
+	if !r.cfg.Catalog.Enabled {
+		in.Catalog = nil
+		in.NoCatalogReason = "[catalog] enabled = false in ccshelf.toml: this repo has no marketplace, so there is no catalog"
+	}
 	for _, f := range r.profileFindings(bad, nil) {
 		in.Policy = append(in.Policy, doctor.Finding{Severity: doctor.Severity(f.Severity), Code: f.Code, Check: "profile", Message: f.File + ": " + f.Message})
 	}

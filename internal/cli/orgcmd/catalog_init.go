@@ -122,8 +122,10 @@ and mcp/registry.toml) but no plugin marketplace and no catalog: ccshelf.toml
 gets [catalog] enabled = false, and the command writes ccshelf.toml,
 .github/CODEOWNERS, a README.md, .gitattributes, .gitignore and only the
 validate workflow (lint). No marketplace.json, sidecars, catalog.yml or
-release.yml. --marketplace-name and --sidecars stub are usage errors with it,
-and so is a directory that already has .claude-plugin/marketplace.json.
+release.yml. --marketplace-name, --owner and --sidecars stub are usage errors
+with it, and so is a directory that already has a marketplace file. An existing
+ccshelf.toml must already have [catalog] enabled = false (add it yourself, or
+use --force to replace the file), and --no-config is refused unless it has.
 
 The workflows call the ccshelf action pinned by full commit SHA. Pass
 --ccshelf-ref <40-hex SHA> and --ccshelf-version <vX.Y.Z> to pin it (a tag
@@ -596,7 +598,10 @@ func nextSteps(tgt *scaffold.Target, plan *scaffold.Plan, gitDone, profilesOnly 
 		cd = "cd " + quoteForSteps(tgt.Dir) + ", then "
 	}
 	var steps []string
-	if files := plan.MarkerFiles(); len(files) > 0 {
+	if files := plan.MarkerFiles(); len(files) > 0 && profilesOnly {
+		steps = append(steps, "replace the "+scaffold.Placeholder+" placeholder in the files written: "+strings.Join(files, ", ")+
+			" (the unpinned ccshelf action; ccshelf lint does not read workflows, so search for it yourself)")
+	} else if len(files) > 0 {
 		steps = append(steps, "replace every "+scaffold.Placeholder+" in the files written: "+strings.Join(files, ", ")+
 			" (ccshelf lint lists the ones in the marketplace descriptions and the catalog sidecars as CAT048 warnings; it does not read the workflows or the README, so search those yourself)")
 	}

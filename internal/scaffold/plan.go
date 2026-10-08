@@ -324,6 +324,11 @@ func (b *builder) load() error {
 			}
 		}
 	}
+	if b.p.ProfilesOnly {
+		if err := b.checkProfilesOnly(); err != nil {
+			return err
+		}
+	}
 	b.coPath = pathCodeowners
 	for _, loc := range codeowners.Locations() {
 		data, seen := b.readExisting(loc)
@@ -337,6 +342,31 @@ func (b *builder) load() error {
 			}
 		}
 		break
+	}
+	return nil
+}
+
+// checkProfilesOnly stops --profiles-only where the result would not be a
+// working profiles-only repo: a marketplace the existing config lists, a config
+// that does not switch the catalog off (and will not be replaced), or no config
+// at all.
+func (b *builder) checkProfilesOnly() error {
+	for _, m := range b.cfg.Catalog.Marketplaces {
+		if _, err := b.fs.Lstat(m); err == nil {
+			return &FieldError{"--profiles-only", m + " already exists, so this repo has a plugin marketplace; use catalog init without --profiles-only, or remove the file"}
+		}
+	}
+	disabled := b.cfgSeen && !b.cfg.Catalog.Enabled
+	writes := b.p.Enabled(GroupConfig) && (!b.cfgSeen || b.p.Force)
+	switch {
+	case disabled || writes:
+	case !b.p.Enabled(GroupConfig):
+		return &FieldError{"--no-config", "cannot be combined with --profiles-only unless " + pathConfig + " already has [catalog] enabled = false: nothing else records that the repo has no marketplace, and its own lint workflow would fail with CAT001"}
+	default:
+		return &FieldError{"--profiles-only", pathConfig + " exists without [catalog] enabled = false, so ccshelf lint would fail with CAT001 here; add\n[catalog]\nenabled = false\nto it yourself, or pass --force to replace it (the old file is saved as " + pathConfig + BackupSuffix + ")"}
+	}
+	if _, err := b.fs.Lstat("plugins"); err == nil {
+		b.note("plugins/ is ignored: a profiles-only repo does not catalog plugins")
 	}
 	return nil
 }
