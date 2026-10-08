@@ -117,7 +117,7 @@ RULES = [
     # starter template.
     ("exact", ".gitattributes", ("go", "docs", "examples")),
     ("exact", ".editorconfig", ("go", "docs", "examples")),
-    ("exact", "Makefile", ("go", "docs")),
+    ("exact", "justfile", ("go", "docs")),
 ]
 
 FULL_EVENTS_NOTE = "not a pull request"

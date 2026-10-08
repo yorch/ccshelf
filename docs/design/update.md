@@ -82,7 +82,7 @@ Discovery, download and extraction use stdlib only (`net/http`, `archive/tar`, `
 
 ## Where releases come from
 
-`internal/version.Repo` (default `yorch/ccshelf`, set by `-ldflags` in `.goreleaser.yaml` and the Makefile) names the repository. With no `[update] base_url` the source is github.com: API `https://api.github.com`, downloads `https://github.com/<repo>/releases/download/<tag>/<asset>`.
+`internal/version.Repo` (default `yorch/ccshelf`, set by `-ldflags` in `.goreleaser.yaml` and the justfile) names the repository. With no `[update] base_url` the source is github.com: API `https://api.github.com`, downloads `https://github.com/<repo>/releases/download/<tag>/<asset>`.
 
 `base_url` only decides where bytes are fetched from. It never decides who must have signed them (see the cosign row below).
 

@@ -170,7 +170,7 @@ No personal access token and no GitHub App key is needed. The one place a token 
 | docs | `docs/`, `site/`, root `*.md` (so `CHANGELOG.md`), `LICENSE`, `.gitignore`, `.release-please-manifest.json`, the docs, site, link and EOL scripts, `scripts/ci_changes.py` and its test | `site` |
 | examples | `examples/`, `scripts/check-examples.sh` | `examples`. `examples/` also selects the Go group (the starter is golden output of `internal/scaffold`) and the pins and actionlint steps (it holds workflows) |
 | workflows | `scripts/check-pins.sh`, `scripts/pin-actions.sh` (and `action/`, `examples/`) | the pins and actionlint steps of `lint` |
-| mixed | `.goreleaser.yaml` (go, installer, action), `.gitattributes` and `.editorconfig` (go, docs, examples), `Makefile` (go, docs) | the union |
+| mixed | `.goreleaser.yaml` (go, installer, action), `.gitattributes` and `.editorconfig` (go, docs, examples), `justfile` (go, docs) | the union |
 
 The `docs` job (report check, link check, EOL check, the classifier's tests) always runs: the EOL check covers every file in the tree and the whole job is cheap. The `site` job runs for go or docs changes because its CLI reference check builds the binary.
 

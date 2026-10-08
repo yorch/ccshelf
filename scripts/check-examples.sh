@@ -16,7 +16,7 @@ if [ -z "$bin" ]; then
     if [ -x "$c" ]; then bin="$c"; break; fi
   done
 fi
-[ -n "$bin" ] && [ -x "$bin" ] || { echo "check-examples: ccshelf binary not found (run make build)" >&2; exit 1; }
+[ -n "$bin" ] && [ -x "$bin" ] || { echo "check-examples: ccshelf binary not found (run just build)" >&2; exit 1; }
 case "$bin" in /*) ;; *) bin="$root/$bin" ;; esac
 
 example="$root/examples/org-data-repo"
