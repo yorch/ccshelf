@@ -11,24 +11,31 @@
 //
 // # Add
 //
-// Add validates the name (config.ValidAccountName: a name, never a path) and
-// the directory (absolute after ~ and $VAR expansion, not Claude Code's
-// default directory ~/.claude, not inside it and not an ancestor of it, not
-// reached through a symlink, not already used by another account, and, when it
-// exists, a directory that is empty or already this account's directory). It
-// creates the directory with mode 0700 and returns a Plan: the one-time steps
-// the person must do by hand (start claude with the variable set, /login, then
-// marketplace adds and plugin installs inside it). Plan.Lines renders them
-// quoted for a shell. The configuration file is changed only when
-// Options.Persist is set, and then through config.Save (atomic, 0600).
+// Add validates the name with config.ValidAccountName (a name, never a path).
+// It also validates the directory. The directory must be:
+//
+//   - absolute after ~ and $VAR expansion
+//   - not Claude Code's default directory ~/.claude, not inside it and not an
+//     ancestor of it
+//   - not reached through a symlink
+//   - not already used by another account
+//   - when it exists, a directory that is empty or already this account's
+//     directory
+//
+// Add creates the directory with mode 0700 and returns a Plan. The Plan holds
+// the one-time steps that the person must do by hand: start claude with the
+// variable set, /login, then marketplace adds and plugin installs inside it.
+// Plan.Lines renders the steps quoted for a shell. Add changes the
+// configuration file only when Options.Persist is set, and then through
+// config.Save (atomic, 0600).
 //
 // # Use
 //
-// List and Describe report accounts, Env returns the environment additions for
-// a child process (CLAUDE_CONFIG_DIR=<dir>), and Remove drops the config entry
-// only: the directory, with its login and history, is left alone and Removal
-// says so.
+// List and Describe report accounts. Env returns the environment additions for
+// a child process (CLAUDE_CONFIG_DIR=<dir>). Remove drops only the config
+// entry. It leaves the directory, with its login and history, alone, and
+// Removal says so.
 //
-// An existing CLAUDE_CONFIG_DIR in the environment is never overridden here;
-// that precedence belongs to config.ResolveAccount.
+// This package never overrides an existing CLAUDE_CONFIG_DIR in the
+// environment. That precedence belongs to config.ResolveAccount.
 package account

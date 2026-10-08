@@ -201,8 +201,8 @@ func TestBuildErrors(t *testing.T) {
 		{"model long", Spec{Model: strings.Repeat("m", 129)}, "model"},
 		{"model odd chars", Spec{Model: "opus;rm"}, "model"},
 		{"env long", Spec{Env: map[string]string{"FIGMA_TOKEN_REF": strings.Repeat("a", 5000)}}, "too long"},
-		{"profile in env", Spec{Profile: "a", Env: map[string]string{"CCSHELF_PROFILE": "b"}}, "set by the launcher"},
-		{"profile in env alone", Spec{Env: map[string]string{"CCSHELF_PROFILE": "b"}}, "set by the launcher"},
+		{"profile in env", Spec{Profile: "a", Env: map[string]string{"CCSHELF_PROFILE": "b"}}, "launcher sets env"},
+		{"profile in env alone", Spec{Env: map[string]string{"CCSHELF_PROFILE": "b"}}, "launcher sets env"},
 		{"profile control", Spec{Profile: "a\nb"}, "profile"},
 	}
 	for _, c := range cases {
@@ -415,7 +415,7 @@ func trimBOM(b []byte) []byte {
 }
 
 func TestEmptyInstalledWarns(t *testing.T) {
-	const want = "no installed plugins were found; nothing will be masked"
+	const want = "no installed plugins were found. Nothing will be masked"
 	res, err := Build(Spec{})
 	if err != nil || !slices.Contains(res.Warnings, want) {
 		t.Fatalf("allow-only: %v %v", err, res)
@@ -503,7 +503,7 @@ func TestEndToEndThroughFake(t *testing.T) {
 			t.Fatalf("%v %v", plugins, err)
 		}
 		res, err := Build(Spec{Installed: plugins, Include: []string{"a@b"}})
-		if err != nil || !slices.Contains(res.Warnings, "no installed plugins were found; nothing will be masked") {
+		if err != nil || !slices.Contains(res.Warnings, "no installed plugins were found. Nothing will be masked") {
 			t.Fatalf("%v %v", err, res.Warnings)
 		}
 	})
@@ -669,7 +669,7 @@ func TestProtectedMCPOwnerAmbiguityAndExclude(t *testing.T) {
 		t.Errorf("unrelated plugin not masked: %v", res.Doc.EnabledPlugins)
 	}
 	all := strings.Join(res.Warnings, "\n")
-	for _, want := range []string{"is ambiguous", "plugin audit@community is protected as a possible owner", "name@marketplace", "solo@acme is excluded but provides the protected MCP server plugin:solo:s; protection wins"} {
+	for _, want := range []string{"is ambiguous", "plugin audit@community is protected as a possible owner", "name@marketplace", "solo@acme is excluded but provides the protected MCP server plugin:solo:s. Protection wins"} {
 		if !strings.Contains(all, want) {
 			t.Errorf("missing warning %q in:\n%s", want, all)
 		}

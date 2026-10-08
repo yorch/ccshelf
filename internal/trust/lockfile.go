@@ -26,16 +26,16 @@ const (
 
 // Errors returned by the store.
 var (
-	// ErrHashMismatch is returned by Accept when the expected closure hash is
-	// not the hash of the closure being accepted.
+	// Accept returns ErrHashMismatch when the expected closure hash is not
+	// the hash of the closure that it accepts.
 	ErrHashMismatch = errors.New("closure hash does not match")
 	// ErrInconsistentClosure is returned when a Closure's Hash is not the
 	// hash of its Items.
 	ErrInconsistentClosure = errors.New("closure hash does not match its items")
-	// ErrHashRequired is returned by Accept when no closure hash is given: the
-	// caller must name the hash that was shown for review.
+	// Accept returns ErrHashRequired when the caller gives no closure hash.
+	// The caller must name the hash that was shown for review.
 	ErrHashRequired = errors.New("accepting trust needs the closure hash that was reviewed")
-	// ErrNotFound is returned by Revoke when nothing matched.
+	// Revoke returns ErrNotFound when nothing matched.
 	ErrNotFound = errors.New("no trust record found")
 )
 
@@ -124,7 +124,7 @@ func (e Entry) MarshalJSON() ([]byte, error) {
 	return json.Marshal(j)
 }
 
-// UnmarshalJSON reads an entry; unknown keys are errors.
+// UnmarshalJSON reads an entry. Unknown keys are errors.
 func (e *Entry) UnmarshalJSON(b []byte) error {
 	var j entryJSON
 	dec := json.NewDecoder(bytes.NewReader(b))
@@ -197,9 +197,9 @@ type Store struct {
 }
 
 // Open reads the lockfile at path (see config.LockfilePath). A missing file is
-// an empty store. The file is never followed through a symlink, is limited in
-// size and has a closed schema; an unreadable or inconsistent file is an
-// error, not an empty store.
+// an empty store. Open never follows the file through a symlink. The file is
+// limited in size and has a closed schema. An unreadable or inconsistent file
+// is an error, not an empty store.
 func Open(path string) (*Store, error) {
 	s := &Store{path: path, now: func() time.Time { return time.Now().UTC() }}
 	if err := s.reload(); err != nil {
@@ -224,7 +224,7 @@ func (s *Store) reload() error {
 		return fmt.Errorf("parsing trust lockfile %s: %w", s.path, err)
 	}
 	if lf.Version != LockVersion {
-		return fmt.Errorf("trust lockfile %s has version %d; this ccshelf understands version %d", s.path, lf.Version, LockVersion)
+		return fmt.Errorf("trust lockfile %s has version %d. This ccshelf understands version %d", s.path, lf.Version, LockVersion)
 	}
 	if len(lf.Entries) > maxEntries {
 		return fmt.Errorf("trust lockfile %s has too many entries", s.path)

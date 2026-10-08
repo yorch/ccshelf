@@ -51,7 +51,7 @@ func digest(b []byte) string {
 }
 
 // PortableSourceID returns a machine-independent label for a source: directory
-// sources become "dir:<kind>"; other ids are used as given.
+// sources become "dir:<kind>". It uses other ids as given.
 func PortableSourceID(s Source) string {
 	id := s.ID()
 	if len(id) >= 4 && id[:4] == "dir:" {

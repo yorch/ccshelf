@@ -110,8 +110,8 @@ func (c *Config) GetSetting(key string) (value string, set bool) {
 	return "", false
 }
 
-// SetSetting changes one allowlisted key. The value is parsed for the key's
-// kind; the caller still runs Validate on the result, which adds the
+// SetSetting changes one allowlisted key. It parses the value for the key's
+// kind. The caller still runs Validate on the result, which adds the
 // cross-field rules (for example that default_account names an account).
 func (c *Config) SetSetting(key, value string) error {
 	st, ok := LookupSetting(key)
@@ -142,7 +142,7 @@ func (c *Config) SetSetting(key, value string) error {
 			return fmt.Errorf("%s: must be an absolute HTTPS URL", key)
 		}
 		if k := credentialMarker(value); k != "" {
-			return fmt.Errorf("%s: looks like it embeds a credential (%s...); never put tokens in the configuration", key, k)
+			return fmt.Errorf("%s: looks like it embeds a credential (%s...). Never put tokens in the configuration", key, k)
 		}
 	case KindAccount:
 		if !ValidAccountName(value) {
@@ -282,21 +282,21 @@ func (s SourceConfig) SourceLocation() string {
 
 // Weakening lists, in words, the security-relevant ways after is weaker than
 // before. A change is weakening when it:
-//   - turns trust.require_pin off;
-//   - turns trust.trust_project_profiles on;
+//   - turns trust.require_pin off
+//   - turns trust.trust_project_profiles on
 //   - sets update.mode to install (a new binary is installed without a
-//     separate step);
+//     separate step)
 //   - adds a git source (or changes the ref of one) so that its ref is not a
-//     tag or full commit id, which can only happen while require_pin is off;
-//   - adds a dir source whose path starts with $ (the variable is read at every
-//     run, so what it names can change without a config change);
+//     tag or full commit id, which can only happen while require_pin is off
+//   - adds a dir source whose path starts with $ (ccshelf reads the variable
+//     at every run, so what it names can change without a config change)
 //   - changes what is trusted to supply code or releases: claude.path,
 //     update.base_url, update.cosign_identity_repo, a new update.asset_hosts
 //     entry, the marketplace of an existing plugin source, or the URL of an
 //     existing git source. "Existing" for a URL means the same position when
 //     the number of sources is unchanged (a removal shifts positions, and a
-//     removal is not a weakening); it is conservative: an edit that swaps one
-//     source for another in one step is reported too.
+//     removal is not a weakening). This rule is conservative: Weakening also
+//     reports an edit that swaps one source for another in one step.
 //
 // Not weakening: going back to a stricter or default value, trust.on_change,
 // removing a source, and adding a pinned source (a new source still needs
@@ -394,24 +394,24 @@ func HasComment(raw []byte) bool {
 	return false
 }
 
-// ErrChangedWhileEditing is returned by SaveChecked and SaveRawChecked when
-// the file no longer holds the bytes the change was based on.
+// SaveChecked and SaveRawChecked return ErrChangedWhileEditing when the file
+// no longer holds the bytes that the change was based on.
 var ErrChangedWhileEditing = errors.New("the configuration file changed while it was being edited")
 
 // BackupPath returns the name of the backup kept next to path.
 func BackupPath(path string) string { return path + ".bak" }
 
 // SaveChecked validates cfg and replaces the file at path with it, but only if
-// the file still holds exactly loaded (the bytes cfg was derived from). The
-// previous file is first copied to BackupPath(path) (0600, replaced
-// atomically; a symlink or a non-regular file at either name is refused).
-// Encoding cfg drops comments and layout; the backup keeps them. It returns
-// the backup path.
+// the file still holds exactly loaded (the bytes cfg was derived from). First
+// it copies the previous file to BackupPath(path) (0600, replaced
+// atomically). It refuses a symlink or a non-regular file at either name.
+// Encoding cfg drops comments and layout, but the backup keeps them.
+// SaveChecked returns the backup path.
 //
-// The comparison and the rename are two steps, so another writer that wins
-// the instant between them is not detected: this guards against a person
-// editing the file while a prompt is open, not against a hostile local
-// process (which could rewrite the file anyway).
+// The comparison and the rename are two steps, so SaveChecked does not detect
+// another writer that wins the instant between them. This guards against a
+// person who edits the file while a prompt is open. It does not guard against
+// a hostile local process (which could rewrite the file anyway).
 func SaveChecked(path string, cfg *Config, loaded []byte) (string, error) {
 	data, err := Encode(cfg)
 	if err != nil {
@@ -420,8 +420,8 @@ func SaveChecked(path string, cfg *Config, loaded []byte) (string, error) {
 	return replaceChecked(path, loaded, data)
 }
 
-// SaveRawChecked is SaveChecked for text a person wrote: raw is parsed and
-// validated, and then written byte for byte, so comments are kept.
+// SaveRawChecked is SaveChecked for text that a person wrote. It parses and
+// validates raw, and then writes it byte for byte, so it keeps comments.
 func SaveRawChecked(path string, raw, loaded []byte) (string, error) {
 	if _, err := Parse(raw, path); err != nil {
 		return "", err
@@ -494,8 +494,8 @@ func CreateExclusive(path string, data []byte) (string, error) {
 // repository (the path of a git or plugin source), or nil.
 func ValidateSourceFolder(p string) error { return relInside(p) }
 
-// ValidateSource reports why s would be refused as a source of cfg, or nil.
-// Only s is checked.
+// ValidateSource reports why cfg would refuse s as a source, or nil. It
+// checks only s.
 func (c *Config) ValidateSource(s SourceConfig) error {
 	probe := *c
 	probe.Sources = []SourceConfig{s}

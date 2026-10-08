@@ -49,7 +49,7 @@ func (k Kind) String() string {
 }
 
 // Source is a place profiles come from. Implementations for git and plugin
-// sources live elsewhere; they must keep these contracts:
+// sources live elsewhere. They must keep these contracts:
 //
 //   - ID is stable and unique per source: "dir:/abs/path" for directories,
 //     "git:<url>@<ref>" for git. Directory ids contain machine paths, so the
@@ -57,16 +57,17 @@ func (k Kind) String() string {
 //   - Root is an explicit, absolute directory that the source owns (never the
 //     user's home directory or the file system root). It contains profiles/
 //     and optionally mcp/registry.toml and prompts/. The only things read
-//     below Root, besides profiles, are prompts/<file> and mcp/registry.toml;
-//     no component of those paths may start with "." or be a symlink. "" means
+//     below Root, besides profiles, are prompts/<file> and mcp/registry.toml.
+//     No component of those paths may start with "." or be a symlink. "" means
 //     the source has no usable root (not prepared, or refused).
 //   - Names lists the profile names present (base names without ".toml"),
-//     sorted; a missing directory is not an error. It need not validate them.
+//     sorted. A missing directory is not an error. It need not validate them.
 //   - Open reads and fully validates one profile and returns an error that
 //     wraps *ValidationError when it is invalid. It must reject names that are
 //     not valid profile names before touching the file system.
 //   - Commit is the resolved commit SHA for git-backed sources, "" otherwise.
-//   - Implementations must be safe for sequential use; no concurrency needed.
+//   - Implementations must be safe for sequential use. They need not support
+//     concurrent use.
 type Source interface {
 	ID() string
 	Kind() Kind
@@ -154,9 +155,9 @@ func checkLayoutPath(what, p string) error {
 
 // DirSourceAt returns a Source for a source root whose layout is given
 // explicitly (the org config of the repository says where profiles and the MCP
-// registry are). root is made absolute; prompts/ stays at root/prompts. The
-// same root checks as DirSource apply, and an invalid layout makes every use
-// of the source fail.
+// registry are). DirSourceAt makes root absolute. prompts/ stays at
+// root/prompts. The same root checks as DirSource apply, and an invalid layout
+// makes every use of the source fail.
 func DirSourceAt(kind Kind, root string, l Layout) Source {
 	abs, err := filepath.Abs(root)
 	if err != nil {
@@ -183,17 +184,17 @@ func DirSourceAt(kind Kind, root string, l Layout) Source {
 	return d
 }
 
-// DirSource returns a Source for a local profiles folder. profilesDir is made
-// absolute but need not exist yet.
+// DirSource returns a Source for a local profiles folder. DirSource makes
+// profilesDir absolute, but profilesDir need not exist yet.
 //
 // Root is the parent of profilesDir only when profilesDir is named "profiles"
 // (so registry and prompts sit next to it, as in an org data repository).
-// Otherwise Root is profilesDir itself: profiles are read from it directly and
-// the source has no prompts and no MCP registry, because there is no way to
+// Otherwise Root is profilesDir itself. The source reads profiles from it
+// directly and has no prompts and no MCP registry, because there is no way to
 // tell which sibling folders belong to the source. Every use of a source whose
 // root is the user's home directory, the file system root or (for a folder
 // not named "profiles") the ccshelf config directory fails with an error
-// (B2). Symlinks are never followed below the root (B7).
+// (B2). The source never follows symlinks below the root (B7).
 func DirSource(kind Kind, profilesDir string) Source {
 	abs, err := filepath.Abs(profilesDir)
 	if err != nil {
@@ -228,7 +229,7 @@ func checkRootDir(root string) error {
 		return fmt.Errorf("%w: the file system root cannot be a source root", ErrPath)
 	}
 	if home, err := os.UserHomeDir(); err == nil && home != "" && sameDir(home, root) {
-		return fmt.Errorf("%w: the home directory cannot be a source root; keep profiles in a folder of their own", ErrPath)
+		return fmt.Errorf("%w: the home directory cannot be a source root. Keep profiles in a folder of their own", ErrPath)
 	}
 	return nil
 }
@@ -304,7 +305,7 @@ func (d *dirSource) Names() ([]string, error) {
 	return names, nil
 }
 
-// Open reads and validates one profile; symlinks are refused.
+// Open reads and validates one profile. It refuses symlinks.
 func (d *dirSource) Open(name string) (*File, error) {
 	if !nameRe.MatchString(name) {
 		return nil, &ValidationError{File: name + ".toml", Problems: []Problem{{Field: "name", Message: fmt.Sprintf("%q must match %s", name, nameRe)}}}

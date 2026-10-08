@@ -19,7 +19,7 @@ const MaxPromptSize = 64 << 10
 // ResolveOptions controls Resolve.
 type ResolveOptions struct {
 	// AllowProject lets project-kind sources take part. The caller sets it
-	// only after explicit per-repo trust (SR2); the default is false.
+	// only after explicit per-repo trust (SR2). The default is false.
 	AllowProject bool
 }
 
@@ -320,11 +320,11 @@ func (r *resolver) merge(res *Resolved, req *File) error {
 	for _, f := range res.Chain {
 		c := f.Manifest
 		if c.Status == StatusDeprecated {
-			r.warn("profile %s is deprecated; use %s", f.Name, c.SupersededBy)
+			r.warn("profile %s is deprecated. Use %s", f.Name, c.SupersededBy)
 		}
 		for _, id := range c.Plugins.Include {
 			if by, ok := excAt[strings.ToLower(id)]; ok {
-				r.warn("profile %s includes %s but %s excludes it; exclusion wins", f.Name, id, by)
+				r.warn("profile %s includes %s but %s excludes it. Exclusion wins", f.Name, id, by)
 			}
 			inc = appendUnique(inc, id)
 		}
@@ -336,7 +336,7 @@ func (r *resolver) merge(res *Resolved, req *File) error {
 		}
 		for _, s := range c.Skills.NameOnly {
 			if by, ok := offAt[strings.ToLower(s)]; ok {
-				r.warn("profile %s sets skill %s to name-only but %s turns it off; off wins", f.Name, s, by)
+				r.warn("profile %s sets skill %s to name-only but %s turns it off. Off wins", f.Name, s, by)
 			}
 			nameOnly = appendUnique(nameOnly, s)
 		}

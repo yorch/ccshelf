@@ -20,8 +20,8 @@ import (
 // DefaultPath is the profiles folder inside the plugin when Options.Path is empty.
 const DefaultPath = "profiles"
 
-// ErrNotPrepared is returned by Names, Open and Root before Prepare.
-var ErrNotPrepared = errors.New("plugin source is not prepared; call Prepare first")
+// Names, Open and Root return ErrNotPrepared before Prepare.
+var ErrNotPrepared = errors.New("plugin source is not prepared. Call Prepare first")
 
 // ErrNotInstalled is returned when the plugin is not installed.
 var ErrNotInstalled = errors.New("plugin is not installed")
@@ -130,8 +130,8 @@ func (s *Source) ID() string {
 	return "plugin:" + s.opts.Plugin
 }
 
-// Locator is the same as ID; the version is not part of a plugin's identity,
-// the real marketplace source is.
+// Locator is the same as ID. The version is not part of a plugin's identity,
+// but the real marketplace source is.
 func (s *Source) Locator() string { return s.ID() }
 
 // Ref returns the installed plugin version, or "" before Prepare. It lets the
@@ -246,7 +246,7 @@ func (s *Source) Prepare(ctx context.Context) error {
 		return err
 	}
 	if found == nil || found.InstallPath == "" {
-		return fmt.Errorf("%w: %s (it carries the shared profiles); install it with: /plugin install %s", ErrNotInstalled, s.opts.Plugin, s.opts.Plugin)
+		return fmt.Errorf("%w: %s (it carries the shared profiles). Install it with: /plugin install %s", ErrNotInstalled, s.opts.Plugin, s.opts.Plugin)
 	}
 	if !filepath.IsAbs(found.InstallPath) {
 		return fmt.Errorf("plugin %s reports a relative install path", s.opts.Plugin)
@@ -312,10 +312,10 @@ func (s *Source) checkInstalled(p *claude.Plugin) error {
 	switch strings.ToLower(p.Scope) {
 	case "user", "managed":
 	default:
-		return fmt.Errorf("plugin %s is installed at scope %q; a shared profile source must be installed at user or managed scope", s.opts.Plugin, ui.SanitizeLine(p.Scope))
+		return fmt.Errorf("plugin %s is installed at scope %q. A shared profile source must be installed at user or managed scope", s.opts.Plugin, ui.SanitizeLine(p.Scope))
 	}
 	if !p.Enabled {
-		return fmt.Errorf("plugin %s is installed but not enabled; enable it with: /plugin enable %s", s.opts.Plugin, s.opts.Plugin)
+		return fmt.Errorf("plugin %s is installed but not enabled. Enable it with: /plugin enable %s", s.opts.Plugin, s.opts.Plugin)
 	}
 	return nil
 }
@@ -348,7 +348,7 @@ func (s *Source) checkMarketplace(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("marketplace %q reports no usable source", ui.SanitizeLine(mkt))
 	}
 	if want := s.opts.ExpectedMarketplace; want != "" && !matchesExpected(src, want) {
-		return "", fmt.Errorf("marketplace %q was added from %q, not from the expected %q; remove it with /plugin marketplace remove %s and add the expected one with /plugin marketplace add %s", ui.SanitizeLine(mkt), ui.SanitizeLine(src), ui.SanitizeLine(want), ui.SanitizeLine(mkt), ui.SanitizeLine(want))
+		return "", fmt.Errorf("marketplace %q was added from %q, not from the expected %q. Remove it with /plugin marketplace remove %s and add the expected one with /plugin marketplace add %s", ui.SanitizeLine(mkt), ui.SanitizeLine(src), ui.SanitizeLine(want), ui.SanitizeLine(mkt), ui.SanitizeLine(want))
 	}
 	return src, nil
 }

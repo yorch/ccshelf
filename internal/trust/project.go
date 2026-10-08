@@ -34,7 +34,7 @@ const (
 	projectHashDomain = "ccshelf-project-v1"
 )
 
-// ErrNoProjectFolder is returned by Trust when root has no .ccshelf folder.
+// Trust returns ErrNoProjectFolder when root has no .ccshelf folder.
 var ErrNoProjectFolder = errors.New("the repository has no .ccshelf folder")
 
 // ProjectRecord is one trusted repository.
@@ -60,8 +60,9 @@ type projectFile struct {
 
 // ProjectStore records which repositories' .ccshelf folders the user trusts,
 // like direnv's "allow": by path and content hash, so editing the folder
-// revokes trust automatically (SR2). Trust here only lets project profiles be
-// loaded; a project profile still needs a lockfile entry for its closure.
+// revokes trust automatically (SR2). Here, trust only lets ccshelf load
+// project profiles. A project profile still needs a lockfile entry for its
+// closure.
 // Methods are safe for concurrent use by goroutines.
 type ProjectStore struct {
 	path string
@@ -72,8 +73,8 @@ type ProjectStore struct {
 }
 
 // OpenProjects reads the project trust file at path (see
-// config.ProjectTrustPath). A missing file is an empty store; the file is
-// never followed through a symlink and has a closed schema.
+// config.ProjectTrustPath). A missing file is an empty store. OpenProjects
+// never follows the file through a symlink. The file has a closed schema.
 func OpenProjects(path string) (*ProjectStore, error) {
 	s := &ProjectStore{path: path, now: func() time.Time { return time.Now().UTC() }}
 	if err := s.reload(); err != nil {
@@ -98,7 +99,7 @@ func (s *ProjectStore) reload() error {
 		return fmt.Errorf("parsing project trust file %s: %w", s.path, err)
 	}
 	if pf.Version != ProjectVersion {
-		return fmt.Errorf("project trust file %s has version %d; this ccshelf understands version %d", s.path, pf.Version, ProjectVersion)
+		return fmt.Errorf("project trust file %s has version %d. This ccshelf understands version %d", s.path, pf.Version, ProjectVersion)
 	}
 	if len(pf.Projects) > maxProjects {
 		return fmt.Errorf("project trust file %s has too many entries", s.path)
@@ -150,7 +151,7 @@ func realRoot(root string) (string, error) {
 // HashProjectFolder returns the content hash of <root>/.ccshelf: a SHA-256
 // over every entry below it in sorted order, names and bytes, length-prefixed.
 // Symlinks and other special files are errors, and the folder is bounded in
-// size. root is used as given (callers pass the real path).
+// size. HashProjectFolder uses root as given (callers pass the real path).
 func HashProjectFolder(root string) (string, error) {
 	dir := filepath.Join(root, ProjectFolder)
 	fi, err := os.Lstat(dir)
@@ -224,7 +225,7 @@ func sortProjectEntries(ents []projectEntry) {
 }
 
 func errProjectSymlink(rel string) error {
-	return fmt.Errorf("%s/%s is a symlink; symlinks are not allowed in a project folder", ProjectFolder, rel)
+	return fmt.Errorf("%s/%s is a symlink. Symlinks are not allowed in a project folder", ProjectFolder, rel)
 }
 
 func errProjectSpecial(rel string) error {
@@ -282,7 +283,7 @@ func (s *ProjectStore) Trust(root string) error {
 }
 
 // IsTrusted reports whether root's .ccshelf folder is trusted and unchanged
-// since. A missing folder or record is (false, nil); a folder with symlinks or
+// since. A missing folder or record is (false, nil). A folder with symlinks or
 // other problems is (false, err). The result is a point-in-time check: the
 // closure hash in the lockfile covers the bytes that are finally used.
 func (s *ProjectStore) IsTrusted(root string) (bool, error) {
@@ -315,8 +316,8 @@ func (s *ProjectStore) IsTrusted(root string) (bool, error) {
 	return hash == rec.ContentHash, nil
 }
 
-// Revoke removes trust for root. A root that no longer exists is matched by
-// its cleaned absolute path. It returns ErrNotFound when there was no record.
+// Revoke removes trust for root. Revoke matches a root that no longer exists
+// by its cleaned absolute path. It returns ErrNotFound when there was no record.
 func (s *ProjectStore) Revoke(root string) error {
 	keys := map[string]bool{}
 	if real, err := realRoot(root); err == nil {

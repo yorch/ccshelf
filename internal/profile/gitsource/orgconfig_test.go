@@ -213,7 +213,7 @@ func TestOrgConfigTamperedCheckout(t *testing.T) {
 			if !errors.Is(err, ErrTampered) {
 				t.Fatalf("err = %v, want ErrTampered", err)
 			}
-			if !strings.Contains(err.Error(), "delete "+checkout) {
+			if !strings.Contains(err.Error(), "Delete "+checkout) {
 				t.Errorf("the error does not say which folder to delete: %v", err)
 			}
 		})
@@ -292,7 +292,7 @@ func TestPrepareCachedErrors(t *testing.T) {
 		t.Fatal(err)
 	}
 	err := f.source("v1", "").PrepareCached(context.Background(), sha)
-	if !errors.Is(err, ErrTampered) || !strings.Contains(err.Error(), "delete ") {
+	if !errors.Is(err, ErrTampered) || !strings.Contains(err.Error(), "Delete ") {
 		t.Errorf("tampered: %v", err)
 	}
 }

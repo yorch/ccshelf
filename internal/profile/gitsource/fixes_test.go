@@ -470,7 +470,7 @@ func TestVerifyDisk(t *testing.T) {
 		{"same size, other bytes", func(t *testing.T, r string) { mustWrite(t, filepath.Join(r, "prompts", "p.md"), "ho\n") }, ErrTampered, "differs from the commit"},
 		{"other size", func(t *testing.T, r string) { mustWrite(t, filepath.Join(r, "prompts", "p.md"), "hello\n") }, ErrTampered, "bytes on disk"},
 		{"extra file", func(t *testing.T, r string) { mustWrite(t, filepath.Join(r, "profiles", "x.toml"), "y") }, ErrTampered, "not in the commit"},
-		{"extra directory", func(t *testing.T, r string) { _ = os.MkdirAll(filepath.Join(r, "profiles", "sub"), 0o700) }, ErrTampered, "not in commit"},
+		{"extra directory", func(t *testing.T, r string) { _ = os.MkdirAll(filepath.Join(r, "profiles", "sub"), 0o700) }, ErrTampered, "not in the commit"},
 		{"missing file", func(t *testing.T, r string) { _ = os.Remove(filepath.Join(r, "mcp", "registry.toml")) }, ErrTampered, "missing"},
 		{"watched folder is a file", func(t *testing.T, r string) {
 			_ = os.RemoveAll(filepath.Join(r, "mcp"))

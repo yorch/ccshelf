@@ -21,7 +21,7 @@ func checkDirOwner(fi os.FileInfo) error {
 		return fmt.Errorf("owned by uid %d, not the current user (%d)", st.Uid, os.Geteuid())
 	}
 	if fi.Mode().Perm()&0o022 != 0 {
-		return fmt.Errorf("writable by group or others (mode %o); run chmod 700 on it", fi.Mode().Perm())
+		return fmt.Errorf("writable by group or others (mode %o). Run chmod 700 on it", fi.Mode().Perm())
 	}
 	return nil
 }
@@ -33,7 +33,7 @@ func checkFileOwner(fi os.FileInfo) error {
 		return fmt.Errorf("owned by uid %d, not the current user (%d)", st.Uid, os.Geteuid())
 	}
 	if fi.Mode().Perm()&0o077 != 0 {
-		return fmt.Errorf("accessible to group or others (mode %o); run chmod 600 on it", fi.Mode().Perm())
+		return fmt.Errorf("accessible to group or others (mode %o). Run chmod 600 on it", fi.Mode().Perm())
 	}
 	return nil
 }

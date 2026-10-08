@@ -90,7 +90,7 @@ func TestControlsAreShownAndStored(t *testing.T) {
 		"profile envp controls changed (sets environment variables)",
 		"account: work -> home", "inherit_user_settings: true -> unset",
 		"environment variable CCSHELF_VAR_MODE changed (was strict, now lax)",
-		"environment variable CCSHELF_VAR_API_KEY changed (the value changed; it is not shown)",
+		"environment variable CCSHELF_VAR_API_KEY changed (the value changed and is not shown)",
 		"environment variable CCSHELF_VAR_NEW_ONE=1 added", "environment variable PD_TOKEN_REF removed",
 	} {
 		if !strings.Contains(flat(out), want) {
