@@ -36,34 +36,25 @@
 // Claude Code installs such a dependency only if the hosting (root)
 // marketplace lists the other one in allowCrossMarketplaceDependenciesOn in
 // its marketplace.json (docs: plugins/dependencies, "Depend on a plugin from
-// another marketplace"). BundleInfo.CrossMarketplaces reports which ones a
-// bundle needs so the CLI can warn or lint. There is no version (the commit
-// SHA is the version), no description and no marketplace key at the top
-// level. Output is 2-space JSON, UTF-8, LF line endings and a single
-// trailing newline, on every OS.
-//
-// Profiles that resolve to no plugins (abstract ones such as a shared base)
-// are not errors: Compile skips them and lists them in Result.Skipped.
+// another marketplace"). BundleInfo.CrossMarketplaces reports them. There is
+// no version (the commit SHA is the version), no description and no
+// marketplace key at the top level. Output is 2-space JSON, UTF-8, LF line
+// endings and a single trailing newline, on every OS.
 //
 // # The bundles directory is generated
 //
 // There is no marker inside a bundle, so the package treats the whole
-// bundles/ directory as generated output. Check reports as drift every path that is not
-// profile-<name>/.claude-plugin/plugin.json of a wanted bundle: extra files
-// inside a wanted bundle (hooks/, .mcp.json...), profile-* directories that
-// no profile produces (Drift.Stale, every path inside them) and anything
-// else directly under bundles/ (Drift.Extra), whether or not it looks
-// generated. Write with PruneStale removes exactly those paths, deepest
-// first. If any of them is a symbolic link or special file it refuses before
-// removing anything. It never follows symlinks and errors when bundles itself
-// is one.
+// bundles/ directory as generated output. Check reports as drift every path
+// that is not the plugin.json of a wanted bundle, whether or not it looks
+// generated. WriteOptions.PruneStale removes exactly those paths, deepest
+// first.
 //
 // # Line endings
 //
 // Check compares bytes. When a Windows checkout converts the LF of a file to
 // CRLF, Check reports the file as Modified (the diff says that only line
-// endings differ). The data repo must keep LF: the starter template should ship a
-// .gitattributes with "*.json text eol=lf" (this tool repo does), otherwise
+// endings differ). The data repo must keep LF with a .gitattributes rule
+// "*.json text eol=lf" (the starter template ships one). Otherwise
 // core.autocrlf on Windows makes the drift check fail on a clean checkout.
 //
 // # Safety
