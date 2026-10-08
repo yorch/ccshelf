@@ -42,7 +42,8 @@ func UpdateModes() []string { return []string{UpdateOff, UpdateNotify, UpdateIns
 type Update struct {
 	// Mode is "off" (default), "notify" or "install".
 	Mode string `toml:"mode,omitempty"`
-	// Interval is a Go duration string (for example "24h"); at least 1h.
+	// Interval is a Go duration string (for example "24h"). It must be at
+	// least 1h.
 	Interval string `toml:"interval,omitempty"`
 	// BaseURL points the updater at a GitHub Enterprise Server: https://host
 	// or https://host/owner/repo. Empty means github.com and the repository
@@ -180,7 +181,7 @@ var updateRepoPathRe = regexp.MustCompile(`^/[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0
 // https://host[:port]/owner/repo: no user information of any kind, no query
 // or fragment, no whitespace or control characters, no token-looking text. A
 // plain http URL is accepted only when allowLoopbackHTTP is true and the host
-// is a loopback address; production builds pass false (see
+// is a loopback address. Production builds pass false (see
 // [LoopbackHTTPAllowed]), so it exists for tests only.
 func ValidateUpdateBaseURL(raw string, allowLoopbackHTTP bool) error {
 	switch {
@@ -192,7 +193,7 @@ func ValidateUpdateBaseURL(raw string, allowLoopbackHTTP bool) error {
 		return errors.New("must not contain a query or a fragment")
 	}
 	if k := credentialMarker(raw); k != "" {
-		return fmt.Errorf("looks like it embeds a credential (%s...); never put tokens in the configuration", k)
+		return fmt.Errorf("looks like it embeds a credential (%s...). Never put tokens in the configuration", k)
 	}
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" || u.Hostname() == "" {

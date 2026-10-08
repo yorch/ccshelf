@@ -29,13 +29,13 @@ const (
 	SkillNameOnly = "name-only"
 )
 
-// ErrProtectedMCP is matched (errors.Is) by the error Build returns when
+// ErrProtectedMCP matches (errors.Is) the error that Build returns when
 // DenyMCP names a protected MCP server (security requirement SR3).
 var ErrProtectedMCP = errors.New("a protected MCP server cannot be denied")
 
-// ErrProtectedConnector is matched (errors.Is) by the error Build returns
+// ErrProtectedConnector matches (errors.Is) the error that Build returns
 // when HideConnectors is set while a protected MCP server is a claude.ai
-// connector, which hiding all connectors would remove.
+// connector. Hiding all connectors would remove that server.
 var ErrProtectedConnector = errors.New("hiding claude.ai connectors would remove a protected MCP server")
 
 // connectorPrefix starts the label of every claude.ai connector.
@@ -60,14 +60,15 @@ type Spec struct {
 	Installed []claude.Plugin
 	// Mode is "allow-only" (default) or "additive".
 	Mode string
-	// Include lists plugin ids to enable; Exclude plugin ids to always mask.
+	// Include lists plugin ids to enable. Exclude lists plugin ids to always
+	// mask.
 	Include, Exclude []string
 	// Protected lists plugin ids that must never be masked.
 	Protected []string
 	// PolicyLocked lists plugin ids the caller learned are forced on by
-	// managed policy (for example policy.Matrix.LockedPlugins()). They are
-	// merged with the installed plugins that report RequiredByOrg into
-	// Result.Locked and are never written, true or false.
+	// managed policy (for example policy.Matrix.LockedPlugins()). Build merges
+	// them with the installed plugins that report RequiredByOrg into
+	// Result.Locked. Build never writes them, true or false.
 	PolicyLocked []string
 	// ProtectedMCP lists MCP server labels that must keep working (SR3).
 	// Build fails with [ErrProtectedMCP] when DenyMCP names one, and with
@@ -80,19 +81,19 @@ type Spec struct {
 	HideConnectors bool
 	// DenyMCP lists full MCP server labels to deny.
 	DenyMCP []string
-	// Model is written as "model" when non-empty.
+	// Build writes Model as "model" when Model is non-empty.
 	Model string
-	// Env is written as "env"; names must pass envpolicy.
+	// Build writes Env as "env". Its names must pass envpolicy.
 	Env map[string]string
 	// Profile, when non-empty, adds CCSHELF_PROFILE to env. It is the only
 	// way to set that variable: Env must not contain it.
 	Profile string
 	// UserLayerDropped says the session runs without the user settings layer
-	// (--setting-sources project,local), which is where the installed plugins
-	// are normally enabled. Build then writes every installed protected plugin
-	// (and every installed policy-locked one, which is harmless) as true, so a
-	// protected plugin stays enabled instead of silently going dark. Nothing
-	// is ever written false for them.
+	// (--setting-sources project,local). That layer is where the installed
+	// plugins are normally enabled. Build then writes every installed protected
+	// plugin (and every installed policy-locked one, which is harmless) as
+	// true, so a protected plugin stays enabled instead of silently going dark.
+	// Build never writes false for them.
 	UserLayerDropped bool
 }
 
@@ -103,7 +104,7 @@ type DeniedServer struct {
 }
 
 // Doc is the generated settings document. Field order is the key order of
-// the output (alphabetical); empty fields are omitted.
+// the output (alphabetical). The output omits empty fields.
 type Doc struct {
 	DeniedMcpServers          []DeniedServer    `json:"deniedMcpServers,omitempty"`
 	DisableClaudeAiConnectors bool              `json:"disableClaudeAiConnectors,omitempty"`
@@ -236,7 +237,7 @@ func Build(spec Spec) (*Result, error) {
 		env[k] = v
 	}
 	if _, ok := env[envpolicy.Profile]; ok {
-		return nil, fmt.Errorf("env %s is set by the launcher from the profile name and cannot appear in Env", envpolicy.Profile)
+		return nil, fmt.Errorf("the launcher sets env %s from the profile name, and it cannot appear in Env", envpolicy.Profile)
 	}
 	if spec.Profile != "" {
 		if len(spec.Profile) > maxNameLen || !plainString(spec.Profile) {
@@ -337,7 +338,7 @@ func buildPlugins(spec Spec, mode string, include, exclude, protected map[string
 	}
 	sort.Strings(ids)
 	if len(spec.Installed) == 0 && mode == ModeAllowOnly {
-		res.Warnings = append(res.Warnings, "no installed plugins were found; nothing will be masked")
+		res.Warnings = append(res.Warnings, "no installed plugins were found. Nothing will be masked")
 	}
 	// A plugin that owns a protected MCP label (plugin:<name>:<server>) is
 	// itself protected: masking it would silently remove the server (SR3).
@@ -366,12 +367,12 @@ func buildPlugins(spec Spec, mode string, include, exclude, protected map[string
 		protected[id] = true
 		switch {
 		case byName[installed[id].Name] > 1:
-			res.Warnings = append(res.Warnings, fmt.Sprintf("protected MCP server %s is ambiguous: several installed plugins are named %q, so plugin %s is protected as a possible owner; protect the full name@marketplace under [protect] plugins to be precise", l, installed[id].Name, id))
+			res.Warnings = append(res.Warnings, fmt.Sprintf("protected MCP server %s is ambiguous: several installed plugins are named %q, so plugin %s is protected as a possible owner. To be precise, protect the full name@marketplace under [protect] plugins", l, installed[id].Name, id))
 		default:
 			res.Warnings = append(res.Warnings, fmt.Sprintf("plugin %s provides the protected MCP server %s and is protected", id, l))
 		}
 		if exclude[id] {
-			res.Warnings = append(res.Warnings, fmt.Sprintf("plugin %s is excluded but provides the protected MCP server %s; protection wins", id, l))
+			res.Warnings = append(res.Warnings, fmt.Sprintf("plugin %s is excluded but provides the protected MCP server %s. Protection wins", id, l))
 		}
 	}
 	plugins := map[string]bool{}
@@ -404,7 +405,7 @@ func buildPlugins(spec Spec, mode string, include, exclude, protected map[string
 		if protected[id] {
 			spared = append(spared, id)
 			if _, viaMCP := mcpOwner[id]; exclude[id] && !viaMCP {
-				res.Warnings = append(res.Warnings, fmt.Sprintf("plugin %s is both excluded and protected; protection wins", id))
+				res.Warnings = append(res.Warnings, fmt.Sprintf("plugin %s is both excluded and protected. Protection wins", id))
 			}
 			continue
 		}
@@ -470,7 +471,7 @@ func buildSkills(spec Spec, res *Result) error {
 	sort.Strings(keys)
 	for _, k := range keys {
 		if ns, _, ok := strings.Cut(k, ":"); ok && namespaces[ns] {
-			res.Warnings = append(res.Warnings, fmt.Sprintf("skill override %q targets a skill of plugin %s; overrides do not apply to plugin skills", k, ns))
+			res.Warnings = append(res.Warnings, fmt.Sprintf("skill override %q targets a skill of plugin %s. Overrides do not apply to plugin skills", k, ns))
 		}
 	}
 	res.Doc.SkillOverrides = over

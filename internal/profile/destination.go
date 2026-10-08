@@ -43,7 +43,7 @@ func ProjectProfilesDir(cwd string) (string, error) {
 
 // CheckDestination refuses symlinks and non-directories at the source root and
 // profiles directory, even when the namespace is disabled. Missing directories
-// are valid destinations and are not created by this check.
+// are valid destinations, and this check does not create them.
 func CheckDestination(dir string) error {
 	for _, p := range []string{filepath.Dir(dir), dir} {
 		fi, err := os.Lstat(p)
@@ -84,7 +84,7 @@ func nearestDir(path string) error {
 // personal config root is the user's own path and may be reached through
 // symlinks (a dotfiles-managed directory), but the profiles directory itself
 // must be a plain directory, exactly as the reader requires. Missing
-// directories are valid and are not created by this check.
+// directories are valid, and this check does not create them.
 func CheckPersonalDestination(dir string) error {
 	if err := nearestDir(filepath.Dir(dir)); err != nil {
 		return err
@@ -134,8 +134,8 @@ func openConfined(parent *os.Root, component, display string) (*os.Root, error) 
 }
 
 // WriteNewProfile writes exclusively below an opened directory anchor. Newly
-// created directories are private; symlinks at the source root or profiles
-// directory are refused. os.Root confines operations to opened directories,
+// created directories are private. It refuses symlinks at the source root or
+// profiles directory. os.Root confines operations to opened directories,
 // rather than following replacement path ancestors. Callers validate before writing.
 func WriteNewProfile(target string, data []byte) error {
 	dir := filepath.Dir(target)
@@ -205,7 +205,7 @@ func WriteNewProfile(target string, data []byte) error {
 }
 
 // WriteNewPersonalProfile writes one personal profile exclusively. The personal
-// config root may be reached through symlinks, matching the reader; the
+// config root may be reached through symlinks, matching the reader. The
 // profiles directory below it must be a plain directory, also matching the
 // reader. The file is created exclusively and a replaced directory is detected
 // before writing. Callers validate before writing.

@@ -77,8 +77,8 @@ type Catalog struct {
 }
 
 // SourceConfig describes one profile source. The order of sources does not
-// matter; profile.Resolve decides collisions and personal shadowing. For git
-// sources Path is the folder inside the repository.
+// matter. profile.Resolve decides collisions and personal shadowing. For git
+// sources, Path is the folder inside the repository.
 type SourceConfig struct {
 	Type   string `toml:"type"`
 	Name   string `toml:"name,omitempty"`
@@ -156,17 +156,22 @@ var reservedRefLeaders = map[string]bool{"refs": true, "heads": true, "remotes":
 // full commit id (40 hex digits, or 64 for SHA-256 repositories) or a tag name
 // matching ^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$.
 //
-// Rejected: anything containing "/" (so refs/..., heads/..., origin/... can
-// never be spelled), a name whose first word (up to the first . _ + or -) is
-// refs, heads, remotes or origin, the names HEAD, FETCH_HEAD, ORIG_HEAD,
-// MERGE_HEAD, main, master, develop, dev, trunk, release, latest, stable and
-// next in any case, ".." and a trailing "." or ".lock", and hex strings of 7 to
-// 39 digits, which are ambiguous abbreviations of a commit id.
+// ValidatePin rejects:
+//
+//   - anything containing "/" (so nobody can ever spell refs/..., heads/...
+//     or origin/...)
+//   - a name whose first word (up to the first . _ + or -) is refs, heads,
+//     remotes or origin
+//   - the names HEAD, FETCH_HEAD, ORIG_HEAD, MERGE_HEAD, main, master,
+//     develop, dev, trunk, release, latest, stable and next, in any case
+//   - ".." and a trailing "." or ".lock"
+//   - hex strings of 7 to 39 digits, which are ambiguous abbreviations of a
+//     commit id
 //
 // This is a syntax gate, not the security boundary. The git source fetches
-// refs/tags/<ref> only, never a branch, and records the peeled commit SHA the
-// tag points to; the trust check compares that SHA, so a tag that moves is
-// detected whatever its name.
+// refs/tags/<ref> only, never a branch, and records the peeled commit SHA that
+// the tag points to. The trust check compares that SHA, so it detects a tag
+// that moves, whatever its name.
 func ValidatePin(ref string) error {
 	if ref == "" {
 		return errors.New("a pinned ref (tag or commit SHA) is required")
@@ -187,11 +192,11 @@ func ValidatePin(ref string) error {
 	}
 	switch {
 	case reservedRefs[lower] || reservedRefLeaders[first]:
-		return fmt.Errorf("ref %q looks like a branch or a moving reference; pin a tag or a full 40-hex commit SHA", ref)
+		return fmt.Errorf("ref %q looks like a branch or a moving reference. Pin a tag or a full 40-hex commit SHA", ref)
 	case strings.Contains(ref, ".."), strings.HasSuffix(ref, "."), strings.HasSuffix(lower, ".lock"):
 		return fmt.Errorf("ref %q is not a valid git tag name", ref)
 	case hexRe.MatchString(ref) && len(ref) >= 7 && len(ref) < 40:
-		return fmt.Errorf("ref %q looks like an abbreviated commit id, which is ambiguous; use the full 40-hex SHA or a tag", ref)
+		return fmt.Errorf("ref %q looks like an abbreviated commit id, which is ambiguous. Use the full 40-hex SHA or a tag", ref)
 	}
 	return nil
 }
@@ -227,14 +232,14 @@ func ReadFile(path string) ([]byte, error) {
 	return raw, nil
 }
 
-// Parse decodes and validates configuration text. name only labels errors
-// (a file name); nothing is read from disk.
+// Parse decodes and validates configuration text. name is only a label for
+// errors (a file name). Parse reads nothing from disk.
 func Parse(raw []byte, name string) (*Config, error) { return parse(raw, name, true) }
 
-// ParseUnexpanded is Parse for a command that rewrites the file: ~ and
-// variables in account directories and claude.path are validated as they would
-// expand, but the returned Config keeps the text the user wrote, so writing it
-// back changes nothing the user did not ask to change.
+// ParseUnexpanded is Parse for a command that rewrites the file. It validates
+// ~ and variables in account directories and claude.path as they would
+// expand. But the returned Config keeps the text that the user wrote, so
+// writing it back changes nothing that the user did not ask to change.
 func ParseUnexpanded(raw []byte, name string) (*Config, error) { return parse(raw, name, false) }
 
 func parse(raw []byte, name string, expand bool) (*Config, error) {
@@ -325,7 +330,8 @@ func (c *Config) expand() error {
 }
 
 // ResolvedPath returns the source path with ~ and variables expanded. For git
-// sources the path is inside the repository and is returned unchanged.
+// sources, the path is inside the repository, and ResolvedPath returns it
+// unchanged.
 func (s SourceConfig) ResolvedPath() (string, error) {
 	if s.Type == SourceDir {
 		p, err := ExpandPath(s.Path)
@@ -333,7 +339,7 @@ func (s SourceConfig) ResolvedPath() (string, error) {
 			return "", err
 		}
 		if !filepath.IsAbs(p) {
-			return "", fmt.Errorf("source path %q expands to the relative path %q; it must be absolute", s.Path, p)
+			return "", fmt.Errorf("source path %q expands to the relative path %q. It must be absolute", s.Path, p)
 		}
 		return p, nil
 	}
@@ -402,7 +408,7 @@ func (c *Config) Validate() error {
 				if err := ValidateMarketplaceSource(s.Marketplace); err != nil {
 					add("%s.marketplace: %v", p, err)
 				} else if k := credentialMarker(s.Marketplace); k != "" {
-					add("%s.marketplace: looks like it embeds a credential (%s...); never put tokens in the configuration", p, k)
+					add("%s.marketplace: looks like it embeds a credential (%s...). Never put tokens in the configuration", p, k)
 				}
 			}
 			if s.Path != "" {
@@ -453,9 +459,9 @@ func (c *Config) Validate() error {
 			switch {
 			case a == "" || b == "":
 			case samePath(a, b):
-				add("accounts.%s.config_dir: the same directory as account %q; accounts must not share a configuration directory", m, n)
+				add("accounts.%s.config_dir: the same directory as account %q. Accounts must not share a configuration directory", m, n)
 			case nested(a, b):
-				add("accounts.%s.config_dir: %q and account %q's directory are nested; accounts must not contain one another", m, c.Accounts[m].ConfigDir, n)
+				add("accounts.%s.config_dir: %q and account %q's directory are nested. Accounts must not contain one another", m, c.Accounts[m].ConfigDir, n)
 			}
 		}
 	}
@@ -473,7 +479,7 @@ func (c *Config) validateGit(p string, s SourceConfig, add func(string, ...any))
 	}
 	for field, v := range map[string]string{"url": s.URL, "ref": s.Ref, "path": s.Path, "name": s.Name} {
 		if k := credentialMarker(v); k != "" {
-			add("%s.%s: looks like it embeds a credential (%s...); never put tokens in the configuration", p, field, k)
+			add("%s.%s: looks like it embeds a credential (%s...). Never put tokens in the configuration", p, field, k)
 		}
 	}
 	if s.Plugin != "" {
@@ -558,12 +564,15 @@ func ValidateMarketplaceSource(raw string) error {
 }
 
 // ValidateGitURL reports why url is not an acceptable git source address, or
-// nil. Exactly three forms are accepted: https://host/path (no userinfo of any
-// kind, no query or fragment), ssh://[user@]host/path (a user name only,
-// never a password) and the scp-like user@host:path. Everything else is
-// refused: file: and bare local paths, ext:: fd:: and any <helper>:: transport,
-// git://, http://, a leading "-" (an option for git), whitespace and control
-// characters.
+// nil. It accepts exactly three forms:
+//
+//   - https://host/path (no userinfo of any kind, no query or fragment)
+//   - ssh://[user@]host/path (a user name only, never a password)
+//   - the scp-like user@host:path
+//
+// It refuses everything else: file: and bare local paths, ext:: fd:: and any
+// <helper>:: transport, git://, http://, a leading "-" (an option for git),
+// whitespace and control characters.
 func ValidateGitURL(raw string) error {
 	switch {
 	case raw == "":
@@ -624,7 +633,7 @@ func checkDirSourcePath(p string) error {
 		return nil
 	case strings.HasPrefix(p, "$"):
 		if v := cwdVariable(p); v != "" {
-			return fmt.Errorf("%q starts with $%s, the directory you run ccshelf from: a cloned repository could then supply profiles as if they were yours (SR2); use an absolute path, or ~", p, v)
+			return fmt.Errorf("%q starts with $%s, the directory you run ccshelf from: a cloned repository could then supply profiles as if they were yours (SR2). Use an absolute path, or ~", p, v)
 		}
 		return nil // expanded later; ResolvedPath requires an absolute result
 	case filepath.IsAbs(p):

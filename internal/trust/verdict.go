@@ -73,8 +73,8 @@ type Change struct {
 	// profiles that set environment names.
 	Risky bool
 	// Detail describes a registry entry: what it runs or connects to, shown
-	// verbatim (registry arguments are code, not secrets: secrets reach a
-	// server only through env_refs, which list names).
+	// verbatim. Registry arguments are code, not secrets. Secrets reach a
+	// server only through env_refs, which list names.
 	Detail string
 	// Fields lists, for a profile-controls item, each field that differs
 	// (environment variables added or removed, plugin includes and excludes,
@@ -98,7 +98,7 @@ type Verdict struct {
 	// is what Accept must be given. It is empty only when the closure is
 	// inconsistent (Problem is set) or r was nil.
 	Hash string
-	// Ref, OldCommit and NewCommit are set for TagMoved; MovedSource names
+	// Ref, OldCommit and NewCommit are set for TagMoved. MovedSource names
 	// the source whose ref moved.
 	Ref, OldCommit, NewCommit, MovedSource string
 	// Problem explains an inconsistent closure (never trusted).
@@ -186,16 +186,16 @@ func closureHash(r *profile.Resolved) (string, error) {
 }
 
 // Check compares the closure of r with the lockfile. It hashes r.Closure as
-// given and never re-reads files: callers must generate the settings and
+// given and never re-reads files. Callers must generate the settings and
 // prompts they run from the same Resolved value they checked (SR2), and must
 // not modify it between Check and use. Personal-only closures are always
 // Trusted. A closure that includes a project profile is ProjectUntrusted
-// here; use CheckWithProject once the repository has been trusted.
+// here. Use CheckWithProject once the repository has been trusted.
 func (s *Store) Check(r *profile.Resolved) Verdict { return s.CheckWithProject(r, false) }
 
 // CheckWithProject is Check for callers that know whether the project folder
 // is trusted (see ProjectStore and ProjectAllowed). Project trust never
-// replaces the lockfile: a trusted project profile still needs an entry.
+// replaces the lockfile. A trusted project profile still needs an entry.
 func (s *Store) CheckWithProject(r *profile.Resolved, projectTrusted bool) Verdict {
 	if r == nil {
 		return Verdict{State: New, Problem: "no resolved profile"}
@@ -396,7 +396,7 @@ func stringSet(v any) (set map[string]bool, order []string) {
 func controlLines(hadOld bool, oldText, newText string) []string {
 	var lines []string
 	if hadOld && oldText == "" {
-		lines = append(lines, "what changed is unknown: the earlier version of these settings was not recorded; they are now:")
+		lines = append(lines, "what changed is unknown: the earlier version of these settings was not recorded. They are now:")
 		hadOld = false
 	}
 	oldC, newC := decodeControls(oldText), decodeControls(newText)
@@ -464,7 +464,7 @@ func envLines(ov any, nv map[string]any) []string {
 			lines = append(lines, fmt.Sprintf("environment variable %s removed", n))
 		case !reflect.DeepEqual(o, nw):
 			if isRefName(n) || secretLike(n) {
-				lines = append(lines, fmt.Sprintf("environment variable %s changed (the value changed; it is not shown)", n))
+				lines = append(lines, fmt.Sprintf("environment variable %s changed (the value changed and is not shown)", n))
 			} else {
 				lines = append(lines, fmt.Sprintf("environment variable %s changed (was %s, now %s)", n, valueText(o), valueText(nw)))
 			}
@@ -736,11 +736,11 @@ type NeedsTrustError struct {
 func (e *NeedsTrustError) Error() string {
 	switch e.Verdict.State {
 	case ProjectUntrusted:
-		return fmt.Sprintf("profile %q comes from an untrusted project folder; review it, then trust the project", clean(e.Profile))
+		return fmt.Sprintf("profile %q comes from an untrusted project folder. Review it, then trust the project", clean(e.Profile))
 	case TagMoved:
-		return fmt.Sprintf("profile %q needs trust: ref %q now points to a different commit; review it with: ccshelf trust %s", clean(e.Profile), clean(e.Verdict.Ref), clean(e.Profile))
+		return fmt.Sprintf("profile %q needs trust: ref %q now points to a different commit. Review it with: ccshelf trust %s", clean(e.Profile), clean(e.Verdict.Ref), clean(e.Profile))
 	case Changed:
-		return fmt.Sprintf("profile %q needs trust: it changed since you accepted it; review it with: ccshelf trust %s", clean(e.Profile), clean(e.Profile))
+		return fmt.Sprintf("profile %q needs trust: it changed since you accepted it. Review it with: ccshelf trust %s", clean(e.Profile), clean(e.Profile))
 	}
 	return fmt.Sprintf("profile %q needs trust: review it with: ccshelf trust %s", clean(e.Profile), clean(e.Profile))
 }
@@ -749,7 +749,7 @@ func (e *NeedsTrustError) Error() string {
 func (e *NeedsTrustError) ExitCode() int { return ExitNeedsTrust }
 
 // Require returns nil only when the closure of r is Trusted, otherwise a
-// *NeedsTrustError. It is what non-interactive callers use: they fail closed.
+// *NeedsTrustError. Non-interactive callers use it, so they fail closed.
 func (s *Store) Require(r *profile.Resolved) error { return s.RequireWithProject(r, false) }
 
 // RequireWithProject is Require for callers that know the project folder is

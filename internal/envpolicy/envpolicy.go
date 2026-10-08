@@ -5,21 +5,21 @@
 // redirect every prompt and file to another endpoint (ANTHROPIC_BASE_URL, a
 // proxy variable, NODE_OPTIONS) or to run code at process start (LD_PRELOAD,
 // BASH_ENV, PYTHONSTARTUP, JAVA_TOOL_OPTIONS). A denylist can never be
-// complete, so the policy is an ALLOWLIST: a profile may set only
+// complete, so the policy is an ALLOWLIST. A profile may set only these names:
 //
-//   - names in its own namespace, CCSHELF_VAR_<NAME>;
+//   - names in its own namespace, CCSHELF_VAR_<NAME>
 //   - reference variables whose name ends in _REF (for example
-//     FIGMA_TOKEN_REF): the value is a reference passed to tools by name,
-//     never resolved or logged here; and
-//   - CCSHELF_PROFILE, which the launcher itself sets.
+//     FIGMA_TOKEN_REF). The value is a reference that tools get by name. This
+//     package never resolves or logs it.
+//   - CCSHELF_PROFILE, which the launcher itself sets
 //
-// A _REF suffix is NOT a guarantee that nothing interprets the name:
-// GITHUB_REF is read by GitHub Actions tooling, for example. The allowlist
-// and the denylist together are the policy. The denylist (known-dangerous
-// prefixes such as ANTHROPIC_, GITHUB_, RUNNER_ and ACTIONS_, suffixes such as
-// _OPTIONS, any name containing _PROXY, and exact names such as PATH and CI)
-// is applied first, so GITHUB_REF is refused even though it ends in _REF, and
-// it gives clearer error messages.
+// A _REF suffix is NOT a guarantee that nothing interprets the name. For
+// example, GitHub Actions tooling reads GITHUB_REF. The allowlist and the
+// denylist together are the policy. The denylist has known-dangerous prefixes
+// such as ANTHROPIC_, GITHUB_, RUNNER_ and ACTIONS_, suffixes such as
+// _OPTIONS, any name that contains _PROXY, and exact names such as PATH and CI.
+// The policy applies the denylist first. Thus it refuses GITHUB_REF although
+// the name ends in _REF, and it gives clearer error messages.
 package envpolicy
 
 import (
@@ -60,8 +60,8 @@ var deniedExact = map[string]bool{
 	"CI": true,
 }
 
-// DeniedReason returns why name may not be set by a profile, or "" when it is
-// allowed. CCSHELF_PROFILE is always allowed.
+// DeniedReason returns why a profile may not set name, or "" when a profile
+// may set it. A profile may always set CCSHELF_PROFILE.
 func DeniedReason(name string) string {
 	if name == Profile {
 		return ""
@@ -73,7 +73,7 @@ func DeniedReason(name string) string {
 		return r
 	}
 	if !allowPattern.MatchString(name) {
-		return "profile variables must be named CCSHELF_VAR_<NAME> or end in _REF (allowlist)"
+		return "a profile variable name must be CCSHELF_VAR_<NAME> or end in _REF (allowlist)"
 	}
 	return ""
 }
@@ -104,8 +104,8 @@ func denylistReason(name string) string {
 // Allowed reports whether a profile may set the variable name.
 func Allowed(name string) bool { return DeniedReason(name) == "" }
 
-// Check returns an error naming the first denied variable in names (sorted
-// order is the caller's concern), or nil.
+// Check returns an error that names the first denied variable in names, or
+// nil. The caller is responsible for the sort order of names.
 func Check(names []string) error {
 	for _, n := range names {
 		if r := DeniedReason(n); r != "" {

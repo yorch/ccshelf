@@ -40,8 +40,8 @@ var sr1Keys = map[string]bool{
 }
 
 // Parse decodes and validates a manifest. filename is the base file name
-// ("frontend.toml"); when non-empty it must equal name + ".toml". Unknown keys
-// are errors (SR1). The result is a *ValidationError when anything is wrong.
+// ("frontend.toml"). When filename is non-empty, it must equal name + ".toml".
+// Unknown keys are errors (SR1). The result is a *ValidationError when anything is wrong.
 func Parse(raw []byte, filename string) (*Manifest, error) {
 	if len(raw) > MaxManifestSize {
 		return nil, &ValidationError{File: filename, Problems: []Problem{{Message: fmt.Sprintf("file is larger than %d bytes", MaxManifestSize)}}}
@@ -104,7 +104,7 @@ func decodeProblems(err error) []Problem {
 		msg := de.Error()
 		field := strings.Join(de.Key(), ".")
 		if strings.HasPrefix(field, "mcp.servers") {
-			msg = "mcp.servers must be a list of registry names; MCP definitions are not allowed in a profile: SR1"
+			msg = "mcp.servers must be a list of registry names. MCP definitions are not allowed in a profile: SR1"
 		}
 		return []Problem{{Field: field, Line: row, Message: msg}}
 	}
@@ -326,7 +326,7 @@ const PromptDir = "prompts"
 
 // CheckPromptPath checks that p is a syntactically safe prompt path: a
 // CheckRelPath path of the form prompts/<file> whose components do not start
-// with "." (so ".git" or ".ssh" can never be named). It is a syntax check; the
+// with "." (so ".git" or ".ssh" can never be named). It is a syntax check. The
 // reader also refuses symlinks and anything outside the source root.
 func CheckPromptPath(p string) error {
 	if err := CheckRelPath(p); err != nil {
