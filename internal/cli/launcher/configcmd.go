@@ -29,8 +29,9 @@ a menu, and a change is shown and confirmed (default no) before it is written.
 Changes are written by re-encoding the file: comments and layout are lost, and
 the previous file is kept as config.toml.bak. A change that weakens a security
 setting (turning off pinning, trusting project profiles, installing updates
-automatically, or adding a source that is not pinned) needs --yes when there is
-no terminal. Nothing here fetches a source or records trust. Only "ccshelf
+automatically, adding a source that is not pinned or whose path is a variable,
+or changing claude.path or the update source) needs --yes when there is no
+terminal. Nothing here fetches a source or records trust. Only "ccshelf
 init" creates the file.
 
 Settings you can change with "config set": ` + strings.Join(config.SettingKeys(), ", ") + `.
@@ -151,7 +152,7 @@ func configData(path string, exists bool, cfg *config.Config) configDoc {
 		Path: path, Exists: exists, Sources: sourceRows(cfg),
 		Trust: configTrust{cfg.Trust.RequirePin, cfg.Trust.OnChange, cfg.Trust.TrustProjectProfiles},
 		Update: configUpdate{
-			Mode: cfg.Update.EffectiveMode(), Interval: cfg.Update.EffectiveInterval().String(),
+			Mode: cfg.Update.EffectiveMode(), Interval: config.FormatInterval(cfg.Update.EffectiveInterval()),
 			BaseURL: cfg.Update.BaseURL, CosignIdentityRepo: cfg.Update.CosignIdentityRepo,
 			AssetHosts: append([]string{}, cfg.Update.AssetHosts...),
 		},
@@ -397,37 +398,38 @@ func (l *launcher) sourceAdd(ctx context.Context, cc *clicore.Context, cmd *cobr
 			kinds++
 		}
 	}
+	// Flags are checked before the file is read, so contradictory flags are a
+	// usage error whether or not a configuration exists.
+	var src config.SourceConfig
+	var err error
+	switch {
+	case kinds > 1:
+		return ui.Usage(errors.New("give exactly one of --git-url, --dir or --plugin"))
+	case kinds == 1:
+		if src, err = sourceFromFlags(cmd, f); err != nil {
+			return err
+		}
+	case !canPrompt(cc):
+		return ui.Usage(ui.MissingFlags("give exactly one of --git-url (with --ref), --dir or --plugin", "--git-url|--dir|--plugin"))
+	}
 	file, err := openConfigFile(cc)
 	if err != nil {
 		return err
 	}
 	cfg := file.clone()
 	var rec *ui.Recorder
-	var src config.SourceConfig
-	switch {
-	case kinds > 1:
-		return ui.Usage(errors.New("give exactly one of --git-url, --dir or --plugin"))
-	case kinds == 0:
-		if !canPrompt(cc) {
-			return ui.Usage(ui.MissingFlags("give exactly one of --git-url (with --ref), --dir or --plugin", "--git-url|--dir|--plugin"))
-		}
-		src, rec, err = askSource(ctx, cc, cfg)
-		if err != nil {
-			return err
-		}
-	default:
-		src, err = sourceFromFlags(cmd, f)
-		if err != nil {
+	if kinds == 0 {
+		if src, rec, err = askSource(ctx, cc, cfg); err != nil {
 			return err
 		}
 	}
 	if err := cfg.ValidateSource(src); err != nil {
-		return ui.Usage(withHint(fmt.Errorf("source: %w", err), "%s", sourceHint(src)))
+		return ui.Usage(withHint(fmt.Errorf("source: %s", strings.ReplaceAll(err.Error(), "sources[0]", fmt.Sprintf("source %d", len(cfg.Sources)+1))), "%s", sourceHint(src)))
 	}
 	for i, ex := range cfg.Sources {
 		if config.SameSource(ex, src) {
 			return ui.Usage(withHint(fmt.Errorf("source %d already is %s %s", i+1, ex.Type, ui.SanitizeLine(ex.SourceLocation())),
-				"to change its ref use: ccshelf config source pin %d --ref <ref>; to replace it: ccshelf config source rm %d; for two folders of one repository: ccshelf config edit", i+1, i+1))
+				"to change its ref use: ccshelf config source pin %d --ref <ref>; to replace it: ccshelf config source rm %d; to add another folder of the same repository give a different --path", i+1, i+1))
 		}
 	}
 	cfg.Sources = append(cfg.Sources, src)
@@ -803,7 +805,7 @@ func (l *launcher) editConfig(ctx context.Context, cc *clicore.Context, printPat
 		return ui.Failure(err)
 	}
 	file := &cfgFile{path: path, raw: raw}
-	if cfg, err := config.Parse(raw, path); err == nil {
+	if cfg, err := config.ParseUnexpanded(raw, path); err == nil {
 		file.cfg = cfg
 	} else {
 		warnf(cc, "the current file is invalid: %v", err)
@@ -820,7 +822,11 @@ func (l *launcher) editConfig(ctx context.Context, cc *clicore.Context, printPat
 		}
 	}()
 	if err := l.runEditor(ctx, cc, copyPath, "ccshelf config edit --path"); err != nil {
-		keep = true
+		// A usage error (no editor) leaves nothing worth keeping.
+		if ui.CodeOf(err) != ui.ExitUsage {
+			keep = true
+			warnf(cc, "your edit is kept in %s", ui.SanitizeLine(copyPath))
+		}
 		return err
 	}
 	edited, err := config.ReadFile(copyPath)
@@ -828,10 +834,10 @@ func (l *launcher) editConfig(ctx context.Context, cc *clicore.Context, printPat
 		keep = true
 		return ui.Failure(err)
 	}
-	if _, err := config.Parse(edited, copyPath); err != nil {
+	if _, err := config.ParseUnexpanded(edited, copyPath); err != nil {
 		keep = true
 		return ui.Failure(withHint(fmt.Errorf("the edited configuration is invalid, so %s was not changed:\n%s", ui.SanitizeLine(path), ui.Sanitize(err.Error())),
-			"your edit is kept in %s; fix it and run: ccshelf config edit", ui.SanitizeLine(copyPath)))
+			"your edit is kept in %s; a new ccshelf config edit starts from the current file, so copy your fix over from it", ui.SanitizeLine(copyPath)))
 	}
 	err = l.commitConfig(ctx, cc, &writePlan{file: file, nextRaw: edited, yes: yes, rec: rec})
 	if err != nil {

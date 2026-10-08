@@ -94,8 +94,22 @@ func TestWeakening(t *testing.T) {
 
 func TestSameSourceAndComment(t *testing.T) {
 	a := SourceConfig{Type: SourceGit, URL: "https://e.com/a.git", Ref: "v1", Path: "profiles"}
-	if !SameSource(a, SourceConfig{Type: SourceGit, URL: "https://e.com/a.git", Ref: "v2", Path: "x"}) {
-		t.Error("same URL is the same source")
+	if !SameSource(a, SourceConfig{Type: SourceGit, URL: "https://e.com/a.git", Ref: "v2", Path: "profiles"}) {
+		t.Error("same URL and folder is the same source")
+	}
+	if SameSource(a, SourceConfig{Type: SourceGit, URL: "https://e.com/a.git", Path: "other"}) {
+		t.Error("another folder of the repository is another source")
+	}
+	for _, u := range []string{"https://E.com/a", "https://e.com/a/", "https://e.com/a.git", "https://e.com/a.git/"} {
+		if !SameSource(a, SourceConfig{Type: SourceGit, URL: u, Path: "profiles"}) {
+			t.Errorf("%s should equal %s", u, a.URL)
+		}
+	}
+	if !SameSource(SourceConfig{Type: SourceGit, URL: "git@e.com:o/r.git"}, SourceConfig{Type: SourceGit, URL: "ssh://git@E.com/o/r"}) {
+		t.Error("scp-like and ssh:// spellings are one repository")
+	}
+	if SameSource(SourceConfig{Type: SourceGit, URL: "git@e.com:o/r.git"}, SourceConfig{Type: SourceGit, URL: "https://e.com/o/r"}) {
+		t.Error("ssh and https stay different")
 	}
 	if SameSource(a, SourceConfig{Type: SourceGit, URL: "https://e.com/b.git"}) || SameSource(a, SourceConfig{Type: SourceDir, Path: a.URL}) {
 		t.Error("different sources compared equal")
@@ -242,6 +256,93 @@ func TestCreateExclusive(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		if fi, _ := os.Stat(a); fi.Mode().Perm() != 0o600 {
 			t.Errorf("mode %v", fi.Mode().Perm())
+		}
+	}
+}
+
+func TestWeakeningTrustWidening(t *testing.T) {
+	base := Default()
+	base.Sources = []SourceConfig{
+		{Type: SourceGit, URL: "https://e.com/a/b.git", Ref: "v1", Path: "profiles"},
+		{Type: SourcePlugin, Plugin: "p@m", Marketplace: "acme/m"},
+	}
+	mod := func(f func(c *Config)) *Config {
+		c := *base
+		c.Sources = append([]SourceConfig(nil), base.Sources...)
+		f(&c)
+		return &c
+	}
+	for name, after := range map[string]*Config{
+		"claude.path":    mod(func(c *Config) { c.Claude.Path = "/opt/claude" }),
+		"base_url":       mod(func(c *Config) { c.Update.BaseURL = "https://ghe.example.com" }),
+		"cosign":         mod(func(c *Config) { c.Update.CosignIdentityRepo = "x/y" }),
+		"asset host":     mod(func(c *Config) { c.Update.AssetHosts = []string{"a.example.com"} }),
+		"marketplace":    mod(func(c *Config) { c.Sources[1].Marketplace = "evil/m" }),
+		"no marketplace": mod(func(c *Config) { c.Sources[1].Marketplace = "" }),
+		"git url":        mod(func(c *Config) { c.Sources[0].URL = "https://e.com/evil/b.git" }),
+		"dollar dir":     mod(func(c *Config) { c.Sources = append(c.Sources, SourceConfig{Type: SourceDir, Path: "$HOME/p"}) }),
+	} {
+		if got := Weakening(base, after); len(got) != 1 {
+			t.Errorf("%s: %v", name, got)
+		}
+	}
+	for name, after := range map[string]*Config{
+		"same URL spelled differently": mod(func(c *Config) { c.Sources[0].URL = "https://e.com/a/b" }),
+		"remove first":                 mod(func(c *Config) { c.Sources = c.Sources[1:] }),
+		"asset host removed":           mod(func(c *Config) { c.Update.AssetHosts = nil }),
+		"tilde dir":                    mod(func(c *Config) { c.Sources = append(c.Sources, SourceConfig{Type: SourceDir, Path: "~/p"}) }),
+	} {
+		if got := Weakening(base, after); len(got) != 0 {
+			t.Errorf("%s: %v", name, got)
+		}
+	}
+}
+
+func TestDirSourceRefusesWorkingDirectoryVariables(t *testing.T) {
+	for _, p := range []string{"$PWD/.ccshelf/profiles", "${PWD}/x", "${PWD:-/x}/y", "$OLDPWD/x", "${OLDPWD}", "$PWD"} {
+		c := Default()
+		c.Sources = []SourceConfig{{Type: SourceDir, Path: p}}
+		err := c.Validate()
+		if err == nil || !strings.Contains(err.Error(), "SR2") {
+			t.Errorf("%s: %v", p, err)
+		}
+		if _, err := Parse([]byte("[[sources]]\ntype = \"dir\"\npath = \""+p+"\"\n"), "x"); err == nil {
+			t.Errorf("Load accepted %s", p)
+		}
+	}
+	for _, p := range []string{"$HOME/profiles", "${HOME}/p", "$PWDX/p", "~/p", "/abs"} {
+		c := Default()
+		c.Sources = []SourceConfig{{Type: SourceDir, Path: p}}
+		if err := c.Validate(); err != nil {
+			t.Errorf("%s: %v", p, err)
+		}
+	}
+}
+
+func TestParseUnexpandedKeepsWrittenPaths(t *testing.T) {
+	t.Setenv("MYBIN", "/opt/a$x")
+	raw := []byte("[claude]\npath = \"$MYBIN/claude\"\n[accounts.work]\nconfig_dir = \"~/.claude-work-test\"\n")
+	cfg, err := ParseUnexpanded(raw, "x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Claude.Path != "$MYBIN/claude" || cfg.Accounts["work"].ConfigDir != "~/.claude-work-test" {
+		t.Errorf("%+v", cfg)
+	}
+	out, err := EncodeUnexpanded(cfg)
+	if err != nil || !strings.Contains(string(out), "$MYBIN/claude") || !strings.Contains(string(out), "~/.claude-work-test") {
+		t.Errorf("%s %v", out, err)
+	}
+	if _, err := Parse(out, "x"); err != nil {
+		t.Errorf("the re-encoded file does not load: %v", err)
+	}
+}
+
+func TestFormatInterval(t *testing.T) {
+	for in, want := range map[string]string{"24h": "24h", "90m": "1h30m", "36h": "36h", "30s": "30s"} {
+		d, _ := ParseUpdateInterval(in)
+		if got := FormatInterval(d); got != want {
+			t.Errorf("%s -> %s, want %s", in, got, want)
 		}
 	}
 }

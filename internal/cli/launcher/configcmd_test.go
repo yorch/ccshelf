@@ -23,6 +23,24 @@ path = "profiles"
 
 func (h *harness) configFile() string { return filepath.Join(h.configDir(), "config.toml") }
 
+// wantNoTrustFiles fails if lock.json or project-trust.json exist where the
+// launcher keeps them (the config directory).
+func (h *harness) wantNoTrustFiles() {
+	h.t.Helper()
+	for _, f := range []func() (string, error){config.LockfilePath, config.ProjectTrustPath} {
+		p, err := f()
+		if err != nil {
+			h.t.Fatal(err)
+		}
+		if filepath.Dir(p) != h.configDir() {
+			h.t.Fatalf("trust file %s is not in the harness config dir %s", p, h.configDir())
+		}
+		if _, err := os.Stat(p); err == nil {
+			h.t.Errorf("%s was written", p)
+		}
+	}
+}
+
 func (h *harness) readConfig() string {
 	h.t.Helper()
 	b, err := os.ReadFile(h.configFile())
@@ -88,7 +106,7 @@ func TestConfigPathShowAndLs(t *testing.T) {
 
 	h.writeConfig(baseConfig + "\n[update]\nmode = \"notify\"\n")
 	h.mustRun("config", "show")
-	for _, want := range []string{"1. git https://example.com/acme/data.git", "ref: v1.0.0", "mode: notify", "interval: 24h0m0s (default)"} {
+	for _, want := range []string{"1. git https://example.com/acme/data.git", "ref: v1.0.0", "mode: notify", "interval: 24h (default)"} {
 		if !strings.Contains(h.out.String(), want) {
 			t.Errorf("show lacks %q:\n%s", want, h.out)
 		}
@@ -169,13 +187,7 @@ func TestConfigSourceAdd(t *testing.T) {
 	if !strings.Contains(h.errb.String(), "wrote") {
 		t.Errorf("stderr: %s", h.errb)
 	}
-	// Nothing is fetched or trusted.
-	if _, err := os.Stat(filepath.Join(h.dirs["XDG_STATE_HOME"], "ccshelf")); err == nil {
-		entries, _ := os.ReadDir(filepath.Join(h.dirs["XDG_STATE_HOME"], "ccshelf"))
-		if len(entries) > 0 {
-			t.Errorf("state written: %v", entries)
-		}
-	}
+	h.wantNoTrustFiles()
 }
 
 func TestConfigSourceAddRefusals(t *testing.T) {
@@ -358,11 +370,7 @@ func TestConfigWeakeningNeedsYes(t *testing.T) {
 		t.Errorf("json: %v %s", err, h.out)
 	}
 	// Trust is never touched.
-	for _, name := range []string{"lock.json", "project-trust.json"} {
-		if _, err := os.Stat(filepath.Join(h.dirs["XDG_STATE_HOME"], "ccshelf", name)); err == nil {
-			t.Errorf("%s written", name)
-		}
-	}
+	h.wantNoTrustFiles()
 }
 
 func TestConfigBackupAndCommentWarning(t *testing.T) {
@@ -448,7 +456,7 @@ func TestConfigConfirmationAndChangedWhileEditing(t *testing.T) {
 	sc := ui.NewScripted(false)
 	h.prompt = sc
 	h.wantCode(1, "config", "set", "ui.color", "never")
-	h.wantErr("configuration not written", "- color = ", "+ color = ", "Change to")
+	h.wantErr("configuration not written", "+ color = 'never'", "- # my notes", "Change to")
 	if h.readConfig() != baseConfig {
 		t.Error("declined confirmation wrote")
 	}
@@ -562,10 +570,12 @@ func TestConfigMenu(t *testing.T) {
 	h.prompt = ui.NewScripted(2, 0, true, 5)
 	h.mustRun("config")
 	h.wantErr("Equivalent: ccshelf config source rm 1 --yes")
-	// Declining in the menu exits 1 with nothing written.
+	// Declining (or a duplicate source) reports and returns to the menu;
+	// nothing is written.
 	h.writeConfig(baseConfig)
-	h.prompt = ui.NewScripted(3, colorIdx, 2, false)
-	h.wantCode(1, "config")
+	h.prompt = ui.NewScripted(3, colorIdx, 2, false, 0, 0, "https://example.com/acme/data.git/", "v9.9.9", "profiles", 5)
+	h.mustRun("config")
+	h.wantErr("configuration not written", "already is git")
 	if h.readConfig() != baseConfig {
 		t.Error("declined menu change wrote")
 	}
@@ -778,4 +788,121 @@ func TestDiffLines(t *testing.T) {
 	if d := diffLines(a, a); len(d) != 0 {
 		t.Errorf("diff of equal = %v", d)
 	}
+}
+
+func TestConfigWriteKeepsUnexpandedPaths(t *testing.T) {
+	t.Setenv("MYBIN", "/opt/a$x")
+	h := newHarness(t)
+	orig := baseConfig + "\n[claude]\npath = \"$MYBIN/claude\"\n\n[accounts.work]\nconfig_dir = \"~/.claude-work\"\n"
+	h.writeConfig(orig)
+	h.prompt = ui.NewScripted(false)
+	h.wantCode(1, "config", "set", "ui.color", "never")
+	// The confirmation diff shows what a rewrite changes, and does not
+	// pretend the paths changed.
+	if strings.Contains(h.errb.String(), "- path = '$MYBIN") || strings.Contains(h.errb.String(), "/opt/a$x") {
+		t.Errorf("paths appear in the diff:\n%s", h.errb)
+	}
+	h.prompt = nil
+	h.mustRun("config", "set", "ui.color", "never")
+	got := h.readConfig()
+	for _, want := range []string{"$MYBIN/claude", "~/.claude-work"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("config lost %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "/opt/a$x") {
+		t.Errorf("expanded value written:\n%s", got)
+	}
+	// Still loads, with the paths expanded once, and every other write works.
+	cfg := h.loadConfig()
+	if cfg.Claude.Path != "/opt/a$x/claude" || !strings.HasSuffix(cfg.Accounts["work"].ConfigDir, ".claude-work") || strings.HasPrefix(cfg.Accounts["work"].ConfigDir, "~") {
+		t.Errorf("loaded: %+v", cfg)
+	}
+	h.mustRun("config", "source", "add", "--dir", filepath.Join(h.dirs["WORK"], "t"))
+	h.mustRun("config", "source", "rm", "2")
+	if g := h.readConfig(); !strings.Contains(g, "$MYBIN/claude") || !strings.Contains(g, "~/.claude-work") {
+		t.Errorf("config lost paths:\n%s", g)
+	}
+	// A no-op set leaves the file bytes alone.
+	before := h.readConfig()
+	h.mustRun("config", "set", "ui.color", "never")
+	if h.readConfig() != before {
+		t.Error("a no-op rewrote the file")
+	}
+}
+
+func TestConfigWorkingDirectoryDirSources(t *testing.T) {
+	h := newHarness(t)
+	h.writeConfig(baseConfig)
+	before := h.readConfig()
+	for _, p := range []string{"$PWD/.ccshelf/profiles", "${PWD}/x", "$OLDPWD/x"} {
+		h.wantCode(2, "config", "source", "add", "--dir", p, "--yes")
+		h.wantErr("SR2")
+	}
+	if h.readConfig() != before {
+		t.Fatal("file changed")
+	}
+	// Any other variable is allowed but weakens: --yes without a terminal.
+	h.wantCode(2, "config", "source", "add", "--dir", "$HOME/profiles")
+	h.wantErr("--yes", "variable")
+	h.mustRun("config", "source", "add", "--dir", "$HOME/profiles", "--yes")
+	h.wantErr("read at every run")
+	// A hand-edited config with $PWD fails closed everywhere.
+	h.writeConfig("[[sources]]\ntype = \"dir\"\npath = \"$PWD/.ccshelf/profiles\"\n")
+	h.wantCode(1, "config", "show")
+	h.wantErr("SR2", "config edit")
+}
+
+func TestConfigSourceAddNormalizedDuplicate(t *testing.T) {
+	h := newHarness(t)
+	h.writeConfig(baseConfig)
+	for _, u := range []string{"https://example.com/acme/data", "https://EXAMPLE.com/acme/data/", "https://example.com/acme/data.git/"} {
+		h.wantCode(2, "config", "source", "add", "--git-url", u, "--ref", "v2.0.0")
+		h.wantErr("already is", "different --path")
+	}
+	// Another folder of the same repository is another source.
+	h.mustRun("config", "source", "add", "--git-url", "https://example.com/acme/data", "--ref", "v1.0.0", "--path", "other")
+	if n := len(h.loadConfig().Sources); n != 2 {
+		t.Errorf("sources = %d", n)
+	}
+}
+
+func TestConfigSourceAddFlagsCheckedBeforeFile(t *testing.T) {
+	h := newHarness(t) // no config file
+	h.wantCode(2, "config", "source", "add", "--dir", h.dirs["WORK"], "--git-url", "https://example.com/a/b.git")
+	h.wantCode(2, "config", "source", "add", "--dir", h.dirs["WORK"], "--ref", "v1")
+	h.wantCode(2, "config", "source", "add")
+	h.wantCode(1, "config", "source", "add", "--dir", h.dirs["WORK"])
+}
+
+func TestConfigErrorsNumberSourcesFromOne(t *testing.T) {
+	h := newHarness(t)
+	h.writeConfig(baseConfig)
+	h.wantCode(2, "config", "source", "add", "--git-url", "https://example.com/acme/x.git", "--ref", "main")
+	h.wantErr("source 2")
+	if strings.Contains(h.errb.String(), "sources[") {
+		t.Errorf("0-based index leaked: %s", h.errb)
+	}
+}
+
+func TestConfigEditTrustWidening(t *testing.T) {
+	t.Setenv("EDITOR", "myedit")
+	t.Setenv("VISUAL", "")
+	h := newHarness(t)
+	h.writeConfig(baseConfig)
+	editWith(h, func(string) string { return baseConfig + "\n[claude]\npath = \"/opt/other/claude\"\n" })
+	h.prompt = ui.NewScripted(true)
+	h.mustRun("config", "edit")
+	h.wantErr("weakens", "claude.path")
+}
+
+func TestConfigEditEditorFailureKeepsCopy(t *testing.T) {
+	t.Setenv("EDITOR", "myedit")
+	t.Setenv("VISUAL", "")
+	h := newHarness(t)
+	h.writeConfig(baseConfig)
+	h.spawnCode = 3
+	h.prompt = ui.NewScripted()
+	h.wantCode(1, "config", "edit")
+	h.wantErr("status 3", "your edit is kept in")
 }

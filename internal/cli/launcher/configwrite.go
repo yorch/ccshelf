@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/yorch/ccshelf/internal/cli/clicore"
@@ -46,7 +48,7 @@ func openConfigFile(cc *clicore.Context) (*cfgFile, error) {
 	if err != nil {
 		return nil, ui.Failure(err)
 	}
-	cfg, err := config.Parse(raw, path)
+	cfg, err := config.ParseUnexpanded(raw, path)
 	if err != nil {
 		return nil, ui.Failure(withHint(err, "fix it with: ccshelf config edit"))
 	}
@@ -93,31 +95,37 @@ type changeResult struct {
 // the single path of every writing "config" subcommand.
 func (l *launcher) commitConfig(ctx context.Context, cc *clicore.Context, w *writePlan) error {
 	f := w.file
-	var before, after []string
 	next := w.next
+	var data []byte
+	var same bool
 	if w.nextRaw != nil {
 		var err error
-		if next, err = config.Parse(w.nextRaw, f.path); err != nil {
+		if next, err = config.ParseUnexpanded(w.nextRaw, f.path); err != nil {
 			return ui.Failure(err)
 		}
-		before, after = splitLines(string(f.raw)), splitLines(string(w.nextRaw))
+		data = w.nextRaw
+		same = string(w.nextRaw) == string(f.raw)
 	} else {
-		if err := next.Validate(); err != nil {
-			return ui.Usage(fmt.Errorf("configuration: %w", err))
+		if err := next.ValidateUnexpanded(); err != nil {
+			return ui.Usage(fmt.Errorf("configuration: %s", renumberSources(err.Error())))
 		}
-		b, err := config.Encode(f.cfg)
+		var err error
+		if data, err = config.EncodeUnexpanded(next); err != nil {
+			return ui.Failure(err)
+		}
+		cur, err := config.EncodeUnexpanded(f.cfg)
 		if err != nil {
 			return ui.Failure(err)
 		}
-		a, err := config.Encode(next)
-		if err != nil {
-			return ui.Failure(err)
-		}
-		before, after = splitLines(string(b)), splitLines(string(a))
+		same = string(cur) == string(data)
 	}
+	// The diff is between the file as it is and the exact bytes that would be
+	// written, so whatever re-encoding changes (comments, layout, empty
+	// tables) is visible.
+	before, after := splitLines(string(f.raw)), splitLines(string(data))
 	res := changeResult{Path: f.path, Weakening: []string{}, NothingFetched: true}
 	diff := diffLines(before, after)
-	if len(diff) == 0 {
+	if same {
 		return finishNoChange(cc, res)
 	}
 	res.Changed = true
@@ -170,7 +178,7 @@ func (l *launcher) commitConfig(ctx context.Context, cc *clicore.Context, w *wri
 	if w.nextRaw != nil {
 		res.Backup, err = config.SaveRawChecked(f.path, w.nextRaw, f.raw)
 	} else {
-		res.Backup, err = config.SaveChecked(f.path, next, f.raw)
+		res.Backup, err = config.SaveRawChecked(f.path, data, f.raw)
 	}
 	switch {
 	case errors.Is(err, config.ErrChangedWhileEditing):
@@ -191,6 +199,17 @@ func (l *launcher) commitConfig(ctx context.Context, cc *clicore.Context, w *wri
 		printEquivalent(cc, w.rec)
 	}
 	return nil
+}
+
+var sourceIndexRe = regexp.MustCompile(`sources\[(\d+)\]`)
+
+// renumberSources rewrites the 0-based "sources[2]" of validation errors as
+// "source 3", the numbering of config show, ls, pin and rm.
+func renumberSources(msg string) string {
+	return sourceIndexRe.ReplaceAllStringFunc(msg, func(m string) string {
+		n, _ := strconv.Atoi(m[len("sources[") : len(m)-1])
+		return "source " + strconv.Itoa(n+1)
+	})
 }
 
 func finishNoChange(cc *clicore.Context, res changeResult) error {

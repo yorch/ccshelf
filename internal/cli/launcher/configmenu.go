@@ -11,7 +11,8 @@ import (
 	"github.com/yorch/ccshelf/internal/ui"
 )
 
-// configMenu is "ccshelf config" in a terminal. Each choice gathers its values
+// configMenu is "ccshelf config" in a terminal. It returns to the menu after
+// each action, whatever its outcome, until Done or an interrupt. Each choice gathers its values
 // with prompts and ends in the same summary and default-no confirmation as the
 // flag form, then prints the equivalent flag command.
 func (l *launcher) configMenu(ctx context.Context, cc *clicore.Context) error {
@@ -50,7 +51,13 @@ func (l *launcher) configMenu(ctx context.Context, cc *clicore.Context) error {
 			return nil
 		}
 		if err != nil {
-			return err
+			// An interrupt or abort leaves the menu; any other problem (a
+			// declined write, a duplicate source, an invalid edit) is reported
+			// and the menu comes back.
+			if ctx.Err() != nil || ui.CodeOf(err) == ui.ExitInterrupted {
+				return err
+			}
+			ui.Report(cc.Streams.Err, err, cc.Mode)
 		}
 	}
 }
@@ -201,8 +208,9 @@ func pickSetting(ctx context.Context, cc *clicore.Context, cfg *config.Config) (
 	return opts[i].Value, nil
 }
 
-// askSettingValue asks the new value of key. For a value that has a default an
-// empty answer (or the "default" choice) unsets the key.
+// askSettingValue asks the new value of key. A bool or enum is a picker of its
+// values; any other key is a line, and an empty line puts the key back to its
+// default (unset).
 func askSettingValue(ctx context.Context, cc *clicore.Context, cfg *config.Config, key string) (value string, unset bool, err error) {
 	st, _ := config.LookupSetting(key)
 	cur, _ := cfg.GetSetting(key)

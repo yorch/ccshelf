@@ -7,10 +7,12 @@ import (
 	"io/fs"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // This file holds what "ccshelf config" needs to change an existing
@@ -93,7 +95,7 @@ func (c *Config) GetSetting(key string) (value string, set bool) {
 		return c.Update.EffectiveMode(), c.Update.Mode != ""
 	case "update.interval":
 		if c.Update.Interval == "" {
-			return DefaultUpdateInterval.String(), false
+			return FormatInterval(DefaultUpdateInterval), false
 		}
 		return c.Update.Interval, true
 	case "catalog.remote_url":
@@ -201,23 +203,69 @@ func (c *Config) UnsetSetting(key string) error {
 	return nil
 }
 
+// FormatInterval prints d compactly: 24h, 1h30m, 90s.
+func FormatInterval(d time.Duration) string {
+	s := d.String()
+	if strings.HasSuffix(s, "m0s") {
+		s = strings.TrimSuffix(s, "0s")
+	}
+	if strings.HasSuffix(s, "h0m") {
+		s = strings.TrimSuffix(s, "0m")
+	}
+	return s
+}
+
 // SameSource reports whether a and b are the same source: the same type and
-// the same repository URL (git), directory (dir) or plugin id (plugin). The
-// ref, folder and marketplace are not part of the identity: to change them
-// use "config source pin", remove the source, or edit the file.
+// the same repository (git), directory (dir) or plugin id (plugin). A git
+// repository is compared in normalized form (see NormalizeGitURL) together with
+// its folder, so two folders of one repository are two sources, while
+// https://h/o/r, https://h/o/r/ and https://h/o/r.git are one. The ref and the
+// marketplace are not part of the identity: to change them use "config source
+// pin", remove the source, or edit the file.
 func SameSource(a, b SourceConfig) bool {
 	if a.Type != b.Type {
 		return false
 	}
 	switch a.Type {
 	case SourceGit:
-		return a.URL == b.URL
+		return NormalizeGitURL(a.URL) == NormalizeGitURL(b.URL) && path.Clean("/"+a.Path) == path.Clean("/"+b.Path)
 	case SourceDir:
 		return samePath(a.Path, b.Path)
 	case SourcePlugin:
 		return a.Plugin == b.Plugin
 	}
 	return false
+}
+
+// NormalizeGitURL returns a form in which spellings of one repository on one
+// transport compare equal: the scheme (https only) and host in lower case, no
+// trailing "/" and no ".git", and user@host:path equal to ssh://user@host/path.
+// An https and an ssh address of one repository stay different.
+func NormalizeGitURL(raw string) string {
+	trim := func(p string) string {
+		p = strings.TrimRight(p, "/")
+		return strings.TrimSuffix(p, ".git")
+	}
+	switch {
+	case strings.HasPrefix(raw, "https://"), strings.HasPrefix(raw, "ssh://"):
+		u, err := url.Parse(raw)
+		if err != nil {
+			return raw
+		}
+		if u.Scheme == "ssh" {
+			user := ""
+			if u.User != nil {
+				user = u.User.Username() + "@"
+			}
+			return "ssh:" + user + strings.ToLower(u.Hostname()) + "/" + strings.TrimLeft(trim(u.Path), "/")
+		}
+		return "https:" + strings.ToLower(u.Host) + "/" + strings.TrimLeft(trim(u.Path), "/")
+	}
+	if i := strings.Index(raw, ":"); i > 0 && strings.Contains(raw[:i], "@") {
+		at := strings.LastIndex(raw[:i], "@")
+		return "ssh:" + raw[:at+1] + strings.ToLower(raw[at+1:i]) + "/" + strings.TrimLeft(trim(raw[i+1:]), "/")
+	}
+	return raw
 }
 
 // SourceLocation is the address of a source for display: the repository URL,
@@ -239,7 +287,16 @@ func (s SourceConfig) SourceLocation() string {
 //   - sets update.mode to install (a new binary is installed without a
 //     separate step);
 //   - adds a git source (or changes the ref of one) so that its ref is not a
-//     tag or full commit id, which can only happen while require_pin is off.
+//     tag or full commit id, which can only happen while require_pin is off;
+//   - adds a dir source whose path starts with $ (the variable is read at every
+//     run, so what it names can change without a config change);
+//   - changes what is trusted to supply code or releases: claude.path,
+//     update.base_url, update.cosign_identity_repo, a new update.asset_hosts
+//     entry, the marketplace of an existing plugin source, or the URL of an
+//     existing git source. "Existing" for a URL means the same position when
+//     the number of sources is unchanged (a removal shifts positions, and a
+//     removal is not a weakening); it is conservative: an edit that swaps one
+//     source for another in one step is reported too.
 //
 // Not weakening: going back to a stricter or default value, trust.on_change,
 // removing a source, and adding a pinned source (a new source still needs
@@ -254,6 +311,39 @@ func Weakening(before, after *Config) []string {
 	}
 	if before.Update.Mode != UpdateInstall && after.Update.Mode == UpdateInstall {
 		out = append(out, "update.mode is install: new releases are installed automatically")
+	}
+	if before.Claude.Path != after.Claude.Path {
+		out = append(out, "claude.path changed: ccshelf will start a different claude binary")
+	}
+	if before.Update.BaseURL != after.Update.BaseURL {
+		out = append(out, "update.base_url changed: releases are fetched from a different server")
+	}
+	if before.Update.CosignIdentityRepo != after.Update.CosignIdentityRepo {
+		out = append(out, "update.cosign_identity_repo changed: releases signed by a different repository are accepted")
+	}
+	for _, h := range after.Update.AssetHosts {
+		if !contains(before.Update.AssetHosts, h) {
+			out = append(out, fmt.Sprintf("update.asset_hosts gained %s: release downloads may be redirected to it", h))
+		}
+	}
+	for _, s := range after.Sources {
+		if s.Type == SourcePlugin {
+			for _, b := range before.Sources {
+				if SameSource(b, s) && b.Marketplace != s.Marketplace {
+					out = append(out, fmt.Sprintf("plugin source %s now expects marketplace %q instead of %q", s.Plugin, s.Marketplace, b.Marketplace))
+				}
+			}
+		}
+		if s.Type == SourceDir && strings.HasPrefix(s.Path, "$") && !containsSource(before.Sources, s) {
+			out = append(out, fmt.Sprintf("dir source %s starts with a variable, which is read at every run", s.Path))
+		}
+	}
+	if len(before.Sources) == len(after.Sources) {
+		for i, s := range after.Sources {
+			if b := before.Sources[i]; s.Type == SourceGit && b.Type == SourceGit && NormalizeGitURL(b.URL) != NormalizeGitURL(s.URL) {
+				out = append(out, fmt.Sprintf("git source %d now points at %s instead of %s", i+1, s.URL, b.URL))
+			}
+		}
 	}
 	for _, s := range after.Sources {
 		if s.Type != SourceGit || ValidatePin(s.Ref) == nil {

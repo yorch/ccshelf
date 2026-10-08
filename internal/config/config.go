@@ -229,7 +229,15 @@ func ReadFile(path string) ([]byte, error) {
 
 // Parse decodes and validates configuration text. name only labels errors
 // (a file name); nothing is read from disk.
-func Parse(raw []byte, name string) (*Config, error) {
+func Parse(raw []byte, name string) (*Config, error) { return parse(raw, name, true) }
+
+// ParseUnexpanded is Parse for a command that rewrites the file: ~ and
+// variables in account directories and claude.path are validated as they would
+// expand, but the returned Config keeps the text the user wrote, so writing it
+// back changes nothing the user did not ask to change.
+func ParseUnexpanded(raw []byte, name string) (*Config, error) { return parse(raw, name, false) }
+
+func parse(raw []byte, name string, expand bool) (*Config, error) {
 	cfg := Default()
 	dec := toml.NewDecoder(bytes.NewReader(raw)).DisallowUnknownFields()
 	if err := dec.Decode(cfg); err != nil {
@@ -248,6 +256,12 @@ func Parse(raw []byte, name string) (*Config, error) {
 		}
 		return nil, fmt.Errorf("config %s: %w", name, errors.Join(errs...))
 	}
+	if !expand {
+		if err := cfg.ValidateUnexpanded(); err != nil {
+			return nil, fmt.Errorf("config %s: %w", name, err)
+		}
+		return cfg, nil
+	}
 	if err := cfg.expand(); err != nil {
 		return nil, fmt.Errorf("config %s: %w", name, err)
 	}
@@ -255,6 +269,20 @@ func Parse(raw []byte, name string) (*Config, error) {
 		return nil, fmt.Errorf("config %s: %w", name, err)
 	}
 	return cfg, nil
+}
+
+// ValidateUnexpanded is Validate for a Config whose paths still hold ~ and
+// variables as written (see ParseUnexpanded): it checks an expanded copy.
+func (c *Config) ValidateUnexpanded() error {
+	cp := *c
+	cp.Accounts = make(map[string]Account, len(c.Accounts))
+	for k, v := range c.Accounts {
+		cp.Accounts[k] = v
+	}
+	if err := cp.expand(); err != nil {
+		return err
+	}
+	return cp.Validate()
 }
 
 func describeDecode(err error) error {
@@ -595,11 +623,29 @@ func checkDirSourcePath(p string) error {
 	case p == "~" || strings.HasPrefix(p, "~/") || strings.HasPrefix(p, `~\`):
 		return nil
 	case strings.HasPrefix(p, "$"):
+		if v := cwdVariable(p); v != "" {
+			return fmt.Errorf("%q starts with $%s, the directory you run ccshelf from: a cloned repository could then supply profiles as if they were yours (SR2); use an absolute path, or ~", p, v)
+		}
 		return nil // expanded later; ResolvedPath requires an absolute result
 	case filepath.IsAbs(p):
 		return nil
 	}
 	return fmt.Errorf("%q must be absolute or start with ~ (a relative path would depend on the working directory)", p)
+}
+
+// cwdVariable returns PWD or OLDPWD when p starts with that variable ($PWD,
+// ${PWD}, ${PWD:-x}), and "" otherwise.
+func cwdVariable(p string) string {
+	rest := strings.TrimPrefix(p, "$")
+	rest = strings.TrimPrefix(rest, "{")
+	n := 0
+	for n < len(rest) && (rest[n] == '_' || rest[n] >= '0' && rest[n] <= '9' || rest[n] >= 'A' && rest[n] <= 'Z' || rest[n] >= 'a' && rest[n] <= 'z') {
+		n++
+	}
+	if name := rest[:n]; name == "PWD" || name == "OLDPWD" {
+		return name
+	}
+	return ""
 }
 
 // samePath reports whether a and b name the same path on the running OS.
@@ -687,6 +733,22 @@ func Encode(cfg *Config) ([]byte, error) {
 		return nil, errors.New("saving config: nil config")
 	}
 	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("saving config: %w", err)
+	}
+	data, err := toml.Marshal(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("encoding config: %w", err)
+	}
+	return data, nil
+}
+
+// EncodeUnexpanded is Encode for a Config that holds paths as written (see
+// ParseUnexpanded).
+func EncodeUnexpanded(cfg *Config) ([]byte, error) {
+	if cfg == nil {
+		return nil, errors.New("saving config: nil config")
+	}
+	if err := cfg.ValidateUnexpanded(); err != nil {
 		return nil, fmt.Errorf("saving config: %w", err)
 	}
 	data, err := toml.Marshal(cfg)
