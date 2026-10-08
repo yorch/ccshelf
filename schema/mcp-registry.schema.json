@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://ccshelf.dev/schema/mcp-registry.schema.json",
   "title": "ccshelf MCP registry",
-  "description": "mcp/registry.toml: named MCP server definitions that profiles reference by name. Secrets are never stored here; env_refs lists variable names only.",
+  "description": "mcp/registry.toml: named MCP server definitions that profiles reference by name. Secrets are never stored here. env_refs lists variable names only.",
   "type": "object",
   "additionalProperties": false,
   "required": ["servers"],
