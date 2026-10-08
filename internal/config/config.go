@@ -162,7 +162,7 @@ func ValidateBranch(name string) error {
 	}
 	first, _, _ := strings.Cut(strings.ToLower(name), "/")
 	if first == "refs" || ((first == "heads" || first == "remotes") && strings.Contains(name, "/")) {
-		return fmt.Errorf("branch %q looks like a full ref name; give the branch name only, for example %q", name, strings.TrimPrefix(strings.TrimPrefix(name, "refs/"), "heads/"))
+		return fmt.Errorf("branch %q looks like a full ref name. Give the branch name only", name)
 	}
 	for _, part := range strings.Split(name, "/") {
 		if strings.HasPrefix(part, ".") || strings.HasSuffix(part, ".lock") {
@@ -264,13 +264,23 @@ func ValidatePin(ref string) error {
 	}
 	switch {
 	case reservedRefs[lower] || reservedRefLeaders[first]:
-		return fmt.Errorf("ref %q looks like a branch or a moving reference. Pin a tag or a full 40-hex commit SHA, or track the branch with branch = %q", ref, ref)
+		return fmt.Errorf("ref %q looks like a branch or a moving reference. Pin a tag or a full 40-hex commit SHA.%s", ref, branchHint(lower))
 	case strings.Contains(ref, ".."), strings.HasSuffix(ref, "."), strings.HasSuffix(lower, ".lock"):
 		return fmt.Errorf("ref %q is not a valid git tag name", ref)
 	case hexRe.MatchString(ref) && len(ref) >= 7 && len(ref) < 40:
 		return fmt.Errorf("ref %q looks like an abbreviated commit id, which is ambiguous. Use the full 40-hex SHA or a tag", ref)
 	}
 	return nil
+}
+
+// branchHint suggests the branch key for the usual names of a default branch.
+// It names only a fixed list, so no input is echoed back.
+func branchHint(lower string) string {
+	switch lower {
+	case "main", "master", "develop", "development", "dev", "trunk":
+		return fmt.Sprintf(" To track the branch, use branch = %q.", lower)
+	}
+	return ""
 }
 
 // Load reads and validates the configuration at path. A missing file yields
@@ -575,7 +585,12 @@ func (c *Config) validateGit(p string, s SourceConfig, add func(string, ...any))
 	case s.Ref != "" && s.Branch != "":
 		add("%s: use ref or branch, not both", p)
 	case s.Ref == "" && s.Branch == "":
-		add("%s: a pinned ref (a tag or full commit id) or a branch is required", p)
+		// With pins required this is a load error (as before). With pins off
+		// it is one unavailable source (gitsource.New reports it), so the
+		// personal profiles and "config source pin" keep working.
+		if c.Trust.RequirePin {
+			add("%s: a pinned ref is required. Add ref = \"<tag>\" or branch = \"<name>\"", p)
+		}
 	case s.Branch != "":
 		// An explicit branch is allowed even with trust.require_pin: the
 		// config says in plain words that the source moves (D-54).

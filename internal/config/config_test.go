@@ -264,8 +264,13 @@ func TestLoadRelaxedPin(t *testing.T) {
 	if _, err := Load(write(t, body+"ref = \"v1\"\n")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Load(write(t, body)); err == nil {
-		t.Error("a git source with neither ref nor branch accepted")
+	// With pins off, a source with neither key still loads (it is one
+	// unavailable source at run time, as on main). With pins on it is a load error.
+	if _, err := Load(write(t, body)); err != nil {
+		t.Errorf("a git source with neither ref nor branch, pins off: %v", err)
+	}
+	if _, err := Load(write(t, strings.Replace(body, "require_pin = false", "require_pin = true", 1))); err == nil || !strings.Contains(err.Error(), "branch = ") {
+		t.Errorf("neither ref nor branch, pins on: %v", err)
 	}
 	if _, err := Load(write(t, body+"ref = \"-x\"\n")); err == nil {
 		t.Error("dash ref accepted")
@@ -470,5 +475,30 @@ func TestTrustRefSeparatesBranchFromTag(t *testing.T) {
 	}
 	if br.TrustRef() != "branch:main-1" || tag.TrustRef() != "main-1" {
 		t.Errorf("trust refs = %q, %q", tag.TrustRef(), br.TrustRef())
+	}
+}
+
+func TestPinHintsDoNotEchoInput(t *testing.T) {
+	for _, ref := range []string{"HEAD", "FETCH_HEAD", "origin", "refs-x", "latest"} {
+		err := ValidatePin(ref)
+		if err == nil {
+			t.Fatalf("%s accepted", ref)
+		}
+		if strings.Contains(err.Error(), "branch = ") {
+			t.Errorf("%s: hint echoes the input: %v", ref, err)
+		}
+	}
+	if err := ValidatePin("main"); err == nil || !strings.Contains(err.Error(), `branch = "main"`) {
+		t.Errorf("main: %v", err)
+	}
+	for _, n := range []string{"refs/heads/x", "heads/x", "remotes/x", "Refs/x"} {
+		if err := ValidateBranch(n); err == nil || strings.Contains(err.Error(), "for example") {
+			t.Errorf("%s: %v", n, err)
+		}
+	}
+	for _, e := range []error{ValidatePin("main"), ValidatePin("a/b"), ValidateBranch("refs/x"), ValidateBranch("a b")} {
+		if strings.Contains(e.Error(), ";") {
+			t.Errorf("semicolon in %q", e)
+		}
 	}
 }

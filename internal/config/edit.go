@@ -366,7 +366,7 @@ func Weakening(before, after *Config) []string {
 			continue
 		}
 		if s.Branch != "" {
-			out = append(out, fmt.Sprintf("git source %s tracks branch %s: the branch can move without notice (every new commit still needs trust before it runs)", s.URL, s.Branch))
+			out = append(out, BranchWarning(s))
 			continue
 		}
 		ref := s.Ref
@@ -376,6 +376,11 @@ func Weakening(before, after *Config) []string {
 		out = append(out, fmt.Sprintf("git source %s has ref %s, which is not a tag or full commit id: it can move without notice", s.URL, ref))
 	}
 	return out
+}
+
+// BranchWarning is the warning for a git source that tracks a branch.
+func BranchWarning(s SourceConfig) string {
+	return fmt.Sprintf("git source %s tracks branch %s. The branch can move without notice, and every new commit still needs trust before it runs", s.URL, s.Branch)
 }
 
 func containsSource(list []SourceConfig, s SourceConfig) bool {
