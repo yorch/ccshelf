@@ -1,6 +1,6 @@
 # Catalog and the org data repo
 
-How the tool repo and an adopting org's private data repo relate (R5), what each contains, and how the data repo is structured. The org data repo is called the "profile catalog repo" in conversation.
+How the tool repo and an adopting org's private org data repo relate (R5), what each contains, and the structure of the org data repo. In conversation, people call the org data repo the "profile catalog repo".
 
 ## Tool repo vs data repo (R5)
 Decided 2026-10-06: the **tool is hosted in a public GitHub repo** (this one), and an adopting company stores its **profiles and catalog data in its own private GHE repo**. The tool never assumes the two live together.
@@ -9,15 +9,22 @@ Decided 2026-10-06: the **tool is hosted in a public GitHub repo** (this one), a
 |---|---|---|
 | Holds | Go source, schemas, docs, release binaries, a reusable GitHub Action, example/fictional profiles, a starter template | The org's `marketplace.json`, plugins, `profiles/*.toml`, generated profile bundles (`bundles/`), org config. The built catalog (`catalog.json`, site) is produced in CI and not committed |
 | Contains org data? | Never. Examples are fictional. | Yes |
-| Released how | Public GitHub Releases (goreleaser); package managers; adopters may mirror internally | Not released; consumed by the tool |
+| Released how | Public GitHub Releases (goreleaser), package managers. Adopters may mirror internally | Not released. The tool consumes it |
 | Changes by | Open-source contributors | The org's platform team |
 
 Consequences:
-- **Reusable CI:** the data repo's workflow calls the public tool, either `uses: <owner>/ccshelf/action@<full commit SHA>` or a step that downloads a pinned release binary. GHE Cloud can use public actions directly; **GHE Server needs GitHub Connect or a mirror** (e.g. `actions-sync`), or the binary-download variant (also mirrorable to an internal registry). Both variants must be documented; the logic stays in the binary (R2).
-- **Pin everything (SR5).** The data repo pins the tool by full commit SHA (never a moving tag), the Action embeds the expected SHA-256 of the binary it downloads, and releases are signed with provenance, because the tool runs in the org's CI and on developers' machines.
-- **Starter template** (layout below): ship a template/example data repo (`examples/org-data-repo/`, possibly also a GitHub template repository) with a sample `marketplace.json`, `profiles/`, a CI workflow and a catalog publish recipe, so adopting takes minutes.
-- **Configuration lives with the adopter, not in the tool:** profile sources (`dir`/`git`, later `plugin`), the catalog metadata schema location and lint rules come from the org's `ccshelf.toml` in the data repo and the user's own `~/.config/ccshelf/config.toml`, with sane defaults. The tool repo never needs to know about a particular org.
-- **Catalog hosting is the adopter's choice** (R2): the tool outputs a plain static directory; the starter template shows GitHub Pages and an internal static host. We don't pick one for the org.
+- **Reusable CI:** the org data repo's workflow calls the public tool, either `uses: <owner>/ccshelf/action@<full commit SHA>` or a step that downloads a pinned release binary. GHE Cloud can use public actions directly. **GHE Server needs GitHub Connect or a mirror** (e.g. `actions-sync`), or the binary-download variant (also mirrorable to an internal registry). The docs must describe both variants. The logic stays in the binary (R2).
+- **Pin everything (SR5).** The tool runs in the org's CI and on developers' machines. So:
+  - The org data repo pins the tool by full commit SHA (never a moving tag).
+  - The Action embeds the expected SHA-256 of the binary it downloads.
+  - Releases are signed with provenance.
+- **Starter template** (layout below): ship a template/example org data repo (`examples/org-data-repo/`, possibly also a GitHub template repository). It has a sample `marketplace.json`, `profiles/`, a CI workflow and a catalog publish recipe, so adopting takes minutes.
+- **Configuration lives with the adopter, not in the tool:** profile sources (`dir`/`git`, later `plugin`), the catalog metadata schema location and lint rules come from two files, with sane defaults:
+  - the org's `ccshelf.toml` in the org data repo
+  - the user's own `~/.config/ccshelf/config.toml`.
+
+  The tool repo never needs to know about a particular org.
+- **Catalog hosting is the adopter's choice** (R2): the tool outputs a plain static directory. The starter template shows GitHub Pages and an internal static host. We don't pick one for the org.
 - **Telemetry:** none by default. An open-source tool that runs in corporate CI must not phone home.
 - **Security reporting, license and contribution docs** live in the public repo (R4).
 
@@ -35,23 +42,27 @@ The tool repo holds **no real org definitions**, but it does hold **fictional ex
 - **Docs:** the research notes, `AGENTS.md`, the license, security policy and contribution guide.
 - **Starter template** (`examples/org-data-repo/`): a complete but fictional org data repo (sample `marketplace.json`, a couple of example plugins, profiles such as `frontend` and `sre`, sidecars, org config and CI workflows). Adopters copy it to start, and it doubles as a test fixture.
 
-Never in the tool repo: a real org's plugins, profiles, sidecars, marketplace, taxonomy or MCP server definitions; org-specific URLs, team names or secrets.
+Never in the tool repo:
+- a real org's plugins, profiles, sidecars, marketplace, taxonomy or MCP server definitions
+- org-specific URLs, team names or secrets.
 
-Two choices: (1) **no built-in default profiles**: roles like "frontend" are org choices and a shipped default invites arguments about what belongs in it, so the examples show the format and nothing more; (2) a **public demo catalog** built from the fictional starter data and published (for example on GitHub Pages) is optional, to show what the catalog looks like.
+Two choices:
+1. **No built-in default profiles.** Roles like "frontend" are org choices, and a shipped default invites arguments about what belongs in it. So the examples show the format and nothing more.
+2. A **public demo catalog** built from the fictional starter data and published (for example on GitHub Pages) is optional, to show what the catalog looks like.
 
 ---
 
 ## Structure of the org data repo
 
 
-This describes the **private repo an adopting organization keeps** (R5): its marketplace, profiles and catalog data. The public tool repo (this one) ships a starter template of it in `examples/org-data-repo/` once code starts. Everything here is a design proposal except where marked decided; names are provisional. The `ccshelf` commands shown don't exist yet.
+This describes the **private repo an adopting organization keeps** (R5): its marketplace, profiles and catalog data. The public tool repo (this one) ships a starter template of it in `examples/org-data-repo/` once code starts. Everything here is a design proposal except where marked decided. Names are provisional. The `ccshelf` commands shown don't exist yet.
 
 ## Principles
 1. **Native first.** `marketplace.json` and plugin folders stay exactly what Claude Code expects, so `/plugin` works with the repo unchanged.
-2. **Hand-written data is small and reviewable; everything else is derived.** Catalog site and `catalog.json` are built in CI and not committed.
+2. **Hand-written data is small and reviewable. Everything else is derived.** CI builds the catalog site and `catalog.json`, and they are not committed.
 3. **Ownership is routable.** Review rules must be expressible in `CODEOWNERS` (which works per file, not per JSON entry).
-4. **Pinned and releasable.** Consumers pin a tag of this org data repo for profile sources; plugins are tagged `<plugin>--v<version>` for native dependency resolution.
-5. **Works for small and large registries.** ~50 plugins is the design point; a single-file mode exists for tiny registries.
+4. **Pinned and releasable.** Consumers pin a tag of this org data repo for profile sources. Plugins are tagged `<plugin>--v<version>` for native dependency resolution.
+5. **Works for small and large registries.** ~50 plugins is the design point. A single-file mode exists for tiny registries.
 
 ## Layout
 ```
@@ -92,7 +103,7 @@ acme-claude-marketplace/                 # private repo on GHE (Cloud or Server)
 ├── docs/                                # contributor guide: add a plugin, metadata fields, deprecation
 └── README.md                            # links to the catalog site and the contributor guide
 ```
-Not in the repo: the built catalog (`dist/`, published as an artifact or to a static host) and `catalog.json` (also built). They can be reproduced from the files above.
+Not in the repo: the built catalog (`dist/`, published as an artifact or to a static host) and `catalog.json` (also built). The files above can reproduce them.
 
 ## What each part is
 | Path | Written by | Committed? | Purpose |
@@ -104,18 +115,18 @@ Not in the repo: the built catalog (`dist/`, published as an artifact or to a st
 | `mcp/registry.toml` | Humans | Yes | Named MCP server definitions. Security-sensitive: commands and env are code execution on developer machines. |
 | `catalog/plugins/<name>.toml` | Plugin authors | Yes | Catalog-only metadata, one file per plugin (see below). |
 | `catalog/taxonomy.toml` | Platform team | Yes | Allowed categories and tags, so the catalog's facets stay clean. |
-| `ccshelf.toml` | Platform team | Yes | Which sidecar fields are required, lint severity, catalog title and the marketplace files that feed the catalog. Users configure their own profile sources in `~/.config/ccshelf/config.toml`; `ccshelf init` can write that from the data repo's URL (proposed). |
+| `ccshelf.toml` | Platform team | Yes | Which sidecar fields are required, lint severity, catalog title and the marketplace files that feed the catalog. Users configure their own profile sources in `~/.config/ccshelf/config.toml`. `ccshelf init` can write that from the org data repo's URL (proposed). |
 | `dist/`, `catalog.json` | CI | No | Built catalog. |
 
 ## Where catalog metadata lives: a sidecar per plugin (decided 2026-10-06)
-The earlier convention put `owner`, `status`, `when_to_use`, etc. into each marketplace entry's free-form `metadata`. That has a problem: with ~50 plugins in one `marketplace.json`, **`CODEOWNERS` can't route review per entry**, so the decided "authors write, platform team reviews" model can't be enforced by file ownership. A sidecar file per plugin fixes this: a PR that touches `catalog/plugins/*.toml` requires platform review, while plugin source stays with the author's team.
+The earlier convention put `owner`, `status`, `when_to_use`, etc. into each marketplace entry's free-form `metadata`. That has a problem: with ~50 plugins in one `marketplace.json`, **`CODEOWNERS` can't route review per entry**. So file ownership can't enforce the decided "authors write, platform team reviews" model. A sidecar file per plugin fixes this: a PR that touches `catalog/plugins/*.toml` requires platform review, while plugin source stays with the author's team.
 
-- `marketplace.json` keeps only what Claude Code reads (plus `category` and `tags`, which are native; whether the `/plugin` UI searches them is unverified).
+- `marketplace.json` keeps only what Claude Code reads, plus `category` and `tags`, which are native. Whether the `/plugin` UI searches them is unverified.
 - The catalog is **derived from** `marketplace.json` + sidecars + git data (last change, contributors). Nothing is duplicated into `metadata`.
-- Plugins hosted outside this org data repo get a sidecar too; the sidecar directory is uniform, not colocated with plugin source.
-- **Small registries** (for example under 20 plugins) can opt into **single-file mode** (`ccshelf.toml`: `metadata_source = "marketplace"`), reading the same fields from each entry's `metadata` object, so one file is enough.
+- Plugins hosted outside this org data repo get a sidecar too. The sidecar directory is uniform, not colocated with plugin source.
+- **Small registries** (for example under 20 plugins) can opt into **single-file mode** (`ccshelf.toml`: `metadata_source = "marketplace"`). This mode reads the same fields from each entry's `metadata` object, so one file is enough.
 
-Sidecar example (`catalog/plugins/sre-kit.toml`; fields are provisional):
+Sidecar example (`catalog/plugins/sre-kit.toml`, fields are provisional):
 ```toml
 owner = "@acme/sre"                  # team accountable for this plugin (required)
 status = "active"                    # active | experimental | deprecated (required)
@@ -129,19 +140,19 @@ docs = "https://wiki.example/sre-kit"
 ```
 
 ## Profiles-only org data repo (decided 2026-10-08, D-52)
-An organization can keep only profiles (plus `prompts/` and `mcp/registry.toml`) in its org data repo, with no plugin marketplace and no catalog. `[catalog] enabled = false` in `ccshelf.toml` says so; the key defaults to `true`, so every existing repo is unchanged.
+An organization can keep only profiles (plus `prompts/` and `mcp/registry.toml`) in its org data repo, with no plugin marketplace and no catalog. `[catalog] enabled = false` in `ccshelf.toml` says so. The key defaults to `true`, so every existing repo is unchanged.
 
 | Command | With `enabled = false` |
 |---|---|
-| `ccshelf lint` | Skips every check that needs a marketplace, plugins, sidecars or bundles (CAT001 to CAT042, CAT044, CAT046, CAT048 and CAT050 to CAT053). Keeps the profile checks (PRF*), the MCP registry, prompts, protect lists and the CODEOWNERS checks (CAT043, CAT045, CAT047; CAT043 also fires when there are profiles but no CODEOWNERS). A marketplace file or `bundles/` that exists anyway is **CAT061** (warning, "ignored"), and `[catalog]` keys other than `enabled` are **CAT062** (warning). |
-| `ccshelf compile`, `catalog build`, `search`, `recommend` | `compile` and `catalog build` exit 1: `[catalog] enabled = false in ccshelf.toml: this repo has no marketplace, so there are no bundles/catalog`, with a hint; nothing is written. `search` and `recommend` do not treat the repo as a catalog: they fall back to the user's configured remote catalog or org source (exit 0), and exit 1 with the same message only when there is none. |
-| `ccshelf doctor` | Checks profiles and, with `--policy`, managed policy; the catalog checks have nothing to check; a note says so, and `--json` lists them as skipped (DOC000) with the reason. |
+| `ccshelf lint` | Skips every check that needs a marketplace, plugins, sidecars or bundles (CAT001 to CAT042, CAT044, CAT046, CAT048 and CAT050 to CAT053). Keeps the profile checks (PRF*), the MCP registry, prompts, protect lists and the CODEOWNERS checks (CAT043, CAT045, CAT047). CAT043 also fires when there are profiles but no CODEOWNERS. A marketplace file or `bundles/` that exists anyway is **CAT061** (warning, "ignored"), and `[catalog]` keys other than `enabled` are **CAT062** (warning). |
+| `ccshelf compile`, `catalog build`, `search`, `recommend` | `compile` and `catalog build` exit 1: `[catalog] enabled = false in ccshelf.toml: this repo has no marketplace, so there are no bundles/catalog`, with a hint. Nothing is written. `search` and `recommend` do not treat the repo as a catalog. They fall back to the user's configured remote catalog or org source (exit 0), and exit 1 with the same message only when there is none. |
+| `ccshelf doctor` | Checks profiles and, with `--policy`, managed policy. The catalog checks have nothing to check. A note says so, and `--json` lists them as skipped (DOC000) with the reason. |
 | Launcher | Unchanged: a `dir` source or a `git` source works without a marketplace. A git source does not watch `catalog/plugins/` or marketplace files when the catalog is off. |
 
 `ccshelf catalog init --profiles-only` sets such a repo up (see below). It is a repo for the roles of an organization whose plugins come from marketplaces that live elsewhere.
 
 ## Generated bundles
-`ccshelf compile` writes `bundles/profile-<name>/.claude-plugin/plugin.json` (name, version, `dependencies`) from `profiles/<name>.toml`. Because marketplaces serve files from git, these are committed; CI runs `ccshelf compile --check` and fails the PR if a committed bundle differs from what would be generated. The `marketplace.json` entry for each bundle (name, `source: ./bundles/profile-frontend`, category `profile`) is written by hand once; `lint` checks that every profile has an entry and every bundle entry has a profile. (Alternative: generate those entries into `marketplace.json`; rejected for now because mixing generated and hand-written entries in one JSON file invites merge conflicts.)
+`ccshelf compile` writes `bundles/profile-<name>/.claude-plugin/plugin.json` (name, version, `dependencies`) from `profiles/<name>.toml`. Because marketplaces serve files from git, these are committed. CI runs `ccshelf compile --check` and fails the PR if a committed bundle differs from what would be generated. A person writes the `marketplace.json` entry for each bundle (name, `source: ./bundles/profile-frontend`, category `profile`) by hand once. `lint` checks that every profile has an entry and every bundle entry has a profile. (Alternative: generate those entries into `marketplace.json`. Rejected for now, because mixing generated and hand-written entries in one JSON file invites merge conflicts.)
 
 ## Org config (`ccshelf.toml`)
 ```toml
@@ -179,34 +190,47 @@ mcp_registry = "mcp/registry.toml"
 /plugins/design-kit/               @acme/web
 /plugins/sre-kit/                  @acme/sre
 ```
-`ccshelf catalog init` writes this file for a new repo (see below). `ccshelf lint` can check that every `plugins/<name>/` folder has a `CODEOWNERS` line and that the sidecar `owner` matches it. Note that listing several owners on one `CODEOWNERS` line requires approval from any one of them; requiring both teams needs branch-protection rules or rulesets.
+`ccshelf catalog init` writes this file for a new repo (see below). `ccshelf lint` can check that every `plugins/<name>/` folder has a `CODEOWNERS` line and that the sidecar `owner` matches it. Note that listing several owners on one `CODEOWNERS` line requires approval from any one of them. To require both teams, use branch-protection rules or rulesets.
 
 ## CI workflows (thin wrappers around the pinned tool)
 | Workflow | Trigger | Steps |
 |---|---|---|
-| `validate.yml` | pull request | `claude plugin validate .`; `ccshelf lint`; `ccshelf compile --check`; `ccshelf catalog build` and upload the preview as an artifact |
-| `tag-plugins.yml` | merge to main | for each plugin whose version changed, create tag `<plugin>--v<version>` (`claude plugin tag`); needs tag-write permission |
-| `catalog.yml` | merge to main | `ccshelf catalog build`; publish to the org's chosen host (Pages or any static host) |
-| `release.yml` | manual or scheduled | create a repo tag (for example `v2026.10.1`); consumers pin profile sources to it |
+| `validate.yml` | pull request | `claude plugin validate .`, `ccshelf lint`, `ccshelf compile --check`, then `ccshelf catalog build` and upload the preview as an artifact |
+| `tag-plugins.yml` | merge to main | for each plugin whose version changed, create tag `<plugin>--v<version>` (`claude plugin tag`). Needs tag-write permission |
+| `catalog.yml` | merge to main | `ccshelf catalog build`, then publish to the org's chosen host (Pages or any static host) |
+| `release.yml` | manual or scheduled | create a repo tag (for example `v2026.10.1`). Consumers pin profile sources to it |
 
 All steps call the same pinned binary from the public tool repo (R2, R5): `uses: <owner>/ccshelf/action@<full commit SHA>` or a pinned release download whose SHA-256 is verified (SR5).
 
-**Workflow security (SR5).** `permissions: {}` at the top of every workflow, granted per job (`contents: write` only for tagging; `pages` and `id-token` only for the catalog). Secrets (for example an Analytics API key) live in a protected environment deployable only from `main`, and are not sent to pull requests from forks. Never interpolate `${{ }}` values from plugin names, versions, descriptions or sidecars into shell: pass them through `env:` and validate (for example a semver pattern). Require code-owner review and at least two approvals through a ruleset, and dismiss stale reviews. The catalog build renders sidecar and marketplace text with `textContent` and a strict CSP, Markdown with raw HTML off and only `http` and `https` links, and the publish step fails unless Pages visibility is private or internal. PR preview artifacts are built from untrusted content and are not published.
+**Workflow security (SR5).**
+- `permissions: {}` at the top of every workflow, granted per job (`contents: write` only for tagging, `pages` and `id-token` only for the catalog).
+- Secrets (for example an Analytics API key) live in a protected environment deployable only from `main`. They are not sent to pull requests from forks.
+- Never interpolate `${{ }}` values from plugin names, versions, descriptions or sidecars into shell. Pass them through `env:` and validate them (for example a semver pattern).
+- Require code-owner review and at least two approvals through a ruleset, and dismiss stale reviews.
+- The catalog build renders sidecar and marketplace text with `textContent` and a strict CSP. It renders Markdown with raw HTML off and only `http` and `https` links. The publish step fails unless Pages visibility is private or internal.
+- PR preview artifacts are built from untrusted content and are not published.
 
 ## Setting up the data repo: `ccshelf catalog init` (decided 2026-10-06, D-41)
-`ccshelf catalog init [dir]` bootstraps a **new** org data repo in an empty directory, or retrofits an **existing** marketplace repo (one that has `.claude-plugin/marketplace.json` and/or `plugins/`) without changing anything that is already there. It is the organization's one-time setup; `ccshelf init` stays each developer's own configuration. The behavior below is implemented and covered by unit, golden and end-to-end tests.
+`ccshelf catalog init [dir]` bootstraps a **new** org data repo in an empty directory. Or it retrofits an **existing** marketplace repo (one that has `.claude-plugin/marketplace.json` and/or `plugins/`) without changing anything that is already there. It is the organization's one-time setup. `ccshelf init` stays each developer's own configuration. The behavior below is implemented, and unit, golden and end-to-end tests cover it.
 
 ### Modes and the plan
-The mode is detected (`new`: a missing or empty directory, a lone `.git` counts as empty; `adopt`: anything else) and can be forced with `--mode new|adopt` (`new` on a directory with content is a usage error). The command always builds a **plan** first and prints it, one line per file, then (without `--dry-run`) writes it:
+The command detects the mode:
+- `new`: a missing or empty directory (a lone `.git` counts as empty)
+- `adopt`: anything else.
+
+`--mode new|adopt` forces the mode (`new` on a directory with content is a usage error). The command always builds a **plan** first and prints it, one line per file. Then (without `--dry-run`) it writes the plan:
 
 | Action | Meaning |
 |---|---|
-| `create` | The file does not exist; it is written (mode 0644, directories 0755, LF endings, no timestamps). |
+| `create` | The file does not exist. The command writes it (mode 0644, directories 0755, LF endings, no timestamps). |
 | `skip-exists` | The file exists and is left alone. The reason says `up to date` when it already equals what would be written, else `exists; left alone` (or `never rewritten` for `marketplace.json`). |
-| `needs-merge` | `.github/CODEOWNERS` (or the CODEOWNERS that GitHub reads from the root or `docs/`), `.gitattributes` or `.gitignore` exists and lacks generated rules or lines. The file is not touched; the lines to add are in the plan and, with `--write-suggestions`, in `<file>.ccshelf-suggested` next to it. For CODEOWNERS the check is semantic (an existing catch-all `*` owned by a platform owner already covers the platform paths) and the suggestion tells you to put a missing catch-all at the **top** of the file, because GitHub applies the last matching rule. |
+| `needs-merge` | `.github/CODEOWNERS` (or the CODEOWNERS that GitHub reads from the root or `docs/`), `.gitattributes` or `.gitignore` exists and lacks generated rules or lines. The file is not touched. The lines to add are in the plan and, with `--write-suggestions`, in `<file>.ccshelf-suggested` next to it. For CODEOWNERS the check is semantic (an existing catch-all `*` owned by a platform owner already covers the platform paths). The suggestion tells you to put a missing catch-all at the **top** of the file, because GitHub applies the last matching rule. |
 | `overwrite` | Only with `--force`: the old bytes are first saved as `<file>.bak` (an existing `.bak` stops the run), then the file is replaced atomically. `marketplace.json` is never rewritten, even with `--force`. |
 
-Adopt mode never edits, appends to or deletes an existing file; it creates only missing files, and the second run with the same flags changes nothing and says `nothing to do`. A re-run without the value flags works as well, because the values are read back from the existing `marketplace.json` and `ccshelf.toml`; a re-run after adding plugins creates their sidecars and suggests their CODEOWNERS lines (that is how the generated files are kept up to date: edit freely, run it again, merge the suggestions).
+Adopt mode never edits, appends to or deletes an existing file. It creates only missing files, and the second run with the same flags changes nothing and says `nothing to do`. A re-run without the value flags works as well, because the command reads the values back from the existing `marketplace.json` and `ccshelf.toml`. A re-run after adding plugins creates their sidecars and suggests their CODEOWNERS lines. That is how you keep the generated files up to date:
+1. Edit freely.
+2. Run it again.
+3. Merge the suggestions.
 
 ### What it generates
 ```
@@ -221,35 +245,96 @@ README.md                             what the repo is, how to add a plugin, pro
 .gitattributes, .gitignore            LF endings (the compile drift check compares bytes); dist/ and suggestion files
 profiles/example.toml.sample          only with --example-profile: an all-comment sample, never a profile
 ```
-Every group has a `--no-<group>` flag. **`--profiles-only`** (D-52) writes only `ccshelf.toml` (with `[catalog] enabled = false`), `.github/CODEOWNERS` (profiles, `mcp/`, `prompts/`, `ccshelf.toml`, `docs/` and `.github/` owned by the platform owners), a profiles-only `README.md`, `.gitattributes`, `.gitignore` and `.github/workflows/validate.yml` with the lint step only (no `compile --check`, no catalog preview, no `catalog.yml`, no `release.yml`); `--marketplace-name` is not needed and is a usage error with it, as are `--owner` and `--sidecars stub`, and so is a directory that already has a marketplace file. An existing `ccshelf.toml` must already have `[catalog] enabled = false` (add it yourself, or `--force` replaces the file after saving `.bak`), and `--no-config` is refused unless it has. A `plugins/` directory is ignored, with a note. There are **no built-in default profiles** (R5): roles are the organization's choice, and the one sample is commented out and carries a `.sample` suffix so that `ccshelf` never loads it. No organization name, host or data is in the templates.
+Every group has a `--no-<group>` flag. **`--profiles-only`** (D-52) writes only these files:
+- `ccshelf.toml` (with `[catalog] enabled = false`)
+- `.github/CODEOWNERS` (profiles, `mcp/`, `prompts/`, `ccshelf.toml`, `docs/` and `.github/` owned by the platform owners)
+- a profiles-only `README.md`
+- `.gitattributes`, `.gitignore`
+- `.github/workflows/validate.yml` with the lint step only (no `compile --check`, no catalog preview, no `catalog.yml`, no `release.yml`).
+
+With `--profiles-only`, `--marketplace-name` is not needed and is a usage error. So are `--owner` and `--sidecars stub`, and so is a directory that already has a marketplace file. An existing `ccshelf.toml` must already have `[catalog] enabled = false` (add it yourself, or `--force` replaces the file after saving `.bak`). Unless it has, the command refuses `--no-config`. The command ignores a `plugins/` directory, with a note. There are **no built-in default profiles** (R5): roles are the organization's choice. The one sample is commented out and carries a `.sample` suffix so that `ccshelf` never loads it. No organization name, host or data is in the templates.
 
 ### Placeholders and the lint result
-A sidecar stub has the owner (the owner the existing CODEOWNERS names for the plugin directory, else `--owner`, else the first platform owner), `status = "experimental"` (an unreviewed entry should not claim `active`) and `when_to_use = ["TODO(ccshelf): ..."]`. The fields that `lint.require` demands and that can hold a placeholder (`avoid_when`, `support`) get one; the ones that cannot (`review_by`, `overlaps_with`, `superseded_by`, `docs`) are left out, so lint reports them as errors (CAT013) exactly where work is needed. A marketplace entry whose `plugin.json` has no description gets `TODO(ccshelf): describe what <name> does`. `ccshelf lint` reports every remaining marker as warning **CAT048**, so the result for a freshly generated repo is deterministic: **no errors; warnings only CAT048 (one per placeholder) and, in adopt mode, whatever the existing files already had or the not yet merged CODEOWNERS suggestions leave uncovered (CAT044, CAT045, CAT046)**. A new repo without plugins lints with no findings at all, also with `--strict`.
+A sidecar stub has:
+- the owner (the owner the existing CODEOWNERS names for the plugin directory, else `--owner`, else the first platform owner)
+- `status = "experimental"` (an unreviewed entry should not claim `active`)
+- `when_to_use = ["TODO(ccshelf): ..."]`.
+
+The fields that `lint.require` demands and that can hold a placeholder (`avoid_when`, `support`) get one. The command leaves out the ones that cannot (`review_by`, `overlaps_with`, `superseded_by`, `docs`), so lint reports them as errors (CAT013) exactly where work is needed. A marketplace entry whose `plugin.json` has no description gets `TODO(ccshelf): describe what <name> does`. `ccshelf lint` reports every remaining marker as warning **CAT048**. So the result for a freshly generated repo is deterministic:
+- **no errors**
+- **warnings only CAT048 (one per placeholder) and, in adopt mode, whatever the existing files already had or the not yet merged CODEOWNERS suggestions leave uncovered (CAT044, CAT045, CAT046)**.
+
+A new repo without plugins lints with no findings at all, also with `--strict`.
 
 ### The ccshelf pin in the workflows
-The workflows call `yorch/ccshelf/action` by full commit SHA (SR5). `--ccshelf-ref` takes the 40-character commit SHA, or a release tag `vX.Y.Z` (which sets only the `version:` input; a tag can never be the pin); `--ccshelf-version` sets the tag when the ref is a SHA. Without a complete pin the workflows contain the all-zero SHA, a `TODO(ccshelf)` comment and a **separate `guard` job** (`permissions: {}`, no checkout, one `run:` step that prints a `::error title=ccshelf is not pinned::` annotation and exits 1); the job that uses the action has `needs: guard`. It has to be a job of its own: the runner resolves every `uses:` of a job in its "Set up job" step, before any step runs, so a guard step inside that job could never run ahead of the unresolvable placeholder and users would see "unable to resolve action" instead. With the guard job, a failing `guard` makes the dependent jobs skip, and the run fails with the clear message. To pin, put the real SHA and tag in, then delete the `guard` job and the `needs: guard` line (the TODO comment says so); the plan lists the TODO with the names of the workflow files that were actually written (an existing workflow is left alone and not listed). `ccshelf lint` does not read workflows or the README, so these markers are not CAT048: the guard job is the check. `--runner-label` sets the fallback of `runs-on: ${{ vars.RUNNER_LABEL || '<label>' }}`. `--default-branch` (default `main`; in adopt mode the branch of the existing repository, read-only from `origin/HEAD`, else `HEAD`, through the hardened git helper and only when the target itself is a repository root) sets `branches:` of `catalog.yml` and is named in the README; `validate.yml` runs for pull requests to any branch, and `release.yml` compares with `github.event.repository.default_branch` at run time. The workflows contain no host name besides the action reference, and no user value reaches a `run:` block: the only values written into YAML are the pin, the runner label and the branch, each restricted to characters that need no quoting. `release.yml` is GitHub Enterprise Server correct: it sets `GH_HOST` to the host of `github.server_url` and passes the token both as `GH_TOKEN` and `GH_ENTERPRISE_TOKEN` (`gh` uses the first for its default host and the second for every other host); `catalog.yml` calls the REST API at `github.api_url`. The generated workflows are checked with actionlint (and shellcheck) in every pin state by a test.
+The workflows call `yorch/ccshelf/action` by full commit SHA (SR5). `--ccshelf-ref` takes the 40-character commit SHA, or a release tag `vX.Y.Z` (which sets only the `version:` input, because a tag can never be the pin). `--ccshelf-version` sets the tag when the ref is a SHA.
+
+Without a complete pin the workflows contain:
+- the all-zero SHA
+- a `TODO(ccshelf)` comment
+- a **separate `guard` job** (`permissions: {}`, no checkout, one `run:` step that prints a `::error title=ccshelf is not pinned::` annotation and exits 1).
+
+The job that uses the action has `needs: guard`. The guard has to be a job of its own. The runner resolves every `uses:` of a job in its "Set up job" step, before any step runs. So a guard step inside that job could never run ahead of the unresolvable placeholder, and users would see "unable to resolve action" instead. With the guard job, a failing `guard` makes the dependent jobs skip, and the run fails with the clear message.
+
+To pin:
+1. Put the real SHA and tag in.
+2. Delete the `guard` job and the `needs: guard` line (the TODO comment says so).
+
+The plan lists the TODO with the names of the workflow files that were actually written (the command leaves an existing workflow alone and does not list it). `ccshelf lint` does not read workflows or the README, so these markers are not CAT048: the guard job is the check.
+
+`--runner-label` sets the fallback of `runs-on: ${{ vars.RUNNER_LABEL || '<label>' }}`. `--default-branch` sets `branches:` of `catalog.yml`, and the README names it. Its default is `main`. In adopt mode the default is the branch of the existing repository. The command reads it read-only from `origin/HEAD`, else `HEAD`, through the hardened git helper, and only when the target itself is a repository root. `validate.yml` runs for pull requests to any branch, and `release.yml` compares with `github.event.repository.default_branch` at run time.
+
+The workflows contain no host name besides the action reference, and no user value reaches a `run:` block. The only values written into YAML are the pin, the runner label and the branch, each restricted to characters that need no quoting. `release.yml` is GitHub Enterprise Server correct. It sets `GH_HOST` to the host of `github.server_url`. It passes the token both as `GH_TOKEN` and `GH_ENTERPRISE_TOKEN` (`gh` uses the first for its default host and the second for every other host). `catalog.yml` calls the REST API at `github.api_url`. A test checks the generated workflows with actionlint (and shellcheck) in every pin state.
 
 ### Safety
-- Writes are confined to the target directory through `os.Root`; a symbolic link is never followed or written through (the target, an intermediate directory and a file are all checked; a link at a generated path is reported and left alone, and `--force` does not replace it); `..` in the argument, the file system root, the user's home directory **and every directory above it**, Claude Code's own directories (`~/.claude`, `$CLAUDE_CONFIG_DIR`), ccshelf's own config and cache directories (compared after resolving links, also for a target that does not exist yet) and any directory that is or lies inside the ccshelf tool repository are refused; `.git` is never touched.
-- A file is created exclusively and atomically (a temporary file next to it, then a hard link that fails when the name exists, falling back to a check and a rename on file systems without links), so a file that appears after the plan is never replaced; an overwrite re-reads the file and refuses when it changed since the plan.
-- Every value is validated with a strict pattern (marketplace name `^[a-z0-9][a-z0-9-]{0,63}$`, owners `@user`, `@org/team` or an email address, no control, invisible or bidirectional characters) and written through an encoder of its format: TOML strings and JSON through encoders, Markdown by escaping every punctuation character; the display name is the only free text. Existing files are read with a size limit and never through a link, and **nothing read from the repository is trusted**: the marketplace name of an existing `marketplace.json` must match the same pattern or it is not used (a note says so and `--marketplace-name` is required for the generated files); a local plugin `source` becomes a CODEOWNERS rule only when it is a plain relative path (segments of letters, digits, `.`, `_`, `-`; no space, `#`, `!`, glob or control character, no `..`, not `.git`), else the plugin still gets its sidecar but no rule, and a note says why; `plugin.json` and `marketplace.json` are read with exact keys (a duplicate key, or two keys that differ only in letter case, make the file ambiguous: the plugin is skipped with a note, and an ambiguous `marketplace.json` is left alone and not used). Every template value is encoded or comes from a validated pattern, and a test feeds hostile values (newlines, quotes, backticks, `${{ }}`, bidirectional characters, markup) through every flag and every file adopt mode reads, then parses the generated TOML, JSON and Markdown and checks that no key, rule or workflow content was injected.
-- **Names that collide are stopped at plan time.** Plugin names that differ only in letter case (one file on Windows and on the default macOS file system), Windows device names (`CON`, `NUL`, `COM1` and so on, with or without an extension) and names ending in a dot are skipped with a note, or, when two listed marketplace entries or an existing sidecar differ only in case, the plan fails before anything is written.
-- **A failed write is undone, best effort.** If a write fails half way, `Apply` removes the files and directories **this run created** (never a pre-existing file; a file whose content changed since it was written is left), reports `written` and `rolled_back` (in the text hint and in the JSON error's `data`), and leaves files replaced with `--force` and their `.bak` as they are, because the new content may already be in use.
-- **Suggestion files are not overwritten blindly.** `--write-suggestions` replaces an existing `<file>.ccshelf-suggested` only when its first line is the header this tool writes; a file the user wrote is left alone (reported in the plan notes and in the JSON `refused` list). `.gitignore` ignores `*.bak` and `*.ccshelf-suggested`.
-- It runs no process (only `--git-init` runs `git init` without the system template directory, so no sample hooks are copied, and the default-branch detection reads the repository, both through the same hardened git helper as the catalog git data; the repository is never committed to, fetched from or pushed) and makes no network call. `--git-init` inside the work tree of another repository still works but warns that it creates a nested repository.
+- `os.Root` confines writes to the target directory.
+- The command never follows or writes through a symbolic link. It checks the target, an intermediate directory and a file. It reports a link at a generated path and leaves it alone, and `--force` does not replace it.
+- The command refuses these targets:
+  - `..` in the argument
+  - the file system root
+  - the user's home directory **and every directory above it**
+  - Claude Code's own directories (`~/.claude`, `$CLAUDE_CONFIG_DIR`)
+  - ccshelf's own config and cache directories (compared after resolving links, also for a target that does not exist yet)
+  - any directory that is or lies inside the ccshelf tool repository.
+- The command never touches `.git`.
+- The command creates a file exclusively and atomically: a temporary file next to it, then a hard link that fails when the name exists. On file systems without links it falls back to a check and a rename. So a file that appears after the plan is never replaced. An overwrite re-reads the file and refuses when it changed since the plan.
+- The command validates every value with a strict pattern (marketplace name `^[a-z0-9][a-z0-9-]{0,63}$`, owners `@user`, `@org/team` or an email address, no control, invisible or bidirectional characters). It writes each value through an encoder of its format: TOML strings and JSON through encoders, Markdown by escaping every punctuation character. The display name is the only free text.
+- The command reads existing files with a size limit and never through a link, and **nothing read from the repository is trusted**:
+  - The marketplace name of an existing `marketplace.json` must match the same pattern or it is not used (a note says so and `--marketplace-name` is required for the generated files).
+  - A local plugin `source` becomes a CODEOWNERS rule only when it is a plain relative path (segments of letters, digits, `.`, `_`, `-`, with no space, `#`, `!`, glob or control character, no `..`, not `.git`). Else the plugin still gets its sidecar but no rule, and a note says why.
+  - The command reads `plugin.json` and `marketplace.json` with exact keys. A duplicate key, or two keys that differ only in letter case, make the file ambiguous. The command then skips the plugin with a note. It leaves an ambiguous `marketplace.json` alone and does not use it.
+- Every template value is encoded or comes from a validated pattern. A test feeds hostile values (newlines, quotes, backticks, `${{ }}`, bidirectional characters, markup) through every flag and every file adopt mode reads. Then it parses the generated TOML, JSON and Markdown and checks that no key, rule or workflow content was injected.
+- **Names that collide are stopped at plan time.** The command skips these names with a note:
+  - plugin names that differ only in letter case (one file on Windows and on the default macOS file system)
+  - Windows device names (`CON`, `NUL`, `COM1` and so on, with or without an extension)
+  - names ending in a dot.
+
+  When two listed marketplace entries or an existing sidecar differ only in case, the plan fails instead, before anything is written.
+- **A failed write is undone, best effort.** If a write fails half way, `Apply`:
+  - removes the files and directories **this run created** (never a pre-existing file, and it leaves a file whose content changed since it was written)
+  - reports `written` and `rolled_back` (in the text hint and in the JSON error's `data`)
+  - leaves files replaced with `--force` and their `.bak` as they are, because the new content may already be in use.
+- **Suggestion files are not overwritten blindly.** `--write-suggestions` replaces an existing `<file>.ccshelf-suggested` only when its first line is the header this tool writes. It leaves a file the user wrote alone (reported in the plan notes and in the JSON `refused` list). `.gitignore` ignores `*.bak` and `*.ccshelf-suggested`.
+- It makes no network call. It runs no process, with two exceptions. Both use the same hardened git helper as the catalog git data:
+  - `--git-init` runs `git init` without the system template directory, so no sample hooks are copied.
+  - The default-branch detection reads the repository.
+
+  The command never commits to, fetches from or pushes the repository. `--git-init` inside the work tree of another repository still works but warns that it creates a nested repository.
 
 ### Single source of the templates
-The templates live in `internal/scaffold/templates/` and are embedded into the binary, so they are the one source of the workflows, `.gitattributes` and `.gitignore`. The starter under `examples/org-data-repo/` keeps its own copies of exactly those files (so it stays a complete, copyable repository) and a test in `internal/scaffold` fails when they drift: `go test ./internal/scaffold -run Example -update` regenerates them with the fictional `acme` parameters. The rest of the starter (plugins, profiles, CODEOWNERS with several teams, `ccshelf.toml` with `[protect]`, the README) is hand-written and is only checked by `scripts/check-examples.sh`. This is less fragile than generating the embedded copy from the example (an embed cannot reach outside its package, so that needs a copy step and a second drift check) or than an overlay inside the generator that models the example-only content.
+The templates live in `internal/scaffold/templates/` and are embedded into the binary, so they are the one source of the workflows, `.gitattributes` and `.gitignore`. The starter under `examples/org-data-repo/` keeps its own copies of exactly those files (so it stays a complete, copyable repository). A test in `internal/scaffold` fails when they drift. `go test ./internal/scaffold -run Example -update` regenerates them with the fictional `acme` parameters. The rest of the starter (plugins, profiles, CODEOWNERS with several teams, `ccshelf.toml` with `[protect]`, the README) is hand-written, and only `scripts/check-examples.sh` checks it. This is less fragile than the two alternatives:
+- generating the embedded copy from the example (an embed cannot reach outside its package, so that needs a copy step and a second drift check)
+- an overlay inside the generator that models the example-only content.
 
 ## Consumption
 - **Plugins:** users add the marketplace natively (`extraKnownMarketplaces` or `/plugin marketplace add <git URL>`), and bundles install profile plugin sets in one step.
 - **Profiles:** users configure a `git` source pointing at this org data repo at a pinned tag, or a local clone as a `dir` source (see [profiles.md](profiles.md), "Profile sources and sharing"). The `plugin` source (profiles shipped inside a plugin) comes later.
-- **Catalog:** the published site, and `ccshelf search` or `ccshelf doctor` reading the same data locally. `ccshelf search` can also read the published `catalog.json` directly when the user's `config.toml` sets `[catalog] remote_url`; this is useful when developers should not need an org repo checkout.
+- **Catalog:** the published site, and `ccshelf search` or `ccshelf doctor` reading the same data locally. `ccshelf search` can also read the published `catalog.json` directly when the user's `config.toml` sets `[catalog] remote_url`. This is useful when developers should not need an org data repo checkout.
 
 ## Variants
-- **Plugins in other repos:** `source` entries point at external git repos; sidecars still live here; `lint` can't inspect external plugin contents beyond the marketplace entry.
-- **Several teams, several marketplaces:** each team keeps its own marketplace repo; one central catalog build lists multiple `marketplaces`.
-- **Public marketplaces:** nothing prevents a public data repo; then R4 applies to the data as well.
+- **Plugins in other repos:** `source` entries point at external git repos. Sidecars still live here. `lint` can't inspect external plugin contents beyond the marketplace entry.
+- **Several teams, several marketplaces:** each team keeps its own marketplace repo. One central catalog build lists multiple `marketplaces`.
+- **Public marketplaces:** nothing prevents a public org data repo. Then R4 applies to the data as well.
 
 ## Open questions
 1. ~~Sidecar versus in-entry metadata~~: **decided, sidecar per plugin** (single-file mode stays available for small registries).
