@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.0](https://github.com/yorch/ccshelf/compare/v0.3.0...v0.4.0) (2026-10-08)
+
+
+### Features
+
+* **cli:** add keyboard pickers, wizard confirmations and profile scope ([#25](https://github.com/yorch/ccshelf/issues/25)) ([f4c6967](https://github.com/yorch/ccshelf/commit/f4c6967034fce9260255e5bab435ef9d6ede8f72))
+
+
+### Bug fixes
+
+* **site:** keep copy buttons from covering code ([#28](https://github.com/yorch/ccshelf/issues/28)) ([ebd6e67](https://github.com/yorch/ccshelf/commit/ebd6e67d523439f3f877d580eaf1d69d3cd69a48))
+
 ## [0.3.0](https://github.com/yorch/ccshelf/compare/v0.2.0...v0.3.0) (2026-10-07)
 
 
