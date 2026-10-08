@@ -363,7 +363,7 @@ func (b *builder) checkProfilesOnly() error {
 	case !b.p.Enabled(GroupConfig):
 		return &FieldError{"--no-config", "cannot be combined with --profiles-only unless " + pathConfig + " already has [catalog] enabled = false: nothing else records that the repo has no marketplace, and its own lint workflow would fail with CAT001"}
 	default:
-		return &FieldError{"--profiles-only", pathConfig + " exists without [catalog] enabled = false, so ccshelf lint would fail with CAT001 here; add\n[catalog]\nenabled = false\nto it yourself, or pass --force to replace it (the old file is saved as " + pathConfig + BackupSuffix + ")"}
+		return &FieldError{"--profiles-only", pathConfig + " exists without [catalog] enabled = false, so ccshelf lint would fail with CAT001 here; add enabled = false under [catalog] in it yourself, or pass --force to replace it (the old file is saved as " + pathConfig + BackupSuffix + ")"}
 	}
 	if _, err := b.fs.Lstat("plugins"); err == nil {
 		b.note("plugins/ is ignored: a profiles-only repo does not catalog plugins")
