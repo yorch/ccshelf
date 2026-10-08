@@ -195,7 +195,7 @@ func TestGitSourceDeprecatedPluginWarning(t *testing.T) {
 
 	s.mustRun("trust", "seo", "--accept", s.closureHash("seo"))
 	r := s.mustRun("run", "seo")
-	contains(t, "stderr", r.Stderr, "plugin seo-tools@acme is deprecated; use docs-writer")
+	contains(t, "stderr", r.Stderr, "plugin seo-tools@acme is deprecated: use docs-writer")
 	if n := strings.Count(r.Stderr, "is deprecated"); n != 1 {
 		t.Errorf("deprecation warning shown %d times, want once:\n%s", n, r.Stderr)
 	}

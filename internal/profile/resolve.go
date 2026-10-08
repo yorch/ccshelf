@@ -320,7 +320,7 @@ func (r *resolver) merge(res *Resolved, req *File) error {
 	for _, f := range res.Chain {
 		c := f.Manifest
 		if c.Status == StatusDeprecated {
-			r.warn("profile %s is deprecated. Use %s", f.Name, c.SupersededBy)
+			r.warn("profile %s is deprecated: use %s", f.Name, c.SupersededBy)
 		}
 		for _, id := range c.Plugins.Include {
 			if by, ok := excAt[strings.ToLower(id)]; ok {

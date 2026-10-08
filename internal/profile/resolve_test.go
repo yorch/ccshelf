@@ -489,7 +489,7 @@ func TestMCPResolution(t *testing.T) {
 
 func TestDeprecatedWarning(t *testing.T) {
 	r, err := Resolve("old", []Source{orgSrc(t)}, ResolveOptions{})
-	if err != nil || !contains(r.Warnings, "profile old is deprecated. Use frontend") {
+	if err != nil || !contains(r.Warnings, "profile old is deprecated: use frontend") {
 		t.Errorf("warnings: %v %v", r, err)
 	}
 	if r.Merged.Status != "deprecated" || r.Merged.SupersededBy != "frontend" {
