@@ -13,7 +13,7 @@ Decided 2026-10-06: the **tool is hosted in a public GitHub repo** (this one), a
 | Changes by | Open-source contributors | The org's platform team |
 
 Consequences:
-- **Reusable CI:** the org data repo's workflow calls the public tool, either `uses: <owner>/ccshelf/action@<full commit SHA>` or a step that downloads a pinned release binary. GHE Cloud can use public actions directly. **GHE Server needs GitHub Connect or a mirror** (e.g. `actions-sync`), or the binary-download variant (also mirrorable to an internal registry). The docs must describe both variants. The logic stays in the binary (R2, see [platform.md](platform.md)).
+- **Reusable CI:** the org data repo's workflow calls the public tool, either `uses: <owner>/ccshelf/action@<full commit SHA>` or a step that downloads a pinned release binary. A step that downloads the binary must verify its SHA-256 (SR5). GHE Cloud can use public actions directly. **GHE Server needs GitHub Connect or a mirror** (e.g. `actions-sync`), or the binary-download variant (also mirrorable to an internal registry). The docs must describe both variants. The logic stays in the binary (R2, see [platform.md](platform.md)).
 - **Pin everything (SR5).** The tool runs in the org's CI and on developers' machines, so the org data repo pins the tool by full commit SHA, never a moving tag. The Action checksum and release signing rules are in [security.md](security.md), SR5.
 - **Starter template:** ship `examples/org-data-repo/` (possibly also a GitHub template repository), so adopting takes minutes. "What the tool repo contains" lists its content.
 - **Configuration lives with the adopter, not in the tool:** profile sources (`dir`/`git`, later `plugin`), the catalog metadata schema location and lint rules come from two files, with sane defaults:
@@ -100,7 +100,7 @@ acme-claude-marketplace/                 # private repo on GHE (Cloud or Server)
 ├── docs/                                # contributor guide: add a plugin, metadata fields, deprecation
 └── README.md                            # links to the catalog site and the contributor guide
 ```
-Not in the repo: the built catalog (`dist/`) and `catalog.json` (see "CI workflows").
+Not in the repo: the built catalog (`dist/`) and `catalog.json` (see "CI workflows"). The committed files can rebuild them.
 
 ## What each part is
 | Path | Written by | Committed? | Purpose |

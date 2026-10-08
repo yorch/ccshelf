@@ -83,7 +83,8 @@
 //
 // The environment is an allowlist (see keptGitEnv). Every GIT_* variable
 // except the ssh and http-proxy settings is dropped, so the environment cannot
-// redirect or weaken git. SSH_ASKPASS is dropped too. Git still reads the
+// redirect or weaken git. SSH_ASKPASS is dropped too. Other variables (HOME,
+// PATH, the proxy variables, SSH_AUTH_SOCK) pass through. Git still reads the
 // user's git configuration, credential helpers and ssh configuration from
 // HOME and XDG_CONFIG_HOME, so private repositories work.
 //

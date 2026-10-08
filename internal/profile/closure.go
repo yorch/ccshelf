@@ -178,6 +178,8 @@ func sortItems(items []ClosureItem) {
 	})
 }
 
+// hashItems returns a hex SHA-256 over the sorted items. Each field is
+// length-prefixed, so two different item lists never hash the same input.
 func hashItems(items []ClosureItem) string {
 	h := sha256.New()
 	put := func(s string) {

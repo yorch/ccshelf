@@ -29,7 +29,7 @@ Design to the lowest common denominator, so nothing assumes github.com or the ne
    - The catalog site must be self-contained (no CDN fonts/scripts).
 5. **Version skew.** GHE Server lags github.com. Avoid features that may not exist on older Server versions (newer Actions syntax, artifact attestations, some Pages options) or make them optional with a fallback. Record the minimum supported GHE Server version once known.
 6. **Auth via the user's git setup.** Git operations run `git` with the existing credential helper or SSH config. API calls (if any) use `GITHUB_TOKEN` in CI or `gh` locally. The tool stores no tokens.
-7. **Marketplace source types.** For GHE hosts use git URL sources (see the table above). Verifying the `github` source type for both flavors is open.
+7. **Marketplace source types.** For GHE hosts use git URL sources (see the table above). Verify the `github` source type against the marketplace docs for both flavors (open).
 8. **Catalog hosting is pluggable.** Output a plain static directory. Publishing to Pages is one option (differences between Cloud and Server noted above), but any static host works.
 
 Still to verify:

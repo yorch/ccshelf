@@ -53,7 +53,7 @@ What is not taken: Changeset files. They need a file per pull request and a Node
 A bot-maintained **release pull request** derived from conventional commits, using `googleapis/release-please-action` v5.0.0, pinned by full commit SHA {V}. It carries the version bump and the generated `CHANGELOG.md`. Merging it creates the tag and a draft GitHub release, and the existing signed goreleaser pipeline publishes. We chose release-please over `semantic-release` (needs Node and a token with push rights, publishes directly with no reviewable pull request). We also chose it over a script of our own (we would re-implement version rules and changelog formatting).
 
 ```
- pull request  --squash-->  main  (subject = pull request title, checked by ci.yml pr-title)
+ pull request  --squash-->  main  (subject = pull request title, checked by pr-title.yml)
                               |
                               v   push to main
                 +--------------------------------+

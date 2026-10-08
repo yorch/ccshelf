@@ -12,7 +12,11 @@ import (
 // appDirName is the directory below the user's config base that ccshelf owns.
 const appDirName = "ccshelf"
 
-// Dir returns the directory holding ccshelf's configuration files.
+// Dir returns the directory holding ccshelf's configuration files. On macOS
+// and Linux it is $XDG_CONFIG_HOME/ccshelf, else ~/.config/ccshelf. On Windows
+// it is %APPDATA%\ccshelf, else <home>\AppData\Roaming\ccshelf. Dir ignores a
+// relative XDG_CONFIG_HOME or APPDATA, as the XDG specification requires, and
+// uses the home directory instead.
 func Dir() (string, error) {
 	home, _ := os.UserHomeDir()
 	return configDirFor(runtime.GOOS, os.Getenv, home)
