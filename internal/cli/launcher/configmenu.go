@@ -117,7 +117,7 @@ func askSource(ctx context.Context, cc *clicore.Context, cfg *config.Config) (co
 		if err != nil {
 			return src, nil, err
 		}
-		mp, err := cc.Prompt.Input(ctx, "Marketplace it must come from (owner/repo or git URL; Enter to skip)", "", func(s string) error {
+		mp, err := cc.Prompt.Input(ctx, "Marketplace it must come from (owner/repo or git URL, or Enter to skip)", "", func(s string) error {
 			if s == "" {
 				return nil
 			}

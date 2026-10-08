@@ -34,15 +34,15 @@ func newRecommend(get clicore.Provider, opt Options) *cobra.Command {
 		Long: `Look at a project directory (--dir, default the current directory) and suggest
 plugins and profiles of the org data repo (--root, default the current
 directory) whose relevance signals and when_to_use text match it. The rules
-are deterministic and there is no model call. Only file names and a few small
-manifest files of the project are read.
+are deterministic and there is no model call. The command reads only file
+names and a few small manifest files of the project.
 
 Outside an org data repo (the marketplace file of ccshelf.toml cannot be read)
-and without --root, [catalog].remote_url in the user config is retrieved over
-HTTPS when set; otherwise it uses the catalog data of the organization's
-source from its local directory or verified git cache. Remote JSON can
-recommend profiles; plugin recommendations need marketplace relevance rules
-from the org data repo.`,
+and without --root, the command gets [catalog].remote_url of the user config
+over HTTPS when it is set. Otherwise it uses the catalog data of the
+organization's source from its local directory or verified git cache. Remote
+JSON can recommend profiles. Plugin recommendations need marketplace relevance
+rules from the org data repo.`,
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			c, err := get()

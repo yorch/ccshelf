@@ -15,14 +15,14 @@ import (
 
 // CatalogProvider returns the launcher's implementation of
 // clicore.CatalogProvider: it finds catalog data for search and recommend
-// outside an org data repo checkout. An explicit catalog.remote_url is fetched
-// first; otherwise configured sources are read from disk. Only opt.NewGit is
-// used for profile sources.
+// outside an org data repo checkout. It fetches an explicit catalog.remote_url
+// first. Otherwise it reads the configured sources from disk. It uses only
+// opt.NewGit for profile sources.
 //
 // Remote catalogs require HTTPS and are size and format checked. Without that
 // setting, a dir source is used as it is and a git source is used from its
-// verified cache, at a commit that was accepted by the trust model. Sources
-// are tried in order; with none usable this returns clicore.ErrNoCatalog.
+// verified cache, at a commit that the trust model accepted. It tries the
+// sources in order. When none is usable, it returns clicore.ErrNoCatalog.
 func CatalogProvider(opt Options) clicore.CatalogProvider {
 	l := &launcher{opt: opt}
 	return l.catalogData

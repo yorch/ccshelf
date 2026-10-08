@@ -147,7 +147,7 @@ func notOrgRepo(err error, withSource bool, extra ...string) error {
 	}
 	hint := "run it inside an org data repo, or pass --root <dir>" + strings.Join(extra, "")
 	if withSource {
-		hint += "; or configure catalog.remote_url in config.toml, or configure the organization's git source and run \"ccshelf ls\" once"
+		hint += ". You can also configure catalog.remote_url in config.toml, or configure the organization's git source and run \"ccshelf ls\" once"
 	}
 	return withHintErr(err, hint)
 }
@@ -329,7 +329,7 @@ func requireCatalog(r *repo, what string) error {
 	}
 	return withHintErr(
 		ui.Failure(fmt.Errorf("%s: [catalog] enabled = false in ccshelf.toml: this repo has no marketplace, so there are no bundles/catalog", what)),
-		"remove enabled = false from [catalog] in ccshelf.toml to use bundles and the catalog; profile checks still work with \"ccshelf lint\"")
+		"remove enabled = false from [catalog] in ccshelf.toml to use bundles and the catalog. Profile checks still work with \"ccshelf lint\"")
 }
 
 // requireMarketplace fails with exit 1 when the repo is not an org data repo:

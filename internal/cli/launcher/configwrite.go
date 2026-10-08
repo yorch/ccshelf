@@ -40,7 +40,7 @@ func openConfigFile(cc *clicore.Context) (*cfgFile, error) {
 		return nil, ui.Failure(fmt.Errorf("checking %s: %w", ui.SanitizeLine(path), err))
 	case fi.Mode()&fs.ModeSymlink != 0:
 		return nil, ui.Failure(withHint(fmt.Errorf("%s is a symbolic link", ui.SanitizeLine(path)),
-			"ccshelf never replaces a link; point --config at the real file"))
+			"ccshelf never replaces a link. Point --config at the real file"))
 	case !fi.Mode().IsRegular():
 		return nil, ui.Failure(fmt.Errorf("%s is not a regular file", ui.SanitizeLine(path)))
 	}
@@ -135,7 +135,7 @@ func (l *launcher) commitConfig(ctx context.Context, cc *clicore.Context, w *wri
 	interactive := canPrompt(cc)
 
 	if weak && !interactive && !w.yes {
-		return ui.Usage(withHint(fmt.Errorf("this change weakens a security setting and needs --yes: %s", ui.SanitizeLine(strings.Join(res.Weakening, "; "))),
+		return ui.Usage(withHint(fmt.Errorf("this change weakens a security setting and needs --yes: %s", ui.SanitizeLine(strings.Join(res.Weakening, ", and "))),
 			"re-run with --yes to confirm it, or leave it as it is"))
 	}
 	if interactive || weak {
@@ -157,7 +157,7 @@ func (l *launcher) commitConfig(ctx context.Context, cc *clicore.Context, w *wri
 		warnf(cc, "this weakens a security setting: %s", ui.SanitizeLine(reason))
 	}
 	if res.CommentsLost {
-		warnf(cc, "%s has comments; they are dropped when it is rewritten (the previous file is kept as %s)",
+		warnf(cc, "%s has comments, and they are dropped when the file is written again (the previous file is kept as %s)",
 			ui.SanitizeLine(f.path), ui.SanitizeLine(config.BackupPath(f.path)))
 	}
 	if interactive && !w.yes {
@@ -216,7 +216,7 @@ func finishNoChange(cc *clicore.Context, res changeResult) error {
 	if cc.Mode.JSON {
 		return ui.WriteJSON(cc.Streams.Out, "config-change", res)
 	}
-	okf(cc, "no change: the configuration already has this; nothing written")
+	okf(cc, "no change: the configuration already has this, so nothing is written")
 	return nil
 }
 

@@ -27,11 +27,11 @@ type Options struct {
 	// Start launches claude (default claude.Start). On Unix the production
 	// Start replaces the process and returns only on error.
 	Start func(bin string, args, env []string) (int, error)
-	// Spawn runs a child to completion (default claude.Spawn); edit uses it
-	// for $EDITOR.
+	// Spawn runs a child to completion (default claude.Spawn). The edit
+	// command uses it for $EDITOR.
 	Spawn func(ctx context.Context, bin string, args, env []string, stdin io.Reader, stdout, stderr io.Writer) (int, error)
 	// Executable returns the absolute path of the ccshelf binary (default
-	// os.Executable); shell-init embeds it.
+	// os.Executable). shell-init embeds it.
 	Executable func() (string, error)
 	// Policy configures managed-policy detection (default: the real,
 	// documented locations of the running OS). Tests point ManagedDir at a
@@ -182,7 +182,7 @@ func pickProfile(ctx context.Context, cc *clicore.Context, name, command string,
 	if !canPrompt(cc) {
 		return "", false, ui.Usage(withHint(
 			errors.New("missing argument <profile>"),
-			"run: ccshelf %s <profile>  (ccshelf ls lists the profiles; in a terminal without --no-interactive you are asked)", command))
+			"run: ccshelf %s <profile>  (ccshelf ls lists the profiles, and in a terminal without --no-interactive ccshelf asks for one)", command))
 	}
 	opts, err := choices()
 	if err != nil {

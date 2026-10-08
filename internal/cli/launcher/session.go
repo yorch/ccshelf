@@ -300,7 +300,7 @@ func detectProject(cfg *config.Config, cwd, goos string) projectState {
 	case err != nil:
 		st.Reason = fmt.Sprintf("the .ccshelf folder cannot be trusted: %v", err)
 	case !ok:
-		st.Reason = "the .ccshelf folder is not trusted (or changed since); review it, then run: ccshelf trust --project"
+		st.Reason = "the .ccshelf folder is not trusted (or changed since). Review it, then run: ccshelf trust --project"
 	default:
 		st.Allowed = true
 	}
@@ -442,13 +442,13 @@ func (s *session) failSource(label string, err error, src profile.Source) {
 			mcp = append(mcp, oc.Protect.MCP...)
 		}
 	}
-	msg := "LOUD WARNING: nothing is known about the plugins and MCP servers it protects, so none are enforced for it; a plugin or MCP server it protects may be masked by a profile"
+	msg := "LOUD WARNING: nothing is known about the plugins and MCP servers it protects, so none are enforced for it. A profile may mask a plugin or MCP server that it protects"
 	if len(plugins)+len(mcp) > 0 {
 		s.assumedPlugins = append(s.assumedPlugins, plugins...)
 		s.assumedMCP = append(s.assumedMCP, mcp...)
-		msg = "the protected plugins and MCP servers recorded for the trusted sources are still enforced"
+		msg = "The protected plugins and MCP servers recorded for the trusted sources are still enforced"
 	}
-	s.warn("%s is unavailable: %s; its profiles are not available in this run; %s", label, ui.SanitizeLine(err.Error()), msg)
+	s.warn("%s is unavailable: %s. Its profiles are not available in this run. %s", label, ui.SanitizeLine(err.Error()), msg)
 }
 
 // warn prints a warning and keeps it for the structured warnings of run.
@@ -485,7 +485,7 @@ func (s *session) failedSummary() string {
 	for _, f := range s.failed {
 		parts = append(parts, fmt.Sprintf("%s is unavailable: %s", f.label, ui.SanitizeLine(f.err.Error())))
 	}
-	return strings.Join(parts, "; ")
+	return strings.Join(parts, ", and ")
 }
 
 // addShared adds a prepared shared source, after checking that its profiles
@@ -553,7 +553,7 @@ func (s *session) prepareNewestCached(ctx context.Context, g PreparedSource, sc 
 	}
 	for _, c := range commits {
 		if cp.PrepareCached(ctx, c) == nil {
-			s.warn("git %s is unreachable (%s); using the newest verified cached checkout (commit %s), which may be older than %s",
+			s.warn("git %s is unreachable (%s), so ccshelf uses the newest verified cached checkout (commit %s), which may be older than %s",
 				ui.Sanitize(sc.URL), ui.SanitizeLine(cause.Error()), shortSHA(c), ui.Sanitize(sc.Ref))
 			return true
 		}
@@ -659,7 +659,7 @@ func (s *session) orgDirSource(i int, p string) profile.Source {
 			case rerr == nil && rel == path.Clean(cfg.Profiles.Dir):
 				return profile.DirSourceAt(profile.KindOrg, root, profile.Layout{Profiles: cfg.Profiles.Dir, Registry: cfg.Profiles.MCPRegistry})
 			case level == 0 && filepath.Base(p) == "profiles":
-				warnf(s.cc, "sources[%d]: the org config in %s says profiles.dir = %q, but this source uses the folder %q; using the folder from the configuration",
+				warnf(s.cc, "sources[%d]: the org config in %s says profiles.dir = %q, but this source uses the folder %q. ccshelf uses the folder from the configuration",
 					i, ui.Sanitize(root), cfg.Profiles.Dir, rel)
 				return profile.DirSourceAt(profile.KindOrg, root, profile.Layout{Profiles: "profiles", Registry: cfg.Profiles.MCPRegistry})
 			}
@@ -738,7 +738,7 @@ func (s *session) collectProtected() error {
 			return fmt.Errorf("org config of source %s: %w", ui.Sanitize(profile.PortableSourceID(src)), err)
 		}
 		if !found && s.gitIDs[src.ID()] {
-			warnf(s.cc, "source %s has no %s: no protected plugins or MCP servers are declared by it (add a %s, which may be empty, to the repository to say so)",
+			warnf(s.cc, "source %s has no %s, so it declares no protected plugins or MCP servers (add a %s, which may be empty, to the repository to say so)",
 				ui.Sanitize(profile.PortableSourceID(src)), orgconfig.FileName, orgconfig.FileName)
 		}
 		s.protectedPlugins = append(s.protectedPlugins, oc.Protect.Plugins...)
@@ -822,12 +822,12 @@ func (s *session) resolve(name string) (*profile.Resolved, error) {
 	switch {
 	case errors.Is(err, profile.ErrNotFound) && len(s.failed) > 0:
 		// The profile may be in a source that could not be loaded.
-		return nil, ui.Failure(withHint(fmt.Errorf("%w; %s", err, s.failedSummary()),
-			"fix the source, or run again when it is reachable; profiles of the other sources are not affected"))
+		return nil, ui.Failure(withHint(fmt.Errorf("%w, and %s", err, s.failedSummary()),
+			"fix the source, or run again when it is reachable. Profiles of the other sources are not affected"))
 	case errors.Is(err, profile.ErrNotFound):
 		hint := "ccshelf ls lists the available profiles"
 		if s.proj.Present && !s.proj.Allowed {
-			hint += "; this directory has a .ccshelf folder that is not loaded: " + s.proj.Reason
+			hint += ". This directory has a .ccshelf folder that is not loaded: " + s.proj.Reason
 		}
 		return nil, ui.Usage(withHint(err, "%s", hint))
 	case errors.Is(err, profile.ErrProjectNotTrusted):

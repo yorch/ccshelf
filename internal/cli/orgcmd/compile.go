@@ -45,11 +45,12 @@ func newCompile(get clicore.Provider) *cobra.Command {
 		Short: "Generate the profile-* bundle plugins from the profile manifests",
 		Long: `Compile every profile of the org data repo into a profile bundle: a plugin
 under bundles/profile-<name>/ whose dependencies are the profile's resolved
-plugins. Profiles that resolve to no plugins (abstract bases) are skipped.
+plugins. The command skips profiles that resolve to no plugins (abstract
+bases).
 
-The whole bundles/ tree is generated output: files that are not produced by a
-profile are removed. With --check nothing is written; the command prints the
-differences and exits 1 when the committed bundles are stale.`,
+The whole bundles/ tree is generated output. The command removes the files
+that no profile produces. With --check, the command writes nothing. It prints
+the differences and exits 1 when the committed bundles are stale.`,
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			c, err := get()
@@ -66,7 +67,7 @@ differences and exits 1 when the committed bundles are stale.`,
 			return runCompile(c, r, check)
 		},
 	}
-	cmd.Flags().BoolVar(&check, "check", false, "write nothing; exit 1 when the bundles are stale")
+	cmd.Flags().BoolVar(&check, "check", false, "write nothing, and exit 1 when the bundles are stale")
 	return cmd
 }
 

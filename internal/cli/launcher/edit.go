@@ -48,7 +48,7 @@ you start yourself.`,
 		switch {
 		case errors.Is(err, fs.ErrNotExist):
 			return ui.Usage(withHint(fmt.Errorf("no personal profile %q", ui.Sanitize(name)),
-				"only your own profiles can be edited; create one with: ccshelf new %s [--from <profile>]", name))
+				"only your own profiles can be edited. Create one with: ccshelf new %s [--from <profile>]", name))
 		case err != nil:
 			return ui.Failure(err)
 		case !fi.Mode().IsRegular():
@@ -84,7 +84,7 @@ you start yourself.`,
 // the wrong stream.
 func (l *launcher) runEditor(ctx context.Context, cc *clicore.Context, path, pathCmd string) error {
 	if !canPrompt(cc) {
-		return ui.Usage(withHint(errors.New("edit opens an editor and needs a terminal; none is available"),
+		return ui.Usage(withHint(errors.New("edit opens an editor and needs a terminal, but none is available"),
 			"use: %s, and open the printed file yourself", pathCmd))
 	}
 	editor := cc.Getenv("VISUAL")
@@ -114,7 +114,7 @@ func (l *launcher) runEditor(ctx context.Context, cc *clicore.Context, path, pat
 		return ui.Failure(fmt.Errorf("running the editor %q: %w", ui.Sanitize(fields[0]), err))
 	}
 	if code != 0 {
-		return ui.Failure(fmt.Errorf("the editor exited with status %d; the file may be unchanged", code))
+		return ui.Failure(fmt.Errorf("the editor exited with status %d, and the file may be unchanged", code))
 	}
 	return nil
 }
