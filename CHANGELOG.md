@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/yorch/ccshelf/compare/v0.4.0...v0.4.1) (2026-10-08)
+
+
+### Bug fixes
+
+* **profile:** match profile docs to resolver and trust rules ([#29](https://github.com/yorch/ccshelf/issues/29)) ([2e08325](https://github.com/yorch/ccshelf/commit/2e08325b86176dcc9b28044adb09f0f93964dcf6))
+
 ## [0.4.0](https://github.com/yorch/ccshelf/compare/v0.3.0...v0.4.0) (2026-10-08)
 
 
