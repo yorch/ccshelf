@@ -55,7 +55,7 @@ func TestCommandSet(t *testing.T) {
 	for _, c := range root.Commands() {
 		have[c.Name()] = true
 	}
-	for _, want := range []string{"run", "dry-run", "show", "ls", "diff", "new", "edit", "init", "trust", "account", "shell-init", "version", "update", "lint", "compile", "catalog", "search", "recommend", "doctor"} {
+	for _, want := range []string{"run", "dry-run", "show", "ls", "diff", "new", "edit", "init", "trust", "account", "config", "shell-init", "version", "update", "lint", "compile", "catalog", "search", "recommend", "doctor"} {
 		if !have[want] {
 			t.Errorf("missing command %q", want)
 		}
