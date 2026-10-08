@@ -45,7 +45,7 @@ $ ccshelf diff frontend my-frontend
 - plugins.include: playwright@acme
 $ ccshelf run my-frontend
 ```
-Personal profiles live outside the repo and can `extends` org profiles. Later `off` / `exclude` wins over an earlier include.
+Personal profiles live outside the repo and can `extends` org profiles. A `plugins.exclude` beats a plugin include and a `skills.off` beats `skills.name_only`, at any level of the chain, so a child cannot re-include what a parent excluded.
 
 ## 4. New hire onboarding
 1. They open the internal catalog page (linked from the README) and pick the role: "Backend engineer".
