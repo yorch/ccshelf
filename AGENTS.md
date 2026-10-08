@@ -152,7 +152,7 @@ Every commit message and pull request title **must** use [Conventional Commits](
 - **Format:** `type(scope)!: description`. The scope and the `!` are optional.
   - Types: `feat` (new behavior), `fix` (a bug), `docs`, `test`, `ci` (workflows and release tooling), `build`, `refactor`, `perf`, `chore`, `revert`.
   - Scope: the area touched, in lowercase, for example `settings`, `trust`, `site`, `action`, `catalog`. Use none when the change spans areas.
-  - Description: imperative, present tense, lowercase start, no trailing period, whole subject under ~70 characters. Example: `fix(settings): reject env names matching ANTHROPIC_*`.
+  - Description: imperative, present tense, lowercase start, no trailing period, whole subject at most 72 characters. Example: `fix(settings): reject env names matching ANTHROPIC_*`.
   - Breaking change: add `!` after the type or scope and a `BREAKING CHANGE:` footer that says what to do instead.
 - **Body:** a short paragraph that says why, when it is not obvious. End commit messages with the attribution line the harness gives you (`Co-Authored-By: ...`).
 - **Commit logically as you go:** one coherent change per commit (for example docs content, a new package, a fix), not one big commit at the end. Do not commit generated scratch files or anything from experiments (they live outside the repo).
@@ -165,7 +165,7 @@ Every commit message and pull request title **must** use [Conventional Commits](
 ## Releasing
 - **Never create, move or delete a `v*` tag, never edit `.release-please-manifest.json` or `CHANGELOG.md`, and never create a GitHub release by hand.** A bot maintains a release pull request (`chore(main): release X.Y.Z`) from the squash-merged pull request titles. Merging it tags and starts the signed release (design: `docs/design/release.md`, decisions D-36 and D-37).
 - **Merge the release pull request, and approve the `release` environment, only when the user asks.** Do not run `gh workflow run release.yml` with `dry-run=false` unless the user asks. A dry run (the default) is fine.
-- **The pull request title is the changelog entry.** Write it in the format of "Commits and pull requests", with at most 72 characters. `scripts/check_pr_title.py` is the rule, and `ci-ok` fails otherwise.
+- **The pull request title is the changelog entry.** Write it in the format of "Commits and pull requests", with at most 72 characters. `scripts/check_pr_title.py` is the rule. The required `pr-title` check fails otherwise.
 - **Release entries:** only `feat`, `fix`, `perf`, `revert` and breaking changes (`!`) are listed and cause a release. Use `fix(deps):` for a dependency fix that must ship. Use `fix(security):` for security fixes.
 - Version strings: the tag is the version (`-ldflags`). There is nothing to bump in Go, docs or the Action.
 - To force a version, ask the user. The method: set `release-as` in `release-please-config.json` through a `fix:`/`feat:` titled pull request, and remove it afterwards. Never use a `Release-As:` line in a description: `pr-title` rejects it, as it does `BEGIN_COMMIT_OVERRIDE`.
