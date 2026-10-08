@@ -53,6 +53,7 @@ func Settings() []Setting {
 		{Key: "trust.on_change", Kind: KindEnum, Values: OnChangeModes(), Default: OnChangePrompt, Help: "what to do when the closure of an accepted profile changes"},
 		{Key: "trust.require_pin", Kind: KindBool, Values: []string{"true", "false"}, Default: "true", Help: "refuse git sources that are not pinned to a tag or full commit"},
 		{Key: "trust.trust_project_profiles", Kind: KindBool, Values: []string{"true", "false"}, Default: "false", Help: "load project .ccshelf/ profiles once trusted per repository"},
+		{Key: "trust.branch_check_interval", Kind: KindDuration, Help: "how often a run checks a tracked branch for a new commit (default 24h, 1h to 1 year)"},
 		{Key: "update.mode", Kind: KindEnum, Values: UpdateModes(), Default: UpdateOff, Help: "automatic update behavior"},
 		{Key: "update.interval", Kind: KindDuration, Help: "how often an automatic update check may run (default 24h, 1h to 1 year)"},
 		{Key: "catalog.remote_url", Kind: KindURL, Help: "published catalog.json for search outside an org repo (https)"},
@@ -91,6 +92,11 @@ func (c *Config) GetSetting(key string) (value string, set bool) {
 		return strconv.FormatBool(c.Trust.RequirePin), !c.Trust.RequirePin
 	case "trust.trust_project_profiles":
 		return strconv.FormatBool(c.Trust.TrustProjectProfiles), c.Trust.TrustProjectProfiles
+	case "trust.branch_check_interval":
+		if c.Trust.BranchCheckInterval == "" {
+			return FormatInterval(DefaultBranchCheckInterval), false
+		}
+		return c.Trust.BranchCheckInterval, true
 	case "update.mode":
 		return c.Update.EffectiveMode(), c.Update.Mode != ""
 	case "update.interval":
@@ -156,6 +162,8 @@ func (c *Config) SetSetting(key, value string) error {
 		c.Trust.RequirePin = value == "true"
 	case "trust.trust_project_profiles":
 		c.Trust.TrustProjectProfiles = value == "true"
+	case "trust.branch_check_interval":
+		c.Trust.BranchCheckInterval = value
 	case "update.mode":
 		c.Update.Mode = value
 	case "update.interval":
@@ -185,6 +193,8 @@ func (c *Config) UnsetSetting(key string) error {
 		c.Trust.RequirePin = true
 	case "trust.trust_project_profiles":
 		c.Trust.TrustProjectProfiles = false
+	case "trust.branch_check_interval":
+		c.Trust.BranchCheckInterval = ""
 	case "update.mode":
 		c.Update.Mode = ""
 	case "update.interval":
@@ -288,6 +298,9 @@ func (s SourceConfig) SourceLocation() string {
 //     separate step)
 //   - adds a git source (or changes the ref of one) so that its ref is not a
 //     tag or full commit id, which can only happen while require_pin is off
+//   - adds a git source that tracks a branch, or switches one to a branch (or
+//     to another branch). The branch can move without notice, but every new
+//     commit still needs trust before it runs (D-54)
 //   - adds a dir source whose path starts with $ (ccshelf reads the variable
 //     at every run, so what it names can change without a config change)
 //   - changes what is trusted to supply code or releases: claude.path,
@@ -346,10 +359,14 @@ func Weakening(before, after *Config) []string {
 		}
 	}
 	for _, s := range after.Sources {
-		if s.Type != SourceGit || ValidatePin(s.Ref) == nil {
+		if s.Type != SourceGit || (s.Branch == "" && ValidatePin(s.Ref) == nil) {
 			continue
 		}
 		if containsSource(before.Sources, s) {
+			continue
+		}
+		if s.Branch != "" {
+			out = append(out, fmt.Sprintf("git source %s tracks branch %s: the branch can move without notice (every new commit still needs trust before it runs)", s.URL, s.Branch))
 			continue
 		}
 		ref := s.Ref

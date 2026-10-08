@@ -261,6 +261,7 @@ func TestConfigExamples(t *testing.T) {
 		"default_account = \"work\"\n[accounts.work]\nconfig_dir = \"~/.claude-work\"\n[trust]\nrequire_pin = true\non_change = \"fail\"\n[ui]\ncolor = \"never\"\n",
 		"[update]\nmode = \"notify\"\ninterval = \"36h\"\nbase_url = \"https://ghe.example.com\"\n",
 		"[update]\nmode = \"install\"\ninterval = \"1h30m\"\n",
+		"[trust]\nbranch_check_interval = \"12h\"\n[[sources]]\ntype = \"git\"\nurl = \"u\"\nbranch = \"main\"\n",
 		"[update]\ncosign_identity_repo = \"acme/ccshelf-fork\"\nasset_hosts = [\"assets.ghe.example.com\"]\n",
 		"[[sources]]\ntype = \"git\"\nurl = \"u\"\nref = \"v1\"\npath = \"profiles\"\n[[sources]]\ntype = \"plugin\"\nplugin = \"a@b\"\nmarketplace = \"https://h.example/o/r.git\"\n",
 	}
@@ -286,6 +287,9 @@ func TestConfigExamples(t *testing.T) {
 		"asset url":     "[update]\nasset_hosts = [\"https://a.example.com\"]\n",
 		"asset caps":    "[update]\nasset_hosts = [\"A.example.com\"]\n",
 		"asset dup":     "[update]\nasset_hosts = [\"a.example.com\", \"a.example.com\"]\n",
+		"branch empty":  "[[sources]]\ntype = \"git\"\nurl = \"u\"\nbranch = \"\"\n",
+		"branch type":   "[[sources]]\ntype = \"git\"\nurl = \"u\"\nbranch = 1\n",
+		"branch intvl":  "[trust]\nbranch_check_interval = \"daily\"\n",
 		"asset string":  "[update]\nasset_hosts = \"a.example.com\"\n",
 	}
 	for i, v := range valid {
