@@ -671,3 +671,62 @@ func TestBranchMovedAndNoCollisionWithTag(t *testing.T) {
 		t.Errorf("same commit: %+v", v)
 	}
 }
+
+func TestRekeyTagToBranchAtTheSameCommit(t *testing.T) {
+	org := orgTree(t)
+	s := newStore(t)
+	if err := accept(s, resolve(t, "dev", gitLike(org, "v1", sha1))); err != nil {
+		t.Fatal(err)
+	}
+	asBranch := resolve(t, "dev", gitLike(org, "branch:main", sha1))
+	if v := s.Check(asBranch); v.State != Trusted {
+		t.Fatalf("verdict = %+v", v)
+	}
+	ok, err := s.Rekey(asBranch)
+	if err != nil || !ok {
+		t.Fatalf("Rekey = %v, %v", ok, err)
+	}
+	if got := s.List(); len(got) != 1 || got[0].Ref != "branch:main" || got[0].Sources[0].Ref != "branch:main" || got[0].Commit != sha1 {
+		t.Fatalf("entries = %+v", got)
+	}
+	if ok, _ := s.Rekey(asBranch); ok {
+		t.Error("a second Rekey wrote again")
+	}
+	// A move of the branch is now a moved ref, not a generic change.
+	if v := s.Check(resolve(t, "dev", gitLike(org, "branch:main", sha2))); v.State != TagMoved {
+		t.Errorf("after the move: %+v", v)
+	}
+}
+
+func TestRekeyNeverTouchesAnotherURLCommitOrContent(t *testing.T) {
+	org := orgTree(t)
+	s := newStore(t)
+	if err := accept(s, resolve(t, "dev", gitLike(org, "v1", sha1))); err != nil {
+		t.Fatal(err)
+	}
+	before := s.List()
+	// Another URL is another key: nothing to rekey.
+	other := gitLike(org, "branch:main", sha1)
+	other.locator = "git:https://example.com/other.git"
+	if ok, _ := s.Rekey(resolve(t, "dev", other)); ok {
+		t.Error("rekeyed another URL")
+	}
+	// Another commit with the same ref name is a different closure and a new ref.
+	if ok, _ := s.Rekey(resolve(t, "dev", gitLike(org, "branch:main", sha2))); ok {
+		t.Error("rekeyed another commit")
+	}
+	// Other content: the hash differs.
+	changed := orgTree(t)
+	put(t, changed, "prompts/dev.md", "Be reckless.\n")
+	if ok, _ := s.Rekey(resolve(t, "dev", gitLike(changed, "branch:main", sha1))); ok {
+		t.Error("rekeyed other content")
+	}
+	after := s.List()
+	if len(after) != len(before) || after[0].Ref != "v1" || after[0].ClosureHash != before[0].ClosureHash {
+		t.Errorf("the entry changed: %+v", after)
+	}
+	// A closure with no entry is left alone.
+	if ok, _ := newStore(t).Rekey(resolve(t, "dev", gitLike(org, "branch:main", sha1))); ok {
+		t.Error("created an entry")
+	}
+}

@@ -3,6 +3,7 @@ package gitsource
 import (
 	"context"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 )
@@ -134,5 +135,37 @@ func TestResolveHeadNeedsBranch(t *testing.T) {
 	f.git("tag", "v1")
 	if _, err := f.source("v1", "").ResolveHead(context.Background()); err == nil {
 		t.Error("ResolveHead on a tag source should fail")
+	}
+}
+
+func TestPrepareAtFetchesTheKnownCommitNotTheHead(t *testing.T) {
+	f := newFixture(t)
+	first := f.seed()
+	f.git("branch", "-M", "main")
+	s := f.branchSource("main")
+	if err := s.Prepare(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	f.write("profiles/more.toml", "name = \"more\"\ndescription = \"d\"\n")
+	second := f.commit("more")
+	// The checkout of the first commit is gone from the cache.
+	if err := os.RemoveAll(CheckoutDir(f.cache, f.url(), first)); err != nil {
+		t.Fatal(err)
+	}
+	s2 := f.branchSource("main")
+	if err := s2.PrepareCached(context.Background(), first); !errors.Is(err, ErrNotCached) {
+		t.Fatalf("PrepareCached = %v; want ErrNotCached", err)
+	}
+	if err := s2.PrepareAt(context.Background(), first); err != nil {
+		t.Fatal(err)
+	}
+	if s2.Commit() != first {
+		t.Fatalf("commit = %q; want the trusted %q, not the head %q", s2.Commit(), first, second)
+	}
+	if names, _ := s2.Names(); len(names) != 1 {
+		t.Errorf("names = %v; the head's profile leaked in", names)
+	}
+	if err := s2.PrepareAt(context.Background(), "main"); err == nil {
+		t.Error("PrepareAt accepted a name")
 	}
 }

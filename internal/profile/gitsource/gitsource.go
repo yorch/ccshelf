@@ -97,6 +97,8 @@ func New(opts Options) (*Source, error) {
 	switch {
 	case opts.Ref != "" && opts.Branch != "":
 		return nil, fmt.Errorf("%w: use ref or branch, not both", ErrNotPinned)
+	case opts.Ref == "" && opts.Branch == "":
+		return nil, fmt.Errorf("%w: a pinned ref is required. Add ref = \"<tag>\" or branch = \"<name>\" to the source", ErrNotPinned)
 	case opts.Branch != "":
 		if err := config.ValidateBranch(opts.Branch); err != nil {
 			return nil, fmt.Errorf("%w: %w", ErrNotPinned, err)
@@ -222,7 +224,7 @@ func (s *Source) prepared() (profile.Source, error) {
 // checkout and validates its content. It is safe to call more than once and
 // from several goroutines or processes at the same time. Each call
 // re-resolves a tag, so it notices a moved tag.
-func (s *Source) Prepare(ctx context.Context) error { return s.prepare(ctx, "") }
+func (s *Source) Prepare(ctx context.Context) error { return s.prepare(ctx, "", false) }
 
 // PrepareCached is Prepare for a commit that is already known (the launcher
 // takes it from the trust lockfile). It never contacts the remote. The
@@ -236,12 +238,28 @@ func (s *Source) PrepareCached(ctx context.Context, commit string) error {
 	if !fullSHA.MatchString(commit) {
 		return fmt.Errorf("%w: %q is not a full commit SHA", ErrNotPinned, commit)
 	}
-	return s.prepare(ctx, commit)
+	return s.prepare(ctx, commit, false)
 }
 
-// prepare is Prepare and PrepareCached; a non-empty cached is the commit to
-// use without any network access.
-func (s *Source) prepare(ctx context.Context, cached string) error {
+// PrepareAt prepares the source at exactly one known commit. It never resolves
+// the ref or the branch: when the checkout of commit is not in the cache, it
+// fetches that commit by id. The launcher uses it for a branch source whose
+// trusted commit is no longer cached, so a run never moves to the branch head
+// without a trust decision. The fetched commit passes the same verification as
+// any other.
+func (s *Source) PrepareAt(ctx context.Context, commit string) error {
+	commit = strings.ToLower(commit)
+	if !fullSHA.MatchString(commit) {
+		return fmt.Errorf("%w: %q is not a full commit SHA", ErrNotPinned, commit)
+	}
+	return s.prepare(ctx, commit, true)
+}
+
+// prepare is Prepare, PrepareCached and PrepareAt. A non-empty known is the
+// commit to use without resolving a ref. With fetchMissing a checkout that is
+// not cached is fetched by id, otherwise it is ErrNotCached.
+func (s *Source) prepare(ctx context.Context, known string, fetchMissing bool) error {
+	cached := known
 	s.prepMu.Lock()
 	defer s.prepMu.Unlock()
 	timeout := s.opts.Timeout
@@ -263,10 +281,16 @@ func (s *Source) prepare(ctx context.Context, cached string) error {
 		sha = cached
 		checkout = CheckoutDir(base, s.opts.URL, sha)
 		if _, err := os.Lstat(checkout); err != nil {
-			if errors.Is(err, fs.ErrNotExist) {
+			switch {
+			case errors.Is(err, fs.ErrNotExist) && fetchMissing:
+				if checkout, err = s.materialize(ctx, base, sha); err != nil {
+					return err
+				}
+			case errors.Is(err, fs.ErrNotExist):
 				return fmt.Errorf("%w: %s", ErrNotCached, sha)
+			default:
+				return fmt.Errorf("inspecting %s: %w", checkout, err)
 			}
-			return fmt.Errorf("inspecting %s: %w", checkout, err)
 		}
 	} else {
 		if sha, err = s.resolve(ctx, base); err != nil {

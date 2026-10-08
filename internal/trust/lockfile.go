@@ -352,6 +352,71 @@ func (s *Store) Accept(r *profile.Resolved, expectedHash string) error {
 	return s.save()
 }
 
+// Rekey updates the refs of the recorded sources of a closure that is already
+// trusted, and reports whether it wrote anything. It exists for a source that
+// changes how it is pinned without changing what it resolves to: a tag source
+// that becomes a branch source at the same commit (D-54). The verdict is
+// Trusted by content, but the lockfile would keep the old ref, and a later
+// move of the new ref would then be a generic "Changed" instead of a moved
+// ref.
+//
+// Rekey changes nothing unless every one of these holds: an entry exists for
+// the profile and the key source, its closure hash equals the hash of r, and
+// the sources of the chain match the recorded ones one by one with the same
+// locator (so the same URL) and the same commit. Only the refs may differ.
+// Anything else is left for the trust check, so no trust can be created or
+// moved to a different URL, commit or content by this call.
+func (s *Store) Rekey(r *profile.Resolved) (bool, error) {
+	if r == nil {
+		return false, nil
+	}
+	hash, err := closureHash(r)
+	if err != nil {
+		return false, err
+	}
+	id := identify(r)
+	if !id.needsEntry || id.project {
+		return false, nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	unlock, err := lockState(s.path)
+	if err != nil {
+		return false, err
+	}
+	defer unlock()
+	if err := s.reload(); err != nil {
+		return false, err
+	}
+	old := s.find(r.Name, id.source)
+	if old == nil || old.ClosureHash != hash {
+		return false, nil
+	}
+	recorded := old.Sources
+	if len(recorded) == 0 {
+		recorded = []SourceRecord{{Source: old.Source, Ref: old.Ref, Commit: old.Commit}}
+	}
+	if len(recorded) != len(id.sources) {
+		return false, nil
+	}
+	differs := false
+	for i, cur := range id.sources {
+		prev := recorded[i]
+		if prev.Source != cur.Source || prev.Commit != cur.Commit || cur.Commit == "" {
+			return false, nil
+		}
+		if prev.Ref != cur.Ref {
+			differs = true
+		}
+	}
+	if !differs {
+		return false, nil
+	}
+	old.Ref, old.Commit = id.ref, id.commit
+	old.Sources = append([]SourceRecord(nil), id.sources...)
+	return true, s.save()
+}
+
 // controlsOf returns the canonical controls text of every profile in r's
 // chain, checked against the closure: each text must hash to the digest of its
 // profile-controls item.
