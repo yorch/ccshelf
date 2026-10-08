@@ -656,7 +656,7 @@ func containsFold(list []string, s string) bool {
 func (c *checker) codeownersGeneral() {
 	co := c.d.Owners
 	if co == nil {
-		if len(c.d.Plugins) > 0 {
+		if len(c.d.Plugins) > 0 || len(c.d.Profiles) > 0 {
 			c.out = append(c.out, Finding{
 				Severity: Warning, Code: "CAT043", Message: "no CODEOWNERS file found (looked in .github/, the root and docs/)",
 				Hint: "CODEOWNERS routes review of plugins, the catalog metadata and workflows",
@@ -687,15 +687,20 @@ func (c *checker) platformPaths(co *codeowners.File, githubUncovered bool) {
 	}
 	probes := []string{
 		".github/workflows/ccshelf-probe.yml", orgconfig.FileName, c.cfg.Profiles.MCPRegistry,
-		c.cfg.Profiles.Dir + "/probe.toml", "bundles/profile-probe/.claude-plugin/plugin.json", c.cfg.Lint.Taxonomy,
+		c.cfg.Profiles.Dir + "/probe.toml",
+	}
+	if c.cfg.Catalog.Enabled {
+		probes = append(probes, "bundles/profile-probe/.claude-plugin/plugin.json", c.cfg.Lint.Taxonomy)
 	}
 	if c.d.OwnersPath != "" {
 		probes = append(probes, c.d.OwnersPath)
 	}
-	if c.cfg.Catalog.MetadataSource != orgconfig.SourceMarketplace {
-		probes = append(probes, sidecar.Dir+"/probe.toml")
+	if c.cfg.Catalog.Enabled {
+		if c.cfg.Catalog.MetadataSource != orgconfig.SourceMarketplace {
+			probes = append(probes, sidecar.Dir+"/probe.toml")
+		}
+		probes = append(probes, c.cfg.Catalog.Marketplaces...)
 	}
-	probes = append(probes, c.cfg.Catalog.Marketplaces...)
 	done := map[string]bool{}
 	for _, p := range probes {
 		if p == "" || done[p] {
@@ -768,6 +773,9 @@ func sortedKeys[V any](m map[string]V) []string {
 // profiles checks the profile manifest and bundle entry correspondence using
 // file names only (plus whether a profile resolves to any plugins).
 func (c *checker) profiles() {
+	if !c.cfg.Catalog.Enabled {
+		return // profiles-only repo: there are no bundles to correspond to
+	}
 	profileSet := map[string]bool{}
 	for _, n := range c.d.Profiles {
 		profileSet[n] = true

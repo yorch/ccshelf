@@ -152,4 +152,6 @@ var rules = []Rule{
 	{"CAT052", Error, "A bundle entry's source is not ./bundles/profile-<name>."},
 	{"CAT053", Error, "A bundle entry sets version (the commit SHA is the version, decision D-17)."},
 	{"CAT060", Error, "A file the lint needs cannot be read safely (outside the repo, too large, not a regular file)."},
+	{"CAT061", Warning, "A marketplace file or bundles/ exists although [catalog] enabled = false; the lint ignores it."},
+	{"CAT062", Warning, "[catalog] keys other than enabled are set although enabled = false; they have no effect."},
 }
