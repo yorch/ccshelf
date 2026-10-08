@@ -10,6 +10,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/yorch/ccshelf/internal/config"
 	"github.com/yorch/ccshelf/internal/profile"
 	"github.com/yorch/ccshelf/internal/ui"
 )
@@ -668,7 +669,11 @@ func (v Verdict) Describe(w io.Writer) {
 	case Changed:
 		p("Profile %q changed since you last trusted it.", name)
 	case TagMoved:
-		p("Profile %q: the ref %q of %s now points to commit %s (you trusted %s). Treat this as an untrusted update.", name, clean(v.Ref), clean(v.MovedSource), clean(short(v.NewCommit)), clean(short(v.OldCommit)))
+		if b, ok := strings.CutPrefix(v.Ref, config.BranchRefPrefix); ok {
+			p("Profile %q: the branch %q of %s now points to commit %s (you trusted %s). Treat this as an untrusted update.", name, clean(b), clean(v.MovedSource), clean(short(v.NewCommit)), clean(short(v.OldCommit)))
+		} else {
+			p("Profile %q: the ref %q of %s now points to commit %s (you trusted %s). Treat this as an untrusted update.", name, clean(v.Ref), clean(v.MovedSource), clean(short(v.NewCommit)), clean(short(v.OldCommit)))
+		}
 	case ProjectUntrusted:
 		p("Profile %q comes from a project folder that has not been trusted.", name)
 	}
@@ -738,6 +743,9 @@ func (e *NeedsTrustError) Error() string {
 	case ProjectUntrusted:
 		return fmt.Sprintf("profile %q comes from an untrusted project folder. Review it, then trust the project", clean(e.Profile))
 	case TagMoved:
+		if b, ok := strings.CutPrefix(e.Verdict.Ref, config.BranchRefPrefix); ok {
+			return fmt.Sprintf("profile %q needs trust: branch %q now points to a different commit. Review it with: ccshelf trust %s", clean(e.Profile), clean(b), clean(e.Profile))
+		}
 		return fmt.Sprintf("profile %q needs trust: ref %q now points to a different commit. Review it with: ccshelf trust %s", clean(e.Profile), clean(e.Verdict.Ref), clean(e.Profile))
 	case Changed:
 		return fmt.Sprintf("profile %q needs trust: it changed since you accepted it. Review it with: ccshelf trust %s", clean(e.Profile), clean(e.Profile))

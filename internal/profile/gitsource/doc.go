@@ -21,6 +21,18 @@
 // a branch that is not branch-like, and Prepare still stores it as a SHA. A
 // SHA pin needs no network once its checkout is cached.
 //
+// # Branches (D-54)
+//
+// Options.Branch tracks a branch instead. It is the only way to follow a
+// moving ref, and it is explicit: Ref still refuses branch-like names. The
+// branch is resolved with `git ls-remote -- <url> refs/heads/<branch>` to a
+// full commit SHA on every Prepare, and ResolveHead does the same without
+// preparing a checkout (the launcher uses it for the periodic check). From the
+// SHA on, nothing differs from a tag: the checkout, the verification and the
+// trust record are per commit, and PrepareCached needs no network. Ref
+// returns "branch:<name>", which no tag name can equal, so a branch and a tag
+// with the same name never share a trust key. RequirePin applies to Ref only.
+//
 // # Checkout and verification
 //
 // The checkout lives in <cache>/<sha256(url)[:16]>/<sha>/ (mode 0700). This

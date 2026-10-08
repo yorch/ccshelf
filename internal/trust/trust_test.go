@@ -637,3 +637,37 @@ func TestDescribeOtherItemKinds(t *testing.T) {
 		}
 	}
 }
+
+func TestBranchMovedAndNoCollisionWithTag(t *testing.T) {
+	org := orgTree(t)
+	s := newStore(t)
+	if err := accept(s, resolve(t, "dev", gitLike(org, "branch:main", sha1))); err != nil {
+		t.Fatal(err)
+	}
+	// Same branch, same content, another commit: an untrusted update.
+	r := resolve(t, "dev", gitLike(org, "branch:main", sha2))
+	v := s.Check(r)
+	if v.State != TagMoved || v.Ref != "branch:main" || v.OldCommit != sha1 || v.NewCommit != sha2 {
+		t.Fatalf("verdict = %+v", v)
+	}
+	var buf bytes.Buffer
+	v.Describe(&buf)
+	for _, want := range []string{`the branch "main"`, "untrusted update"} {
+		if !strings.Contains(buf.String(), want) {
+			t.Errorf("describe lacks %q:\n%s", want, buf.String())
+		}
+	}
+	err := s.Require(r)
+	if !IsNeedsTrust(err) || !strings.Contains(err.Error(), `branch "main" now points to a different commit`) {
+		t.Errorf("Require = %v", err)
+	}
+	// A tag called main (the name is refused by config, but the key must not
+	// depend on that) with another commit is not "the branch moved".
+	if v := s.Check(resolve(t, "dev", gitLike(org, "main", sha2))); v.State == TagMoved {
+		t.Errorf("a tag and a branch with one name collided: %+v", v)
+	}
+	// The same commit on the branch is trusted.
+	if v := s.Check(resolve(t, "dev", gitLike(org, "branch:main", sha1))); v.State != Trusted {
+		t.Errorf("same commit: %+v", v)
+	}
+}
