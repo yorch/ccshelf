@@ -71,25 +71,14 @@ Also: never bypass or probe managed policy by trial, no telemetry, and no networ
 
 ## Commit and pull request style
 
-[Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `docs:`, `test:`, `ci:`, `build:`, `refactor:`, `perf:`, `chore:`, `revert:`, with an optional scope and an optional `!` for a breaking change. Example: `fix(settings): reject env names matching ANTHROPIC_*`.
+Every commit message and pull request title uses [Conventional Commits](https://www.conventionalcommits.org/) (`type(scope)!: description`). Maintainers squash-merge, so **the pull request title becomes the commit subject and the changelog entry**. [AGENTS.md](AGENTS.md#commits-and-pull-requests) has the types, the title rules and the pull request rules. Its ["Releasing"](AGENTS.md#releasing) section says which types cause a release.
 
-Maintainers squash-merge, so **the pull request title becomes the commit subject and the changelog entry**. The `pr-title` check (its own workflow, `pr-title.yml`, required next to `ci-ok`) rejects a title that is not in this form:
-
-- lowercase description.
-- no trailing period.
-- at most 72 characters.
-- no invisible characters.
-
-Edit the title and the check re-runs. The check also rejects a description that contains `BEGIN_COMMIT_OVERRIDE`, `BEGIN_NESTED_COMMIT` or a `Release-As:` line, because release-please reads those.
-
-Only `feat`, `fix`, `perf`, `revert` and breaking changes appear in the changelog and trigger a release. Use `fix(deps):` for a dependency bump that fixes a vulnerability. Keep pull requests focused, fill in the template, and make sure `ci-ok` is green. The full rules are in [AGENTS.md](AGENTS.md#commits-and-pull-requests).
+The `pr-title` check (its own workflow, `pr-title.yml`, required next to `ci-ok`) applies the title rules, including a ban on invisible characters. It re-runs when you edit the title. It also rejects a description with the release-please markers that [docs/design/release.md](docs/design/release.md#pull-request-titles-d-37) lists.
 
 ## Documentation rules
 
-- Edit the **Markdown** under `docs/`. Never edit `docs/report.html` by hand. Rebuild it with `python3 docs/build_report.py` (or `make docs`) and commit it in the same commit as the Markdown change. CI runs `python3 docs/build_report.py --check`.
-- Record decisions, supersessions and open questions in `docs/DECISIONS.md` (never delete a row). Use the glossary terms consistently: profile, profile bundle, catalog, sidecar, marketplace, tool repo, org data repo, account.
-- Mark factual claims about Claude Code with `{V}` verified, `{R}` reported or `{U}` unverified.
-- Examples are fictional and labeled as mockups until the behavior exists.
+- Follow [AGENTS.md "Documentation conventions"](AGENTS.md#documentation-conventions): the docs layout, the decision log, the glossary terms, the `{V}` `{R}` `{U}` markers, mockup labels and the generated `docs/report.html`.
+- `make docs` rebuilds the report (`python3 docs/build_report.py`). CI runs `python3 docs/build_report.py --check`.
 - Write messages, help text and docs in the plain style of [AGENTS.md](AGENTS.md#writing-style-asd-ste100): short active sentences, no semicolons, one name for one thing, and no lost hedges or conditions.
 
 ## Workflow rules (SR5)
@@ -101,55 +90,30 @@ Only `feat`, `fix`, `perf`, `revert` and breaking changes appear in the changelo
   - `timeout-minutes` and `concurrency` everywhere.
   - `persist-credentials: false` on checkouts that do not push.
 - Never put untrusted data (PR titles, branch names, tags, commit messages) inside `${{ }}` in a `run:` script. Pass it through `env:` and quote it.
-- **`ci.yml` runs only the jobs a pull request needs.** The `changes` job (`scripts/ci_changes.py`) maps changed paths to jobs. Skipped jobs count as passed in `ci-ok`, which always reports. These run everything:
-  - pushes to `main`.
-  - merge groups.
-  - manual dispatches.
-  - pull requests that touch `.github/`, an unclassified file or the release config.
-- When you add a new file or directory, add a rule to `scripts/ci_changes.py`. Otherwise a unit test fails. Details: [docs/design/release.md](docs/design/release.md#ci-job-selection).
+- **`ci.yml` runs only the jobs a pull request needs.** The `changes` job (`scripts/ci_changes.py`) maps changed paths to jobs. Some events and paths run everything. When you add a new file or directory, add a rule to `scripts/ci_changes.py`. Otherwise a unit test fails. Details: [docs/design/release.md](docs/design/release.md#ci-job-selection).
 - Build and test use `pull_request`, never `pull_request_target`. Secrets exist only on protected environments (`release`, `nightly`) and are never sent to forks.
 - Prefer plain shell calling `go`, `gh` and the project's own binary over third-party actions (R2). The allowed third-party actions are the ones already in use.
 
 ## Releasing
 
-Releases are cut from a **release pull request** that a bot keeps up to date. Nobody tags by hand. The design, the token and signing analysis and the failure runbook are in [docs/design/release.md](docs/design/release.md).
+Releases are cut from a **release pull request** that a bot keeps up to date. Nobody tags by hand. [docs/design/release.md](docs/design/release.md) has the design: the versioning rules, how to force a version, hotfixes, the token and signing analysis, the failure runbook and the one-time setup. The maintainer steps:
 
-1. Pull requests are squash-merged with a Conventional Commits title. On every push to `main`, the `release-please` workflow reads the titles since the last release. It opens or updates the pull request `chore(main): release X.Y.Z`. That pull request contains the next version (`.release-please-manifest.json`) and the generated `CHANGELOG.md`. Before 1.0.0, a breaking change and a `feat` bump the minor version. A `fix`, `perf` or `revert` bumps the patch. If only `docs`, `test`, `ci`, `build`, `refactor` or `chore` commits landed, there is nothing to release and no pull request.
-2. The `dispatch` job starts `ci.yml` and `pr-title.yml` on that branch, so the required checks `ci-ok` and `pr-title` appear on it. (A pull request opened with `GITHUB_TOKEN` does not trigger CI by itself.)
+1. On every push to `main`, the `release-please` workflow opens or updates the pull request `chore(main): release X.Y.Z`. It contains the next version (`.release-please-manifest.json`) and the generated `CHANGELOG.md`. The `dispatch` job starts `ci.yml` and `pr-title.yml` on that branch, so the required checks `ci-ok` and `pr-title` appear on it.
    - Review the version and the changelog like any pull request.
    - Make sure `docs/report.html` is current on `main`.
    - Merge it with the usual approvals.
-
-   To force a version (1.0.0, a correction):
-   1. Merge a releasable (`fix:` or `feat:` titled) pull request that sets `"release-as": "X.Y.Z"` in `release-please-config.json`.
-   2. Merge the release pull request.
-   3. Remove `release-as` again.
-
-   A `chore:` commit with a `Release-As:` footer does nothing: the release is skipped when no visible entry exists, and `pr-title` rejects the footer in pull request descriptions. A hotfix is a `fix:` pull request followed by merging the next release pull request. It ships everything on `main`.
-3. Merging creates the tag `vX.Y.Z` at the merge commit and a **draft** GitHub release with the changelog as its notes. Then `dispatch` starts the `release` workflow with that tag as its ref, so the signing identity stays `release.yml@refs/tags/vX.Y.Z`. (A manual retry is `gh workflow run release.yml --ref vX.Y.Z -f dry-run=false`. A dry run, `gh workflow run release.yml`, builds a snapshot without signing or publishing.)
-4. The `verify` job checks that:
-   - the tag is a semantic version.
-   - the tag points at a commit on `main`.
-   - the tag equals the version in `.release-please-manifest.json` at that commit.
-   - no branch has the tag's name.
-   - `ci.yml` succeeded for the commit (the job waits for that run).
-   - `go.mod` is tidy and the report is up to date.
-
-   It runs with a read-only token, which cannot see draft releases. So the `release` job (after the approval below) checks that:
-   - exactly one draft has the tag as `tag_name`.
-   - exactly one release is named like the tag.
-   - they are the same release.
-   - the draft targets the tag's commit.
-5. The `release` job waits for approval of the protected **`release` environment**. Configure that environment to require **two maintainers** (with "prevent self-review") and to allow deployments only from `v*` tags (see "Required repository rulesets"). Dry runs use the separate `snapshot` job, which has no environment, no signing and a read-only token.
-6. goreleaser:
+2. Merging creates the tag `vX.Y.Z` and a **draft** GitHub release. Then `dispatch` starts the `release` workflow with that tag as its ref, so the signing identity stays `release.yml@refs/tags/vX.Y.Z`.
+3. The `verify` job checks the tag and CI (the design note lists each check). It also checks that `go.mod` is tidy and the report is up to date.
+4. The `release` job checks the draft and waits for approval of the protected **`release` environment**. Configure that environment to require **two maintainers** (with "prevent self-review") and to allow deployments only from `v*` tags (see "Required repository rulesets"). Dry runs use the separate `snapshot` job, which has no environment, no signing and a read-only token.
+5. goreleaser:
    1. builds the six targets (`-trimpath`, `CGO_ENABLED=0`, commit-timestamped).
    2. writes `checksums.txt` and an SBOM per archive (syft).
    3. uploads them to the draft.
    4. appends the verification footer to the notes written by release-please.
    5. publishes the release.
 
-   The release uploads the two end-user installers, `scripts/install.sh` and `scripts/install.ps1`, as release assets and lists them in `checksums.txt`. The settings are `release.extra_files` and `checksum.extra_files` in `.goreleaser.yaml`. Keep the two lists identical. So the signature covers the installers, and `releases/latest/download/install.sh` always serves the script of the newest release. cosign signs the checksums file keyless (`checksums.txt.sigstore.json`), and `actions/attest-build-provenance` attaches a SLSA build provenance attestation.
-7. **Optional publishers** run only if their secret exists on the `release` environment, and never for pre-releases. Otherwise the workflow skips each one with a notice:
+   The release also uploads the end-user installers, `scripts/install.sh` and `scripts/install.ps1`, and lists them in `checksums.txt`. The settings are `release.extra_files` and `checksum.extra_files` in `.goreleaser.yaml`. Keep the two lists identical. cosign signs the checksums file keyless (`checksums.txt.sigstore.json`), and `actions/attest-build-provenance` attaches a SLSA build provenance attestation.
+6. **Optional publishers** run only if their secret exists on the `release` environment, and never for pre-releases. Otherwise the workflow skips each one with a notice:
 
    | Secret | Publishes to | Token needs |
    |---|---|---|
@@ -158,23 +122,13 @@ Releases are cut from a **release pull request** that a bot keeps up to date. No
    | `WINGET_TOKEN` | WinGet pull request to `microsoft/winget-pkgs` from the `yorch/winget-pkgs` fork | contents write on the fork and pull request creation |
 
    Use fine-grained tokens scoped to exactly those repositories.
-8. Before you announce the release:
+7. Before you announce the release:
    - Verify the published release as a user would. Follow "Verifying a release" in [SECURITY.md](SECURITY.md).
    - Run the documented one-liners from the README (`install.sh | sh`, and `install.ps1` on Windows) against it in a scratch directory (`--bin-dir`/`-BinDir`).
 
-   A change to `scripts/install.sh` or `install.ps1` is a security-sensitive change. Keep `scripts/test_install.sh` (with `--mutants`) and `scripts/test_install.ps1` green, and update "What the installer verifies" in SECURITY.md. The macOS and Windows binaries are not notarized or signed yet, so Gatekeeper and SmartScreen may warn. Targets without a native CI runner are noted as built but not natively tested.
+   A change to `scripts/install.sh` or `install.ps1` is a security-sensitive change. Keep their tests green (see [AGENTS.md "Installers"](AGENTS.md#installers)), and update "What the installer verifies" in SECURITY.md. The macOS and Windows binaries are not notarized or signed yet, so Gatekeeper and SmartScreen may warn. Targets without a native CI runner are noted as built but not natively tested.
 
-If a release fails or turns out bad, follow "Failure and rollback" in the design note:
-- A failed job leaves the draft and the tag in place and can be re-run.
-- A published bad release is yanked (back to a draft or deleted, tag kept) and fixed by the next patch.
-
-**One-time setup** (before the first release). The full bootstrap runbook is in the design note.
-1. Enable "Allow GitHub Actions to create and approve pull requests" under Settings > Actions > General.
-2. Create the rulesets and the `release` environment below.
-3. Set the squash-merge default message to "Pull request title". The description must not reach `main`: release-please also reads `BEGIN_COMMIT_OVERRIDE` and `Release-As:` from it, and `pr-title` rejects them.
-4. Require code-owner review and "Require approval of the most recent reviewable push" in the `main` ruleset. Reason: the Actions setting also lets workflow tokens submit approvals.
-
-The release flow itself needs no secret. The first release is `0.1.0` (`initial-version`), and `bootstrap-sha` in `release-please-config.json` can shorten its changelog.
+If a release fails or turns out bad, follow [Failure and rollback](docs/design/release.md#failure-and-rollback). Before the first release, follow the [one-time setup and bootstrap runbook](docs/design/release.md#one-time-maintainer-setup-and-bootstrap-runbook) and create the rulesets and the `release` environment below.
 
 The repository owner appears in `.goreleaser.yaml`, `.github/ISSUE_TEMPLATE/config.yml`, `CODEOWNERS` (team handle), `SECURITY.md` and this file, each marked `OWNER`.
 
@@ -208,11 +162,11 @@ Configure these rulesets (Settings > Rules) on the tool repository before the fi
 
 Pull requests and tags created with an App token trigger workflows natively, so the `dispatch` job becomes unnecessary. The tag-push trigger of `release.yml` would be needed again.
 
-The release workflow also fails when the tagged commit is not an ancestor of `main` (`git merge-base --is-ancestor` after a full fetch, plus a GitHub compare API check). This backs up the rulesets but does not replace them. The `pins` job needs no environment. It starts `ci.yml` and `pr-title.yml` on its own branch with `workflow_dispatch`, so `ci-ok` and `pr-title` report on its pull request. You can re-run it safely. If you prefer CI to trigger natively, add a repository secret `PINS_PR_TOKEN` (GitHub App token or fine-grained PAT scoped to this repository) and the job uses it instead.
+The release workflow also fails when the tagged commit is not an ancestor of `main` (`git merge-base --is-ancestor` after a full fetch, plus a GitHub compare API check). This backs up the rulesets but does not replace them.
 
 ## Embedded checksums for the Action
 
-After each release the `pins` job opens a pull request `chore: pin checksums for vX.Y.Z` that appends the six archive hashes to `action/pins.txt` (`<version> <os> <arch> <sha256>`). Review the lines against the signed `checksums.txt` and merge. Adopters pin the Action to a commit that contains the line for their version, which pins the binary without any signature service (see [action/README.md](action/README.md)).
+After each release the `pins` job opens a pull request `chore: pin checksums for vX.Y.Z` that appends the six archive hashes to `action/pins.txt`. Review the lines against the signed `checksums.txt` and merge. The job needs no environment, and you can re-run it safely. [action/README.md](action/README.md) says how the job gets CI, how the optional `PINS_PR_TOKEN` works (scope it to this repository), and how adopters use the pins.
 
 ## Nightly smoke test
 
@@ -222,7 +176,7 @@ After each release the `pins` job opens a pull request `chore: pin checksums for
 
 The tool and its workflows are designed to the lowest common denominator (R2): no hard-coded hosts in logic, CLI first and workflow second, and few third-party actions.
 
-- **Mirror the Action and the binary.** Mirror `yorch/ccshelf` (the repository with `action/`) onto your instance, for example with [`actions-sync`](https://github.com/actions/actions-sync), and pin it by full commit SHA. Mirror the release assets (`ccshelf_*` archives, `checksums.txt`, `checksums.txt.sigstore.json`) to an internal location. The Action must download from there (`base-url`) and verify the SHA-256. `cosign verify-blob` needs the Sigstore trusted root and is not offline. For an air-gapped instance, use the `sha256` pin or `action/pins.txt`, or mirror the trusted root and pass it as `trusted-root`.
+- **Mirror the Action and the binary.** Follow "GitHub Enterprise Server and offline use" in [action/README.md](action/README.md). It covers the mirror of `yorch/ccshelf`, the asset layout for `base-url`, SHA pins and the offline checks.
 - **Third-party actions.** The workflows here use `actions/checkout`, `actions/setup-go`, `actions/upload-artifact`, `actions/download-artifact` and a few others. GHE Server administrators must mirror or allow them (or use GitHub Connect). Where that is not possible, build the binary with plain `go build` and call it directly. Every `ccshelf` command works outside Actions.
 - **Attestations.** Build provenance attestations have limited support on GHE Server. Use one of these instead (see [SECURITY.md](SECURITY.md)):
   - the cosign bundle with `cosign verify-blob` and a mirrored trusted root (this is not offline without it).

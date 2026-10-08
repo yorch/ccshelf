@@ -58,7 +58,7 @@ Outputs: `path` (the installed binary) and `version`. The action also adds the b
 
 To install once and run several commands, give the first call no `args`. Then call `ccshelf` directly, or reuse `steps.<id>.outputs.path`.
 
-Pinning `sha256` per OS and architecture in a matrix is easiest with a map in the workflow (`sha256: ${{ matrix.ccshelf_sha256 }}`). The hashes are in the release's `checksums.txt`. Archive names have no leading `v` (`ccshelf_0.1.0_linux_amd64.tar.gz`, `.zip` on Windows) while the release path keeps it (`.../download/v0.1.0/`).
+Pinning `sha256` per OS and architecture in a matrix is easiest with a map in the workflow (`sha256: ${{ matrix.ccshelf_sha256 }}`). The hashes are in the release's `checksums.txt` (archive names in "How verification works").
 
 ## How verification works
 
@@ -118,7 +118,7 @@ The action only needs the assets, so three approaches work. All keep the logic i
 
    A `base-url` that starts with `file:///` copies from a runner-local directory, which is how an air-gapped runner image or a test can supply the release. Downloads over `https://` do not follow redirects to other schemes. The action sends no credentials. If your mirror needs authentication, download the assets in an earlier step and use `file://`.
 
-Notes: artifact attestations have limited support on GHE Server. The signature check reads the Sigstore bundle from the file, but it still needs the Sigstore trusted root (mirror it and pass `trusted-root`). So on an air-gapped instance, use the `sha256` pin or `pins.txt`, which need no service at all.
+Artifact attestations have limited support on GHE Server. The signature check reads the Sigstore bundle from the mirror, but still needs the trusted root (step 3 of "How verification works"). On an air-gapped instance, use the `sha256` pin or `pins.txt`, which need no service.
 
 ## Tests
 
