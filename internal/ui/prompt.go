@@ -12,7 +12,7 @@ type Option struct {
 	// Detail is an optional second column (a description). It is shown but not
 	// matched.
 	Detail string
-	// Value is a stable identifier for the caller; it is also matched when
+	// Value is a stable identifier for the caller. It is also matched when
 	// filtering. It may be empty.
 	Value string
 }
@@ -46,7 +46,7 @@ func (q Question) defaultIndex() (int, bool) {
 
 // ConfirmRisky asks for confirmation of a risky or irreversible action. It has
 // no default and no y/n shortcut: the user must type the word "yes" (exactly,
-// ignoring case and surrounding space); anything else, including an empty
+// ignoring case and surrounding space). Anything else, including an empty
 // answer, is "no". It uses only Prompter.Input, so it works with every
 // Prompter, and a non-interactive Prompter returns a *MissingFlagError instead
 // of answering. Use it, not Confirm with def=true, whenever the safe answer is
@@ -69,11 +69,11 @@ type Prompter interface {
 	// MultiSelect asks the user to pick any number of options and returns their
 	// indexes in ascending order (possibly none).
 	MultiSelect(ctx context.Context, q Question) ([]int, error)
-	// Confirm asks a yes or no question; an empty answer returns def. Pass
-	// def=true only when yes is the safe, reversible answer; for anything risky
+	// Confirm asks a yes or no question. An empty answer returns def. Pass
+	// def=true only when yes is the safe, reversible answer. For anything risky,
 	// use ConfirmRisky.
 	Confirm(ctx context.Context, text string, def bool) (bool, error)
-	// Input asks for a line of text; an empty answer returns def. validate, when
+	// Input asks for a line of text. An empty answer returns def. validate, when
 	// not nil, may reject a value: the user is asked again with its message.
 	Input(ctx context.Context, text, def string, validate func(string) error) (string, error)
 	// Secret asks for a value without echoing it. The value must never be

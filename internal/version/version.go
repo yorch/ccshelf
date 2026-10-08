@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-// Build identity. The linker overrides these with -X; the defaults mark a
+// Build identity. The linker overrides these with -X. The defaults mark a
 // build that did not go through the release pipeline.
 var (
 	// Version is the release version without a leading "v" (for example
@@ -18,7 +18,7 @@ var (
 	Commit = "none"
 	// Date is the build or commit date, or "unknown".
 	Date = "unknown"
-	// Repo is the GitHub "owner/name" this binary was released from; "ccshelf
+	// Repo is the GitHub "owner/name" this binary was released from. "ccshelf
 	// update" looks for releases there. The linker sets it for release builds.
 	Repo = "yorch/ccshelf"
 )

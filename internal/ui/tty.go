@@ -19,7 +19,7 @@ import (
 // TTY uses an inline keyboard picker on capable terminals. Plain mode,
 // unsupported terminals and non-file streams retain numbered line prompts:
 // ambiguous text narrows the list and "/" clears the filter. Ctrl+D or end
-// of input returns ErrAborted; canceling the context returns ctx.Err().
+// of input returns ErrAborted. Canceling the context returns ctx.Err().
 // Keyboard prompts restore terminal state synchronously before returning.
 //
 // Prompts are written to Streams.Err and answers are read from Streams.In.
@@ -214,7 +214,7 @@ func (t *TTY) Select(ctx context.Context, q Question) (int, error) {
 }
 
 // MultiSelect implements Prompter. Answers are numbers, ranges ("2-4") or
-// names, separated by commas or spaces; an empty answer selects nothing.
+// names, separated by commas or spaces. An empty answer selects nothing.
 func (t *TTY) MultiSelect(ctx context.Context, q Question) ([]int, error) {
 	if len(q.Options) == 0 {
 		return nil, errors.New("multi-select: no options to choose from")
@@ -225,7 +225,7 @@ func (t *TTY) MultiSelect(ctx context.Context, q Question) ([]int, error) {
 	t.title(q)
 	t.printList(Question{Options: q.Options}, allIndexes(len(q.Options)))
 	for {
-		t.printf("Select (numbers like 1,3 or 2-4; empty for none): ")
+		t.printf("Select (numbers like 1,3 or 2-4, or empty for none): ")
 		line, err := t.readLine(ctx)
 		if err != nil {
 			return nil, err
@@ -272,7 +272,7 @@ func parseMulti(q Question, line string) ([]int, error) {
 		case 1:
 			seen[m[0]] = true
 		default:
-			return nil, fmt.Errorf("%q matches %d options; use their numbers", tok, len(m))
+			return nil, fmt.Errorf("%q matches %d options. Use their numbers", tok, len(m))
 		}
 	}
 	out := make([]int, 0, len(seen))
@@ -341,7 +341,7 @@ var (
 )
 
 // Secret implements Prompter. When input is a terminal the value is read
-// without echo; otherwise (a pipe in tests) a line is read. The terminal state
+// without echo. Otherwise (a pipe in tests) a line is read. The terminal state
 // is saved first and restored on every way out, including a canceled context
 // and an interrupt or termination signal (which cancel the read instead of
 // killing the process with echo still off).

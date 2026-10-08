@@ -7,19 +7,19 @@ Unknown
   - server-managed settings cannot be read locally
 
 Warnings
-  - managed key disableAllHooks should be a boolean; ignoring the value
+  - managed key disableAllHooks should be a boolean, so ccshelf ignores the value
 
 Capabilities
-  settings-masking           available the generated --settings file is not a sideload flag and cannot be disabled by policy; keys that managed settings lock (force-enabled plugins) still win
+  settings-masking           available the generated --settings file is not a sideload flag, and policy cannot disable it. Keys that managed settings lock (force-enabled plugins) still win
   hide-connectors            available disableClaudeAiConnectors is valid in any settings file
-  deny-mcp-servers           available deniedMcpServers is valid in any settings file; entries need full server names such as plugin:context7:context7
+  deny-mcp-servers           available deniedMcpServers is valid in any settings file. Entries need full server names such as plugin:context7:context7
   add-mcp-config             blocked   managed settings set disableSideloadFlags, which rejects --mcp-config
   strict-mcp-config          blocked   managed settings set disableSideloadFlags, which rejects --strict-mcp-config
   plugin-dir                 blocked   managed settings set disableSideloadFlags, which rejects --plugin-dir and CLAUDE_CODE_PLUGIN_DIRS
   agents                     blocked   managed settings set disableSideloadFlags, which rejects --agents
   setting-sources            available not restricted by any readable managed key
   append-system-prompt-file  available not a sideload flag
-  forced-plugins             blocked   these plugins are force-enabled by policy and cannot be masked; they stay on in every profile
+  forced-plugins             blocked   these plugins are force-enabled by policy and cannot be masked. They stay on in every profile
                                        audit-logger@acme, sre-kit@acme
 
 Force-disabled by policy: legacy@acme

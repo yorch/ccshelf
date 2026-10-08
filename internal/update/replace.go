@@ -18,8 +18,8 @@ const BackupSuffix = ".old"
 // executable, so that stale ones can be recognized and removed.
 const tempPrefix = ".ccshelf-update-"
 
-// NotWritableError means the directory of the executable cannot be written by
-// the current user.
+// NotWritableError means the current user cannot write the directory of the
+// executable.
 type NotWritableError struct {
 	Dir string
 	Err error
@@ -49,13 +49,13 @@ func CheckWritable(dir string) error {
 	return nil
 }
 
-// ResolveExecutable returns the path the update will replace. A symlinked
-// executable is followed to its target, but only when the target's directory is
+// ResolveExecutable returns the path the update will replace. It follows a
+// symlinked executable to its target, but only when the target's directory is
 // one the current user owns (so a link in a world-readable location can never
-// be used to overwrite something that is not ours); that the directory can be
-// written is checked later by [CheckWritable], right before a replacement,
-// because this function must not write anything (it also serves --check and
-// --dry-run). wasLink reports whether a link was followed. On Linux
+// be used to overwrite something that is not ours). [CheckWritable] checks
+// later, right before a replacement, that the directory can be written. This
+// function must not write anything, because it also serves --check and
+// --dry-run. wasLink reports whether a link was followed. On Linux
 // os.Executable already returns the resolved path, so a link is seen here
 // mostly where the OS reports the path as invoked (macOS).
 func ResolveExecutable(exe string) (resolved string, wasLink bool, err error) {
@@ -210,7 +210,7 @@ func installAside(newPath, exe, old string) error {
 	}
 	if err := os.Rename(newPath, exe); err != nil {
 		if rerr := os.Rename(old, exe); rerr != nil {
-			return fmt.Errorf("replacing %s: %w (and putting the old binary back failed: %w; it is at %s)", exe, err, rerr, old)
+			return fmt.Errorf("replacing %s: %w (and putting the old binary back failed: %w. The old binary is at %s)", exe, err, rerr, old)
 		}
 		return fmt.Errorf("replacing %s: %w", exe, err)
 	}
@@ -246,7 +246,7 @@ func swapAside(exe, old string) error {
 	}
 	if err := os.Rename(old, exe); err != nil {
 		if rerr := os.Rename(tmp, exe); rerr != nil {
-			return fmt.Errorf("restoring %s: %w (and putting the current binary back failed: %w; it is at %s)", old, err, rerr, tmp)
+			return fmt.Errorf("restoring %s: %w (and putting the current binary back failed: %w. The current binary is at %s)", old, err, rerr, tmp)
 		}
 		return fmt.Errorf("restoring %s: %w", old, err)
 	}

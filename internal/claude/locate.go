@@ -31,7 +31,7 @@ type ShimOnlyError struct {
 
 // Error implements error.
 func (e *ShimOnlyError) Error() string {
-	return fmt.Sprintf("found %s, which is a .cmd/.bat shim; ccshelf cannot run those safely. Set %s to the full path of claude.exe (the native installer puts it in %%USERPROFILE%%\\.local\\bin)", e.Path, EnvBinary)
+	return fmt.Sprintf("found %s, which is a .cmd/.bat shim. ccshelf cannot run those safely. Set %s to the full path of claude.exe (the native installer puts it in %%USERPROFILE%%\\.local\\bin)", e.Path, EnvBinary)
 }
 
 // Is makes errors.Is(err, ErrShimOnly) work.

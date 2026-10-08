@@ -35,7 +35,7 @@ var ErrAborted = errors.New("aborted")
 type ExitError struct {
 	// Code is the process exit code.
 	Code int
-	// Err is the underlying error; it may be nil.
+	// Err is the underlying error. It may be nil.
 	Err error
 }
 

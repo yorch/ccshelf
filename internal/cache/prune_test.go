@@ -151,7 +151,7 @@ func TestTamperedErrorsSayWhatToDelete(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err := Write(dir, "mcp", "json", []byte("good"))
-	if err == nil || !strings.Contains(err.Error(), "delete "+p) {
+	if err == nil || !strings.Contains(err.Error(), "Delete "+p) {
 		t.Errorf("Write error lacks the hint: %v", err)
 	}
 	if err := os.Remove(p); err != nil {
@@ -160,7 +160,7 @@ func TestTamperedErrorsSayWhatToDelete(t *testing.T) {
 	if err := os.Mkdir(p, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ReadFile(dir, filepath.Base(p)); err == nil || !strings.Contains(err.Error(), "delete "+p) {
+	if _, err := ReadFile(dir, filepath.Base(p)); err == nil || !strings.Contains(err.Error(), "Delete "+p) {
 		t.Errorf("ReadFile error lacks the hint: %v", err)
 	}
 }

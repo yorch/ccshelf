@@ -91,7 +91,7 @@ func ParseChecksums(data []byte, name string) (string, error) {
 	case 1:
 		return found[0], nil
 	}
-	return "", fmt.Errorf("checksums.txt has %d entries for %s; refusing to guess", len(found), name)
+	return "", fmt.Errorf("checksums.txt has %d entries for %s, so ccshelf refuses to guess", len(found), name)
 }
 
 // ErrChecksum means a file's SHA-256 is not the one the release recorded.

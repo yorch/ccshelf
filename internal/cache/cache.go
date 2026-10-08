@@ -79,8 +79,8 @@ func Dir() (string, error) {
 // the final component is a real directory owned by the current user. A
 // directory the user owns whose mode is wider than 0700 is repaired with
 // chmod 0700 (Unix) or given an owner-only protected DACL (Windows) and
-// accepted; a directory owned by someone else, or a symlink, is refused.
-// Parent components may be symlinks (for example /tmp on macOS); only the
+// accepted. A directory owned by someone else, or a symlink, is refused.
+// Parent components may be symlinks (for example /tmp on macOS). Only the
 // cache directory itself may not be.
 func Ensure(dir string) error {
 	if err := os.MkdirAll(filepath.Dir(dir), 0o700); err != nil {
@@ -94,7 +94,7 @@ func Ensure(dir string) error {
 		return fmt.Errorf("inspect cache directory: %w", err)
 	}
 	if fi.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("cache directory %s is a symlink; refusing to use it", dir)
+		return fmt.Errorf("cache directory %s is a symlink, so ccshelf refuses to use it", dir)
 	}
 	if !fi.IsDir() {
 		return fmt.Errorf("cache path %s is not a directory", dir)
@@ -142,7 +142,7 @@ func Write(dir, prefix, ext string, content []byte) (string, error) {
 // WriteReplace atomically writes content to the file called name in dir,
 // replacing any previous regular file of that name. name must match the
 // pattern <prefix>-<32 hex>.<ext> so that [GC] can age it out. Use it for
-// small mutable records; use [Write] for immutable content-addressed files.
+// small mutable records. Use [Write] for immutable content-addressed files.
 func WriteReplace(dir, name string, content []byte) error {
 	if !namePattern.MatchString(name) {
 		return fmt.Errorf("invalid cache file name %q", name)
@@ -198,7 +198,7 @@ func ReadState(dir, name string, limit int64) ([]byte, error) {
 // deleteHint is appended to errors about a cache file that cannot be trusted:
 // every cache file can be rebuilt, so removing it is always safe.
 func deleteHint(path string) string {
-	return "; delete " + path + " and run again to rebuild it"
+	return ". Delete " + path + " and run again to rebuild it"
 }
 
 func readRegular(path string, limit int64) ([]byte, error) {

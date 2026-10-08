@@ -11,7 +11,7 @@
       "check": "overlap",
       "message": "ops-helper@acme and sre-kit@acme share 4 of 5 tags (alerts, oncall, ops, runbook)",
       "plugin": "ops-helper@acme",
-      "hint": "if the overlap is intended, add each to the other's overlaps_with; otherwise consider merging or deprecating one"
+      "hint": "if the overlap is intended, add each to the other's overlaps_with. Otherwise, consider merging or deprecating one"
     },
     {
       "severity": "info",
@@ -38,7 +38,7 @@
       "severity": "warning",
       "code": "DOC003",
       "check": "deprecated-in-use",
-      "message": "profile sre includes the deprecated plugin postmortem-lite@acme; use sre-kit instead",
+      "message": "profile sre includes the deprecated plugin postmortem-lite@acme. Use sre-kit instead",
       "plugin": "postmortem-lite@acme",
       "profile": "sre",
       "hint": "in the profile's [plugins] include list, replace \"postmortem-lite@acme\" with the replacement"
@@ -86,7 +86,7 @@
       "severity": "info",
       "code": "DOC009",
       "check": "forced-by-policy",
-      "message": "audit-log@acme is forced on by managed policy and cannot be masked; profiles that leave it out still run with it: sre",
+      "message": "audit-log@acme is forced on by managed policy and cannot be masked. Profiles that leave it out still run with it: sre",
       "plugin": "audit-log@acme"
     },
     {

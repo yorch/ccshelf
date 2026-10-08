@@ -9,7 +9,7 @@ import (
 )
 
 // Streams are the three standard streams a command uses. Prompts and
-// diagnostics go to Err; results go to Out so they can be piped.
+// diagnostics go to Err. Results go to Out so they can be piped.
 type Streams struct {
 	// In is the input (normally os.Stdin).
 	In io.Reader
@@ -78,14 +78,15 @@ var terminalWidth = func(fd uintptr) int {
 // --no-interactive is not set, ui.interactive is not "never", CI is not set
 // (any non-empty value counts as set, including "false" and "0") and TERM is not "dumb". Color
 // is off when NO_COLOR is set to any non-empty value (the no-color.org rule), --no-color is
-// given, TERM is "dumb" or stdout is not a terminal; ui.color = "always"
+// given, TERM is "dumb" or stdout is not a terminal. ui.color = "always"
 // turns it on for a non-terminal stdout but never overrides NO_COLOR,
 // --no-color or a dumb terminal. --plain forces line-oriented prompts, and so
 // does TERM=dumb. --json disables prompts and color.
 //
 // On Windows the console's virtual-terminal processing is enabled on a
-// best-effort basis; if that fails the mode falls back to plain output without
-// color. env may be nil (os.Getenv); a nil file counts as not a terminal.
+// best-effort basis. If that fails, the mode falls back to plain output
+// without color. env may be nil (os.Getenv). A nil file counts as not a
+// terminal.
 func DetectMode(env func(string) string, in, out *os.File, flags ModeFlags) Mode {
 	if env == nil {
 		env = os.Getenv

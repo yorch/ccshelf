@@ -18,8 +18,8 @@ type Plugin struct {
 	// Version, Scope (user, project, local, synced, ...), InstallPath,
 	// InstalledAt and LastUpdated are passed through as reported.
 	Version, Scope, InstallPath, InstalledAt, LastUpdated string
-	// Enabled is true when the plugin is enabled in the current context;
-	// ProjectEnabled when the project settings enable it.
+	// Enabled is true when the plugin is enabled in the current context.
+	// ProjectEnabled is true when the project settings enable it.
 	Enabled, ProjectEnabled bool
 	// MCPServers holds the plugin's MCP server definitions, uninterpreted.
 	MCPServers map[string]json.RawMessage
@@ -44,7 +44,7 @@ func SplitID(id string) (name, marketplace string) {
 }
 
 // UnmarshalJSON decodes one plugin object. Known keys with the wrong type
-// are errors; unknown keys land in Extra.
+// are errors. Unknown keys land in Extra.
 func (p *Plugin) UnmarshalJSON(data []byte) error {
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {

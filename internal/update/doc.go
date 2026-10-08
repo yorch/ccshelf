@@ -5,7 +5,7 @@
 // The package is the one place that makes optional network calls on the
 // user's behalf (SECURITY.md lists it as the single exception to "no network
 // unless asked"). Nothing here runs unless the user ran "ccshelf update" or
-// set [update] mode in config.toml; the default is off.
+// set [update] mode in config.toml. The default is off.
 //
 // # Trust model
 //
@@ -18,11 +18,11 @@
 //     release. If cosign is on PATH, the keyless signature of checksums.txt
 //     (checksums.txt.sigstore.json) must also verify against the identity
 //     https://<host>/<repo>/.github/workflows/release.yml@refs/tags/<tag> and
-//     the GitHub Actions OIDC issuer; a failure aborts the update. With
+//     the GitHub Actions OIDC issuer. A failure aborts the update. With
 //     RequireSignature a missing cosign is an error too.
 //   - Only the ccshelf (ccshelf.exe) entry of the archive is extracted, with
 //     traversal, links, unknown entries and oversize rejected, into a file next
-//     to the running binary; the file must report the expected version before
+//     to the running binary. The file must report the expected version before
 //     it replaces anything.
 //   - The previous binary is kept as <name>.old for rollback.
 //

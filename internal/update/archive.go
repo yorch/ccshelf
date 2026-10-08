@@ -44,8 +44,8 @@ func checkEntryName(name string) error {
 }
 
 // ExtractBinary copies the file called binary out of the archive at path to
-// w and returns its size. Only that entry is read: the extras are skipped;
-// directories, links, devices, duplicates, other names, traversal and any
+// w and returns its size. It reads only that entry and skips the extras.
+// Directories, links, devices, duplicates, other names, traversal and any
 // entry larger than max are errors, and so is an archive without the binary.
 func ExtractBinary(path string, zipped bool, binary string, w io.Writer, max int64) (int64, error) {
 	if zipped {

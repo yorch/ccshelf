@@ -245,7 +245,7 @@ func (p *pickerState) headers(width int) []string {
 		status += fmt.Sprintf("; %d selected (including hidden)", count)
 	}
 	if len(p.candidates) == 0 {
-		status = "No matches; Backspace or Ctrl+U resets the filter"
+		status = "No matches. Backspace or Ctrl+U resets the filter"
 	}
 	return append(lines, wrapLine(status, width)...)
 }
@@ -339,7 +339,7 @@ func (t *TTY) keyboardSelect(ctx context.Context, q Question, multi bool) (resul
 			return nil, true, fmt.Errorf("reading terminal size: %w", err)
 		}
 		if w != originalWidth || h != originalHeight {
-			return nil, true, errors.New("terminal resized during selection; retry with --plain")
+			return nil, true, errors.New("terminal resized during selection: retry with --plain")
 		}
 		lines := p.lines(width, height)
 		var frame strings.Builder

@@ -22,7 +22,7 @@ type check struct {
 
 var checks = []check{
 	{"DOC001", "overlap", Warning, "Plugins that share at least 60% of their tags, or list each other in overlaps_with.", checkOverlap},
-	{"DOC002", "unused", Info, "Plugins in no profile (protected plugins excepted) and, with usage data, with no skill_activated events in the window; unconfirmed when usage names are redacted.", checkUnused},
+	{"DOC002", "unused", Info, "Plugins in no profile (protected plugins excepted) and, with usage data, with no skill_activated events in the window. The finding is unconfirmed when usage names are redacted.", checkUnused},
 	{"DOC003", "deprecated-in-use", Warning, "A profile includes a deprecated plugin.", checkDeprecatedInUse},
 	{"DOC004", "review", Warning, "A plugin's review_by is missing or in the past.", checkReview},
 	{"DOC005", "owner", Warning, "A plugin has no owner.", checkOwner},
@@ -31,8 +31,8 @@ var checks = []check{
 	{"DOC008", "not-installed", Warning, "A profile includes a plugin that is not installed.", checkNotInstalled},
 	{"DOC009", "forced-by-policy", Info, "A plugin is forced on by managed policy and no profile can mask it.", checkForced},
 	{"DOC010", "platform-review", Warning, "A plugin with hooks, MCP or LSP servers is not covered by platform review (needs lint.platform_owners).", checkPlatformReview},
-	{"DOC011", "protected-masked", Info, "A profile excludes a plugin the org config protects; the launcher keeps protected plugins on, so the exclude has no effect.", checkProtectedMasked},
-	{"DOC012", "protected-mcp", Error, "A profile hides claude.ai connectors or sets mcp.strict while the org config protects an MCP server it would remove; the launcher refuses to start it.", checkProtectedMCP},
+	{"DOC011", "protected-masked", Info, "A profile excludes a plugin the org config protects. The launcher keeps protected plugins on, so the exclude has no effect.", checkProtectedMasked},
+	{"DOC012", "protected-mcp", Error, "A profile hides claude.ai connectors or sets mcp.strict while the org config protects an MCP server it would remove. The launcher refuses to start the profile.", checkProtectedMCP},
 }
 
 // Safe-value patterns: only values that match are put into shell commands and
@@ -170,7 +170,7 @@ func checkOverlap(in *Input) ([]Finding, string) {
 			}
 			f := Finding{Plugin: x, Message: fmt.Sprintf("%s and %s %s", txt(x), txt(y), strings.Join(parts, " and "))}
 			if !declared {
-				f.Hint = "if the overlap is intended, add each to the other's overlaps_with; otherwise consider merging or deprecating one"
+				f.Hint = "if the overlap is intended, add each to the other's overlaps_with. Otherwise, consider merging or deprecating one"
 			}
 			out = append(out, f)
 		}
@@ -285,10 +285,10 @@ func checkDeprecatedInUse(in *Input) ([]Finding, string) {
 			f := Finding{Plugin: entryID(e), Profile: p.Name}
 			f.Message = fmt.Sprintf("profile %s includes the deprecated plugin %s", txt(p.Name), txt(entryID(e)))
 			if e.SupersededBy != "" {
-				f.Message += fmt.Sprintf("; use %s instead", txt(e.SupersededBy))
+				f.Message += fmt.Sprintf(". Use %s instead", txt(e.SupersededBy))
 				f.Hint = fmt.Sprintf("in the profile's [plugins] include list, replace %q with the replacement", entryID(e))
 			} else {
-				f.Hint = "remove it from the profile; no replacement is named"
+				f.Hint = "remove it from the profile. No replacement is named"
 			}
 			out = append(out, f)
 		}
@@ -480,7 +480,7 @@ func checkForced(in *Input) ([]Finding, string) {
 		sort.Strings(masking)
 		msg := fmt.Sprintf("%s is forced on by managed policy and cannot be masked", txt(p.ID))
 		if len(masking) > 0 {
-			msg += fmt.Sprintf("; profiles that leave it out still run with it: %s", txt(strings.Join(masking, ", ")))
+			msg += fmt.Sprintf(". Profiles that leave it out still run with it: %s", txt(strings.Join(masking, ", ")))
 		}
 		out = append(out, Finding{Plugin: p.ID, Message: msg})
 	}
@@ -600,7 +600,7 @@ func checkProtectedMasked(in *Input) ([]Finding, string) {
 			}
 			f := Finding{
 				Plugin: id, Profile: p.Name,
-				Message: fmt.Sprintf("profile %s excludes %s, which the org config protects; the launcher keeps it enabled, so the exclude has no effect", txt(p.Name), txt(id)),
+				Message: fmt.Sprintf("profile %s excludes %s, which the org config protects. The launcher keeps it enabled, so the exclude has no effect", txt(p.Name), txt(id)),
 			}
 			if profileRe.MatchString(p.Name) && pluginIDRe.MatchString(id) {
 				f.Hint = fmt.Sprintf("remove %q from plugins.exclude of profile %s", id, p.Name)
@@ -648,7 +648,7 @@ func checkProtectedMCP(in *Input) ([]Finding, string) {
 		if p.HideConnectors && len(connectors) > 0 {
 			f := Finding{
 				Profile: p.Name,
-				Message: fmt.Sprintf("profile %s sets claudeai_connectors = \"none\", which would hide the protected connector(s) %s; the launcher refuses to start it", txt(p.Name), txt(strings.Join(connectors, ", "))),
+				Message: fmt.Sprintf("profile %s sets claudeai_connectors = \"none\", which would hide the protected connector(s) %s. The launcher refuses to start the profile", txt(p.Name), txt(strings.Join(connectors, ", "))),
 			}
 			f.Hint = "set claudeai_connectors = \"keep\" in the profile, or remove the connector from protect.mcp"
 			out = append(out, f)
@@ -656,7 +656,7 @@ func checkProtectedMCP(in *Input) ([]Finding, string) {
 		if p.StrictMCP && len(in.Org.Protect.MCP) > 0 {
 			out = append(out, Finding{
 				Profile: p.Name,
-				Message: fmt.Sprintf("profile %s sets mcp.strict, which would also remove the protected MCP servers (%s); the launcher refuses to start it", txt(p.Name), txt(strings.Join(in.Org.Protect.MCP, ", "))),
+				Message: fmt.Sprintf("profile %s sets mcp.strict, which would also remove the protected MCP servers (%s). The launcher refuses to start the profile", txt(p.Name), txt(strings.Join(in.Org.Protect.MCP, ", "))),
 				Hint:    "remove mcp.strict from the profile",
 			})
 		}

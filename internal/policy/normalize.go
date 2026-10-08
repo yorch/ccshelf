@@ -41,7 +41,7 @@ func (d *detector) normalizeDoc(m map[string]any, where string) {
 			continue
 		}
 		if _, has := m[canon]; has {
-			warn("both %s and its alias %s are set; using %s", canon, alias, canon)
+			warn("both %s and its alias %s are set, so ccshelf uses %s", canon, alias, canon)
 		} else {
 			m[canon] = v
 		}
@@ -58,17 +58,17 @@ func (d *detector) normalizeDoc(m map[string]any, where string) {
 			switch x {
 			case "true":
 				m[k] = true
-				warn("%s is the string \"true\"; reading it as true, drop the quotes", k)
+				warn("%s is the string \"true\", so ccshelf reads it as true. Drop the quotes", k)
 			case "false":
 				m[k] = false
-				warn("%s is the string \"false\"; reading it as false, drop the quotes", k)
+				warn("%s is the string \"false\", so ccshelf reads it as false. Drop the quotes", k)
 			default:
 				m[k] = true
-				warn("%s is present but invalid; treating it as true (fail closed)", k)
+				warn("%s is present but invalid, so ccshelf treats it as true (fail closed)", k)
 			}
 		default:
 			m[k] = true
-			warn("%s is present but invalid; treating it as true (fail closed)", k)
+			warn("%s is present but invalid, so ccshelf treats it as true (fail closed)", k)
 		}
 	}
 	for _, k := range plainBoolKeys {
@@ -78,13 +78,13 @@ func (d *detector) normalizeDoc(m map[string]any, where string) {
 		}
 		if _, isBool := v.(bool); !isBool {
 			delete(m, k)
-			warn("%s must be a JSON boolean; dropping the value", k)
+			warn("%s must be a JSON boolean, so ccshelf ignores the value", k)
 		}
 	}
 	if pm, ok := m["permissions"].(map[string]any); ok {
 		if v, ok := pm["disableBypassPermissionsMode"]; ok && v != nil && v != "disable" {
 			pm["disableBypassPermissionsMode"] = "disable"
-			warn("permissions.disableBypassPermissionsMode is present but invalid; treating it as \"disable\" (fail closed)")
+			warn("permissions.disableBypassPermissionsMode is present but invalid, so ccshelf treats it as \"disable\" (fail closed)")
 		}
 	}
 }

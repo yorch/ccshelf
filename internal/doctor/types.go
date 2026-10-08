@@ -65,7 +65,7 @@ type ProfileView struct {
 	StrictMCP bool
 }
 
-// Input is everything the checks look at. Only Catalog is required; a check
+// Input is everything the checks look at. Only Catalog is required. A check
 // whose input is missing is skipped and listed in Report.Skipped.
 type Input struct {
 	Catalog *catalog.Catalog
@@ -76,22 +76,22 @@ type Input struct {
 	Lint     *lint.Report
 	Profiles []ProfileView
 	// Installed are the plugins `claude plugin list` reports. nil means "not
-	// read" (the checks that need it are skipped); an empty non-nil slice
+	// read" (the checks that need it are skipped). An empty non-nil slice
 	// means "read, and nothing is installed".
 	Installed []claude.Plugin
-	// StandaloneSkills are the names found in the user's skills directory;
-	// nil means "not read", an empty non-nil slice "none found".
+	// StandaloneSkills are the names found in the user's skills directory.
+	// nil means "not read", and an empty non-nil slice means "none found".
 	StandaloneSkills []string
 	// Usage is optional usage data.
 	Usage *analytics.Usage
-	// Org is the org config (optional); it supplies the protected plugins.
+	// Org is the org config (optional). It supplies the protected plugins.
 	Org *orgconfig.Config
 	// Policy are findings from the policy package, copied into the report.
 	Policy []Finding
-	// Now is the clock; time.Now when zero.
+	// Now is the clock. It is time.Now when zero.
 	Now time.Time
-	// ReviewMaxAgeDays is how long after review_by a plugin is "stale";
-	// 180 when zero.
+	// ReviewMaxAgeDays is how long after review_by a plugin is "stale".
+	// It is 180 when zero.
 	ReviewMaxAgeDays int
 }
 
