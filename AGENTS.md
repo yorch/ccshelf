@@ -52,6 +52,7 @@ Text that people and agents read follows the structural rules of ASD-STE100 Simp
   - Descriptions in `schema/` and the inputs and outputs in `action/action.yml`.
   - This file.
 - **STE-flavored mode** is for `README.md`, `SECURITY.md`, `CONTRIBUTING.md`, `docs/design/`, `site/`, new rows in `docs/DECISIONS.md` and pull request descriptions. It uses the rules below except the last one.
+- **Go doc comments** (package comments and comments on exported identifiers) use STE-flavored mode. Inline comments are out of scope.
 - **Out of scope:** `docs/research/` (dated findings, changed only to correct them) and the text of existing decision rows.
 - Change text when you touch it for another reason. Do not rewrite a whole file only for style.
 
