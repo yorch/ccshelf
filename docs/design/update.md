@@ -21,12 +21,12 @@ ccshelf update [--check] [--version vX.Y.Z] [--prerelease] [--dry-run]
 
 | Flag | Meaning |
 |---|---|
-| `--check` | Print the current version, the latest one and the release notes URL. Exit 0 whether or not an update exists. With `--json`, the envelope kind `update`. |
+| `--check` | Print the current version, the latest one and the release notes URL. Exit 0 whether or not an update exists. With `--json`, the envelope kind `update`, fields `action`, `current`, `latest`, `updateAvailable`, `releaseUrl`, `installMethod`, and for an install `executable`, `backup` and `signature`. |
 | `--version vX.Y.Z` | Install that release. An older one than the running version needs `--allow-downgrade` (exit 2 otherwise). Cannot be combined with `--prerelease`. |
 | `--prerelease` | Let the search for "latest" include pre-releases. |
 | `--dry-run` | Show what would be downloaded, verified and replaced. Changes nothing, downloads nothing (the release metadata is still fetched). |
 | `--require-signature` | Fail (exit 1) unless cosign is on `PATH` (see below). Checked first: before any network access, the dry run and the confirmation (only `--check`, which changes nothing, ignores it). |
-| `--rollback` | Restore the previous binary. No network. It runs the backup file (`version --json`) to check that it is ccshelf. A backup that cannot be run needs `--force` as well as `--yes`. |
+| `--rollback` | Restore the previous binary. No network. The backup is checked first (see "Rollback" in [Replacing the running binary](#replacing-the-running-binary)). |
 | `--yes` | Skip the confirmation only. There is no trust decision in an update, so unlike `trust --yes` nothing is being accepted that a flag could not name. |
 | `--force` | Also replace a package-managed or development build, reinstall the running version, and (with `--rollback`) restore a backup that could not be checked. It never implies a downgrade: if the latest release is older than the running version, `--force` alone still refuses (exit 2). |
 | `--allow-downgrade` | Allow installing a release older than the running version, whether named with `--version` or the newest one offered (for example a release that was withdrawn or a mirror that lags). Only this flag does. |
@@ -154,7 +154,7 @@ When the directory is not writable the command prints the exact elevated command
   - If it cannot be run at all (another platform, damaged), it needs `--force` as well. `--yes` alone is refused. On a terminal without `--yes`, the prompt asks to type `yes`, and the printed equivalent command then contains `--force`.
   - If it runs but is not ccshelf, it is refused whatever the flags.
 
-  The swap keeps the replaced binary as the new `.old`, so another `--rollback` can undo a rollback. A rollback never touches the network.
+  The swap keeps the replaced binary as the new `.old`, so another `--rollback` can undo a rollback.
 - **Locking.** `update.lock` in the cache directory (mode 0600, never a symlink) holds an exclusive operating-system lock (`flock` on Unix, `LockFileEx` on Windows) for as long as an update or rollback runs. A second `update` (or automatic install) fails immediately (exit 1, or silently in the automatic path). The kernel drops the lock when its holder exits for any reason. So:
   - A crash leaves nothing to expire.
   - No two processes can take over a stale lock.
@@ -186,7 +186,7 @@ When it acts, after a command that **succeeded**, for every command except `run`
   - `CCSHELF_NO_UPDATE_CHECK` is set to any non-empty value. This is the kill switch. It does not affect the explicit `ccshelf update`.
   - This is a development build.
 - The check runs at most once per `interval`, with a **hard 3 s** overall timeout. Any error ends in at most one warning line on a terminal, and the next attempt waits for the interval (a failing network is not retried on every command). The check never changes the command's exit code.
-- Both modes act only when somebody is looking. A script, a cron job, a pipeline or a command with its output redirected never makes the automatic network call and never has its binary swapped. `ccshelf update --yes` is the scripted path.
+- So a script, a cron job, a pipeline or a command with its output redirected never makes the automatic network call and never has its binary swapped. `ccshelf update --yes` is the scripted path.
 - `notify` prints one line to stderr: `ccshelf 0.2.0 is available (you have 0.1.0). Run: ccshelf update` (the package manager's command instead, for a package-managed copy), at most once per 24 hours.
 - `install` runs the same verified flow, but only when all of these are true:
   - The release is **newer, stable, in the same major version** (for 0.x, the same minor, since a 0.x minor may break). It is never a downgrade and never a pre-release.
@@ -213,9 +213,7 @@ A `GET` of the release metadata (and, for an install or `update`, of `checksums.
 | Directory not writable | Exit 1 with the exact `sudo ...` (or Administrator) command. |
 | Another update running | Exit 1 (silent for the automatic path). |
 | A download redirected to a host that is not allowed | Exit 1. The hint says to list the exact hostname in `[update] asset_hosts` if you trust it. |
-| `--require-signature` without cosign | Exit 1 before any network access, dry run or question. |
 | Latest release older than the running version | `update` says up to date. `--force` alone refuses (exit 2, names `--allow-downgrade`). |
-| A child process (cosign, version check) leaves a process holding its pipes | Fails after at most 2 s past its deadline (fail closed). Nothing replaced. |
 | Package manager or development build | Exit 1 with the command to run, or `--force`. |
 | No `.old` for `--rollback` | Exit 1. |
 | Downloaded file killed mid-way (crash) | The old binary is untouched. Stale `.ccshelf-update-*` files are cleaned on a later update. |
