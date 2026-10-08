@@ -353,7 +353,7 @@ func TestOverwriteDetectsAConcurrentEdit(t *testing.T) {
 		t.Fatal(err)
 	}
 	m.put("README.md", "two\n")
-	if _, err := Apply(m, plan, ApplyOptions{}); err == nil || !strings.Contains(err.Error(), "changed after the plan") {
+	if _, err := Apply(m, plan, ApplyOptions{}); err == nil || !strings.Contains(err.Error(), "changed after ccshelf made the plan") {
 		t.Fatalf("err = %v", err)
 	}
 	if m.read("README.md") != "two\n" {

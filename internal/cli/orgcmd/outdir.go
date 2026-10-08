@@ -163,7 +163,7 @@ func (t *outTarget) checkNoSymlinks() error {
 		case err != nil:
 			return fmt.Errorf("inspecting %s: %w", cur, err)
 		case fi.Mode()&os.ModeSymlink != 0:
-			return fmt.Errorf("--out %s passes through the symbolic link %s; refusing to write through it", t.dest, cur)
+			return fmt.Errorf("--out %s passes through the symbolic link %s: refusing to write through it", t.dest, cur)
 		case !fi.IsDir():
 			return fmt.Errorf("--out %s: %s is not a directory", t.dest, cur)
 		}
@@ -191,7 +191,7 @@ func (t *outTarget) open() (*os.Root, error) {
 		switch {
 		case err == nil && fi.Mode()&os.ModeSymlink != 0:
 			_ = cur.Close()
-			return nil, fmt.Errorf("--out %s passes through a symbolic link at %s; refusing to write through it", t.dest, comp)
+			return nil, fmt.Errorf("--out %s passes through a symbolic link at %s: refusing to write through it", t.dest, comp)
 		case err == nil && !fi.IsDir():
 			_ = cur.Close()
 			return nil, fmt.Errorf("%s is not a directory", filepath.Join(t.anchor, comp))

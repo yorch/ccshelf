@@ -72,7 +72,7 @@ func (r *Recorder) Bool(name string) {
 }
 
 // Args returns the recorded arguments (after the program name), with values
-// as given (not redacted). Positional arguments follow the command; when one
+// as given (not redacted). Positional arguments follow the command. When one
 // starts with "-" the flags come first and a "--" precedes the positional
 // arguments so they cannot be read as flags.
 func (r *Recorder) Args() []string { return r.render(false) }

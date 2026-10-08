@@ -26,7 +26,7 @@ func (e *TargetError) Error() string { return e.Msg }
 
 // TargetOptions describe the directory argument.
 type TargetOptions struct {
-	// Arg is the directory as typed; empty means the working directory.
+	// Arg is the directory as typed. An empty Arg means the working directory.
 	Arg string
 	// Wd is the working directory.
 	Wd string
@@ -55,13 +55,13 @@ const toolModule = "github.com/yorch/ccshelf"
 
 // ResolveTarget validates the directory argument and returns the target. It
 // refuses (without touching anything):
-//   - an argument with a ".." component or a control character;
+//   - an argument with a ".." component or a control character
 //   - the file system root, the user's home directory and every directory
-//     above it (an org data repo is never that broad);
+//     above it (an org data repo is never that broad)
 //   - a directory that is, or lies inside, one of o.Forbidden (the Claude Code
 //     and ccshelf configuration and cache directories: this tool never writes
-//     into them);
-//   - a directory that is, or lies inside, the ccshelf tool repository;
+//     into them)
+//   - a directory that is, or lies inside, the ccshelf tool repository
 //   - a target that is a symbolic link or not a directory, and, for a relative
 //     argument, any component below the working directory that is a symbolic
 //     link. Symbolic links above an absolute path are the caller's explicit
@@ -73,7 +73,7 @@ func ResolveTarget(o TargetOptions) (*Target, error) {
 	}
 	for _, comp := range strings.FieldsFunc(arg, func(r rune) bool { return r == '/' || r == '\\' }) {
 		if comp == ".." {
-			return nil, &TargetError{Msg: fmt.Sprintf("the directory %q contains \"..\"; pass a path without it", ui.SanitizeLine(arg)), Usage: true}
+			return nil, &TargetError{Msg: fmt.Sprintf("the directory %q contains \"..\": pass a path without it", ui.SanitizeLine(arg)), Usage: true}
 		}
 	}
 	dir := arg
@@ -187,7 +187,7 @@ func checkNotForbidden(dir string, forbidden []string) error {
 func checkNotToolRepo(dir string) error {
 	for p := dir; ; p = filepath.Dir(p) {
 		if isToolModule(filepath.Join(p, "go.mod")) {
-			return &TargetError{Msg: fmt.Sprintf("%s is, or is inside, the ccshelf tool repository; an org data repo lives in its own repository", ui.SanitizeLine(p)), Usage: true}
+			return &TargetError{Msg: fmt.Sprintf("%s is, or is inside, the ccshelf tool repository: an org data repo lives in its own repository", ui.SanitizeLine(p)), Usage: true}
 		}
 		if filepath.Dir(p) == p {
 			return nil
@@ -235,7 +235,7 @@ func (t *Target) checkSymlinks(o TargetOptions) error {
 					return &TargetError{Msg: fmt.Sprintf("inspecting %s: %v", ui.SanitizeLine(cur), err)}
 				}
 				if fi.Mode()&fs.ModeSymlink != 0 {
-					return &TargetError{Msg: fmt.Sprintf("%s is a symbolic link; refusing to write through it", ui.SanitizeLine(cur))}
+					return &TargetError{Msg: fmt.Sprintf("%s is a symbolic link, so ccshelf refuses to write through it", ui.SanitizeLine(cur))}
 				}
 				if !fi.IsDir() {
 					return &TargetError{Msg: fmt.Sprintf("%s is not a directory", ui.SanitizeLine(cur))}
@@ -250,7 +250,7 @@ func (t *Target) checkSymlinks(o TargetOptions) error {
 	case err != nil:
 		return &TargetError{Msg: fmt.Sprintf("inspecting %s: %v", ui.SanitizeLine(t.Dir), err)}
 	case t.explicit && fi.Mode()&fs.ModeSymlink != 0:
-		return &TargetError{Msg: fmt.Sprintf("%s is a symbolic link; refusing to write through it (pass the real directory)", ui.SanitizeLine(t.Dir))}
+		return &TargetError{Msg: fmt.Sprintf("%s is a symbolic link, so ccshelf refuses to write through it (pass the real directory)", ui.SanitizeLine(t.Dir))}
 	}
 	if st, err := os.Stat(t.Dir); err != nil || !st.IsDir() {
 		return &TargetError{Msg: fmt.Sprintf("%s is not a directory", ui.SanitizeLine(t.Dir))}
@@ -260,7 +260,7 @@ func (t *Target) checkSymlinks(o TargetOptions) error {
 }
 
 // Open returns the FS of the target for planning: the real directory when it
-// exists, the empty FS when it does not. The returned closer must be called.
+// exists, the empty FS when it does not. The caller must call the returned closer.
 func (t *Target) Open() (FS, io.Closer, error) {
 	if !t.Exists {
 		return Empty(), nopCloser{}, nil
@@ -279,14 +279,14 @@ func (t *Target) open() (FS, io.Closer, error) {
 		si, serr := os.Stat(t.Dir)
 		if lerr != nil || serr != nil || !os.SameFile(li, si) {
 			_ = c.Close()
-			return nil, nil, &TargetError{Msg: fmt.Sprintf("%s changed while it was being opened; refusing to continue", ui.SanitizeLine(t.Dir))}
+			return nil, nil, &TargetError{Msg: fmt.Sprintf("%s changed while ccshelf opened it: refusing to continue", ui.SanitizeLine(t.Dir))}
 		}
 	}
 	return f, c, nil
 }
 
 // Create makes the target directory (and missing parents, mode 0755) when it
-// does not exist and returns the writable FS. It is called only when there is
+// does not exist and returns the writable FS. Call it only when there is
 // something to write.
 func (t *Target) Create() (FS, io.Closer, error) {
 	if !t.Exists {

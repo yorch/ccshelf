@@ -43,22 +43,22 @@ type Options struct {
 	BaseURL string
 	// AllowInsecure permits an http BaseURL. For tests with httptest only.
 	AllowInsecure bool
-	// KeyEnv names the environment variable that holds the admin key; the
-	// default is DefaultKeyEnv. The variable is read at call time.
+	// KeyEnv names the environment variable that holds the admin key. The
+	// default is DefaultKeyEnv. Fetch reads the variable at call time.
 	KeyEnv string
 	// Getenv replaces os.Getenv, for tests.
 	Getenv func(string) string
 	// From (inclusive) and To (exclusive) select the window. Zero To means
-	// today (UTC); zero From means 30 days before To.
+	// today (UTC). Zero From means 30 days before To.
 	From, To time.Time
 	// Now replaces the clock, for tests.
 	Now func() time.Time
 	// Product, when set (claude_code or cowork), filters rows to that
 	// surface. Leave empty for both.
 	Product string
-	// PageSize is the limit parameter (1 to 1000); default 1000.
+	// PageSize is the limit parameter (1 to 1000). The default is 1000.
 	PageSize int
-	// Timeout bounds each request; default DefaultTimeout.
+	// Timeout bounds each request. The default is DefaultTimeout.
 	Timeout time.Duration
 	// HTTPClient replaces the default client (its redirect policy is
 	// replaced as well, so redirects stay confined to the same host).
@@ -224,7 +224,7 @@ func (f *fetcher) fetch(ctx context.Context) (*Usage, error) {
 	seen := map[string]bool{}
 	for page := 0; ; page++ {
 		if page >= maxPages {
-			return nil, fmt.Errorf("the analytics API returned more than %d pages; narrow the window", maxPages)
+			return nil, fmt.Errorf("the analytics API returned more than %d pages: narrow the window", maxPages)
 		}
 		q := url.Values{}
 		q.Set("starting_date", from)

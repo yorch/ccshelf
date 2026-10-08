@@ -44,7 +44,7 @@ func fixturePolicy() *Policy {
 		DisableSideloadFlags: bp(true),
 		EnabledPlugins:       map[string]bool{"audit-logger@acme": true, "legacy@acme": false},
 		Unknown:              []string{"server-managed settings cannot be read locally"},
-		Warnings:             []string{"managed key disableAllHooks should be a boolean; ignoring the value"},
+		Warnings:             []string{"managed key disableAllHooks should be a boolean, so ccshelf ignores the value"},
 	}
 }
 

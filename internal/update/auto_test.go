@@ -435,7 +435,7 @@ func TestAutoInstall(t *testing.T) {
 		if readFile(t, fx.exe) != string(fakeBinary("0.1.0")) {
 			t.Error("the binary changed")
 		}
-		if !strings.Contains(s.String(), "run: ccshelf update") && !strings.Contains(s.String(), "is available") {
+		if !strings.Contains(s.String(), "Run: ccshelf update") && !strings.Contains(s.String(), "is available") {
 			t.Errorf("output = %q", s.String())
 		}
 	})

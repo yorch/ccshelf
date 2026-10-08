@@ -71,8 +71,8 @@ func runList(ctx context.Context, bin, dir string, env []string, available bool)
 }
 
 // ListInstalled returns the installed plugins as seen from dir, sorted by ID
-// (then scope). env is the child environment (nil inherits); when ctx has no
-// deadline a 30 second timeout applies. It takes about a second, so see
+// (then scope). env is the child environment (nil inherits). When ctx has no
+// deadline, a 30 second timeout applies. It takes about a second, so see
 // [InstalledCache].
 func ListInstalled(ctx context.Context, bin, dir string, env []string) ([]Plugin, error) {
 	out, err := runList(ctx, bin, dir, env, false)

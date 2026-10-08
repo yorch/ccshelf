@@ -514,7 +514,7 @@ func TestProfilesOnlyNotesPluginsDir(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(strings.Join(plan.Notes, "\n"), "plugins/ is ignored") {
+	if !strings.Contains(strings.Join(plan.Notes, "\n"), "ccshelf ignores plugins/") {
 		t.Errorf("notes = %v", plan.Notes)
 	}
 }

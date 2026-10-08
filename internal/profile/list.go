@@ -22,13 +22,14 @@ type Summary struct {
 	// Conflict lists the ids of every source holding the name when the
 	// collision rules make it an error (Resolve would fail).
 	Conflict []string
-	// Err is set when the profile file is invalid; other fields are partial.
+	// Err is set when the profile file is invalid. Other fields are partial.
 	Err string
 }
 
-// List summarizes every profile in sources, sorted by name. Invalid profiles
-// are listed with Err set rather than failing the listing. Callers decide which
-// sources to pass: project sources should be left out unless trusted.
+// List summarizes every profile in sources, sorted by name. List includes
+// invalid profiles with Err set, rather than failing the listing. Callers
+// decide which sources to pass. They should leave out project sources unless
+// those are trusted.
 func List(sources []Source) ([]Summary, error) {
 	type entry struct {
 		src  Source

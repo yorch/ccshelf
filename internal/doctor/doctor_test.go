@@ -140,10 +140,10 @@ func TestDeprecatedInUse(t *testing.T) {
 	if skip != "" || len(fs) != 2 {
 		t.Fatalf("findings = %+v", fs)
 	}
-	if fs[0].Profile != "sre" || !strings.Contains(fs[0].Message, "use new instead") {
+	if fs[0].Profile != "sre" || !strings.Contains(fs[0].Message, "Use new instead") {
 		t.Errorf("first = %+v", fs[0])
 	}
-	if !strings.Contains(fs[1].Hint, "no replacement") {
+	if !strings.Contains(fs[1].Hint, "No replacement") {
 		t.Errorf("second = %+v", fs[1])
 	}
 	if _, skip := run1(t, "DOC003", Input{Catalog: c}); skip == "" {
@@ -273,7 +273,7 @@ func TestForcedByPolicy(t *testing.T) {
 	if skip != "" || len(fs) != 2 {
 		t.Fatalf("findings = %+v", fs)
 	}
-	if !strings.Contains(fs[0].Message, "cannot be masked") || !strings.Contains(fs[0].Message, "profiles that leave it out still run with it: a") {
+	if !strings.Contains(fs[0].Message, "cannot be masked") || !strings.Contains(fs[0].Message, "Profiles that leave it out still run with it: a") {
 		t.Errorf("audit = %q", fs[0].Message)
 	}
 	if !strings.Contains(fs[1].Message, ": c") {
@@ -376,7 +376,7 @@ func TestProtectedMasked(t *testing.T) {
 	if skip != "" || !reflect.DeepEqual(names, []string{"excl", "bad name!"}) {
 		t.Fatalf("profiles = %v", names)
 	}
-	if !strings.Contains(fs[0].Message, "the launcher keeps it enabled") || strings.Contains(fs[0].Message, "would mask") {
+	if !strings.Contains(fs[0].Message, "The launcher keeps it enabled") || strings.Contains(fs[0].Message, "would mask") {
 		t.Errorf("message = %q", fs[0].Message)
 	}
 	if !strings.Contains(fs[0].Hint, `remove "audit@acme" from plugins.exclude of profile excl`) || fs[1].Hint != "" {

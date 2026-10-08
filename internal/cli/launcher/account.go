@@ -126,7 +126,7 @@ The directory defaults to ~/.claude-<name>.`,
 			})
 		}
 		okf(cc, "account %s uses %s", name, plan.Dir)
-		fmt.Fprintln(cc.Streams.Out, "One-time steps (run them yourself; ccshelf never touches credentials):")
+		fmt.Fprintln(cc.Streams.Out, "One-time steps for you to run (ccshelf never touches credentials):")
 		for _, ln := range lines {
 			fmt.Fprintf(cc.Streams.Out, "  %s\n", ui.Sanitize(ln))
 		}
@@ -167,7 +167,7 @@ func (l *launcher) accountLsCmd() *cobra.Command {
 			return ui.WriteJSON(cc.Streams.Out, "accounts", rows)
 		}
 		if len(infos) == 0 {
-			return ui.EmptyState(cc.Streams.Out, "no accounts configured", "accounts are optional; to add one: ccshelf account add <name>")
+			return ui.EmptyState(cc.Streams.Out, "no accounts configured", "accounts are optional. To add one: ccshelf account add <name>")
 		}
 		rows := make([][]string, 0, len(infos))
 		for _, i := range infos {

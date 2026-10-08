@@ -560,7 +560,7 @@ func TestDuplicateListedPluginIsNotedOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(strings.Join(plan.Notes, "\n"), "listed twice") {
+	if !strings.Contains(strings.Join(plan.Notes, "\n"), "twice (plugins/foo1 and plugins/foo2)") {
 		t.Errorf("notes = %v", plan.Notes)
 	}
 	if _, err := Apply(m, plan, ApplyOptions{}); err != nil {
@@ -783,7 +783,7 @@ func TestExistingForeignSuggestionIsNotReplaced(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(strings.Join(plan.Notes, "\n"), "CODEOWNERS.ccshelf-suggested exists and was not written by ccshelf") {
+	if !strings.Contains(strings.Join(plan.Notes, "\n"), "CODEOWNERS.ccshelf-suggested exists and ccshelf did not write it") {
 		t.Errorf("notes = %v", plan.Notes)
 	}
 	res, err := Apply(m, plan, ApplyOptions{WriteSuggestions: true})

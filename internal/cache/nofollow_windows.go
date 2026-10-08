@@ -167,7 +167,7 @@ func secureDir(dir string, _ os.FileInfo) error {
 		return fmt.Errorf("read attributes: %w", err)
 	}
 	if attrs&windows.FILE_ATTRIBUTE_REPARSE_POINT != 0 {
-		return errors.New("is a symlink or reparse point; refusing to use it")
+		return errors.New("is a symlink or reparse point, so ccshelf refuses to use it")
 	}
 	sd, err := windows.GetNamedSecurityInfo(dir, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION)
 	if err != nil {

@@ -16,7 +16,7 @@ func HashItems(items []ClosureItem) string { return hashItems(items) }
 // lockfile so that a later change to what a profile can do (environment
 // names, plugin includes and excludes, inherit_user_settings, account, ...)
 // can be explained field by field, not only as a changed digest. It must stay
-// byte-identical to what Resolve hashes; the trust package's tests compare the
+// byte-identical to what Resolve hashes. The trust package's tests compare the
 // two.
 func ControlsJSON(m *Manifest) ([]byte, error) {
 	env := m.Session.Env

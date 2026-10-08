@@ -393,7 +393,7 @@ func verifyDisk(checkout, base string, entries []treeEntry, w watchSet) error {
 			}
 			if d.IsDir() {
 				if p != dir && !dirs[rel] {
-					return fmt.Errorf("%w: %s is not in commit", ErrTampered, rel)
+					return fmt.Errorf("%w: %s is not in the commit", ErrTampered, rel)
 				}
 				return nil
 			}

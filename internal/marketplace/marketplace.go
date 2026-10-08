@@ -97,7 +97,7 @@ func (d *Dependency) UnmarshalJSON(b []byte) error {
 }
 
 // Source says where a plugin comes from. A string source is a relative path
-// inside the marketplace repository (Kind "path"); an object source has a Kind
+// inside the marketplace repository (Kind "path"). An object source has a Kind
 // taken from its "source" key (for example "github", "url", "git-subdir" or
 // "npm") and keeps every key in Raw.
 type Source struct {
@@ -181,8 +181,8 @@ type Plugin struct {
 	Keywords       []string
 	Dependencies   []Dependency
 	Relevance      *Relevance
-	// Metadata is free-form and not read by Claude Code; ccshelf reads it only
-	// in single-file catalog mode.
+	// Metadata is free-form. Claude Code does not read it, and ccshelf reads it
+	// only in single-file catalog mode.
 	Metadata map[string]any
 	// Extra holds unknown keys (and inline component keys such as hooks and
 	// mcpServers) exactly as written.
@@ -195,8 +195,8 @@ type Marketplace struct {
 	Owner       Owner
 	Description string
 	Plugins     []Plugin
-	// Renames maps an old plugin name to its new name; a null value means the
-	// plugin was removed.
+	// Renames maps an old plugin name to its new name. A null value means that
+	// the plugin was removed.
 	Renames                             map[string]*string
 	ForceRemoveDeletedPlugins           bool
 	AllowCrossMarketplaceDependenciesOn []string

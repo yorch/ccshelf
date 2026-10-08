@@ -75,7 +75,7 @@ func wrapLine(text string, width int) []string {
 }
 
 // EmptyState prints a successful empty result and one recovery hint. It is
-// for human output only; commands keep their existing empty JSON collections.
+// for human output only. Commands keep their existing empty JSON collections.
 // Callers use the result stream, not the diagnostic stream.
 func EmptyState(w io.Writer, message, hint string) error {
 	text := SanitizeLine(message) + "\n"

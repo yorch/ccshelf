@@ -20,16 +20,17 @@ func (l *launcher) trustCmd() *cobra.Command {
 		Use:   "trust [profile]",
 		Short: "Review and trust a shared profile (or a project folder)",
 		Long: `Show what a profile's closure runs (MCP servers, prompts, plugins, environment
-names) and record it as trusted. In a terminal you are asked to confirm what is
-shown. For scripts, name exactly what you accept:
+names) and record it as trusted. In a terminal, the command asks you to confirm
+what it shows. For scripts, name exactly what you accept:
 
   ccshelf trust <profile> --accept <closure-hash>
 
-The hash is printed by "ccshelf trust <profile>" and "ccshelf show <profile>".
+"ccshelf trust <profile>" and "ccshelf show <profile>" print the hash.
 --yes does not exist here: trust is never accepted by default.
 
 --project reviews the repository's .ccshelf folder (loaded only when
-trust.trust_project_profiles is true); --accept then takes the folder hash.
+trust.trust_project_profiles is true). With --project, --accept takes the
+folder hash.
 --revoke removes the records of a profile (or of the project folder).`,
 		Args: cobra.MaximumNArgs(1),
 	}
@@ -86,7 +87,7 @@ func (l *launcher) trustProfile(ctx context.Context, cc *clicore.Context, name, 
 	if v.Problem != "" {
 		// An inconsistent closure is a bug or tampering: exit 1, not exit 4.
 		return ui.Failure(withHint(fmt.Errorf("profile %s: %w: %s", ui.SanitizeLine(r.Name), trust.ErrInconsistentClosure, ui.SanitizeLine(v.Problem)),
-			"the closure cannot be trusted; this is a bug or a tampered file"))
+			"the closure cannot be trusted. This is a bug or a tampered file"))
 	}
 	if v.State == trust.ProjectUntrusted {
 		return ui.TrustRequired(withHint(&trust.NeedsTrustError{Profile: r.Name, Verdict: v},
@@ -97,7 +98,7 @@ func (l *launcher) trustProfile(ctx context.Context, cc *clicore.Context, name, 
 	if accept != "" {
 		if err := store.Accept(r, accept); err != nil {
 			if errors.Is(err, trust.ErrHashMismatch) {
-				return ui.TrustRequired(withHint(err, "the closure is now %s; review it above and pass that hash if you accept it", v.Hash))
+				return ui.TrustRequired(withHint(err, "the closure is now %s. Review it above, and pass that hash if you accept it", v.Hash))
 			}
 			return ui.Failure(fmt.Errorf("recording trust: %w", err))
 		}

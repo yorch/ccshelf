@@ -59,8 +59,8 @@ type MarketplaceSource struct {
 }
 
 // ServerRule is a redacted MCP allow or deny entry. Kind is serverName,
-// serverUrl or serverCommand. For serverCommand only the executable is kept,
-// for serverUrl credentials and queries are removed.
+// serverUrl or serverCommand. For serverCommand only the executable is kept.
+// For serverUrl, credentials and queries are removed.
 type ServerRule struct {
 	Kind  string `json:"kind"`
 	Value string `json:"value"`
@@ -231,7 +231,7 @@ func Detect(ctx context.Context, opt Options) (*Policy, error) {
 	switch goos {
 	case "darwin":
 		tiers = append(tiers, d.plist(), d.files(orDefault(opt.ManagedDir, macDir), "managed settings file"))
-		p.Unknown = append(p.Unknown, "per-user managed preferences (/Library/Managed Preferences/<user>/"+plistDomain+".plist) are not read; a policy delivered only there is not visible")
+		p.Unknown = append(p.Unknown, "per-user managed preferences (/Library/Managed Preferences/<user>/"+plistDomain+".plist) are not read. A policy delivered only there is not visible")
 	case "windows":
 		tiers = append(tiers, d.registry(HKLM, true), d.files(orDefault(opt.ManagedDir, windowsDir), "managed settings file"), d.registry(HKCU, false))
 	default:
@@ -241,7 +241,7 @@ func Detect(ctx context.Context, opt Options) (*Policy, error) {
 			tiers = d.wsl(lin)
 		}
 	}
-	p.Unknown = append(p.Unknown, "server-managed settings (claude.ai admin console or a Claude apps gateway) cannot be read locally; if your organization uses them they rank above every source listed here")
+	p.Unknown = append(p.Unknown, "server-managed settings (claude.ai admin console or a Claude apps gateway) cannot be read locally. If your organization uses them, they rank above every source listed here")
 	d.combine(tiers)
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -282,7 +282,7 @@ func (d *detector) unreadable(t *tier, what, reason string) {
 func (d *detector) wsl(lin *tier) []*tier {
 	dir := orDefault(d.opt.WindowsDir, wslWindowsDir)
 	win := d.files(dir, "Windows managed settings file (via WSL)")
-	d.p.Unknown = append(d.p.Unknown, "Windows registry (HKLM, HKCU) is not readable from WSL; a policy delivered only there is not visible")
+	d.p.Unknown = append(d.p.Unknown, "Windows registry (HKLM, HKCU) is not readable from WSL. A policy delivered only there is not visible")
 	inherit := false
 	if v, ok := win.m["wslInheritsWindowsSettings"]; ok {
 		// normalizeDoc made this a real boolean (invalid values read as true).

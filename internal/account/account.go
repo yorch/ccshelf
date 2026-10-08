@@ -32,8 +32,8 @@ type Options struct {
 	Plugins []string
 }
 
-// Step is one manual, one-time action after the directory exists. Exactly one
-// of Argv and Slash is set.
+// Step is one manual, one-time action after the directory exists. A Step sets
+// exactly one of Argv and Slash.
 type Step struct {
 	// Description says what the step does.
 	Description string
@@ -61,7 +61,8 @@ type Plan struct {
 
 var (
 	pluginIDRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9._-]*$`)
-	// ErrDirInUse is returned when the directory is not suitable for a new account.
+	// ErrDirInUse is the error that Add returns when the directory is not
+	// suitable for a new account.
 	ErrDirInUse = errors.New("directory is not available for a new account")
 )
 
@@ -75,7 +76,7 @@ func Add(ctx context.Context, cfg *config.Config, name, dir string, opts Options
 		return nil, errors.New("adding account: nil config")
 	}
 	if !config.ValidAccountName(name) {
-		return nil, fmt.Errorf("invalid account name %q: use lower-case letters, digits and hyphens (at most 32); an account is a name, never a path", ui.Sanitize(name))
+		return nil, fmt.Errorf("invalid account name %q: use lower-case letters, digits and hyphens (at most 32). An account is a name, never a path", ui.Sanitize(name))
 	}
 	if _, err := buildSteps(dir, opts); err != nil {
 		return nil, err
@@ -91,7 +92,7 @@ func Add(ctx context.Context, cfg *config.Config, name, dir string, opts Options
 	}
 
 	if existing, ok := cfg.Accounts[name]; ok && !samePath(existing.ConfigDir, abs) {
-		return nil, fmt.Errorf("account %q already exists with directory %s; remove it first or pick another name", name, existing.ConfigDir)
+		return nil, fmt.Errorf("account %q already exists with directory %s. Remove it first or pick another name", name, existing.ConfigDir)
 	}
 	// Validate the resulting configuration before touching the disk.
 	updated := withAccount(cfg, name, abs)
@@ -260,7 +261,7 @@ func checkDir(cfg *config.Config, name, dir string) (string, error) {
 	}
 	switch {
 	case inside(runtime.GOOS, def, abs):
-		return "", fmt.Errorf("account directory %s is Claude Code's default directory %s or inside it; pick a separate directory such as ~/.claude-%s", abs, def, name)
+		return "", fmt.Errorf("account directory %s is Claude Code's default directory %s or inside it. Pick a separate directory such as ~/.claude-%s", abs, def, name)
 	case inside(runtime.GOOS, abs, def):
 		return "", fmt.Errorf("account directory %s contains Claude Code's default directory %s", abs, def)
 	}
@@ -298,7 +299,7 @@ func checkNoSymlinks(abs string) error {
 		if filepath.Dir(parent) == parent || (home != "" && within(filepath.Clean(p), filepath.Clean(home))) {
 			continue
 		}
-		return fmt.Errorf("%w: %s is a symlink; use the real path", ErrDirInUse, p)
+		return fmt.Errorf("%w: %s is a symlink. Use the real path", ErrDirInUse, p)
 	}
 }
 
@@ -383,9 +384,15 @@ func buildSteps(dir string, opts Options) ([]Step, error) {
 	return steps, nil
 }
 
-// Lines renders the plan for a person to follow, quoted for shell: "bash",
-// "zsh", "sh" or "posix"; "fish"; "pwsh" or "powershell"; "cmd". A value that
-// cannot be quoted safely for the shell is an error.
+// Lines renders the plan for a person to follow, quoted for shell. These are
+// the shell values:
+//
+//   - "bash", "zsh", "sh" or "posix"
+//   - "fish"
+//   - "pwsh" or "powershell"
+//   - "cmd"
+//
+// Lines returns an error for a value that it cannot quote safely for the shell.
 func (p *Plan) Lines(shell string) ([]string, error) {
 	lines := []string{fmt.Sprintf("Account %q uses %s", p.Name, p.Dir)}
 	for i, s := range p.Steps {
@@ -495,7 +502,7 @@ func find(cfg *config.Config, name string) (config.Account, error) {
 }
 
 // Describe returns the account and whether its directory exists. It checks
-// only that the directory exists; it never lists or reads its contents.
+// only that the directory exists. It never lists or reads its contents.
 func Describe(cfg *config.Config, name string) (Info, error) {
 	a, err := find(cfg, name)
 	if err != nil {
@@ -522,24 +529,24 @@ func Env(cfg *config.Config, name string) ([]string, error) {
 type Removal struct {
 	// Name is the removed account.
 	Name string
-	// ConfigDir is the directory that was left in place.
+	// ConfigDir is the directory that Remove left in place.
 	ConfigDir string
-	// ClearedDefault is true when the account was the default and default_account
-	// was cleared.
+	// ClearedDefault is true when the account was the default and Remove
+	// cleared default_account.
 	ClearedDefault bool
 }
 
-// Message is a sentence for the person, stating that nothing was deleted.
+// Message returns text for the person. The text says that nothing was deleted.
 func (r Removal) Message() string {
-	msg := fmt.Sprintf("Removed account %q from the configuration. The directory %s was NOT deleted: it still holds the login, plugins and history. Delete it yourself if you no longer need it.", r.Name, r.ConfigDir)
+	msg := fmt.Sprintf("Removed account %q from the configuration. The directory %s was NOT deleted. It still holds the login, plugins and history. Delete it yourself if you no longer need it.", r.Name, r.ConfigDir)
 	if r.ClearedDefault {
 		msg += " It was the default account, so default_account is now unset."
 	}
 	return msg
 }
 
-// Remove deletes the account's entry from cfg (in memory; the caller saves it
-// with config.Save). It never deletes the directory.
+// Remove deletes the account's entry from cfg in memory. The caller saves cfg
+// with config.Save. Remove never deletes the directory.
 func Remove(cfg *config.Config, name string) (Removal, error) {
 	a, err := find(cfg, name)
 	if err != nil {

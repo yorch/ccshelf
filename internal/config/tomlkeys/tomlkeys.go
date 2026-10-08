@@ -1,10 +1,10 @@
-// Package tomlkeys closes a gap in the TOML decoder: go-toml matches struct
-// tags case-insensitively, so "Inherit_User_Settings = false" written after
-// "inherit_user_settings = true" would silently override it and a reviewer
-// reading the file would see two different spellings of one setting. Check
+// Package tomlkeys closes a gap in the TOML decoder. go-toml matches struct
+// tags case-insensitively. Thus "Inherit_User_Settings = false" written after
+// "inherit_user_settings = true" would silently override it, and a reviewer
+// who reads the file would see two different spellings of one setting. Check
 // decodes the same bytes into a generic map and compares every key with the
-// exact tags of the target struct, so the only accepted spelling is the one
-// the schema documents.
+// exact tags of the target struct. Thus the only accepted spelling is the one
+// that the schema documents.
 package tomlkeys
 
 import (
@@ -34,9 +34,9 @@ func (i Issue) String() string {
 
 // Check decodes raw into a generic map and walks it against the type of
 // target (a struct or a pointer to one), returning one Issue per key that
-// matches a field only case-insensitively. Keys that match no field are not
-// reported here: the strict decoder reports unknown keys. Issues are sorted by
-// path. An error means raw is not valid TOML.
+// matches a field only case-insensitively. Check does not report keys that
+// match no field, because the strict decoder reports unknown keys. Check
+// sorts the issues by path. An error means raw is not valid TOML.
 func Check(raw []byte, target any) ([]Issue, error) {
 	var generic map[string]any
 	if err := toml.Unmarshal(raw, &generic); err != nil {

@@ -31,7 +31,7 @@ type Options struct {
 	// by update.NewClient).
 	Client *http.Client
 	// GOOS and GOARCH select the release archive (default: the running
-	// platform; they are NOT cc.GOOS, which only tests the output shape).
+	// platform). They are NOT cc.GOOS, which only tests the output shape.
 	GOOS, GOARCH string
 	// StateDir is the directory of the lock, the state file and the downloads
 	// (default: the ccshelf cache directory).
@@ -85,16 +85,18 @@ func (c *command) updateCmd() *cobra.Command {
 		Short: "Update ccshelf to the latest release (verified), or roll back",
 		Long: `Download the newest ccshelf release, verify it and replace this binary.
 
-The archive's SHA-256 must match checksums.txt of the same release, fetched
-over HTTPS without credentials. If cosign is on PATH the keyless signature of
-checksums.txt is verified as well, against the project's release workflow, and
-a mismatch stops the update; --require-signature makes a missing cosign an
-error. The previous binary is kept as <name>.old; --rollback restores it.
+The archive's SHA-256 must match checksums.txt of the same release. The
+command gets checksums.txt over HTTPS without credentials. If cosign is on
+PATH, the command also verifies the keyless signature of checksums.txt against
+the project's release workflow. A mismatch stops the update. With
+--require-signature, a missing cosign is an error. The command keeps the
+previous binary as <name>.old. --rollback restores it.
 
 Nothing contacts the network unless you run this command or set [update] mode
-in config.toml (off by default). A copy installed by Homebrew, Scoop, WinGet,
-"go install" or a system package, and development builds, are not replaced
-unless you pass --force; the right command is printed instead.`,
+in config.toml (off by default). Without --force, the command does not replace
+these, and prints the correct command instead:
+  - a copy installed by Homebrew, Scoop, WinGet, "go install" or a system package
+  - a development build`,
 		Example: `  ccshelf update --check
   ccshelf update
   ccshelf update --version v0.2.0 --yes
@@ -105,7 +107,7 @@ unless you pass --force; the right command is printed instead.`,
 	fl.BoolVar(&f.check, "check", false, "only report the current and latest version (exit 0 either way)")
 	fl.StringVar(&f.version, "version", "", "install this release (for example v0.2.0) instead of the latest")
 	fl.BoolVar(&f.prerelease, "prerelease", false, "consider pre-releases when looking for the latest")
-	fl.BoolVar(&f.dryRun, "dry-run", false, "show what would be downloaded, verified and replaced; change nothing")
+	fl.BoolVar(&f.dryRun, "dry-run", false, "show what the update would download, verify and replace, and change nothing")
 	fl.BoolVar(&f.requireSignature, "require-signature", false, "fail (before anything else) unless cosign is available to verify the release signature")
 	fl.BoolVar(&f.rollback, "rollback", false, "restore the previous binary kept by the last update")
 	fl.BoolVar(&f.yes, "yes", false, "do not ask for confirmation")
@@ -377,9 +379,9 @@ func (c *command) run(ctx context.Context, cc *clicore.Context, f *flags) error 
 	if res.Signature == "cosign" {
 		info(cc, "verified: SHA-256 and the cosign signature of checksums.txt")
 	} else {
-		info(cc, "verified: SHA-256 (cosign was not found, so the signature was not checked)")
+		info(cc, "verified: SHA-256 (ccshelf did not find cosign, so it did not check the signature)")
 	}
-	info(cc, "the previous version is kept as %s; undo with: ccshelf update --rollback", filepath.Base(res.Backup))
+	info(cc, "kept the previous version as %s. To undo, run: ccshelf update --rollback", filepath.Base(res.Backup))
 	return nil
 }
 
@@ -416,7 +418,7 @@ func checkFlags(f *flags) error {
 			return ui.Usage(withHint(fmt.Errorf("--version %q: %w", ui.Sanitize(f.version), err), "use a release version such as v0.2.0"))
 		}
 		if f.prerelease {
-			return ui.Usage(errors.New("--version and --prerelease cannot be combined: a named version is installed as it is"))
+			return ui.Usage(errors.New("--version and --prerelease cannot be combined: ccshelf installs a named version as it is"))
 		}
 	}
 	return nil
@@ -452,13 +454,13 @@ func (c *command) printCheck(cc *clicore.Context, p *update.Plan, rep report) er
 	line(cc, "latest:  %s", p.Target.Version)
 	switch {
 	case p.Dev:
-		line(cc, "this is a development build; the latest release is shown for reference")
+		line(cc, "this is a development build, so the latest release is only for reference")
 	case rep.UpdateAvailable:
 		line(cc, "an update is available: %s", p.Target.URL)
 		if p.Method.SelfUpdatable() {
 			line(cc, "run: ccshelf update")
 		} else {
-			line(cc, "installed with %s; run: %s", p.Method.Kind, p.Method.Command)
+			line(cc, "installed with %s, so run: %s", p.Method.Kind, p.Method.Command)
 		}
 	case p.Downgrade:
 		line(cc, "%s is older than the running version", p.Target.Tag)
@@ -536,7 +538,7 @@ func (c *command) rollback(ctx context.Context, cc *clicore.Context, u *update.U
 		if cc.Mode.JSON {
 			return ui.WriteJSON(cc.Streams.Out, "update", rep)
 		}
-		line(cc, "dry run: would restore %s (%s) over %s; nothing was changed", filepath.Base(rp.Backup), orUnknown(rp.BackupVersion), rp.Exe)
+		line(cc, "dry run: would restore %s (%s) over %s, and changed nothing", filepath.Base(rp.Backup), orUnknown(rp.BackupVersion), rp.Exe)
 		return nil
 	}
 	if f.yes && !rp.Verified && !f.force {
@@ -580,7 +582,7 @@ func (c *command) rollback(ctx context.Context, cc *clicore.Context, u *update.U
 	if cc.Mode.JSON {
 		return ui.WriteJSON(cc.Streams.Out, "update", rep)
 	}
-	status(cc, ui.LevelOK, "restored %s; the replaced version is kept as %s", orUnknown(rp.BackupVersion), filepath.Base(rp.Backup))
+	status(cc, ui.LevelOK, "restored %s, and kept the replaced version as %s", orUnknown(rp.BackupVersion), filepath.Base(rp.Backup))
 	return nil
 }
 
@@ -656,7 +658,7 @@ func elevatedAdvice(cc *clicore.Context, dir string, f *flags, p *update.Plan) s
 		cmdline = strings.Join(words, " ")
 	}
 	if cc.GOOS == "windows" {
-		return fmt.Sprintf("%s is not writable by you; run this in a terminal started as Administrator: %s", dir, cmdline)
+		return fmt.Sprintf("you cannot write to %s, so run this in a terminal started as Administrator: %s", dir, cmdline)
 	}
-	return fmt.Sprintf("%s is not writable by you; run: sudo %s", dir, cmdline)
+	return fmt.Sprintf("you cannot write to %s, so run: sudo %s", dir, cmdline)
 }

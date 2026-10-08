@@ -153,8 +153,8 @@ include = ["p5@m"]
 	check("when_to_use", m.WhenToUse, []string(nil))
 	check("extends", m.Extends, []string{"a", "b"})
 	wantW := []string{
-		"profile b includes x1@m but a excludes it; exclusion wins",
-		"profile b sets skill s-off to name-only but a turns it off; off wins",
+		"profile b includes x1@m but a excludes it. Exclusion wins",
+		"profile b sets skill s-off to name-only but a turns it off. Off wins",
 	}
 	for _, w := range wantW {
 		if !contains(r.Warnings, w) {
@@ -489,7 +489,7 @@ func TestMCPResolution(t *testing.T) {
 
 func TestDeprecatedWarning(t *testing.T) {
 	r, err := Resolve("old", []Source{orgSrc(t)}, ResolveOptions{})
-	if err != nil || !contains(r.Warnings, "profile old is deprecated; use frontend") {
+	if err != nil || !contains(r.Warnings, "profile old is deprecated: use frontend") {
 		t.Errorf("warnings: %v %v", r, err)
 	}
 	if r.Merged.Status != "deprecated" || r.Merged.SupersededBy != "frontend" {

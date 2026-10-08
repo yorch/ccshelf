@@ -28,8 +28,8 @@ func MCPTypes() []string { return []string{MCPStdio, MCPHTTP, MCPSSE} }
 const MaxRegistrySize = 256 << 10
 
 // MCPServer is one registry entry. EnvRefs are the names of variables the
-// server needs; they are passed on as ${NAME} references and never resolved by
-// this package (SR1).
+// server needs. This package passes them on as ${NAME} references and never
+// resolves them (SR1).
 type MCPServer struct {
 	Name    string       `toml:"-" json:"name"`
 	Type    string       `toml:"type,omitempty" json:"type"`
@@ -63,7 +63,7 @@ func LoadRegistry(path string) (map[string]MCPServer, error) {
 	return ParseRegistry(raw, path)
 }
 
-// ParseRegistry validates registry bytes; name is only used in messages.
+// ParseRegistry validates registry bytes. name is only for messages.
 func ParseRegistry(raw []byte, name string) (map[string]MCPServer, error) {
 	var rf registryFile
 	dec := toml.NewDecoder(bytes.NewReader(raw)).DisallowUnknownFields()
@@ -205,11 +205,11 @@ func validateURL(v *validator, field, raw string) {
 	}
 	for k := range u.Query() {
 		if looksLikeCredentialKey(k) {
-			v.add(field, "query key %q looks like a credential: never put secrets in a URL; use env_refs (SR1)", k)
+			v.add(field, "query key %q looks like a credential: never put secrets in a URL. Use env_refs (SR1)", k)
 			return
 		}
 	}
-	v.add(field, "must not contain a query string; pass anything secret through env_refs, never through the URL (SR1)")
+	v.add(field, "must not contain a query string. Pass anything secret through env_refs, never through the URL (SR1)")
 }
 
 // ForOS returns the server with the per-OS override for goos ("windows",

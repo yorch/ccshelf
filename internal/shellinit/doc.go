@@ -5,7 +5,7 @@
 // # Naming rule
 //
 // The function for profile "sre" is named "cs-sre" (Prefix plus the profile
-// name). Profile names must match ^[a-z0-9][a-z0-9-]{0,62}$; anything else,
+// name). Profile names must match ^[a-z0-9][a-z0-9-]{0,62}$. Anything else,
 // including every name that holds a quote, space, "$", backtick, ";" or a
 // path separator, is rejected before any text is generated, so a hostile
 // profile name can never reach a shell. The ccshelf executable is always
@@ -18,7 +18,7 @@
 //	fish        ccshelf shell-init fish | source
 //	pwsh        ccshelf shell-init pwsh | Out-String | Invoke-Expression
 //	cmd         doskey macros: ccshelf shell-init cmd > %TEMP%\ccshelf-init.cmd
-//	            && call %TEMP%\ccshelf-init.cmd; or persistent .cmd shims
+//	            && call %TEMP%\ccshelf-init.cmd, or persistent .cmd shims
 //	            written by WriteCmdShims into a directory on PATH
 //
 // The eval above runs only the text ccshelf generated from validated profile

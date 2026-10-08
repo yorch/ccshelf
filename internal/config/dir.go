@@ -12,7 +12,11 @@ import (
 // appDirName is the directory below the user's config base that ccshelf owns.
 const appDirName = "ccshelf"
 
-// Dir returns the directory holding ccshelf's configuration files.
+// Dir returns the directory holding ccshelf's configuration files. On macOS
+// and Linux it is $XDG_CONFIG_HOME/ccshelf, else ~/.config/ccshelf. On Windows
+// it is %APPDATA%\ccshelf, else <home>\AppData\Roaming\ccshelf. Dir ignores a
+// relative XDG_CONFIG_HOME or APPDATA, as the XDG specification requires, and
+// uses the home directory instead.
 func Dir() (string, error) {
 	home, _ := os.UserHomeDir()
 	return configDirFor(runtime.GOOS, os.Getenv, home)
@@ -41,8 +45,8 @@ func configDirFor(goos string, getenv func(string) string, home string) (string,
 func Path() (string, error) { return inConfigDir("config.toml") }
 
 // LockfilePath returns the location of the trust lockfile (lock.json).
-// This package never reads or writes it; it exists so that later packages
-// agree on one place.
+// This package never reads or writes it. The function exists so that later
+// packages agree on one place.
 func LockfilePath() (string, error) { return inConfigDir("lock.json") }
 
 // ProjectTrustPath returns the location of the per-repository trust records
@@ -58,7 +62,7 @@ func inConfigDir(name string) (string, error) {
 }
 
 // DefaultClaudeDir returns Claude Code's default configuration directory
-// (~/.claude). It is only used for comparison; nothing in it is read.
+// (~/.claude). ccshelf uses it only for comparison and reads nothing in it.
 func DefaultClaudeDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -68,9 +72,10 @@ func DefaultClaudeDir() (string, error) {
 }
 
 // ExpandPath expands a leading "~" (alone or followed by a path separator)
-// and $VAR or ${VAR} references. An unset variable, an unterminated "${" or a
-// "$" that does not start a reference is an error rather than an empty string,
-// so a typo cannot silently turn a path into "/" or a relative path.
+// and $VAR or ${VAR} references. ExpandPath returns an error, not an empty
+// string, for an unset variable, an unterminated "${" or a "$" that does not
+// start a reference. Thus a typo cannot silently turn a path into "/" or a
+// relative path.
 func ExpandPath(p string) (string, error) {
 	home, _ := os.UserHomeDir()
 	return expandPath(p, os.Getenv, home)

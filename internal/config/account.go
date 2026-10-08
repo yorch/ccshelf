@@ -23,7 +23,7 @@ type AccountChoice struct {
 	SetEnv bool
 	// OverridesEnv is true when an explicit --account replaces an existing
 	// CLAUDE_CONFIG_DIR. The explicit flag wins because it is the user's
-	// stated intent for this run; a Note says so and callers should show it.
+	// stated intent for this run. A Note says so, and callers should show it.
 	OverridesEnv bool
 	// Notes lists what the caller should tell the user: an implicit choice
 	// that was ignored because CLAUDE_CONFIG_DIR is set, or an explicit
@@ -32,8 +32,8 @@ type AccountChoice struct {
 }
 
 // ResolveAccount picks the account for a run. See the package documentation
-// for the precedence. env may be nil (os.Getenv). An unknown explicit name is
-// an error that lists the known account names.
+// for the precedence. env may be nil (os.Getenv). For an unknown explicit
+// name, ResolveAccount returns an error that lists the known account names.
 func ResolveAccount(flag, profileAccount string, cfg *Config, env func(string) string) (AccountChoice, error) {
 	if env == nil {
 		env = os.Getenv
@@ -68,7 +68,7 @@ func ResolveAccount(flag, profileAccount string, cfg *Config, env func(string) s
 	if envDir != "" {
 		c := AccountChoice{Source: "env", FromEnv: true}
 		if implicit != "" {
-			c.Notes = append(c.Notes, fmt.Sprintf("%s is set; ignoring account %q from %s", EnvConfigDir, implicit, from))
+			c.Notes = append(c.Notes, fmt.Sprintf("%s is set. Ignoring account %q from %s", EnvConfigDir, implicit, from))
 		}
 		return c, nil
 	}

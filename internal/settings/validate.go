@@ -16,8 +16,8 @@ import (
 const MaxSize = 1 << 20
 
 // Validate strictly checks raw settings JSON against the closed schema. It
-// is the guard that must run before every launch. All problems found are
-// reported together, each naming its key. It applies the same rules as
+// is the guard that must run before every launch. It reports all problems
+// together, and each one names its key. It applies the same rules as
 // [Build] (model names, env values, server labels), and in addition rejects a
 // UTF-8 byte order mark and invalid UTF-8. Being stricter than Claude Code is
 // safe: Claude Code silently ignores a file it cannot parse.

@@ -38,7 +38,7 @@ const (
 // ManagedLocations returns the managed-settings files and drop-in
 // directories that Claude Code reads on goos ("darwin", "linux" or
 // "windows"): files are stamped individually, a directory contributes every
-// *.json file in it. The Windows registry policy cannot be stamped; the TTL
+// *.json file in it. The Windows registry policy cannot be stamped. The TTL
 // bounds how long a change there can go unnoticed.
 func ManagedLocations(goos string) (files, dirs []string) {
 	dirOf := func(base, sep string) {
@@ -73,13 +73,13 @@ func ManagedLocations(goos string) (files, dirs []string) {
 // Only the fields the launcher needs are stored: the plugin identity, version,
 // scope, paths, enabled flags, the required-by-org marker and the names of
 // MCP servers. A plugin read back from the cache has MCPServers values of
-// JSON null and no Extra; callers needing those must call [ListInstalled].
+// JSON null and no Extra. Callers needing those must call [ListInstalled].
 type InstalledCache struct {
 	// Dir is the cache directory, normally from cache.Dir.
 	Dir string
 	// TTL defaults to DefaultInstalledTTL.
 	TTL time.Duration
-	// Now defaults to time.Now; tests replace it.
+	// Now defaults to time.Now. Tests replace it.
 	Now func() time.Time
 	// ExtraFiles are further files whose stamps join the fingerprint.
 	ExtraFiles []string

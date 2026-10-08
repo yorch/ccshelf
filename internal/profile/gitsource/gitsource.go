@@ -27,15 +27,15 @@ const DefaultTimeout = 2 * time.Minute
 
 // Errors returned by this package, besides ErrBadURL and ErrHygiene.
 var (
-	// ErrNotPrepared is returned by Names, Open and Root before Prepare.
-	ErrNotPrepared = errors.New("git source is not prepared; call Prepare first")
+	// Names, Open and Root return ErrNotPrepared before Prepare.
+	ErrNotPrepared = errors.New("git source is not prepared. Call Prepare first")
 	// ErrNotPinned is returned when the ref is not an acceptable pin.
 	ErrNotPinned = errors.New("git source is not pinned")
 	// ErrTampered is returned when a cached checkout does not match the
 	// commit it is supposed to hold.
 	ErrTampered = errors.New("cached git checkout does not match its commit")
-	// ErrNotCached is returned by PrepareCached when no checkout of the
-	// requested commit is in the cache.
+	// PrepareCached returns ErrNotCached when no checkout of the requested
+	// commit is in the cache.
 	ErrNotCached = errors.New("no checkout of that commit is cached")
 )
 
@@ -141,8 +141,8 @@ func (s *Source) Root() string {
 }
 
 // OrgConfig returns the org config (ccshelf.toml) read from the pinned
-// checkout, and whether the repository has one. Without one the defaults are
-// returned and found is false; the launcher uses that to warn that no
+// checkout, and whether the repository has one. Without one, it returns the
+// defaults and found is false. The launcher uses that to warn that no
 // protected controls are declared. It returns (nil, false) before Prepare.
 func (s *Source) OrgConfig() (cfg *orgconfig.Config, found bool) {
 	s.mu.Lock()
@@ -194,16 +194,17 @@ func (s *Source) prepared() (profile.Source, error) {
 
 // Prepare resolves the ref to a commit SHA, creates or re-verifies the
 // checkout and validates its content. It is safe to call more than once and
-// from several goroutines or processes at the same time; each call
-// re-resolves a tag so a moved tag is noticed.
+// from several goroutines or processes at the same time. Each call
+// re-resolves a tag, so it notices a moved tag.
 func (s *Source) Prepare(ctx context.Context) error { return s.prepare(ctx, "") }
 
 // PrepareCached is Prepare for a commit that is already known (the launcher
-// takes it from the trust lockfile): it never contacts the remote. The
-// checkout of that commit must already be in the cache and passes the same
-// verification as in Prepare; when it is not there, ErrNotCached is returned
-// and the caller can fall back to Prepare. A tag that moved on the remote is
-// not noticed, but nothing but the pinned commit is ever read.
+// takes it from the trust lockfile). It never contacts the remote. The
+// checkout of that commit must already be in the cache, and it gets the same
+// verification as in Prepare. When it is not there, PrepareCached returns
+// ErrNotCached, and the caller can fall back to Prepare. PrepareCached does
+// not notice a tag that moved on the remote, but it never reads anything but
+// the pinned commit.
 func (s *Source) PrepareCached(ctx context.Context, commit string) error {
 	commit = strings.ToLower(commit)
 	if !fullSHA.MatchString(commit) {
@@ -256,7 +257,7 @@ func (s *Source) prepare(ctx context.Context, cached string) error {
 	root, cfg, found, err := s.verify(ctx, checkout, sha)
 	if err != nil {
 		if errors.Is(err, ErrTampered) {
-			return fmt.Errorf("%w; delete %s to fetch the commit again", err, checkout)
+			return fmt.Errorf("%w. Delete %s to fetch the commit again", err, checkout)
 		}
 		return err
 	}
@@ -299,7 +300,7 @@ func CacheBase() (string, error) {
 }
 
 // CheckoutDir returns the folder that holds the checkout of commit sha of the
-// repository at url below the cache base (see CacheBase). It does no I/O; the
+// repository at url below the cache base (see CacheBase). It does no I/O. The
 // cache pruning uses it to know which checkouts the trust lockfile pins.
 func CheckoutDir(base, url, sha string) string {
 	return filepath.Join(base, urlKey(url), sha)

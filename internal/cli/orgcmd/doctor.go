@@ -71,30 +71,35 @@ plugins, plugins in no profile, deprecated plugins in use, stale or missing
 review dates and owners, protected plugins that a profile masks, and plugins
 that need platform review.
 
-Checks that need more input are skipped and listed as skipped, never silently
-passed: --installed reads 'claude plugin list' (read only), --usage-file reads
-an OpenTelemetry JSONL export, --usage-api asks the Enterprise Analytics API
-(needs the admin key in CCSHELF_ANALYTICS_KEY; this is the only network call),
---skills-dir lists the standalone skills in a directory (read only; each
-subdirectory with a SKILL.md is a skill; ccshelf never reads ~/.claude on its
-own), and --policy reads the machine's managed Claude Code policy (read only,
-never bypassed) and prints the capability matrix.
+The command skips the checks that need more input and lists them as skipped.
+It never passes them silently. These flags give the input:
+  - --installed reads 'claude plugin list' (read only).
+  - --usage-file reads an OpenTelemetry JSONL export.
+  - --usage-api asks the Enterprise Analytics API. It needs the admin key in
+    CCSHELF_ANALYTICS_KEY. This is the only network call.
+  - --skills-dir lists the standalone skills in a directory (read only). Each
+    subdirectory with a SKILL.md is a skill. ccshelf never reads ~/.claude on
+    its own.
+  - --policy reads the machine's managed Claude Code policy (read only, never
+    bypassed) and prints the capability matrix.
 
-With --policy every profile's needs (extra MCP servers, strict MCP, dropping
-user settings, a system prompt file, hiding claude.ai connectors, and the
-marketplaces of its plugins) are checked against the policy that could be
-read. Exit code 3 when the policy blocks something a profile needs (POL002,
-POL005, POL006); a feature whose state is unknown is a warning, never a
-failure. A policy that exists but could not be read is a warning, and exit 3
-only with --strict.
+With --policy, the command checks the needs of every profile against the
+policy that it could read. The needs are extra MCP servers, strict MCP,
+dropping user settings, a system prompt file, hiding claude.ai connectors, and
+the marketplaces of its plugins. The exit code is 3 when the policy blocks
+something a profile needs (POL002, POL005, POL006). A feature whose state is
+unknown is a warning, never a failure. A policy that exists but could not be
+read is a warning. It gives exit code 3 only with --strict.
 
-Exit code 1 for error findings, and when the directory is not an org data
-repo (its marketplace file cannot be read). With --policy and no --root, a
-directory that is not an org data repo is not an error: only the policy part
-runs (the capability matrix and the policy findings that do not need profiles;
-the checks that need the catalog are listed as skipped), because the managed
-policy belongs to the machine, not to a repository. A developer who reaches the
-org through a git source can use it that way.`,
+The exit code is 1 for error findings, and when the directory is not an org
+data repo (its marketplace file cannot be read).
+
+With --policy and no --root, a directory that is not an org data repo is not
+an error, because the managed policy belongs to the machine, not to a
+repository. Only the policy part runs: the capability matrix and the policy
+findings that do not need profiles. The command lists the checks that need the
+catalog as skipped. A developer who reaches the org through a git source can
+use it that way.`,
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			c, err := get()
@@ -138,7 +143,7 @@ type doctorOptions struct {
 
 func runDoctor(ctx context.Context, c *clicore.Context, r *repo, o doctorOptions) error {
 	if !r.cfg.Catalog.Enabled && !c.Mode.JSON {
-		fmt.Fprintln(errw(c), "note: [catalog] enabled = false in ccshelf.toml: the checks that need the catalog (overlap, review dates, owners) have nothing to check; profiles and policy are checked")
+		fmt.Fprintln(errw(c), "note: [catalog] enabled = false in ccshelf.toml: the checks that need the catalog (overlap, review dates, owners) have nothing to check, but the command checks profiles and policy")
 	}
 	cat, lrep, err := catalog.BuildContext(ctx, r.root, r.cfg, catalog.Options{Now: c.Now})
 	if err != nil {
@@ -149,7 +154,7 @@ func runDoctor(ctx context.Context, c *clicore.Context, r *repo, o doctorOptions
 		return err
 	}
 	if err := requireMarketplace(r, lrep); err != nil {
-		return notOrgRepo(err, false, "; doctor --policy works anywhere")
+		return notOrgRepo(err, false, " (doctor --policy works anywhere)")
 	}
 	dropAbstractBundles(lrep, good)
 	src := profile.PortableSourceID(r.source())
@@ -260,7 +265,7 @@ func runPolicyOnly(ctx context.Context, c *clicore.Context, o doctorOptions) err
 		blocked = blocked || f.Severity == doctor.Error
 	}
 	if !c.Mode.JSON {
-		fmt.Fprintln(errw(c), "note: this directory is not an org data repo (pass --root to check one); showing the managed policy only")
+		fmt.Fprintln(errw(c), "note: this directory is not an org data repo (pass --root to check one), so doctor shows only the managed policy")
 	}
 	return finishDoctor(c, doctor.Run(in), matrix, blocked)
 }
@@ -290,7 +295,7 @@ func finishDoctor(c *clicore.Context, rep *doctor.Report, matrix *policy.Matrix,
 	}
 	switch {
 	case policyBlocked:
-		return ui.Policy(errors.New("managed policy blocks something this org's profiles need, or (with --strict) could not be read; see the policy findings"))
+		return ui.Policy(errors.New("managed policy blocks something this org's profiles need, or (with --strict) could not be read (see the policy findings)"))
 	case rep.HasErrors():
 		return ui.Failure(fmt.Errorf("doctor found %s", plural(rep.Counts().Errors, "error", "errors")))
 	}
@@ -319,7 +324,7 @@ func loadUsage(ctx context.Context, c *clicore.Context, o doctorOptions) (*analy
 		})
 		if err != nil {
 			if errors.Is(err, analytics.ErrNoKey) {
-				return nil, ui.Usage(fmt.Errorf("--usage-api needs an admin key: set the environment variable %s (the key is read from the environment only), or use --usage-file with an OpenTelemetry export", analytics.DefaultKeyEnv))
+				return nil, ui.Usage(fmt.Errorf("--usage-api needs an admin key: set the environment variable %s (ccshelf reads the key only from the environment), or use --usage-file with an OpenTelemetry export", analytics.DefaultKeyEnv))
 			}
 			return nil, fmt.Errorf("--usage-api: %w", err)
 		}
@@ -432,7 +437,7 @@ func policyFindings(pol *policy.Policy, m *policy.Matrix, profs []policyProfile,
 		}
 		out = append(out, doctor.Finding{
 			Severity: sev, Code: codePolicyUnreadable, Check: checkPolicy, Message: msg,
-			Hint: "fix the file's permissions or contents; ccshelf never guesses around a policy it cannot read (--strict makes this exit 3)",
+			Hint: "fix the file's permissions or contents. ccshelf never guesses around a policy it cannot read (--strict makes this exit 3)",
 		})
 	}
 	blocked := toSet(m.BlockedPlugins())
@@ -446,7 +451,7 @@ func policyFindings(pol *policy.Policy, m *policy.Matrix, profs []policyProfile,
 				out = append(out, doctor.Finding{
 					Severity: doctor.Error, Code: codePolicyBlocked, Check: checkPolicy, Plugin: id, Profile: v.Name,
 					Message: fmt.Sprintf("profile %s includes %s, which managed policy blocks (enabledPlugins false)", v.Name, id),
-					Hint:    "remove it from the profile; policy cannot be overridden",
+					Hint:    "remove it from the profile. Policy cannot be overridden",
 				})
 			}
 		}
@@ -460,7 +465,7 @@ func policyFindings(pol *policy.Policy, m *policy.Matrix, profs []policyProfile,
 			case !v.Abstract && !inc[id] && (v.Mode == "" || v.Mode == profile.ModeAllowOnly):
 				out = append(out, doctor.Finding{
 					Severity: doctor.Info, Code: codePolicyForced, Check: checkPolicy, Plugin: id, Profile: v.Name,
-					Message: fmt.Sprintf("%s is force-enabled by managed policy and stays on in profile %s although the profile does not list it", id, v.Name),
+					Message: fmt.Sprintf("managed policy force-enables %s, so it stays on in profile %s although the profile does not list it", id, v.Name),
 				})
 			}
 		}
@@ -490,8 +495,8 @@ func needFindings(m *policy.Matrix, p policyProfile) []doctor.Finding {
 	for _, id := range applied.Dropped {
 		out = append(out, doctor.Finding{
 			Severity: doctor.Error, Code: codePolicyNeedBlocked, Check: checkPolicy, Profile: p.view.Name,
-			Message: fmt.Sprintf("profile %s needs %s, which managed policy blocks (%s); %s", p.view.Name, id, m.Features[id].Reason, outcome),
-			Hint:    "change the profile so it does not need this feature; policy cannot be overridden",
+			Message: fmt.Sprintf("profile %s needs %s, which managed policy blocks (%s), so %s", p.view.Name, id, m.Features[id].Reason, outcome),
+			Hint:    "change the profile so it does not need this feature. Policy cannot be overridden",
 		})
 	}
 	// Features that are unknown for the same reason share one finding.
@@ -534,7 +539,7 @@ func marketplaceFindings(pol *policy.Policy, v doctor.ProfileView) []doctor.Find
 			out = append(out, doctor.Finding{
 				Severity: doctor.Error, Code: codePolicyMarketplace, Check: checkPolicy, Profile: v.Name,
 				Message: fmt.Sprintf("profile %s includes %s from marketplace %s, which managed policy blocks (%s)", v.Name, strings.Join(byMarket[n], ", "), n, why),
-				Hint:    "use plugins from an allowed marketplace; policy cannot be overridden",
+				Hint:    "use plugins from an allowed marketplace. Policy cannot be overridden",
 			})
 		}
 	}

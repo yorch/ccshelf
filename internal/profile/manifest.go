@@ -34,7 +34,7 @@ func OnBlockedModes() []string { return []string{OnBlockedWarn, OnBlockedFail} }
 // Manifest is one profile file (profiles/<name>.toml). The schema is closed
 // (SR1): a profile cannot carry permissions, hooks, auth or MCP definitions.
 // Unset scalars are "" (or nil for the pointer fields) so that merging can tell
-// "not set" from a value; WithDefaults fills the documented defaults.
+// "not set" from a value. WithDefaults fills the documented defaults.
 type Manifest struct {
 	Name         string   `toml:"name"`
 	Description  string   `toml:"description,omitempty"`
@@ -59,13 +59,13 @@ type Plugins struct {
 	Exclude []string `toml:"exclude,omitempty"`
 }
 
-// Skills is the [skills] table; it concerns standalone skills only.
+// Skills is the [skills] table. It concerns standalone skills only.
 type Skills struct {
 	Off      []string `toml:"off,omitempty"`
 	NameOnly []string `toml:"name_only,omitempty"`
 }
 
-// MCP is the [mcp] table. Servers names entries of the MCP registry; the
+// MCP is the [mcp] table. Servers names entries of the MCP registry. The
 // definitions never live in a profile.
 type MCP struct {
 	Servers            []string `toml:"servers,omitempty"`

@@ -1,6 +1,6 @@
 // Package catalogtest holds helpers shared by the tests of the catalog
 // packages: the fictional org data repo fixture and small file helpers. It is
-// only meant to be imported from tests.
+// for tests only.
 package catalogtest
 
 import (

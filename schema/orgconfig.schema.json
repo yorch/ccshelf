@@ -13,21 +13,21 @@
         "require": {"type": "array", "items": {"$ref": "#/$defs/sidecarField"}, "default": ["owner", "status"], "description": "Sidecar fields every plugin needs."},
         "require_when_deprecated": {"type": "array", "items": {"$ref": "#/$defs/sidecarField"}, "default": ["superseded_by"]},
         "max_review_age_days": {"type": "integer", "minimum": 1, "default": 180, "description": "A review_by date older than this many days before today is stale."},
-        "taxonomy": {"type": "string", "default": "catalog/taxonomy.toml", "description": "Allowed categories and tags; the rules are off when the file does not exist."},
+        "taxonomy": {"type": "string", "default": "catalog/taxonomy.toml", "description": "Allowed categories and tags. The rules are off when the file does not exist."},
         "min_description_length": {"type": "integer", "minimum": 0, "default": 30},
-        "platform_owners": {"type": "array", "items": {"type": "string"}, "description": "CODEOWNERS owners (@user, @org/team or email) that must own plugin hooks and .mcp.json; empty turns the rule off."}
+        "platform_owners": {"type": "array", "items": {"type": "string"}, "description": "CODEOWNERS owners (@user, @org/team or email) that must own plugin hooks and .mcp.json. An empty list turns the rule off."}
       }
     },
     "catalog": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "enabled": {"type": "boolean", "default": true, "description": "false for a profiles-only org data repo (no marketplace, sidecars, bundles or catalog); the other [catalog] keys are then ignored and lint warns."},
+        "enabled": {"type": "boolean", "default": true, "description": "false for a profiles-only org data repo (no marketplace, sidecars, bundles or catalog). The other [catalog] keys are then ignored, and lint warns."},
         "title": {"type": "string", "maxLength": 200},
         "metadata_source": {"enum": ["sidecar", "marketplace"], "default": "sidecar"},
         "marketplaces": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "\\.json$"}, "default": [".claude-plugin/marketplace.json"]},
         "git_data": {"type": "boolean", "default": false, "description": "Add last change, author count and changed-since-tag data (needs git)."},
-        "release_tag_pattern": {"type": "string", "default": "v[0-9]*", "pattern": "^[A-Za-z0-9*?\\[\\]!._/+-]{1,100}$", "description": "Git glob that selects release tags for changed-since-tag data; never matches plugin tags <plugin>--v<version>."},
+        "release_tag_pattern": {"type": "string", "default": "v[0-9]*", "pattern": "^[A-Za-z0-9*?\\[\\]!._/+-]{1,100}$", "description": "Git glob that selects release tags for changed-since-tag data. It never matches plugin tags <plugin>--v<version>."},
         "base_url": {"type": "string", "pattern": "^https?://", "description": "Public URL of the catalog site."}
       }
     },

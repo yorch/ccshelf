@@ -104,7 +104,7 @@ func TestDoctorPolicyRunsOutsideAnOrgRepo(t *testing.T) {
 	if r.code != 0 || !strings.Contains(r.out, "capability matrix") {
 		t.Fatalf("code %d\n%s\n%s", r.code, r.out, r.err)
 	}
-	if !strings.Contains(r.err, "managed policy only") {
+	if !strings.Contains(r.err, "shows only the managed policy") {
 		t.Errorf("no note:\n%s", r.err)
 	}
 	j := h.run("--json", "doctor", "--policy")

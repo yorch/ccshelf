@@ -9,7 +9,7 @@ var reservedPrefixes = []string{"claude-", "anthropic-", "cc-plugin-"}
 
 // ReservedNameCheck reports whether a plugin name collides with a reserved
 // name rule of "claude plugin validate". The names starting with "claude-",
-// "anthropic-" or "cc-plugin-" are errors (isError true); a name containing
+// "anthropic-" or "cc-plugin-" are errors (isError true). A name containing
 // the whole word "claude" is a warning (isError false). reason is empty when
 // the name is fine. Matching is case-insensitive.
 func ReservedNameCheck(name string) (reason string, isError bool) {

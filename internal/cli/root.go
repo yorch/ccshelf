@@ -18,9 +18,9 @@ import (
 	"github.com/yorch/ccshelf/internal/version"
 )
 
-// NewRoot builds the root command. The globals are bound as persistent flags
-// and every subcommand receives its Context from the provider once cobra has
-// parsed the flags.
+// NewRoot builds the root command. It binds the globals as persistent flags.
+// Every subcommand receives its Context from the provider after cobra parses
+// the flags.
 func NewRoot(env *clicore.Env) *cobra.Command {
 	root, _ := newRoot(env)
 	return root
@@ -37,13 +37,14 @@ func newRoot(env *clicore.Env) (*cobra.Command, *clicore.Globals) {
 
 	root := &cobra.Command{
 		Use:   "ccshelf",
-		Short: "Run Claude Code with a named profile; lint and publish an org's plugin catalog",
+		Short: "Run Claude Code with a named profile, and lint and publish an org's plugin catalog",
 		Long: `Choose which plugins, skills and MCP servers are active for a Claude Code
 session, or maintain your organization's plugin catalog.
 
-Getting started: init creates your config; new creates a profile; run launches it.
+Getting started: init creates your config, new creates a profile and run
+launches it.
 Run ccshelf without a command in a terminal to pick a profile.
-Flags and arguments work without prompts; use --no-interactive in scripts.`,
+Flags and arguments work without prompts. Use --no-interactive in scripts.`,
 		Example: `  ccshelf init
   ccshelf new my-profile
   ccshelf ls
@@ -76,7 +77,7 @@ Flags and arguments work without prompts; use --no-interactive in scripts.`,
 	f.StringVar(&g.ClaudePath, "claude", "", "path to the claude binary")
 	f.StringVar(&g.Account, "account", "", "account to use for this invocation")
 	f.StringVar(&g.Root, "root", "", "org data repo root (default: current directory)")
-	f.BoolVar(&g.NoInteractive, "no-interactive", false, "never prompt; fail naming the missing flag")
+	f.BoolVar(&g.NoInteractive, "no-interactive", false, "never prompt, and fail with the name of the missing flag")
 	f.BoolVar(&g.NoColor, "no-color", false, "disable color")
 	f.BoolVar(&g.Plain, "plain", false, "line-oriented output and prompts")
 	f.BoolVar(&g.JSON, "json", false, "machine-readable output where supported")
@@ -96,8 +97,8 @@ Flags and arguments work without prompts; use --no-interactive in scripts.`,
 }
 
 // Execute runs the command tree with args and returns the process exit code.
-// Errors are reported on the error stream; a child's exit status (an ExitError
-// without a message) is returned silently.
+// It reports errors on the error stream. It returns a child's exit status (an
+// ExitError without a message) silently.
 func Execute(ctx context.Context, env *clicore.Env, args []string) int {
 	root, g := newRoot(env)
 	root.SetArgs(args)
@@ -153,7 +154,7 @@ func reportJSON(w io.Writer, err error, code int) {
 		Hint    string `json:"hint,omitempty"`
 		Code    int    `json:"code"`
 		// Data carries what a command knows about a partial failure, such as
-		// the files it had written; see errorData.
+		// the files it had written. See errorData.
 		Data map[string]any `json:"data,omitempty"`
 	}
 	o := out{Message: ui.SanitizeLine(err.Error()), Code: code}

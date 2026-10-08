@@ -26,7 +26,7 @@ const (
 // ErrInputTooLarge is returned when the OTel export is longer than the 256 MiB
 // cap. Reading less than the whole file would silently undercount usage, so
 // an oversized input is an error, never a truncation.
-var ErrInputTooLarge = errors.New("the OTel export is larger than 256 MiB; split it or export a shorter window")
+var ErrInputTooLarge = errors.New("the OTel export is larger than 256 MiB: split it or export a shorter window")
 
 // OTelOptions narrows ParseOTelJSONLWindow.
 type OTelOptions struct {
@@ -79,15 +79,15 @@ var (
 // plugin.
 //
 // It is tolerant about the envelope: the event name may be under event.name,
-// event_name, name or body; attributes may be top-level keys, an
+// event_name, name or body. Attributes may be top-level keys, an
 // "attributes" object, or an OTLP list of {key, value:{stringValue}} pairs.
 // The plugin comes from plugin.name / plugin_name / plugin.id (joined with a
-// marketplace attribute when there is one); a skill_activated event without a
+// marketplace attribute when there is one). A skill_activated event without a
 // plugin attribute uses the part before ":" of the skill name. Redacted or
 // missing names ("<REDACTED>", "redacted", empty) increase Usage.Redacted.
-// Timestamps outside the years 2000 to 2100 are treated as missing. Lines that
-// are not JSON objects or not events of these kinds are ignored;
-// lines that are not JSON objects at all are counted in Usage.Skipped. It is
+// It treats timestamps outside the years 2000 to 2100 as missing. It ignores
+// lines that are not JSON objects or not events of these kinds, and it counts
+// lines that are not JSON objects at all in Usage.Skipped. It is
 // an error when the input has lines but none is a JSON object.
 func ParseOTelJSONL(r io.Reader) (*Usage, error) {
 	return ParseOTelJSONLWindow(r, OTelOptions{})
@@ -95,7 +95,7 @@ func ParseOTelJSONL(r io.Reader) (*Usage, error) {
 
 // ParseOTelJSONLWindow is ParseOTelJSONL restricted to the events inside the
 // window of opt. When a bound is set, Usage.From and Usage.To echo it (To is
-// the last day included); otherwise they come from the events. Input larger
+// the last day included). Otherwise they come from the events. Input larger
 // than 256 MiB is an error (ErrInputTooLarge).
 func ParseOTelJSONLWindow(r io.Reader, opt OTelOptions) (*Usage, error) {
 	return parseOTel(r, opt, maxInputSize)

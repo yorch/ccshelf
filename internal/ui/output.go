@@ -15,7 +15,7 @@ const minColumn = 8
 
 // Table writes an aligned table. Cells are sanitized (no terminal escape
 // injection) and flattened to one line. When mode.Width is set, the widest
-// columns are truncated with an ellipsis so rows fit; widths count wide
+// columns are truncated with an ellipsis so rows fit. Widths count wide
 // Unicode characters as two columns. If even the minimum column widths cannot
 // fit, rows become wrapped, labeled records without truncation. In plain mode
 // the header rule and the ellipsis are ASCII. Trailing spaces are not written.
@@ -127,7 +127,7 @@ func sum(xs []int) int {
 //
 // Schema rule: the envelope is {"version":1,"kind":<string>,"data":<value>}.
 // Within a version, a kind's data may gain fields but never lose or rename
-// one and never change a field's type; any breaking change bumps the version,
+// one and never change a field's type. Any breaking change bumps the version,
 // and a command keeps writing the old version until the documented removal.
 // Keys are in a stable order (struct field order, maps sorted by key).
 const JSONVersion = 1
@@ -169,7 +169,7 @@ const (
 )
 
 // Status prefixes text with "ok:", "warn:" or "error:". The word is always
-// present so color is never the only carrier of meaning; with mode.Color the
+// present so color is never the only carrier of meaning. With mode.Color the
 // word is also green, yellow or red.
 func Status(mode Mode, level Level, text string) string {
 	word, code := "ok", "32"
@@ -287,7 +287,7 @@ func looksSecret(name string) bool {
 // exactly "--". Redaction errs toward too much. Everything after a "--"
 // is positional: only NAME=value arguments are checked there. The result is
 // for display only. A Recorder knows exactly which flags carry a value and
-// does not guess; prefer it for the Equivalent line.
+// does not guess. Prefer it for the Equivalent line.
 func RedactArgs(args []string) []string {
 	out := make([]string, len(args))
 	redactNext := false

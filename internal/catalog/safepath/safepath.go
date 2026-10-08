@@ -44,8 +44,8 @@ func CheckRel(rel string) error {
 }
 
 // Resolve returns the real absolute path of rel below root. The path does not
-// have to exist: the deepest existing ancestor is resolved through symlinks
-// and the remainder is appended. It fails with ErrEscape when the result is
+// have to exist: Resolve follows the symlinks of the deepest existing ancestor
+// and appends the remainder. It fails with ErrEscape when the result is
 // outside root, including through a symlink or a dangling symlink.
 func Resolve(root, rel string) (string, error) {
 	if err := CheckRel(rel); err != nil {

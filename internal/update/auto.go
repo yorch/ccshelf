@@ -15,7 +15,7 @@ const (
 	// AutoCheckTimeout is the hard overall limit of the periodic check.
 	AutoCheckTimeout = 3 * time.Second
 	// AutoInstallTimeout is the limit of an automatic install, which downloads
-	// an archive; it only runs after a check found a newer release in policy.
+	// an archive. It only runs after a check found a newer release in policy.
 	AutoInstallTimeout = 60 * time.Second
 	// NoticeEvery is how often the "update available" line may be shown.
 	NoticeEvery = 24 * time.Hour
@@ -30,14 +30,14 @@ type AutoOptions struct {
 	Mode string
 	// Interval is the minimum time between checks (default 24h).
 	Interval time.Duration
-	// CI is true when the CI environment variable is set; KillSwitch when
-	// CCSHELF_NO_UPDATE_CHECK is.
+	// CI is true when the CI environment variable is set. KillSwitch is true
+	// when CCSHELF_NO_UPDATE_CHECK is set.
 	CI, KillSwitch bool
 	// TTY is true when a person is looking: standard input, output and error
 	// are all terminals and prompting is allowed (not --json,
 	// --no-interactive). Only then does the automatic path act at all, and
-	// only then is a line printed; scripts and pipelines use "ccshelf update
-	// --yes".
+	// only then does it print a line. Scripts and pipelines use "ccshelf
+	// update --yes".
 	TTY bool
 	// CheckTimeout and InstallTimeout override the budgets (tests).
 	CheckTimeout, InstallTimeout time.Duration
@@ -55,13 +55,14 @@ func (o AutoOptions) interval() time.Duration {
 }
 
 // Auto runs the opt-in periodic check. It never fails and never blocks for
-// longer than its time budgets: every error ends in at most one line through
+// longer than its time budgets. Every error ends in at most one line through
 // say, and the next attempt waits for the interval. It does nothing without
 // an interactive terminal (see [AutoOptions.TTY]) and never when CI or the
-// kill switch is set. mode "notify" prints one line when a newer release
-// exists; "install" also installs a newer release of the same major version (for 0.x, the same minor),
-// never a downgrade and never a pre-release, and only for a binary ccshelf may
-// replace; the new binary takes effect on the next invocation.
+// kill switch is set. Mode "notify" prints one line when a newer release
+// exists. Mode "install" also installs a newer release of the same major
+// version (for 0.x, the same minor). It never installs a downgrade or a
+// pre-release, and it installs only for a binary ccshelf may replace. The new
+// binary takes effect on the next invocation.
 func (u *Updater) Auto(ctx context.Context, o AutoOptions, say func(string)) {
 	if o.off() || IsDevVersion(u.Current) {
 		return
@@ -91,7 +92,7 @@ func (u *Updater) Auto(ctx context.Context, o AutoOptions, say func(string)) {
 		if err != nil {
 			_ = SaveState(u.StateDir, st)
 			if o.TTY {
-				say("ccshelf: could not check for updates (" + shortReason(err) + "); will try again later")
+				say("ccshelf: could not check for updates (" + shortReason(err) + "). ccshelf will try again later")
 			}
 			return
 		}
@@ -164,12 +165,12 @@ func (u *Updater) autoInstall(ctx context.Context, o AutoOptions, rel Release, s
 	res, err := u.Apply(ictx, plan, Request{}, nil)
 	if err != nil {
 		if KindOf(err) != KindLocked && o.TTY {
-			say("ccshelf: automatic update failed (" + shortReason(err) + "); run: ccshelf update")
+			say("ccshelf: automatic update failed (" + shortReason(err) + "). Run: ccshelf update")
 		}
 		return false
 	}
 	if o.TTY {
-		say(fmt.Sprintf("ccshelf updated to %s (the previous version is kept as %s); it takes effect the next time you run ccshelf", res.To, res.Backup))
+		say(fmt.Sprintf("ccshelf updated to %s (the previous version is kept as %s). The new version takes effect the next time you run ccshelf", res.To, res.Backup))
 	}
 	return true
 }

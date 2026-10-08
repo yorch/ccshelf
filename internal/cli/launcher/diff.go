@@ -41,7 +41,7 @@ func (l *launcher) diffCmd() *cobra.Command {
 		Long: `Compare two profiles after their parents are merged: plugins, skills, MCP
 servers, environment variable names and session defaults. "+" marks what b adds
 to a and "-" what b lacks. Environment values and prompt text are never printed.
-The exit code is 0 whether or not they differ; --json has an "identical" field.`,
+The exit code is 0 whether or not they differ. --json has an "identical" field.`,
 		Args: cobra.MaximumNArgs(2),
 	}
 	c.RunE = l.do(func(ctx context.Context, cc *clicore.Context, _ *cobra.Command, args []string) error {

@@ -31,12 +31,12 @@ var ErrNotRegular = errors.New("not a regular file")
 var ErrTooLarge = errors.New("file is too large")
 
 // FS is the file system the plan is built from and applied to. Names are
-// slash-separated and relative to the target directory ("." is the target);
-// an implementation refuses anything else, and never follows or writes
+// slash-separated and relative to the target directory ("." is the target).
+// An implementation refuses anything else, and it never follows or writes
 // through a symbolic link.
 type FS interface {
 	// Lstat describes name without following a final symbolic link. A missing
-	// name (or a missing intermediate directory) returns fs.ErrNotExist; an
+	// name (or a missing intermediate directory) returns fs.ErrNotExist. An
 	// intermediate symbolic link returns ErrSymlink.
 	Lstat(name string) (fs.FileInfo, error)
 	// ReadFile reads a regular file of at most limit bytes (ErrNotRegular,

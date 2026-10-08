@@ -81,7 +81,7 @@ type showSession struct {
 	Effort                 string `json:"effort,omitempty"`
 	AppendSystemPromptFile string `json:"append_system_prompt_file,omitempty"`
 	InheritUserSettings    bool   `json:"inherit_user_settings"`
-	// EnvNames lists variable names only; values are never exported.
+	// EnvNames lists variable names only. Values are never exported.
 	EnvNames []string `json:"env_names"`
 }
 

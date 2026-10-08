@@ -295,7 +295,7 @@ func TestWrongTypes(t *testing.T) {
 	if p.StrictKnownMarketplaces == nil || len(p.StrictKnownMarketplaces) != 0 || p.AllowedMcpServers == nil || len(p.AllowedMcpServers) != 0 {
 		t.Fatalf("wrong-typed allowlists must restrict everything: %+v %+v", p.StrictKnownMarketplaces, p.AllowedMcpServers)
 	}
-	if !hasWarning(p, "strictKnownMarketplaces should be an array; enforcing it as an empty allowlist") || !hasWarning(p, "allowedMcpServers should be an array; enforcing it as an empty allowlist") {
+	if !hasWarning(p, "strictKnownMarketplaces should be an array, so ccshelf enforces it as an empty allowlist") || !hasWarning(p, "allowedMcpServers should be an array, so ccshelf enforces it as an empty allowlist") {
 		t.Fatalf("warnings: %v", p.Warnings)
 	}
 	if len(p.BlockedMarketplaces) != 1 || len(p.PluginSuggestionMarketplaces) != 1 {

@@ -30,7 +30,7 @@ func (d *detector) interpret(doc map[string]any) {
 		}
 	}
 	warn := func(key, want string) {
-		p.Warnings = append(p.Warnings, fmt.Sprintf("managed key %s should be %s; ignoring the value", key, want))
+		p.Warnings = append(p.Warnings, fmt.Sprintf("managed key %s should be %s, so ccshelf ignores the value", key, want))
 	}
 	boolKey := func(key string, failClosed bool) *bool {
 		v, ok := doc[key]
@@ -41,7 +41,7 @@ func (d *detector) interpret(doc map[string]any) {
 			return &b
 		}
 		if failClosed {
-			p.Warnings = append(p.Warnings, fmt.Sprintf("managed key %s should be a boolean; treating it as true (fail closed)", key))
+			p.Warnings = append(p.Warnings, fmt.Sprintf("managed key %s should be a boolean, so ccshelf treats it as true (fail closed)", key))
 			t := true
 			return &t
 		}
@@ -146,17 +146,17 @@ func (d *detector) marketplaceList(doc map[string]any, key string, failEmpty boo
 	l, ok := v.([]any)
 	if !ok {
 		if failEmpty {
-			d.p.Warnings = append(d.p.Warnings, fmt.Sprintf("managed key %s should be an array; enforcing it as an empty allowlist (fail closed)", key))
+			d.p.Warnings = append(d.p.Warnings, fmt.Sprintf("managed key %s should be an array, so ccshelf enforces it as an empty allowlist (fail closed)", key))
 			return []MarketplaceSource{}
 		}
-		d.p.Warnings = append(d.p.Warnings, fmt.Sprintf("managed key %s should be an array; ignoring the value", key))
+		d.p.Warnings = append(d.p.Warnings, fmt.Sprintf("managed key %s should be an array, so ccshelf ignores the value", key))
 		return nil
 	}
 	out := []MarketplaceSource{} // non-nil: an empty list blocks everything
 	for _, e := range l {
 		m, ok := e.(map[string]any)
 		if !ok {
-			d.p.Warnings = append(d.p.Warnings, fmt.Sprintf("managed key %s has an entry that is not an object; skipping it", key))
+			d.p.Warnings = append(d.p.Warnings, fmt.Sprintf("managed key %s has an entry that is not an object, so ccshelf ignores the entry", key))
 			continue
 		}
 		out = append(out, redactMarketplace(m))
@@ -210,10 +210,10 @@ func (d *detector) serverRules(doc map[string]any, key string, failEmpty bool) [
 	l, ok := v.([]any)
 	if !ok {
 		if failEmpty {
-			d.p.Warnings = append(d.p.Warnings, fmt.Sprintf("managed key %s should be an array; enforcing it as an empty allowlist (fail closed)", key))
+			d.p.Warnings = append(d.p.Warnings, fmt.Sprintf("managed key %s should be an array, so ccshelf enforces it as an empty allowlist (fail closed)", key))
 			return []ServerRule{}
 		}
-		d.p.Warnings = append(d.p.Warnings, fmt.Sprintf("managed key %s should be an array; ignoring the value", key))
+		d.p.Warnings = append(d.p.Warnings, fmt.Sprintf("managed key %s should be an array, so ccshelf ignores the value", key))
 		return nil
 	}
 	out := []ServerRule{} // non-nil: an empty allowlist blocks everything
@@ -227,7 +227,7 @@ func (d *detector) serverRules(doc map[string]any, key string, failEmpty bool) [
 		out = append(out, r)
 	}
 	if dropped > 0 {
-		d.p.Warnings = append(d.p.Warnings, fmt.Sprintf("managed key %s has %d entr%s that are not valid rules (need a string serverName, serverUrl or a serverCommand array); skipped", key, dropped, plural(dropped)))
+		d.p.Warnings = append(d.p.Warnings, fmt.Sprintf("managed key %s: ccshelf ignores %d entr%s that are not valid rules (need a string serverName, serverUrl or a serverCommand array)", key, dropped, plural(dropped)))
 	}
 	return out
 }

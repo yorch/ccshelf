@@ -150,7 +150,7 @@ func TestCatalogInitDoesNotReplaceAForeignSuggestionFile(t *testing.T) {
 	if read(t, dir, ".github/CODEOWNERS.ccshelf-suggested") != "the user's own notes\n" {
 		t.Error("a file the user wrote was replaced")
 	}
-	if !strings.Contains(r.out, "was not written by ccshelf") {
+	if !strings.Contains(r.out, "ccshelf did not write it") {
 		t.Errorf("no note:\n%s", r.out)
 	}
 	r = h.run(append(args, "--json")...)
@@ -295,7 +295,7 @@ func TestCatalogInitFailureReportsAndRollsBack(t *testing.T) {
 
 func TestApplyFailureData(t *testing.T) {
 	f := &applyFailure{err: os.ErrPermission, res: &scaffold.Result{Created: []string{"a", "b", "c"}, RolledBack: []string{"b"}}}
-	if h := f.Hint(); !strings.Contains(h, "written before the failure: a, b, c") || !strings.Contains(h, "rolled back: b") || !strings.Contains(h, "2 stay") {
+	if h := f.Hint(); !strings.Contains(h, "written before the failure: a, b, c") || !strings.Contains(h, "Rolled back: b") || !strings.Contains(h, "2 stay") {
 		t.Errorf("hint = %q", h)
 	}
 	data := f.ErrorData()

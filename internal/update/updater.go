@@ -17,7 +17,7 @@ import (
 )
 
 // Updater performs updates. Every field that reaches outside the process is a
-// seam; the zero value of an optional seam means the production behavior.
+// seam. The zero value of an optional seam means the production behavior.
 type Updater struct {
 	Source Source
 	// Client performs HTTP requests (default [NewClient]).
@@ -27,14 +27,14 @@ type Updater struct {
 	// Current is the running version as printed by --version ("0.1.0" or
 	// "dev").
 	Current string
-	// GOOS and GOARCH select the archive; they default to the running
+	// GOOS and GOARCH select the archive. They default to the running
 	// platform's, set by the caller.
 	GOOS, GOARCH string
 	// Executable returns the path of the running binary (os.Executable).
 	Executable func() (string, error)
 	// Detect carries the environment the install-method detector needs
-	// (home, GOBIN, GOPATH, container flag); GOOS, Paths and Repo are filled
-	// in by the Updater.
+	// (home, GOBIN, GOPATH, container flag). The Updater fills in GOOS, Paths
+	// and Repo.
 	Detect DetectInput
 	// LookCosign finds cosign (nil: not found).
 	LookCosign func() (string, bool)
@@ -90,7 +90,7 @@ type Request struct {
 
 // Plan is the outcome of looking for a release, before anything is changed.
 type Plan struct {
-	// CurrentRaw is the running version string; Current is parsed from it
+	// CurrentRaw is the running version string. Current is parsed from it
 	// (zero when Dev).
 	CurrentRaw string
 	Current    Version
@@ -99,7 +99,7 @@ type Plan struct {
 	// Target is the release that would be installed.
 	Target  Release
 	Archive Archive
-	// Exe is the file that would be replaced (symlinks resolved); ExeErr is
+	// Exe is the file that would be replaced (symlinks resolved). ExeErr is
 	// why it could not be determined or may not be replaced.
 	Exe    string
 	ExeErr error
@@ -203,10 +203,10 @@ func downloadError(err error, name string) error {
 	if errors.Is(err, ErrRedirect) {
 		return newErr(KindFailure, redirectHint, err, "downloading %s: the download was redirected to a host that is not allowed", name)
 	}
-	return newErr(KindFailure, "nothing was changed; try again", err, "downloading %s", name)
+	return newErr(KindFailure, "nothing was changed. Try again", err, "downloading %s", name)
 }
 
-const redirectHint = "if this server serves release assets from another host, list that exact hostname in [update] asset_hosts in config.toml (it is trusted with the download; the SHA-256 is still verified)"
+const redirectHint = "if this server serves release assets from another host, list that exact hostname in [update] asset_hosts in config.toml (ccshelf trusts it with the download and still verifies the SHA-256)"
 
 func networkError(err error, version string, src Source) error {
 	var he *HTTPError
@@ -214,11 +214,11 @@ func networkError(err error, version string, src Source) error {
 	case errors.Is(err, ErrRedirect):
 		return newErr(KindFailure, redirectHint, err, "the download was redirected to a host that is not allowed")
 	case errors.As(err, &he) && he.Status == http.StatusNotFound && version == "" && !strings.EqualFold(src.Web.Hostname(), DefaultHost) && strings.HasSuffix(strings.ToLower(src.Web.Hostname()), ".ghe.com"):
-		return newErr(KindFailure, "GitHub Enterprise Cloud with data residency (*.ghe.com) keeps its API on api.<subdomain>.ghe.com, which this version does not support; download the release by hand", err, "the release information was not found")
+		return newErr(KindFailure, "GitHub Enterprise Cloud with data residency (*.ghe.com) keeps its API on api.<subdomain>.ghe.com, which this version does not support. Download the release by hand", err, "the release information was not found")
 	case errors.As(err, &he) && he.Status == http.StatusNotFound && version != "":
 		return newErr(KindFailure, "see the releases page for the versions that exist", err, "release %s was not found", version)
 	case errors.As(err, &he) && (he.Status == http.StatusForbidden || he.Status == http.StatusTooManyRequests):
-		return newErr(KindFailure, "GitHub limits unauthenticated requests; try again later", err, "the release server refused the request")
+		return newErr(KindFailure, "GitHub limits unauthenticated requests. Try again later", err, "the release server refused the request")
 	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):
 		return newErr(KindFailure, "check your network connection and try again", err, "could not reach the release server in time")
 	}
@@ -262,7 +262,7 @@ func (u *Updater) cosign() (string, bool) {
 // CheckSignatureRequirement fails with KindSignatureRequired when the request
 // demands a verified signature and cosign is not available. The command
 // calls it before it plans, prints the dry run or asks for confirmation, so
-// that an update that cannot be verified as required never gets that far;
+// that an update that cannot be verified as required never gets that far.
 // Apply checks again.
 func (u *Updater) CheckSignatureRequirement(req Request) error {
 	if !req.RequireSignature {
@@ -305,7 +305,7 @@ func (u *Updater) Apply(ctx context.Context, p *Plan, req Request, progress func
 	cosignPath, haveCosign := u.cosign()
 	for _, name := range []string{p.Archive.Name, ChecksumsName} {
 		if _, ok := p.Target.Asset(name); !ok {
-			return nil, newErr(KindFailure, "the release may still be publishing; try again later", nil,
+			return nil, newErr(KindFailure, "the release may still be publishing. Try again later", nil,
 				"release %s has no %s (no build for %s/%s)", p.Target.Tag, name, u.GOOS, u.GOARCH)
 		}
 	}
@@ -355,7 +355,7 @@ func (u *Updater) Apply(ctx context.Context, p *Plan, req Request, progress func
 		return nil, newErr(KindVerify, "nothing was changed", err, "reading %s", ChecksumsName)
 	}
 	if err := VerifySHA256(sum, want); err != nil {
-		return nil, newErr(KindVerify, "nothing was changed; the download may be corrupt or tampered with", err, "verifying %s", p.Archive.Name)
+		return nil, newErr(KindVerify, "nothing was changed. The download may be corrupt or tampered with", err, "verifying %s", p.Archive.Name)
 	}
 
 	tmp, err := CreateTemp(dir, u.GOOS)
@@ -432,9 +432,9 @@ func (u *Updater) verifySignature(ctx context.Context, f *Fetcher, cosignPath, w
 	bundle, err := f.Get(ctx, u.Source.AssetURL(tag, SignatureName), "application/octet-stream", MaxChecksumsBytes)
 	if err != nil {
 		var he *HTTPError
-		hint := "cosign is on PATH, so the signature is required; try again, or ask whoever publishes the release to check that it was signed"
+		hint := "cosign is on PATH, so the signature is required. Try again, or ask whoever publishes the release to check that it was signed"
 		if errors.As(err, &he) && he.Status == http.StatusNotFound {
-			hint = "this release carries no signature although cosign is installed; do not install it unless you can verify it another way"
+			hint = "this release carries no signature although cosign is installed. Do not install it unless you can verify it another way"
 		}
 		return newErr(KindVerify, hint, err, "downloading %s", SignatureName)
 	}
@@ -450,7 +450,7 @@ func (u *Updater) verifySignature(ctx context.Context, f *Fetcher, cosignPath, w
 		verify = VerifyCosign
 	}
 	if err := verify(ctx, cosignPath, u.environ(), bundlePath, sumsPath, u.Source.CosignIdentity(tag), OIDCIssuer); err != nil {
-		return newErr(KindVerify, "nothing was changed; the release may not have been built by the project's release workflow", err, "the signature of %s is not valid", ChecksumsName)
+		return newErr(KindVerify, "nothing was changed. The project's release workflow may not have built the release", err, "the signature of %s is not valid", ChecksumsName)
 	}
 	return nil
 }
@@ -459,8 +459,8 @@ func (u *Updater) verifySignature(ctx context.Context, f *Fetcher, cosignPath, w
 var ErrNotCcshelf = errors.New("not a ccshelf binary")
 
 // RunVersion runs "<path> version --json" with a scrubbed environment and
-// returns the version it reports. A failure to run is returned as is;
-// output that is not a ccshelf version envelope is [ErrNotCcshelf].
+// returns the version it reports. It returns a failure to run as is. Output
+// that is not a ccshelf version envelope is [ErrNotCcshelf].
 func RunVersion(ctx context.Context, path string, environ []string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
@@ -497,8 +497,9 @@ type RollbackPlan struct {
 }
 
 // PrepareRollback locates and checks the backup. A backup that runs but is not
-// ccshelf is an error; one that cannot be run at all (wrong platform, damaged)
-// is returned unverified so that the caller can require explicit consent.
+// ccshelf is an error. PrepareRollback returns a backup that cannot run at all
+// (wrong platform, damaged) unverified, so that the caller can require
+// explicit consent.
 func (u *Updater) PrepareRollback(ctx context.Context) (*RollbackPlan, error) {
 	p := &Plan{}
 	u.locate(p)
@@ -508,14 +509,14 @@ func (u *Updater) PrepareRollback(ctx context.Context) (*RollbackPlan, error) {
 	rp := &RollbackPlan{Exe: p.Exe, Backup: p.Exe + BackupSuffix, Method: p.Method}
 	fi, err := os.Lstat(rp.Backup)
 	if err != nil || !fi.Mode().IsRegular() {
-		return nil, newErr(KindNoBackup, "an update keeps the previous binary as "+filepath.Base(rp.Backup)+" next to ccshelf; there is none here", err, "there is no previous version to roll back to")
+		return nil, newErr(KindNoBackup, "an update keeps the previous binary as "+filepath.Base(rp.Backup)+" next to ccshelf. There is none here", err, "there is no previous version to roll back to")
 	}
 	v, err := u.runVersion(ctx, rp.Backup)
 	switch {
 	case err == nil:
 		rp.Verified, rp.BackupVersion = true, v
 	case errors.Is(err, ErrNotCcshelf):
-		return nil, newErr(KindVerify, "the file was not touched; delete it if it is not yours", err, "%s is not a ccshelf binary", rp.Backup)
+		return nil, newErr(KindVerify, "the file was not touched. Delete it if it is not yours", err, "%s is not a ccshelf binary", rp.Backup)
 	default:
 		rp.VerifyErr = err
 	}
@@ -528,7 +529,7 @@ func (u *Updater) GuardRollback(rp *RollbackPlan, force bool) error {
 		return nil
 	}
 	return newErr(KindManaged, "use "+rp.Method.Command+" (or pass --force)", nil,
-		"this ccshelf was installed with %s; its backup is not managed here", rp.Method.Kind)
+		"this ccshelf was installed with %s, so its backup is not managed here", rp.Method.Kind)
 }
 
 // Rollback swaps the backup into place. The replaced binary becomes the new

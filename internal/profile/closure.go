@@ -51,7 +51,7 @@ func digest(b []byte) string {
 }
 
 // PortableSourceID returns a machine-independent label for a source: directory
-// sources become "dir:<kind>"; other ids are used as given.
+// sources become "dir:<kind>". It uses other ids as given.
 func PortableSourceID(s Source) string {
 	id := s.ID()
 	if len(id) >= 4 && id[:4] == "dir:" {
@@ -178,6 +178,8 @@ func sortItems(items []ClosureItem) {
 	})
 }
 
+// hashItems returns a hex SHA-256 over the sorted items. Each field is
+// length-prefixed, so two different item lists never hash the same input.
 func hashItems(items []ClosureItem) string {
 	h := sha256.New()
 	put := func(s string) {

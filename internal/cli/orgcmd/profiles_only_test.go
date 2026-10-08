@@ -185,7 +185,7 @@ func TestProfilesOnlyCLIConflicts(t *testing.T) {
 	}
 	write(t, dir2, "plugins/x/README.md", "x")
 	r = h.run(poArgs(dir2, "--yes", "--force")...)
-	if r.code != 0 || !strings.Contains(r.out, "plugins/ is ignored") {
+	if r.code != 0 || !strings.Contains(r.out, "ccshelf ignores plugins/") {
 		t.Errorf("--force: code %d\n%s\n%s", r.code, r.out, r.err)
 	}
 }

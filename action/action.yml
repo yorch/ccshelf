@@ -10,7 +10,7 @@ inputs:
     description: Release tag of ccshelf to install, a strict semver tag such as v0.1.0.
     required: true
   args:
-    description: The ccshelf subcommand and flags to run, split on spaces (no quoting), for example "lint" or "catalog build --out dist/catalog". Leave empty to install only.
+    description: The ccshelf subcommand and flags to run, split on spaces (no quoting). Examples are "lint" and "catalog build --out dist/catalog". Leave empty to install only.
     required: false
     default: ""
   working-directory:
@@ -18,7 +18,7 @@ inputs:
     required: false
     default: "."
   sha256:
-    description: SHA-256 of the release archive for this runner's OS and architecture, pinned by you. The strongest option and fully offline; when set, the signature is not needed. Without it, a matching line in this action's own pins.txt is used before cosign.
+    description: SHA-256 of the release archive for this runner's OS and architecture, pinned by you. The strongest option, and fully offline. When it is set, the action does not need the signature. When it is not set, the action uses a matching line in its own pins.txt before cosign.
     required: false
     default: ""
   base-url:
@@ -26,7 +26,7 @@ inputs:
     required: false
     default: https://github.com/yorch/ccshelf/releases/download
   verify-signature:
-    description: Verify the cosign signature of checksums.txt (needs cosign on PATH and the Sigstore trusted root, so it is not offline) when neither sha256 nor a pins.txt line applies. "false" is an explicit, loudly warned opt-out.
+    description: Verify the cosign signature of checksums.txt when neither sha256 nor a pins.txt line applies. This needs cosign on PATH and the Sigstore trusted root, so it is not offline. "false" is an explicit opt-out, and the action warns loudly about it.
     required: false
     default: "true"
   cosign-identity:
@@ -34,7 +34,7 @@ inputs:
     required: false
     default: ""
   cosign-identity-regexp:
-    description: Regular expression the certificate identity must match instead of an exact identity (explicit opt-in; escape dots). Exclusive with cosign-identity.
+    description: Regular expression the certificate identity must match instead of an exact identity (explicit opt-in, escape dots). Exclusive with cosign-identity.
     required: false
     default: ""
   trusted-root:
