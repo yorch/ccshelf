@@ -138,7 +138,7 @@ section>input[type=search]{display:block}
 <body>
 <div class="shell">
 <aside class="rail">
-<div class="brand"><h1>ccshelf</h1><p>Research and design notes. Claude Code 2.1.290. Generated from the Markdown in docs/ (source hash 1be0c68f).</p></div>
+<div class="brand"><h1>ccshelf</h1><p>Research and design notes. Claude Code 2.1.290. Generated from the Markdown in docs/ (source hash bad438ef).</p></div>
 <nav aria-label="Sections"><div id="tabs" role="tablist" aria-orientation="vertical"></div></nav>
 <div class="legend" aria-label="Confidence markers"><b>How sure we are</b><br><span class="lg gv" aria-hidden="true">&#9679;</span>verified in docs, gh or the CLI<br><span class="lg gr" aria-hidden="true">&#9680;</span>reported by a research agent<br><span class="lg gu" aria-hidden="true">&#9675;</span>unverified or inferred</div>
 <button class="themebtn" id="themebtn" type="button">Switch theme</button>
@@ -297,7 +297,7 @@ draw(false);
 <tr><td class="nw">D-51</td><td class="nw">2026-10-07</td><td><strong>A <code>dir</code> source path may not start with <code>$PWD</code>, <code>${PWD}</code>, <code>$OLDPWD</code> or <code>${OLDPWD}</code>: configuration validation refuses it on every load (a hand-edited config fails closed with the reason), and <code>config source add</code> refuses it with exit 2. Any other <code>$</code>-prefixed <code>dir</code> source added through <code>config</code> counts as weakening (needs <code>--yes</code> without a terminal, warns that the variable is read at every run). <code>config</code> also treats a change of <code>claude.path</code>, <code>update.base_url</code>, <code>update.cosign_identity_repo</code>, a new <code>update.asset_hosts</code> entry, a plugin <code>marketplace</code> or an existing git URL as weakening, compares git sources in normalized form (another <code>--path</code> of one repository is allowed), writes paths unexpanded, and diffs the file against the exact bytes to be written. This can break an existing config that used <code>$PWD</code>; that is intended (SR2/SR3): a cloned repository's <code>.ccshelf/profiles</code> would otherwise be an org-kind source.</strong></td><td><code>internal/config/config.go</code> (<code>checkDirSourcePath</code>, <code>ParseUnexpanded</code>), <code>internal/config/edit.go</code> (<code>Weakening</code>, <code>NormalizeGitURL</code>); review of D-50. A run-time refusal of any <code>dir</code> source inside the current directory's repository was not added: the working directory is only known at run time and the check would need a git lookup on every command.</td><td>High</td><td>A real use needs a cwd-relative source: add an explicit, per-repository trust path instead of a variable; or the run-time repository check proves cheap</td></tr>
 <tr><td class="nw">D-52</td><td class="nw">2026-10-08</td><td><strong>An org data repo can be profiles-only: <code>[catalog] enabled = false</code> in <code>ccshelf.toml</code> (default <code>true</code>, so existing repos are unchanged) says the repo has no marketplace, sidecars, bundles or catalog. <code>ccshelf lint</code> then skips every check that needs them (CAT001, CAT0xx metadata, ownership of plugins, CAT050 to CAT053) and keeps the profile checks (PRF*), the MCP registry, prompts, protect lists and the CODEOWNERS and platform-owner checks for profiles and <code>ccshelf.toml</code>; a marketplace file or <code>bundles/</code> that exists anyway is CAT061 (warning) and other <code>[catalog]</code> keys set alongside are CAT062 (warning). <code>compile</code> and <code>catalog build</code> exit 1 with <code>[catalog] enabled = false in ccshelf.toml: this repo has no marketplace, so there are no bundles/catalog</code>; <code>search</code> and <code>recommend</code> do the same when nothing else supplies a catalog, but inside such a repo they first fall back to the user's configured remote catalog or org source (exit 0), because a profiles-only directory is not a catalog source; <code>doctor</code> still checks profiles and policy (it prints a note, and <code>--json</code> lists the catalog checks as skipped, DOC000, with the reason); sidecars and marketplace files are read from no source with the catalog off (<code>LoadSidecars</code>, <code>LoadTaxonomy</code> and the launcher's deprecation warning), so nothing outside the watched set is read (SR4); a <code>dir</code> or <code>git</code> source with the catalog off is not taken for a catalog source, and a git source does not watch sidecars or marketplace files. <code>ccshelf catalog init --profiles-only</code> writes ccshelf.toml, CODEOWNERS, a profiles-only README, .gitattributes, .gitignore and a lint-only <code>validate.yml</code> (same SHA pins) and no marketplace, sidecars, <code>catalog.yml</code> or <code>release.yml</code>; with it <code>--marketplace-name</code>, <code>--owner</code> and <code>--sidecars stub</code> are usage errors (exit 2), as is an existing marketplace file (the default one or one the config lists), an existing <code>ccshelf.toml</code> without <code>enabled = false</code> (add it yourself, or <code>--force</code> replaces the file with a <code>.bak</code>) and <code>--no-config</code> unless the existing config already has it; running init without the flag on a config that has <code>enabled = false</code> is a usage error too, so a re-run cannot add a marketplace.</strong></td><td>Scratch reproduction on 2026-10-08: <code>catalog init dir --no-marketplace --no-sidecars --no-workflows</code> still demanded <code>--marketplace-name</code> and printed next steps for <code>catalog build</code> and <code>compile</code>; <code>ccshelf lint</code> on such a repo failed with <code>CAT001 cannot read marketplace file</code> and one <code>CAT050 profile "x" has no bundle entry "profile-x"</code> per profile, so the validate workflow could not be used; the launcher (dir source, and git source by reading <code>internal/profile/gitsource</code>) already worked. Tests: <code>go test ./internal/orgconfig ./internal/catalog/lint ./internal/scaffold ./internal/cli/orgcmd ./internal/profile/gitsource</code>. No Claude Code behavior is involved. SR1 to SR5 are unchanged (no new setting reaches the generated settings; the workflow keeps its SHA pins and read-only token). Interactive init does not ask whether the repo is profiles-only (that would add a prompt to every scripted wizard run): pass <code>--profiles-only</code>, which the printed equivalent command keeps</td><td>High</td><td>An org wants plugins later (remove <code>enabled = false</code> and run init without the flag); or the interactive wizard should offer profiles-only; or <code>search</code> should work from a remote catalog of a profiles-only source</td></tr>
 <tr><td class="nw">D-53</td><td class="nw">2026-10-08</td><td><strong>Text that people and agents read follows the structural rules of ASD-STE100 Simplified Technical English (Issue 9, 2025). Strict mode applies to CLI messages and help, lint messages, schema and Action descriptions, and AGENTS.md. STE-flavored mode applies to the other docs, the site and new decision rows. Contributors change text when they edit it for another reason, with no bulk rewrite. <code>docs/research/</code> and existing decision rows are out of scope. The STE dictionary is not used, and the text is never called STE-compliant. CI does not check it.</strong> The rules are in AGENTS.md, "Writing style".</td><td>User decision (option A of an assessment: a writing convention, no tooling). ASD does not permit reproduction of the standard without written authority, so the dictionary cannot be in an MIT repo (R4) <span class="R">R</span>. The source is the <code>asd-ste100</code> skill, which quotes Issue 9, page 2. The official FAQ returned 403. On 2026-10-08 the skill's regex linter found about 3 to 5.5 findings per 100 words in <code>docs/</code>, mostly semicolons, long sentences and possible passive voice.</td><td>User, license <span class="R">R</span></td><td>The project wants a CI check (the pinned linter with a baseline that can only go down), the routing eval tests STE-style plugin descriptions for catalog lint rules, or a rewrite loses meaning</td></tr>
-<tr><td class="nw">D-54</td><td class="nw">2026-10-08</td><td><strong>One-time rewrite of existing text to the D-53 rules, as an exception to its "change text when touched" rule.</strong> In scope: CLI help and messages, lint messages, schema and Action descriptions, scaffold templates, the root Markdown files, <code>docs/design/</code>, the site, and Go doc comments in STE-flavored mode. Out of scope: inline comments, <code>docs/research/</code> and existing decision rows. After the rewrite, the D-53 rule applies again. Amends D-53.</td><td>User decision. One reviewed pull request is cheaper than a slow drift. The change keeps every identifier, flag, exit code and machine-readable output. Tests and goldens that check message text change in the same commit.</td><td>User</td><td>A reviewer finds that the rewrite changed meaning, or a script depends on the old message text</td></tr>
+<tr><td class="nw">D-54</td><td class="nw">2026-10-08</td><td><strong>One-time rewrite of existing text to the D-53 rules, as an exception to its "change text when touched" rule.</strong> In scope: CLI help and messages, lint messages, schema and Action descriptions, scaffold templates, the root Markdown files, <code>docs/design/</code>, the site, and Go doc comments in STE-flavored mode. Out of scope: inline comments, <code>docs/research/</code> and existing decision rows. The same pull request also removes repetition: each fact keeps one full home (design docs for detail, <code>SECURITY.md</code> for what a release and the installer verify, <code>AGENTS.md</code> for every agent rule), and the other places link to it. After the rewrite, the D-53 rule applies again. Amends D-53.</td><td>User decision. One reviewed pull request is cheaper than a slow drift. The change keeps every identifier, flag, exit code and machine-readable output. Tests and goldens that check message text change in the same commit.</td><td>User</td><td>A reviewer finds that the rewrite changed meaning, or a script depends on the old message text</td></tr>
 </tbody></table>
 <h3 id="decisions-superseded-or-corrected">Superseded or corrected</h3>
 <table><thead><tr><th>ID</th><th>Was</th><th>Replaced by</th></tr></thead><tbody>
@@ -333,7 +333,7 @@ draw(false);
 <section id="roadmap">
 <h2>Roadmap</h2>
 <p>Staged plan. Decisions and open questions are in <a href="#decisions">../DECISIONS.md</a>.</p>
-<p><strong>Direction (decided 2026-10-06, after the adversarial review): evidence first, then trimmed scope.</strong> This supersedes the earlier "both tracks in parallel" build order. The review's verdict was that the mechanism is sound but the plan was wider than its evidence. It also found that the benefit the pitch rests on (better skill routing, less clutter) was never measured.</p>
+<p><strong>Direction (decided 2026-10-06, after the adversarial review): evidence first, then trimmed scope</strong> (D-19, which supersedes the "both tracks in parallel" build order, S-01). The review's verdict was that the mechanism is sound but the plan was wider than its evidence. It also found that the benefit the pitch rests on (better skill routing, less clutter) was never measured.</p>
 <h3 id="roadmap-phase-0-evidence-before-writing-product-code">Phase 0: evidence (before writing product code)</h3>
 <ol>
 <li><strong>Routing eval.</strong> Run 20 or more realistic prompts on a real plugin setup of the size the project targets (for example with <code>claude plugin eval</code> or <code>-p</code> runs). Compare the full set with a masked profile. Record which skill or plugin fires and whether it was the intended one. Fix the success criterion before running. The launcher is worth building only if the masked set measurably improves correct-first-try activation or reduces wrong-skill activations. If it does not, the launcher is documented as an alias recipe (<code>dry-run</code> prints the exact command) and not built as a product.</li>
@@ -347,13 +347,7 @@ draw(false);
 <li><strong>Bundle and masking prototype (T7).</strong> Does masking a plugin that an installed bundle depends on break the bundle? It needs a second config directory and a login only the user can do. It also settles whether <code>profile = bundle</code> stays the bridge between the launcher and the catalog.</li>
 <li><strong>Stage 0 on Linux and Windows</strong> (including <code>windows-11-arm</code> if a runner is used), repeating T1, T2 and the concurrency check, plus the MCP <code>cmd /c</code> question.</li>
 <li><strong>Measure MCP and connector removal</strong> through the settings keys (the one measurement that suggested a real saving).</li>
-<li><strong>Kill and obsolescence criteria,</strong> written down now and reviewed at every Claude Code minor release:
-<ul>
-<li>A native allowlist or default-deny <code>enabledPlugins</code> mode.</li>
-<li>A native task-scoped profiles feature (not #91770, which is about accounts).</li>
-<li>A faceted <code>/plugin</code> Discover.</li>
-<li>An existing tool that covers the gaps.</li>
-</ul></li>
+<li><strong>Kill and obsolescence criteria,</strong> written down now and reviewed at every Claude Code minor release (K1 to K12 below).</li>
 </ol>
 <h3 id="roadmap-phase-1-mvp-if-phase-0-supports-it">Phase 1: MVP, if Phase 0 supports it</h3>
 <ul>
@@ -378,7 +372,7 @@ draw(false);
 <li>The interactive wizards beyond the picker.</li>
 </ul>
 <h3 id="roadmap-what-changed-from-the-earlier-roadmap">What changed from the earlier roadmap</h3>
-<p>Both tracks in parallel became evidence first. The shared <code>core/</code> is built only as far as the MVP needs. The catalog track starts with <code>CATALOG.md</code>, not the site. Open source remains the direction, but the scaffolding is gated on employer approval.</p>
+<p>The shared <code>core/</code> is built only as far as the MVP needs. The catalog track starts with <code>CATALOG.md</code>, not the site (Phase 1). Open source remains the direction, but the scaffolding is gated on employer approval.</p>
 <h3 id="roadmap-kill-and-obsolescence-criteria-phase-0-6-written-2026-10-06">Kill and obsolescence criteria (Phase 0.6, written 2026-10-06)</h3>
 <p>Written down before the evidence is in, so that stopping or shrinking is a decision made against a rule and not against sunk cost. "Stop" means archive the launcher and keep nothing but a documented recipe. "Shrink" means keep the smaller part that still earns its place (usually the catalog). Each trigger names how to check it. Claims about what Claude Code does today are <span class="V">V</span> only where <a href="#stage0">stage0.md</a> verified them. Everything about future releases is <span class="U">U</span>.</p>
 <h4 id="roadmap-a-the-launcher-stops-being-worth-building-stop-or-shrink-to-an-alias-recipe">A. The launcher stops being worth building (stop or shrink to an alias recipe)</h4>
@@ -424,8 +418,7 @@ draw(false);
 </ol></li>
 </ul>
 <h3 id="roadmap-non-goals-for-now">Non-goals (for now)</h3>
-<p>Deferred to Phase 2: accounts, the trust lockfile and git sources, <code>compile</code> and committed bundles, <code>recommend</code>, the static catalog site and taxonomy.</p>
-<p>Other non-goals:</p>
+<p>Phase 2 lists the deferred items. Other non-goals:</p>
 <ul>
 <li>A registry server/DB.</li>
 <li>Vector search.</li>
@@ -480,7 +473,7 @@ draw(false);
 <h2>Architecture</h2>
 <p>Code layout of the tool repo, design principles and the Go stack. For the org data repo see <a href="#catalog">catalog-and-org-repo.md</a>.</p>
 <h3 id="architecture-code-layout-and-principles">Code layout and principles</h3>
-<p><strong>Code layout of the tool repo</strong> (the public repo). <a href="#catalog">catalog-and-org-repo.md</a> describes the org's private data repo. One Go module builds one binary. The module has three packages, and none depends on another except on <code>core</code>:</p>
+<p>One Go module builds one binary. The module has three packages, and none depends on another except on <code>core</code>:</p>
 <ul>
 <li><code>core/</code>: read <code>marketplace.json</code> and installed state (<code>claude plugin list --json</code> for installed plugins, <code>--available</code> when the catalog needs uninstalled ones), resolve sets. Pure, no side effects.</li>
 <li><code>profiles/</code>: local per-terminal launcher. Depends on <code>core</code>.</li>
@@ -498,16 +491,16 @@ draw(false);
 </ol>
 <h3 id="architecture-go-stack-choices-proposed">Go stack choices (proposed)</h3>
 <ul>
-<li>Module layout: <code>core/</code>, <code>profiles/</code>, <code>catalog/</code> as Go packages in one module. One <code>ccshelf</code> binary with subcommands (project and command name <code>ccshelf</code>, see <a href="#project">project.md</a>). Cobra or a small stdlib-based CLI parser. Stdlib <code>os/exec</code>, <code>encoding/json</code>, <code>html/template</code>, <code>embed</code>.</li>
+<li>One <code>ccshelf</code> binary with subcommands (project and command name <code>ccshelf</code>, see <a href="#project">project.md</a>). Cobra or a small stdlib-based CLI parser. Stdlib <code>os/exec</code>, <code>encoding/json</code>, <code>html/template</code>, <code>embed</code>.</li>
 <li>TOML: a maintained library (<code>pelletier/go-toml/v2</code> or <code>BurntSushi/toml</code>). Pick one that preserves useful error positions.</li>
 <li>JSON Schema validation for manifests: a Go validator library, with schemas in <code>schema/</code> shared with editors.</li>
 <li>Git access for <code>git</code> sources: shell out to the user's <code>git</code> (inherits credential helper/SSH config, important for GHE) rather than embedding a git library.</li>
 <li>Catalog frontend: generated static HTML plus one small vanilla JS file for filtering. Data in <code>catalog.json</code>.</li>
-<li>Release: <code>goreleaser</code>. CI matrix on <code>macos-latest</code>, <code>ubuntu-latest</code>, <code>windows-latest</code> (see cross-platform section).</li>
+<li>Release: <code>goreleaser</code>. CI matrix on <code>macos-latest</code>, <code>ubuntu-latest</code>, <code>windows-latest</code> (see <a href="#platform">platform.md</a>).</li>
 <li>Tests: golden files for generated settings, a fake <code>claude</code> binary built from <code>testdata/</code>, opt-in real-<code>claude</code> integration test.</li>
 </ul>
 <h3 id="architecture-repo-layout">Repo layout</h3>
-<p>Tool repo (this one): <code>core/ profiles/ catalog/ schema/ action/ site/ examples/ docs/</code>. Org data repo: see <a href="#catalog">catalog-and-org-repo.md</a> (marketplace, plugins, <code>profiles/</code>, generated <code>bundles/</code>, <code>catalog/</code> sidecars, org config, CI). The built catalog output is not committed.</p>
+<p>Tool repo (this one): <code>core/ profiles/ catalog/ schema/ action/ site/ examples/ docs/</code>. Org data repo: see <a href="#catalog">catalog-and-org-repo.md</a>, "Layout".</p>
 </section>
 
 <section id="launcher">
@@ -551,7 +544,7 @@ draw(false);
        --model opus --effort high                                  # if the profile sets them
        --resume                                                    # passthrough args</code></pre>
 <p>The generated settings file hides plugins, skills, connectors and other MCP servers (<code>enabledPlugins</code>, <code>skillOverrides</code>, <code>disableClaudeAiConnectors</code>, <code>deniedMcpServers</code> with full server names). So the core path uses no sideload flags. The launcher <strong>validates the generated JSON before every launch</strong>, because Claude Code ignores an invalid settings file silently (exit 0, no message). With <code>inherit_user_settings = false</code> it adds <code>--setting-sources project,local</code> (this drops the user layer, and the launcher re-adds only what the profile sets). If policy blocks a flag or key, behavior follows <code>[policy] on_blocked</code> (<code>warn</code> drops that part, <code>fail</code> refuses).</p></li>
-<li><strong>Start <code>claude</code> and step aside</strong>. On <strong>Unix, <code>exec</code></strong>: the launcher process is replaced, so terminal job control and exit codes behave exactly as for plain <code>claude</code>. On <strong>Windows, spawn</strong> a child with inherited stdio, ignore Ctrl+C in the launcher, forward termination and return the child's exit code. Passthrough works for non-interactive use: <code>ccshelf run sre -- -p "summarize this repo"</code>.</li>
+<li><strong>Start <code>claude</code> and step aside</strong>: <code>exec</code> on Unix, spawn and wait on Windows (see <a href="#platform">platform.md</a>, "Starting <code>claude</code>"). Passthrough works for non-interactive use: <code>ccshelf run sre -- -p "summarize this repo"</code>.</li>
 <li><strong>Write nothing shared</strong>: it never touches <code>~/.claude/settings.json</code>, <code>~/.claude.json</code> or the plugin cache (Claude Code rewrites its own state as usual).</li>
 </ol>
 <p>Concurrency: two terminals produce two command lines pointing at two immutable files, so neither reads anything the other wrote (tested on macOS with three parallel sessions).</p>
@@ -569,7 +562,7 @@ draw(false);
 </tbody></table>
 <p>Not hidden by a profile: a repo's own <code>.claude/skills/</code>, <code>.claude/agents/</code> and <code>.claude/settings.json</code> still apply. Its <code>.mcp.json</code> also applies, unless the profile uses <code>strict</code>, which drops project <code>.mcp.json</code> servers too. <code>strict</code> degrades to a <code>deniedMcpServers</code> list in two cases:</p>
 <ul>
-<li>Managed policy blocks <code>--strict-mcp-config</code>.</li>
+<li>Managed policy blocks <code>--strict-mcp-config</code> and the profile has <code>on_blocked = "warn"</code>. With <code>on_blocked = "fail"</code>, the launcher exits.</li>
 <li>The org protects an MCP server the profile does not provide.</li>
 </ul>
 <p>The list holds the installed plugins' servers (never the profile's own or protected ones). The launcher then warns that servers from the user's own settings or project files stay available. Plugin masking outranks project settings (<code>--settings</code> has higher precedence).</p>
@@ -600,7 +593,7 @@ config_dir = "~/.claude-personal"</code></pre>
 <li><strong>Installed plugins and marketplaces are per config dir</strong>, so each account must install its plugins (<code>/plugin marketplace add ...</code> and installs) separately. The launcher's installed-plugin list is also per account. A profile can list plugins that exist in one account but not another. The launcher then reports "not installed in this account".</li>
 <li><strong>Plugin cache is duplicated per account.</strong> Do not symlink <code>plugins/</code> between accounts: that triggers "corrupted" warnings (#82272, #85325). Accept the duplication, or evaluate <code>CLAUDE_CODE_PLUGIN_SEED_DIR</code> (a read-only pre-populated plugin dir for containers, where plugins still must be enabled) as a way to dedupe. Untested.</li>
 <li><strong>Org profiles are shared across accounts</strong>, because they come from the profile sources, not from the config dir. The <code>plugin</code> source type needs the data-only plugin installed in each account that uses it. <code>git</code> and <code>dir</code> sources work in any account.</li>
-<li><strong>Auth storage differs by OS</strong>: the macOS Keychain entry is keyed per config dir. Linux and Windows keep <code>.credentials.json</code> inside the dir. Either way each account has its own login.</li>
+<li><strong>Auth storage differs by OS</strong> (see <a href="#platform">platform.md</a>, "Facts from the docs"). Either way each account has its own login.</li>
 <li><strong>Managed settings still apply to every account</strong> (Claude Code reads them from system paths).</li>
 <li><strong>Base preferences diverge</strong>: the user layer (<code>settings.json</code>) is per account, while profile settings arrive through <code>--settings</code> and are common to all accounts.</li>
 </ul>
@@ -669,15 +662,9 @@ trust_project_profiles = false # project .ccshelf/ folders are ignored unless tr
 on_change = "prompt"          # prompt | fail. What to do when the resolved closure of an accepted profile changes in ANY way
                               # (there is no auto-accept: `allow` is rejected). Risky changes (a new MCP command, env
                               # name, prompt text or plugin, or any change to the profile's controls) are listed first in the diff and marked risky.</code></pre>
-<p>ccshelf reads <code>catalog.remote_url</code> only from the user's config file. It must be an HTTPS URL without embedded credentials, a query string or a fragment. Search fetches it on each invocation, checks the <code>catalog.json</code> format version, and rejects responses larger than 8 MiB. It supports <code>ccshelf search</code> and profile recommendations. Plugin recommendations still need the org data repo's marketplace relevance rules. Commands that build or lint the catalog also need the source files. <strong>Precedence:</strong> the order of <code>[[sources]]</code> does not matter. Every source is checked, and a name found in more than one source is a collision error, with one exception. Exactly one personal profile may shadow a name from the non-project sources (org, git, plugin), and the launcher prints a warning naming what it shadows. Only the built-in personal directory is personal-kind. Any other configured <code>dir</code> source, even your own folder, is an org source and collides instead of shadowing. <code>extends</code> parents are looked up by the same rule across all sources. So an org profile <code>frontend</code> that extends <code>base</code> uses the user's personal <code>base</code> when one exists (with the shadow warning). The resolved closure, and so trust, covers whichever parent was chosen. <strong>Project profiles (a <code>.ccshelf/</code> folder in a repository) are off by default</strong> (SR2). When explicitly trusted per repo, they can never shadow a name from another source and can never define MCP commands, env or prompt text. A project profile is also never shadowed by another source. If a trusted repo's <code>.ccshelf/</code> holds a profile with the same name as an org or personal one, running that name fails with a collision error. That fails closed, but it means a trusted repo can block a name for as long as it is trusted.</p>
-<p>On <code>strict</code>: <code>mcp.servers</code> is a union across the chain, so a child inherits strict together with every server listed by it and its parents. Only when no level lists a server does strict run with an empty set, which drops the user's own MCP servers. <code>--strict-mcp-config</code> with an empty config removes all MCP servers <span class="V">V</span> (Stage 0 T5, <code>../research/stage0.md</code>). Where the flag cannot be used (managed policy blocks it with <code>on_blocked = "warn"</code>, or a protected MCP server is not in the profile), the launcher uses <code>deniedMcpServers</code> instead. With <code>on_blocked = "fail"</code>, it exits.</p>
-<p><strong>Trust model (SR1 and SR2).</strong> A shared profile is a closed schema: it cannot carry permissions, hooks, auth or endpoint settings, and MCP definitions live in a reviewed registry. But it still selects plugins and MCP servers that run code, so loading one is effectively running code from that source. The launcher therefore:</p>
-<ol>
-<li>loads org profiles only from sources already trusted by the org (a pinned git ref, later an allowlisted marketplace), and project profiles only after explicit per-repo trust.</li>
-<li>records, in a lockfile (<code>~/.config/ccshelf/lock.json</code>), a hash of the <strong>resolved closure</strong> (profile, parents, referenced registry entries, prompt bytes) plus the <strong>commit SHA</strong> the tag resolved to.</li>
-<li>shows a diff and asks before accepting (<code>ccshelf trust &lt;profile&gt;</code>) when a closure that includes a non-personal (org or project) source changes in any way. This includes identity-only fields such as <code>description</code>, <code>when_to_use</code>, <code>model</code> or <code>effort</code>. The diff lists risky items first and marks them: every profile's controls (plugins, skills, MCP servers and controls, <code>extends</code>, account, <code>inherit_user_settings</code>, <code>session.env</code>, prompt file name, <code>on_blocked</code>), registry entries, prompt text and plugins. Only the identity item (name, description, owner, status, <code>when_to_use</code>, <code>avoid_when</code>, <code>model</code>, <code>effort</code>) is not risky. A tag that now resolves to a different SHA is an untrusted update. Non-interactive runs fail closed (exit 4). With <code>[trust] on_change = "fail"</code>, a changed or moved closure exits 4 even on a terminal. A closure never trusted before still prompts on a terminal. A closure made only of personal profiles is always trusted.</li>
-<li>never bypasses org policy (unchanged principle).</li>
-</ol>
+<p>ccshelf reads <code>catalog.remote_url</code> only from the user's config file. It must be an HTTPS URL without embedded credentials, a query string or a fragment. Search fetches it on each invocation, checks the <code>catalog.json</code> format version, and rejects responses larger than 8 MiB. It supports <code>ccshelf search</code> and profile recommendations. Plugin recommendations still need the org data repo's marketplace relevance rules. Commands that build or lint the catalog also need the source files. <strong>Precedence:</strong> the order of <code>[[sources]]</code> does not matter. Every source is checked, and a name found in more than one source is a collision error, with one exception. Exactly one personal profile may shadow a name from the non-project sources (org, git, plugin), and the launcher prints a warning naming what it shadows. Only the built-in personal directory is personal-kind. Any other configured <code>dir</code> source, even your own folder, is an org source and collides instead of shadowing. <code>extends</code> parents are looked up by the same rule across all sources. So an org profile <code>frontend</code> that extends <code>base</code> uses the user's personal <code>base</code> when one exists (with the shadow warning). The resolved closure, and so trust, covers whichever parent was chosen. <strong>Project profiles (a <code>.ccshelf/</code> folder in a repository) are off by default</strong> (SR2, which also limits what they can define). When explicitly trusted per repo, they can never shadow a name from another source, and another source never shadows them. If a trusted repo's <code>.ccshelf/</code> holds a profile with the same name as an org or personal one, running that name fails with a collision error. That fails closed, but it means a trusted repo can block a name for as long as it is trusted.</p>
+<p>On <code>strict</code>: <code>mcp.servers</code> is a union across the chain, so a child inherits strict together with every server listed by it and its parents. Only when no level lists a server does strict run with an empty set, which drops the user's own MCP servers. <code>--strict-mcp-config</code> with an empty config removes all MCP servers <span class="V">V</span> (Stage 0 T5, <code>../research/stage0.md</code>). Where the flag cannot be used, the launcher uses <code>deniedMcpServers</code> instead (see <a href="#launcher">launcher.md</a>, "2. What is shared between profiles").</p>
+<p><strong>Trust model (SR1 and SR2).</strong> A shared profile is a closed schema, and MCP definitions live in a reviewed registry. The launcher loads it only from a trusted source, records a hash of its resolved closure in a lockfile and asks before it accepts a change. The full rules are in <a href="#security">security.md</a>, SR2.</p>
 <p>Still undecided:</p>
 <ul>
 <li>Whether the data-only plugin approach works smoothly when <code>strictKnownMarketplaces</code> or other policy applies (untested).</li>
@@ -904,32 +891,18 @@ on_blocked = "warn"           # warn | fail. What to do when org policy blocks s
 <li>A write re-encodes the struct, so <strong>comments and layout are lost</strong>. The summary says so when the file has a <code>#</code> comment. The command keeps the previous file as <code>config.toml.bak</code> (0600, replaced atomically, a symlink at either name is refused).</li>
 <li>The command compares the bytes read at the start again just before the write. If the file changed meanwhile, nothing is written (exit 1, <code>changed while editing</code>).</li>
 <li>The confirmation diff compares the file as it is with the exact bytes about to be written, so dropped comments, added empty tables and any layout change are visible.</li>
-<li>The command validates paths (<code>~</code>, <code>$VAR</code> in account directories and <code>claude.path</code>) as they would expand, but writes them as the user wrote them, so a <code>set</code> changes only its own lines. <code>account add</code> and <code>rm</code> still use the plain, expanding save and keep neither the backup nor the changed-file check.</li>
+<li>The command validates paths (<code>~</code>, <code>$VAR</code> in account directories and <code>claude.path</code>) as they would expand, but writes them as the user wrote them, so a <code>set</code> changes only its own lines. <code>account add</code> and <code>rm</code> still use the plain, expanding save (<code>config.Save</code>) and keep neither the backup nor the changed-file check.</li>
 <li>The command refuses duplicate sources (same type and repository, directory or plugin id) with a hint to use <code>source pin</code> or <code>source rm</code>. It compares git URLs after lower-casing the host and dropping a trailing <code>/</code> and <code>.git</code>, and <code>git@host:p</code> equals <code>ssh://git@host/p</code>. Another folder (<code>--path</code>) of the same repository is a different source.</li>
 <li>Validation errors name sources from 1, like <code>show</code> and <code>ls</code>.</li>
 </ul></li>
-<li><strong><code>config edit</code></strong> opens a copy (0600, created exclusively in the config folder) in <code>$VISUAL</code> or <code>$EDITOR</code> and checks it like the real file. Only if the copy is valid does it replace <code>config.toml</code> with the text exactly as saved (comments kept, previous file in <code>.bak</code>). For an invalid copy, the command prints the errors (with line and column when the parser gives one, and value errors name the key). It leaves the original untouched, keeps the copy and exits 1. If the editor fails, the command keeps the copy and prints its path, as for an invalid copy. A new <code>config edit</code> starts from the current file, so copy the fix over. <code>config edit</code> may repair a currently invalid file, needs a terminal (<code>--path</code> prints the path instead), and does not create a missing file. Account commands (<code>account add</code> and <code>rm</code>) still use plain <code>config.Save</code> without the backup and changed-file check.</li>
+<li><strong><code>config edit</code></strong> opens a copy (0600, created exclusively in the config folder) in <code>$VISUAL</code> or <code>$EDITOR</code> and checks it like the real file. Only if the copy is valid does it replace <code>config.toml</code> with the text exactly as saved (comments kept, previous file in <code>.bak</code>). For an invalid copy, the command prints the errors (with line and column when the parser gives one, and value errors name the key). It leaves the original untouched, keeps the copy and exits 1. If the editor fails, the command keeps the copy and prints its path, as for an invalid copy. A new <code>config edit</code> starts from the current file, so copy the fix over. <code>config edit</code> may repair a currently invalid file, needs a terminal (<code>--path</code> prints the path instead), and does not create a missing file.</li>
 </ul>
 <h4 id="cli-human-readable-presentation-d-42">Human-readable presentation (D-42)</h4>
 <p>The CLI uses restrained presentation: task-grouped root help, a short getting-started sequence, readable labels, and explicit <code>hint:</code> lines rather than banners or emoji. Root help groups commands into profiles, discovery and diagnostics, org data repo maintenance, and setup and utilities. Usage errors point to the failing command's <code>--help</code> unless a more specific recovery hint or missing-value instruction is already available.</p>
 <p>Tables keep their aligned layout at normal widths. When the terminal cannot fit even the minimum column widths, they switch to wrapped, labeled records separated by blank lines, retaining values rather than truncating them. The fallback also works with <code>--plain</code>. Piped output has no terminal-width limit and retains the aligned layout. A terminal only one column wide cannot display a two-column character, so that character becomes <code>?</code> in the fallback.</p>
 <p>An empty profile or account list, a search with no matches, and an empty recommendation result are successful results on stdout, with a next-step <code>hint:</code>. Diagnostics and prompts remain on stderr. JSON keeps its existing envelope, collection types and exit codes, without human-only empty-state text. Scripts should use <code>--json</code> rather than parse presentation layouts.</p>
 <h4 id="cli-update-d-40"><code>update</code> (D-40)</h4>
-<p><code>ccshelf update</code> follows the rules above:</p>
-<ul>
-<li>Every flag has a prompt-free form.</li>
-<li>The confirmation is a plain yes/no (default no) because an update accepts no trust.</li>
-<li>The interactive run prints <code>Equivalent: ccshelf update --version vX.Y.Z --yes</code> (plus <code>--force</code>, <code>--allow-downgrade</code> and <code>--require-signature</code> when given, so it replays the same).</li>
-<li>Without a terminal and without <code>--yes</code> it exits 2 naming <code>--yes</code> (nothing to confirm, such as "up to date", exits 0).</li>
-</ul>
-<p>Exit codes and output:</p>
-<ul>
-<li><code>--require-signature</code> without cosign exits 1 before any network access.</li>
-<li><code>--check</code> always exits 0 and has a JSON form (envelope kind <code>update</code>, fields <code>action</code>, <code>current</code>, <code>latest</code>, <code>updateAvailable</code>, <code>releaseUrl</code>, <code>installMethod</code>, and for an install <code>executable</code>, <code>backup</code> and <code>signature</code>).</li>
-<li>Network, verification and permission failures exit 1 with a hint and change nothing.</li>
-<li>These exit 2: a downgrade without <code>--allow-downgrade</code> (<code>--force</code> never implies it), a bad <code>--version</code> and contradictory flags.</li>
-</ul>
-<p><a href="#update">update.md</a> has the command's design, trust model and the automatic update. The <code>[update]</code> configuration keys are <code>mode</code> (<code>off</code> by default, <code>notify</code>, <code>install</code>), <code>interval</code>, <code>base_url</code>, <code>cosign_identity_repo</code> and <code>asset_hosts</code>. The automatic update acts only with a terminal on stdin, stdout and stderr and never under <code>CI</code>. <code>CCSHELF_NO_UPDATE_CHECK</code> turns it off.</p>
+<p><code>ccshelf update</code> follows the rules above. Its flags, confirmation, <code>Equivalent:</code> line, exit codes, <code>--json</code> output, trust model and the automatic update (<code>[update]</code> keys, terminal and <code>CI</code> conditions, <code>CCSHELF_NO_UPDATE_CHECK</code>) are in <a href="#update">update.md</a>.</p>
 <h4 id="cli-scope-for-the-first-release">Scope for the first release</h4>
 <p>Interactive:</p>
 <ul>
@@ -951,7 +924,7 @@ on_blocked = "warn"           # warn | fail. What to do when org policy blocks s
 <li>no network use.</li>
 </ul></li>
 <li><strong>Testing:</strong> non-interactive behavior with golden files on every OS. Interactive flows with the scripted <code>Prompter</code> in unit tests plus a small pty smoke test per OS (ConPTY on Windows).</li>
-<li><strong>Cross-platform:</strong> raw-mode terminal handling differs per OS. The picker must restore the terminal before spawning or replacing the process, which interacts with the Windows spawn-and-wait versus Unix <code>exec</code> choice.</li>
+<li><strong>Cross-platform:</strong> raw-mode terminal handling differs per OS. The terminal restore of rule 6 interacts with the Windows spawn-and-wait versus Unix <code>exec</code> choice.</li>
 <li><strong>Security:</strong> prompts must not echo secrets, and an interactive default must never be less safe than the flag default. The implementation:
 <ul>
 <li>A question has no default unless it opts in (<code>HasDefault</code>).</li>
@@ -1011,21 +984,16 @@ on_blocked = "warn"           # warn | fail. What to do when org policy blocks s
 </tbody></table>
 <p>Consequences:</p>
 <ul>
-<li><strong>Reusable CI:</strong> the org data repo's workflow calls the public tool, either <code>uses: &lt;owner&gt;/ccshelf/action@&lt;full commit SHA&gt;</code> or a step that downloads a pinned release binary. GHE Cloud can use public actions directly. <strong>GHE Server needs GitHub Connect or a mirror</strong> (e.g. <code>actions-sync</code>), or the binary-download variant (also mirrorable to an internal registry). The docs must describe both variants. The logic stays in the binary (R2).</li>
-<li><strong>Pin everything (SR5).</strong> The tool runs in the org's CI and on developers' machines. So:
-<ul>
-<li>The org data repo pins the tool by full commit SHA (never a moving tag).</li>
-<li>The Action embeds the expected SHA-256 of the binary it downloads.</li>
-<li>Releases are signed with provenance.</li>
-</ul></li>
-<li><strong>Starter template</strong> (layout below): ship a template/example org data repo (<code>examples/org-data-repo/</code>, possibly also a GitHub template repository). It has a sample <code>marketplace.json</code>, <code>profiles/</code>, a CI workflow and a catalog publish recipe, so adopting takes minutes.</li>
+<li><strong>Reusable CI:</strong> the org data repo's workflow calls the public tool, either <code>uses: &lt;owner&gt;/ccshelf/action@&lt;full commit SHA&gt;</code> or a step that downloads a pinned release binary. GHE Cloud can use public actions directly. <strong>GHE Server needs GitHub Connect or a mirror</strong> (e.g. <code>actions-sync</code>), or the binary-download variant (also mirrorable to an internal registry). The docs must describe both variants. The logic stays in the binary (R2, see <a href="#platform">platform.md</a>).</li>
+<li><strong>Pin everything (SR5).</strong> The tool runs in the org's CI and on developers' machines, so the org data repo pins the tool by full commit SHA, never a moving tag. The Action checksum and release signing rules are in <a href="#security">security.md</a>, SR5.</li>
+<li><strong>Starter template:</strong> ship <code>examples/org-data-repo/</code> (possibly also a GitHub template repository), so adopting takes minutes. "What the tool repo contains" lists its content.</li>
 <li><strong>Configuration lives with the adopter, not in the tool:</strong> profile sources (<code>dir</code>/<code>git</code>, later <code>plugin</code>), the catalog metadata schema location and lint rules come from two files, with sane defaults:
 <ul>
 <li>the org's <code>ccshelf.toml</code> in the org data repo</li>
 <li>the user's own <code>~/.config/ccshelf/config.toml</code>.</li>
 </ul>
 <p>The tool repo never needs to know about a particular org.</p></li>
-<li><strong>Catalog hosting is the adopter's choice</strong> (R2): the tool outputs a plain static directory. The starter template shows GitHub Pages and an internal static host. We don't pick one for the org.</li>
+<li><strong>Catalog hosting is the adopter's choice</strong> (R2, see <a href="#platform">platform.md</a>): the starter template shows GitHub Pages and an internal static host.</li>
 <li><strong>Telemetry:</strong> none by default. An open-source tool that runs in corporate CI must not phone home.</li>
 <li><strong>Security reporting, license and contribution docs</strong> live in the public repo (R4).</li>
 </ul>
@@ -1038,7 +1006,7 @@ on_blocked = "warn"           # warn | fail. What to do when org policy blocks s
 <li><strong>Reusable GitHub Action</strong> and the release and packaging config (goreleaser, Homebrew, Scoop, WinGet).</li>
 <li><strong>Tests and fixtures:</strong> the fake <code>claude</code> test double, golden files, and fixtures that simulate managed policy.</li>
 <li><strong>Docs:</strong> the research notes, <code>AGENTS.md</code>, the license, security policy and contribution guide.</li>
-<li><strong>Starter template</strong> (<code>examples/org-data-repo/</code>): a complete but fictional org data repo (sample <code>marketplace.json</code>, a couple of example plugins, profiles such as <code>frontend</code> and <code>sre</code>, sidecars, org config and CI workflows). Adopters copy it to start, and it doubles as a test fixture.</li>
+<li><strong>Starter template</strong> (<code>examples/org-data-repo/</code>): a complete but fictional org data repo (sample <code>marketplace.json</code>, a couple of example plugins, profiles such as <code>frontend</code> and <code>sre</code>, sidecars, org config, CI workflows and a catalog publish recipe). Adopters copy it to start, and it doubles as a test fixture.</li>
 </ul>
 <p>Never in the tool repo:</p>
 <ul>
@@ -1098,7 +1066,7 @@ on_blocked = "warn"           # warn | fail. What to do when org policy blocks s
 │       └── release.yml                  # manual or scheduled: tag the repo for consumers to pin
 ├── docs/                                # contributor guide: add a plugin, metadata fields, deprecation
 └── README.md                            # links to the catalog site and the contributor guide</code></pre>
-<p>Not in the repo: the built catalog (<code>dist/</code>, published as an artifact or to a static host) and <code>catalog.json</code> (also built). The files above can reproduce them.</p>
+<p>Not in the repo: the built catalog (<code>dist/</code>) and <code>catalog.json</code> (see "CI workflows").</p>
 <h3 id="catalog-what-each-part-is">What each part is</h3>
 <table><thead><tr><th>Path</th><th>Written by</th><th>Committed?</th><th>Purpose</th></tr></thead><tbody>
 <tr><td><code>.claude-plugin/marketplace.json</code></td><td>Humans (platform-reviewed)</td><td>Yes</td><td>Native plugin list. Fields Claude Code reads: <code>name</code>, <code>source</code>, <code>description</code>, <code>category</code>, <code>tags</code>, <code>version</code>, <code>dependencies</code>, <code>relevance</code>, <code>author</code>.</td></tr>
@@ -1112,7 +1080,7 @@ on_blocked = "warn"           # warn | fail. What to do when org policy blocks s
 <tr><td><code>dist/</code>, <code>catalog.json</code></td><td>CI</td><td>No</td><td>Built catalog.</td></tr>
 </tbody></table>
 <h3 id="catalog-where-catalog-metadata-lives-a-sidecar-per-plugin-decided-2026-10-06">Where catalog metadata lives: a sidecar per plugin (decided 2026-10-06)</h3>
-<p>The earlier convention put <code>owner</code>, <code>status</code>, <code>when_to_use</code>, etc. into each marketplace entry's free-form <code>metadata</code>. That has a problem: with ~50 plugins in one <code>marketplace.json</code>, <strong><code>CODEOWNERS</code> can't route review per entry</strong>. So file ownership can't enforce the decided "authors write, platform team reviews" model. A sidecar file per plugin fixes this: a PR that touches <code>catalog/plugins/*.toml</code> requires platform review, while plugin source stays with the author's team.</p>
+<p>D-16 records the decision. The earlier convention put <code>owner</code>, <code>status</code>, <code>when_to_use</code>, etc. into each entry's free-form <code>metadata</code>. But with ~50 plugins in one <code>marketplace.json</code>, <strong><code>CODEOWNERS</code> can't route review per entry</strong>, so it can't enforce the "authors write, platform team reviews" model. A sidecar file per plugin fixes this: a PR that touches <code>catalog/plugins/*.toml</code> requires platform review, while plugin source stays with the author's team.</p>
 <ul>
 <li><code>marketplace.json</code> keeps only what Claude Code reads, plus <code>category</code> and <code>tags</code>, which are native. Whether the <code>/plugin</code> UI searches them is unverified.</li>
 <li>The catalog is <strong>derived from</strong> <code>marketplace.json</code> + sidecars + git data (last change, contributors). Nothing is duplicated into <code>metadata</code>.</li>
@@ -1179,16 +1147,8 @@ mcp_registry = "mcp/registry.toml"</code></pre>
 <tr><td><code>catalog.yml</code></td><td>merge to main</td><td><code>ccshelf catalog build</code>, then publish to the org's chosen host (Pages or any static host)</td></tr>
 <tr><td><code>release.yml</code></td><td>manual or scheduled</td><td>create a repo tag (for example <code>v2026.10.1</code>). Consumers pin profile sources to it</td></tr>
 </tbody></table>
-<p>All steps call the same pinned binary from the public tool repo (R2, R5): <code>uses: &lt;owner&gt;/ccshelf/action@&lt;full commit SHA&gt;</code> or a pinned release download whose SHA-256 is verified (SR5).</p>
-<p><strong>Workflow security (SR5).</strong></p>
-<ul>
-<li><code>permissions: {}</code> at the top of every workflow, granted per job (<code>contents: write</code> only for tagging, <code>pages</code> and <code>id-token</code> only for the catalog).</li>
-<li>Secrets (for example an Analytics API key) live in a protected environment deployable only from <code>main</code>. They are not sent to pull requests from forks.</li>
-<li>Never interpolate <code>${{ }}</code> values from plugin names, versions, descriptions or sidecars into shell. Pass them through <code>env:</code> and validate them (for example a semver pattern).</li>
-<li>Require code-owner review and at least two approvals through a ruleset, and dismiss stale reviews.</li>
-<li>The catalog build renders sidecar and marketplace text with <code>textContent</code> and a strict CSP. It renders Markdown with raw HTML off and only <code>http</code> and <code>https</code> links. The publish step fails unless Pages visibility is private or internal.</li>
-<li>PR preview artifacts are built from untrusted content and are not published.</li>
-</ul>
+<p>All steps call the same pinned binary from the public tool repo (R2, R5), through the Action or a release download (see "Reusable CI" above).</p>
+<p><strong>Workflow security (SR5).</strong> The rules for these workflows (permissions, secrets, <code>${{ }}</code> handling, review rulesets, catalog rendering and PR previews) are in <a href="#security">security.md</a>, SR5.</p>
 <h3 id="catalog-setting-up-the-data-repo-ccshelf-catalog-init-decided-2026-10-06-d-41">Setting up the data repo: <code>ccshelf catalog init</code> (decided 2026-10-06, D-41)</h3>
 <p><code>ccshelf catalog init [dir]</code> bootstraps a <strong>new</strong> org data repo in an empty directory. Or it retrofits an <strong>existing</strong> marketplace repo (one that has <code>.claude-plugin/marketplace.json</code> and/or <code>plugins/</code>) without changing anything that is already there. It is the organization's one-time setup. <code>ccshelf init</code> stays each developer's own configuration. The behavior below is implemented, and unit, golden and end-to-end tests cover it.</p>
 <h4 id="catalog-modes-and-the-plan">Modes and the plan</h4>
@@ -1229,7 +1189,7 @@ profiles/example.toml.sample          only with --example-profile: an all-commen
 <li><code>.gitattributes</code>, <code>.gitignore</code></li>
 <li><code>.github/workflows/validate.yml</code> with the lint step only (no <code>compile --check</code>, no catalog preview, no <code>catalog.yml</code>, no <code>release.yml</code>).</li>
 </ul>
-<p>With <code>--profiles-only</code>, <code>--marketplace-name</code> is not needed and is a usage error. So are <code>--owner</code> and <code>--sidecars stub</code>, and so is a directory that already has a marketplace file. An existing <code>ccshelf.toml</code> must already have <code>[catalog] enabled = false</code> (add it yourself, or <code>--force</code> replaces the file after saving <code>.bak</code>). Unless it has, the command refuses <code>--no-config</code>. The command ignores a <code>plugins/</code> directory, with a note. There are <strong>no built-in default profiles</strong> (R5): roles are the organization's choice. The one sample is commented out and carries a <code>.sample</code> suffix so that <code>ccshelf</code> never loads it. No organization name, host or data is in the templates.</p>
+<p>With <code>--profiles-only</code>, <code>--marketplace-name</code> is not needed and is a usage error. So are <code>--owner</code> and <code>--sidecars stub</code>, and so is a directory that already has a marketplace file. An existing <code>ccshelf.toml</code> must already have <code>[catalog] enabled = false</code> (add it yourself, or <code>--force</code> replaces the file after saving <code>.bak</code>). Unless it has, the command refuses <code>--no-config</code>. The command ignores a <code>plugins/</code> directory, with a note. There are <strong>no built-in default profiles</strong> (R5). The one sample is commented out and carries a <code>.sample</code> suffix so that <code>ccshelf</code> never loads it. No organization name, host or data is in the templates.</p>
 <h4 id="catalog-placeholders-and-the-lint-result">Placeholders and the lint result</h4>
 <p>A sidecar stub has:</p>
 <ul>
@@ -1344,15 +1304,25 @@ profiles/example.toml.sample          only with --example-profile: an all-commen
 <li><code>CCSHELF_PROFILE</code>.</li>
 </ul>
 <p>As defense in depth, the env policy first applies a denylist of known-dangerous prefixes such as <code>ANTHROPIC_</code>, <code>NODE_</code>, <code>PYTHON</code>, <code>JAVA_</code>, <code>LD_</code>, suffixes such as <code>_OPTIONS</code>, and exact names. The launcher passes <code>effort</code> as a command-line flag, not as a settings key. A profile can never write <code>permissions</code>, <code>hooks</code>, <code>apiKeyHelper</code>, <code>*McpServers</code> allow lists or <code>disableAllHooks</code>. Otherwise a profile's env alone could redirect every prompt and file to another endpoint or run code at process start. MCP server definitions are not part of a profile: a profile names servers, and the definitions live in a reviewed registry in the org data repo. A golden test proves that no profile, however crafted, produces a key outside the allowlist.</p>
-<p><strong>SR2: trust the resolved closure, pinned by commit SHA.</strong></p>
+<p><strong>SR2: trust the resolved closure, pinned by commit SHA.</strong> A shared profile cannot carry permissions, hooks, auth or endpoint settings (SR1). But it still selects plugins and MCP servers that run code, so loading one is effectively running code from that source.</p>
 <ul>
-<li>Every non-personal source needs explicit trust. Project sources (a <code>.ccshelf/</code> folder in a cloned repo) are <strong>off by default</strong>, and the user trusts them per repo (path plus hash, like direnv <code>allow</code>). A project source cannot shadow a name from another source (a collision is an error), and it can never define MCP commands, env or prompt text. Otherwise a malicious repository could run code through the launcher while skipping Claude Code's own workspace trust and per-server MCP approval.</li>
-<li>The lockfile hashes the <strong>fully resolved closure</strong>: the profile, its <code>extends</code> parents, the MCP registry entries it references, the prompt file bytes and the source commit SHA. A change to <code>mcp/registry.toml</code> that alters what <code>figma</code> runs changes the hash. For a closure that includes a non-personal source, every change needs trust again, including identity-only edits such as <code>description</code> or <code>model</code>. A personal-only closure is always trusted. The diff marks risky items and lists them first: profile controls, registry entries, prompt text and plugin includes (plugins carry hooks and MCP). With <code>[trust] on_change = "fail"</code> a changed closure exits 4 even on a terminal.</li>
+<li>Every non-personal source needs explicit trust. The launcher loads org profiles only from sources already trusted by the org (a pinned git ref, later an allowlisted marketplace). Project sources (a <code>.ccshelf/</code> folder in a cloned repo) are <strong>off by default</strong>, and the user trusts them per repo (path plus hash, like direnv <code>allow</code>). A project source can never define MCP commands, env or prompt text. Otherwise a malicious repository could run code through the launcher while skipping Claude Code's own workspace trust and per-server MCP approval.</li>
+<li>The lockfile (<code>~/.config/ccshelf/lock.json</code>) hashes the <strong>fully resolved closure</strong>: the profile, its <code>extends</code> parents, the MCP registry entries it references, the prompt file bytes and the source commit SHA. A change to <code>mcp/registry.toml</code> that alters what <code>figma</code> runs changes the hash.</li>
+<li>For a closure that includes a non-personal (org or project) source, every change needs trust again: <code>ccshelf trust &lt;profile&gt;</code> shows a diff and asks. This includes identity-only edits such as <code>description</code>, <code>when_to_use</code>, <code>model</code> or <code>effort</code>. A personal-only closure is always trusted. A closure never trusted before still prompts on a terminal.</li>
+<li>The diff lists risky items first and marks them:
+<ul>
+<li>every profile's controls (plugins, skills, MCP servers and controls, <code>extends</code>, account, <code>inherit_user_settings</code>, <code>session.env</code>, prompt file name, <code>on_blocked</code>)</li>
+<li>registry entries</li>
+<li>prompt text</li>
+<li>plugin includes (plugins carry hooks and MCP).</li>
+</ul>
+<p>Only the identity item (name, description, owner, status, <code>when_to_use</code>, <code>avoid_when</code>, <code>model</code>, <code>effort</code>) is not risky. With <code>[trust] on_change = "fail"</code> a changed or moved closure exits 4 even on a terminal.</p></li>
 <li>When trust is granted, ccshelf resolves a tag to a commit SHA and stores it in the lockfile. <code>run</code> uses the pinned commit (from the cache, without network, when it is already fetched). Only <code>ccshelf trust</code> and <code>ccshelf ls --refresh</code> notice a tag that later points elsewhere, and they show it as an untrusted update. Recommend tag-protection rulesets on the org data repo. Once a day, ccshelf prunes cache files older than the retention age. It never prunes the checkouts a lock pins.</li>
 <li>Compile from the same in-memory bytes that were hashed (no re-read), to close the gap between accepting and running.</li>
-<li>Non-interactive and CI runs fail closed. <code>--yes</code> never accepts trust (R6).</li>
+<li>Non-interactive and CI runs fail closed (exit 4). <code>--yes</code> never accepts trust (R6).</li>
+<li>The launcher never bypasses org policy.</li>
 </ul>
-<p><strong>SR3: no shadowing, protected controls.</strong> A project profile can never shadow a profile from another source, and two org sources cannot define the same name. A personal profile may shadow an org profile of the same name because the user owns it (the listing marks it "shadows"). The org config (<code>ccshelf.toml</code>) declares <code>[protect] plugins</code> and <code>[protect] mcp</code> (audit, secret-scanning or required servers) that are never masked. ccshelf reads the org config from the pinned tree of a git source, so a git source without one gets a visible warning. The lists are part of the trust closure, so a change to them needs re-trust. If a source is unreachable, ccshelf continues to enforce its last-known lists from the lockfile for every profile. A broken org config stops the command. <code>inherit_user_settings = false</code> drops the user settings layer that normally enables plugins. With it, the generator writes protected and policy-locked plugins as enabled, never off. Shared profiles cannot set <code>inherit_user_settings = false</code>, because that drops the user's deny rules, hooks and MCP. Personal profiles can set it, with a warning that lists what is dropped. Only managed settings with <code>allowManagedHooksOnly</code>, <code>allowManagedPermissionRulesOnly</code> and <code>disableBypassPermissionsMode</code> are real enforcement. The docs must say so.</p>
+<p><strong>SR3: no shadowing, protected controls.</strong> A project profile can never shadow a profile from another source (a collision is an error), and two org sources cannot define the same name. A personal profile may shadow an org profile of the same name because the user owns it (the listing marks it "shadows"). The org config (<code>ccshelf.toml</code>) declares <code>[protect] plugins</code> and <code>[protect] mcp</code> (audit, secret-scanning or required servers) that are never masked. ccshelf reads the org config from the pinned tree of a git source, so a git source without one gets a visible warning. The lists are part of the trust closure, so a change to them needs re-trust. If a source is unreachable, ccshelf continues to enforce its last-known lists from the lockfile for every profile. A broken org config stops the command. <code>inherit_user_settings = false</code> drops the user settings layer that normally enables plugins. With it, the generator writes protected and policy-locked plugins as enabled, never off. Shared profiles cannot set <code>inherit_user_settings = false</code>, because that drops the user's deny rules, hooks and MCP. Personal profiles can set it, with a warning that lists what is dropped. Only managed settings with <code>allowManagedHooksOnly</code>, <code>allowManagedPermissionRulesOnly</code> and <code>disableBypassPermissionsMode</code> are real enforcement. The docs must say so.</p>
 <p><strong>SR4: private, verified local artifacts.</strong></p>
 <ul>
 <li>Cache directory mode 0700 (owner-only ACL on Windows) and files 0600, created with exclusive-create and no-follow.</li>
@@ -1369,14 +1339,16 @@ profiles/example.toml.sample          only with --example-profile: an all-commen
 <li>Branch protection and two-maintainer release approval on the public repo.</li>
 <li>An OpenSSF Scorecard.</li>
 </ul>
-<p>Org data repo workflows:</p>
+<p>Org data repo workflows (the starter template applies these rules, see <a href="#catalog">catalog-and-org-repo.md</a>, "CI workflows"):</p>
 <ul>
 <li>Use <code>permissions: {}</code> at the top level and grant permissions per job (<code>contents: write</code> only for tagging, and <code>pages</code> and <code>id-token</code> only for the catalog).</li>
-<li>Keep secrets in a protected environment deployable only from <code>main</code>.</li>
-<li>Pass values through <code>env:</code> and validate them (for example against semver) instead of interpolating <code>${{ }}</code> into shell.</li>
-<li>Do not send secrets to fork pull requests.</li>
+<li>Keep secrets (for example an Analytics API key) in a protected environment deployable only from <code>main</code>. Do not send secrets to fork pull requests.</li>
+<li>Never interpolate <code>${{ }}</code> values from plugin names, versions, descriptions or sidecars into shell. Pass them through <code>env:</code> and validate them (for example against semver).</li>
+<li>Require code-owner review and at least two approvals through a ruleset, and dismiss stale reviews.</li>
+<li>Add <code>/.github/</code> to <code>CODEOWNERS</code>.</li>
+<li>Do not publish PR preview artifacts. They are built from untrusted content.</li>
 </ul>
-<p>The catalog site uses <code>textContent</code> and a strict CSP. It renders Markdown with raw HTML off and only <code>http</code> and <code>https</code> links. The publish step fails unless Pages visibility is private or internal. Add <code>/.github/</code> to <code>CODEOWNERS</code>.</p>
+<p>The catalog site renders sidecar and marketplace text with <code>textContent</code> and a strict CSP. It renders Markdown with raw HTML off and only <code>http</code> and <code>https</code> links. The publish step fails unless Pages visibility is private or internal.</p>
 <p><strong>Updates (D-40).</strong> The tool never contacts the network on its own. <code>ccshelf update</code> is explicit, and the automatic check (<code>[update] mode</code>) is off by default and opt-in. An update:</p>
 <ul>
 <li>Is downloaded over HTTPS without credentials.</li>
@@ -1392,7 +1364,7 @@ profiles/example.toml.sample          only with --example-profile: an all-commen
 <li>Trust fatigue (show a risk-only summary).</li>
 <li><code>ccshelf init --org &lt;url&gt;</code> must only write source entries and never trust anything.</li>
 <li>An account must be a name, never a path.</li>
-<li>Employer approval and <code>SECURITY.md</code> before the repo goes public.</li>
+<li>Employer approval before the repo goes public.</li>
 <li>Outside contributors' code running in corporate CI is why SHA pinning is mandatory.</li>
 </ul>
 <h3 id="security-policy-spectrum-and-open-source-r3-r4">Policy spectrum and open source (R3, R4)</h3>
@@ -1430,7 +1402,7 @@ profiles/example.toml.sample          only with --example-profile: an all-commen
 <tr><td>Profile <code>git</code> source</td><td>Same: use git URLs for GHE. Honor the user's existing git credential helper/SSH config instead of storing tokens.</td></tr>
 <tr><td>Tags and bundles</td><td>Native bundle resolution uses git tags <code>&lt;plugin&gt;--v&lt;version&gt;</code>. CI should create them (<code>claude plugin tag</code>), which needs write permission for <code>GITHUB_TOKEN</code> on tags.</td></tr>
 <tr><td>Usage data</td><td>Enterprise Analytics API / OTel exist independently of GitHub. If the catalog job uses the Analytics API, it needs a secret for the API key.</td></tr>
-<tr><td>Provenance</td><td><strong>Required on github.com releases (SR5):</strong> keyless signatures (cosign), SLSA provenance and an SBOM. Artifact attestations have limited support on GHE Server, so ship offline-verifiable bundles for GHE Server mirrors.</td></tr>
+<tr><td>Provenance</td><td><strong>Required on github.com releases</strong> (see SR5 in <a href="#security">security.md</a>). Artifact attestations have limited support on GHE Server, so SR5 ships offline-verifiable bundles for GHE Server mirrors.</td></tr>
 </tbody></table>
 <h4 id="platform-requirement-r2-support-both-ghe-cloud-and-ghe-server-decided-2026-10-06">Requirement R2: support both GHE Cloud and GHE Server (decided 2026-10-06)</h4>
 <p>Design to the lowest common denominator, so nothing assumes github.com or the newest Actions features.</p>
@@ -1446,7 +1418,7 @@ profiles/example.toml.sample          only with --example-profile: an all-commen
 </ul></li>
 <li><strong>Version skew.</strong> GHE Server lags github.com. Avoid features that may not exist on older Server versions (newer Actions syntax, artifact attestations, some Pages options) or make them optional with a fallback. Record the minimum supported GHE Server version once known.</li>
 <li><strong>Auth via the user's git setup.</strong> Git operations run <code>git</code> with the existing credential helper or SSH config. API calls (if any) use <code>GITHUB_TOKEN</code> in CI or <code>gh</code> locally. The tool stores no tokens.</li>
-<li><strong>Marketplace source types.</strong> For GHE hosts use git URL sources. Verify the <code>github</code> source type behavior against the marketplace docs for both flavors (open).</li>
+<li><strong>Marketplace source types.</strong> For GHE hosts use git URL sources (see the table above). Verifying the <code>github</code> source type for both flavors is open.</li>
 <li><strong>Catalog hosting is pluggable.</strong> Output a plain static directory. Publishing to Pages is one option (differences between Cloud and Server noted above), but any static host works.</li>
 </ol>
 <p>Still to verify:</p>
@@ -1492,12 +1464,12 @@ profiles/example.toml.sample          only with --example-profile: an all-commen
 <tr><td>Testing</td><td>macOS only so far</td><td>CI matrix on macos, ubuntu and windows runners. Use a <strong>fake <code>claude</code></strong> test double (records its arguments and generated files) for unit and integration tests on every OS. Keep the real-<code>claude</code> init-event test (Stage 0 method) opt-in because it needs authentication.</td></tr>
 </tbody></table>
 <h4 id="platform-supported-targets-for-the-first-release-decided-2026-10-06">Supported targets for the first release (decided 2026-10-06)</h4>
-<p>All six: <strong>darwin/arm64, darwin/amd64, linux/amd64, linux/arm64, windows/amd64, windows/arm64</strong>. WSL counts as linux.</p>
+<p>All six: <strong>darwin/arm64, darwin/amd64, linux/amd64, linux/arm64, windows/amd64, windows/arm64</strong>.</p>
 <ul>
 <li><strong>Build:</strong> Go cross-compiles all six from one runner (<code>goreleaser</code>).</li>
 <li><strong>Test in CI:</strong> run unit and fake-<code>claude</code> integration tests natively wherever a hosted runner exists: macOS arm64 and Intel, Ubuntu x64 and Windows x64. Ubuntu arm64 and Windows arm64 runners are reportedly available for public repos. Verify this before committing to them. Targets without a native runner are at minimum compile-checked, and flagged "built, not natively tested" in the release notes until a runner is available.</li>
 <li><strong>Publish:</strong> release archives for all six, a Homebrew tap (macOS and Linux), and Scoop and WinGet (Windows). Binaries need macOS notarization and Windows signing, or the package manager must cover that.</li>
-<li><strong>Not covered by CI:</strong> the real-<code>claude</code> integration test stays opt-in (it needs authentication). So the Linux and Windows behavior of <code>claude</code> itself (credentials, <code>cmd /c</code> for <code>npx</code>, managed-settings paths) must be verified manually or in a self-hosted job before we claim support.</li>
+<li><strong>Not covered by CI:</strong> the real-<code>claude</code> integration test (opt-in, see "Testing" above). So the Linux and Windows behavior of <code>claude</code> itself (credentials, <code>cmd /c</code> for <code>npx</code>, managed-settings paths) must be verified manually or in a self-hosted job before we claim support.</li>
 </ul>
 <h4 id="platform-effect-on-the-language-choice">Effect on the language choice</h4>
 <p>This strengthens <strong>Go</strong>: <code>os/exec</code>, build tags for platform differences, <code>filepath</code>, <code>os.UserConfigDir</code>/cache dirs, trivial cross-compilation, and <code>goreleaser</code> publishing to Homebrew, Scoop and WinGet. TypeScript with <code>bun --compile</code> remains possible, but Windows signal and console handling are the weaker spot. Shell scripts are out as an implementation (they're fine only as generated aliases).</p>
@@ -1558,7 +1530,7 @@ profiles/example.toml.sample          only with --example-profile: an all-commen
 <li><strong>What was already good</strong> and is kept unchanged in effect: SHA-pinned actions, <code>permissions: {}</code>, the protected <code>release</code> environment with two reviewers, keyless cosign signing of <code>checksums.txt</code>, build provenance, SBOMs, the ancestry check against <code>main</code>, the snapshot dry run.</li>
 </ul>
 <h3 id="release-decision-d-36">Decision (D-36)</h3>
-<p>A bot-maintained <strong>release pull request</strong> derived from conventional commits, using <code>googleapis/release-please-action</code> v5.0.0, pinned by full commit SHA <span class="V">V</span>. It carries the version bump and the generated <code>CHANGELOG.md</code>. Merging it creates the tag and a draft GitHub release, and the existing signed goreleaser pipeline publishes. We chose release-please over <code>semantic-release</code> (needs Node and a token with push rights, publishes directly with no reviewable pull request). We also chose it over a script of our own (we would re-implement version rules and changelog formatting). The assessment above rejects Changesets.</p>
+<p>A bot-maintained <strong>release pull request</strong> derived from conventional commits, using <code>googleapis/release-please-action</code> v5.0.0, pinned by full commit SHA <span class="V">V</span>. It carries the version bump and the generated <code>CHANGELOG.md</code>. Merging it creates the tag and a draft GitHub release, and the existing signed goreleaser pipeline publishes. We chose release-please over <code>semantic-release</code> (needs Node and a token with push rights, publishes directly with no reviewable pull request). We also chose it over a script of our own (we would re-implement version rules and changelog formatting).</p>
 <pre><code> pull request  --squash--&gt;  main  (subject = pull request title, checked by ci.yml pr-title)
                               |
                               v   push to main
@@ -1608,10 +1580,10 @@ profiles/example.toml.sample          only with --example-profile: an all-commen
 <ol>
 <li>Open a pull request that sets <code>"release-as": "X.Y.Z"</code> for the <code>.</code> package in <code>release-please-config.json</code>. The pull request must itself be releasable: its title is <code>fix(release): ...</code> or <code>feat(release): ...</code> (a real change, or the title of a change that is in it anyway). Merge it. The release pull request now proposes <code>X.Y.Z</code>.</li>
 <li>Review and merge the release pull request as usual.</li>
-<li>Remove <code>release-as</code> again in a <code>chore(release): drop release-as</code> pull request. It is sticky: left in place, it would force the next release to the same version. Do this before merging anything releasable.</li>
+<li>Remove <code>release-as</code> again in a <code>chore(release): drop release-as</code> pull request, before merging anything releasable. Left in place, the sticky key forces the next release to the same version.</li>
 </ol>
 <p>A <code>Release-As:</code> footer in a commit message also works for a releasable commit, but this repository does not use it. The commit body reaches <code>main</code> only through the squash default, and <code>pr-title</code> rejects a pull request description carrying <code>Release-As:</code> (see "Pull request titles").</p></li>
-<li><strong>Changelog sections.</strong> Shown: <code>feat</code> (Features), <code>fix</code> (Bug fixes), <code>perf</code> (Performance), <code>revert</code> (Reverts). Hidden: <code>docs</code>, <code>test</code>, <code>ci</code>, <code>build</code>, <code>refactor</code>, <code>chore</code>. release-please opens a release pull request only when at least one visible entry exists ("No user facing commits found ... skipping" otherwise {V: <code>BaseStrategy.buildReleasePullRequest</code>}). I chose to hide the maintenance types rather than add a "Maintenance" section, because a docs-only or CI-only merge should not produce a release pull request. Consequences: <strong>dependency bumps do not trigger a release</strong> (Dependabot titles are <code>chore(deps)</code>). Ship a vulnerability fix in a dependency with a title such as <code>fix(deps): bump x to 1.2.3 (CVE-...)</code>. Security fixes are <code>fix(security): ...</code>. The old goreleaser "Security" group by regexp is gone.</li>
+<li><strong>Changelog sections.</strong> Shown: <code>feat</code> (Features), <code>fix</code> (Bug fixes), <code>perf</code> (Performance), <code>revert</code> (Reverts). Hidden: <code>docs</code>, <code>test</code>, <code>ci</code>, <code>build</code>, <code>refactor</code>, <code>chore</code>. release-please opens a release pull request only when at least one visible entry exists (see "Forcing a version") {V: <code>BaseStrategy.buildReleasePullRequest</code>}. I chose to hide the maintenance types rather than add a "Maintenance" section, because a docs-only or CI-only merge should not produce a release pull request. Consequences: <strong>dependency bumps do not trigger a release</strong> (Dependabot titles are <code>chore(deps)</code>). Ship a vulnerability fix in a dependency with a title such as <code>fix(deps): bump x to 1.2.3 (CVE-...)</code>. Security fixes are <code>fix(security): ...</code>. The old goreleaser "Security" group by regexp is gone.</li>
 <li><strong>No releasable commits</strong> (only hidden types since the last release): no release pull request is opened or updated, nothing is tagged, nothing is built. An existing open release pull request stays as it is.</li>
 <li><strong>Hotfix.</strong> A fix is an ordinary <code>fix:</code> pull request on <code>main</code>. The release pull request then shows the next patch. Merge it. It contains everything on <code>main</code> since the last release. This model cannot ship only a fix while unreleased <code>feat</code> commits sit on <code>main</code>. This is by design:
 <ul>
@@ -1627,7 +1599,7 @@ profiles/example.toml.sample          only with --example-profile: an all-commen
 <tr><td><code>release-please</code> job</td><td><code>GITHUB_TOKEN</code>: contents, pull-requests, issues write. No checkout, no repository code runs</td><td>create and update the release branch and pull request, labels, the tag, the draft release</td><td>push to <code>main</code> (the ruleset requires pull requests), run anything that signs, reach secrets (none are passed)</td></tr>
 <tr><td><code>dispatch</code> job</td><td><code>GITHUB_TOKEN</code>: actions write</td><td>start <code>ci.yml</code> and <code>release.yml</code> (<code>workflow_dispatch</code>)</td><td>change contents</td></tr>
 <tr><td><code>verify</code> job</td><td>contents read, actions read</td><td>read the repository, branches and CI runs (it cannot see draft releases: the API lists them only to tokens with push access)</td><td>write</td></tr>
-<tr><td><code>release</code> job</td><td>contents, id-token, attestations write, <strong>after two reviewers approve the <code>release</code> environment, from a <code>v*</code> tag only</strong></td><td>check the draft release (exactly one, name and tag_name equal the tag, target equals the tag's commit), build, sign (keyless OIDC), verify the signature with cosign, attest, upload to the draft, publish it</td><td>run without approval</td></tr>
+<tr><td><code>release</code> job</td><td>contents, id-token, attestations write, <strong>after two reviewers approve the <code>release</code> environment, from a <code>v*</code> tag only</strong></td><td>check the draft release (see "Trust change" below), build, sign (keyless OIDC), verify the signature with cosign, attest, upload to the draft, publish it</td><td>run without approval</td></tr>
 <tr><td>optional publishers</td><td><code>HOMEBREW_TAP_TOKEN</code>, <code>SCOOP_BUCKET_TOKEN</code>, <code>WINGET_TOKEN</code> on the <code>release</code> environment</td><td>write to the tap, bucket and winget fork</td><td>anything else</td></tr>
 <tr><td><code>pins</code> job</td><td>contents, pull-requests, actions write</td><td>open the checksum pull request and run CI on its branch</td><td>merge it</td></tr>
 </tbody></table>
@@ -1648,7 +1620,7 @@ profiles/example.toml.sample          only with --example-profile: an all-commen
 <li>It is equal to the version in <code>.release-please-manifest.json</code> at that commit (so a tag cannot name a version no release pull request produced).</li>
 <li><code>ci.yml</code> succeeded for the commit.</li>
 </ul>
-<p><code>verify</code> also refuses a branch of the same name as the tag (the dispatch API takes a short ref name). The <code>release</code> job has <code>contents: write</code> (a read-only token is not shown draft releases). It then requires all of these:</p>
+<p><code>verify</code> also refuses a branch of the same name as the tag (the dispatch API takes a short ref name). The <code>release</code> job, which can read drafts because it has <code>contents: write</code> (see the token table), requires all of these:</p>
 <ul>
 <li>Exactly one draft with <code>tag_name</code> equal to the tag.</li>
 <li>Exactly one release with <code>name</code> equal to the tag (goreleaser finds its draft by name).</li>
@@ -1656,7 +1628,7 @@ profiles/example.toml.sample          only with --example-profile: an all-commen
 <li>No published release uses the tag.</li>
 <li>The draft's <code>target_commitish</code> resolves to the commit the run started on.</li>
 </ul>
-<p>So a tag that somebody created first at another commit fails closed. These draft checks run after the environment approval, because only that job can read drafts. The two-reviewer approval of the <code>release</code> environment is unchanged. It is the control that matters most: nothing is signed or published without it.</p></li>
+<p>So a tag that somebody created first at another commit fails closed. These draft checks run after the environment approval. The two-reviewer approval of the <code>release</code> environment is unchanged. It is the control that matters most: nothing is signed or published without it.</p></li>
 <li>What the new design adds to the attack surface: the release-please action (third party, SHA-pinned, runs with <code>contents: write</code> and no repository checkout, no secrets) and the <code>GITHUB_TOKEN</code> permission to create tags. A compromised action could create a <code>v*</code> tag, but only at a commit already on <code>main</code> whose manifest equals the tag, and only once (the ruleset blocks updating a tag and lets only maintainers delete one). It still cannot sign.</li>
 <li>What it removes: any maintainer typing a version by hand, and an unsigned-but-required "signed tag" rule that could not be enforced.</li>
 <li><strong>Rulesets that follow:</strong>
@@ -1688,11 +1660,11 @@ profiles/example.toml.sample          only with --example-profile: an all-commen
 <li>A changed file matches no rule, which includes <code>release-please-config.json</code> and any new top-level file.</li>
 </ul>
 <p>Fail-open is what keeps the release path intact. The <code>verify</code> job of <code>release.yml</code> waits for a successful <code>ci.yml</code> run for the tagged commit, which is the full push-to-<code>main</code> run. The dispatched run, also full, covers the release pull request. A unit test asserts that every tracked file is classified (or deliberately fails open), so a new file needs a rule in the same pull request.</p>
-<p><strong>The release pull request.</strong> It changes only <code>CHANGELOG.md</code> and <code>.release-please-manifest.json</code>, which alone would select just <code>site</code>. A native <code>pull_request</code> run can still happen on it, for example after a maintainer closes and reopens it or pushes to its branch, or if a GitHub App token is adopted. A cheap green <code>ci-ok</code> from that run could supersede a failed full dispatched run on the same commit. The classifier therefore fails open for any pull request whose head branch starts with <code>release-please--</code>. So a native run is as complete as the dispatched one, and the two cannot disagree. Nothing skips by branch name. One earlier run that sat in <code>action_required</code> is GitHub waiting for approval of a workflow run triggered by a bot-owned pull request {U: not reproduced here}.</p>
+<p><strong>The release pull request.</strong> It changes only <code>CHANGELOG.md</code> and <code>.release-please-manifest.json</code>, which alone would select just <code>site</code>. A native <code>pull_request</code> run can still happen on it, for example after a maintainer closes and reopens it or pushes to its branch, or if a GitHub App token is adopted. A cheap green <code>ci-ok</code> from that run could supersede a failed full dispatched run on the same commit. The <code>release-please--</code> fail-open rule above makes a native run as complete as the dispatched one, so the two cannot disagree. Nothing skips by branch name. One earlier run that sat in <code>action_required</code> is GitHub waiting for approval of a workflow run triggered by a bot-owned pull request {U: not reproduced here}.</p>
 <p><strong>The first real pull request shows whether gating works.</strong> The <code>changes</code> job uses <code>fetch-depth: 0</code> unconditionally. The form <code>cond &amp;&amp; 0 || 1</code> always gives 1, because 0 is falsy in GitHub expressions <span class="R">R</span>. That would make every diff fail and every pull request run everything. When the diff cannot be computed, the step summary says so in a warning line. A unit test documents the failure in a depth-1 clone.</p>
 <p>The test matrix drops the two experimental legs (<code>ubuntu-24.04-arm</code>, <code>windows-11-arm</code>) on pull requests. They run on <code>push</code>, <code>merge_group</code> and <code>workflow_dispatch</code>. The classifier builds the matrix (<code>fromJSON</code>), because a job-level <code>if:</code> cannot read the <code>matrix</code> context <span class="R">R</span>.</p>
 <h3 id="release-pull-request-titles-d-37">Pull request titles (D-37)</h3>
-<p>Maintainers squash-merge, so the pull request title becomes the commit subject and the changelog entry. The workflow <code>pr-title.yml</code> runs <code>scripts/check_pr_title.py</code> (stdlib Python, tests in <code>scripts/test_check_pr_title.py</code>) on every pull request, including when the title or description is edited. Its job <code>pr-title</code> is a <strong>second required check</strong> next to <code>ci-ok</code>. It is a separate workflow so that an edit never re-runs the <code>ci.yml</code> matrix (whose <code>cancel-in-progress</code> would cancel runs). It has <code>permissions: {}</code> at the top, <code>contents: read</code> and <code>pull-requests: read</code> on the job, and no third-party action. <code>ci-ok</code> is unchanged: it does not need <code>pr-title</code>, and skipped jobs still count as passed.</p>
+<p>Maintainers squash-merge, so the pull request title becomes the commit subject and the changelog entry. The workflow <code>pr-title.yml</code> runs <code>scripts/check_pr_title.py</code> (stdlib Python, tests in <code>scripts/test_check_pr_title.py</code>) on every pull request, including when the title or description is edited. Its job <code>pr-title</code> is a <strong>second required check</strong> next to <code>ci-ok</code>. It is a separate workflow so that an edit never re-runs the <code>ci.yml</code> matrix (whose <code>cancel-in-progress</code> would cancel runs). It has <code>permissions: {}</code> at the top, <code>contents: read</code> and <code>pull-requests: read</code> on the job, and no third-party action. <code>ci-ok</code> does not need <code>pr-title</code>.</p>
 <ul>
 <li>Format <code>type(scope)!: description</code>:
 <ul>
@@ -1719,7 +1691,7 @@ profiles/example.toml.sample          only with --example-profile: an all-commen
 <li><code>pr-title</code> rejects a description that contains <code>BEGIN_COMMIT_OVERRIDE</code>, <code>BEGIN_NESTED_COMMIT</code> or a line starting <code>Release-As:</code> (any case, after quote or list marks), for everyone except the release bot. The description reaches the script through <code>env:</code> (<code>PR_BODY</code>), and the script never prints it. Maintainers force a version through <code>release-as</code> in the configuration (see "Forcing a version").</li>
 <li>The release pull request carries the reminder "Review every changelog entry and the version before merging" (<code>pull-request-footer</code>), and the two approvals plus the code owner are the last review. <strong>Residual risk:</strong> <code>pr-title</code> does not reject a description paragraph that merely looks like a commit (<code>feat: ...</code>, <code>BREAKING CHANGE: ...</code>), because that check would have false positives, for example in Dependabot release notes. A commit message edited by hand at merge time is outside every check here. Layer 1 neutralises both and layer 3 catches them, but nothing prevents them.</li>
 </ol></li>
-<li>Setting to choose once: the repository's squash-merge default message must be <strong>"Pull request title"</strong> (not "title and description", and not "commit messages"). The <code>!</code> of the title still marks a breaking change. A breaking change is therefore always visible in the title.</li>
+<li>With the squash default "Pull request title" (layer 1), the <code>!</code> of the title still marks a breaking change. A breaking change is therefore always visible in the title.</li>
 </ul>
 <h3 id="release-failure-and-rollback">Failure and rollback</h3>
 <table><thead><tr><th>Situation</th><th>What happens</th><th>What to do</th></tr></thead><tbody>
@@ -1742,8 +1714,8 @@ profiles/example.toml.sample          only with --example-profile: an all-commen
 <p>Before the first release (everything under Settings of the tool repository):</p>
 <ol>
 <li><strong>Actions &gt; General &gt; Workflow permissions:</strong> enable "Allow GitHub Actions to create and approve pull requests". The default token permission can stay read-only: the workflows request what they need {V: release-please-action README}. <strong>Side effect:</strong> the same setting also lets a workflow token submit an approving review. Mitigate it in the <code>main</code> ruleset: require <strong>code-owner review</strong> (CODEOWNERS) from people, so a bot approval does not satisfy it, and enable <strong>"Require approval of the most recent reviewable push"</strong>. No workflow in this repository submits approvals.</li>
-<li><strong>Rulesets:</strong> <code>main</code> (required checks <code>ci-ok</code> and <code>pr-title</code>, pull requests, code-owner review, two approvals, block force push and deletion) and tags <code>v*</code> (block update and deletion). For tag creation, see the trust section. <strong>Environment <code>release</code>:</strong> deployment tags <code>v*</code>, two required reviewers, prevent self-review. Optional publisher secrets live here.</li>
-<li><strong>Pull requests &gt; squash merging:</strong> allow squash merging only, with the default commit message <strong>"Pull request title"</strong> (the description must not reach <code>main</code>: see "Pull request titles").</li>
+<li><strong>Rulesets and the environment <code>release</code>:</strong> set up <code>main</code>, tags <code>v*</code> and the environment <code>release</code> as listed under "Rulesets that follow" in Token, tag and signing chain. Optional publisher secrets live on the environment.</li>
+<li><strong>Pull requests &gt; squash merging:</strong> allow squash merging only, with the default commit message <strong>"Pull request title"</strong> (not "title and description", and not "commit messages"). The description must not reach <code>main</code> (see "Pull request titles").</li>
 <li><strong>Optional:</strong> Settings &gt; Code security &gt; "Immutable releases" <span class="U">U</span>.</li>
 <li>Check <code>ci.yml</code> and <code>release.yml</code> are on the default branch (workflow_dispatch needs the file on the default branch to appear), then merge this change.</li>
 </ol>
@@ -1802,8 +1774,8 @@ profiles/example.toml.sample          only with --example-profile: an all-commen
 <p>Not validated (needs the real repository):</p>
 <ul>
 <li>A real release.</li>
-<li>That a read-only token sees no draft releases (taken from the REST documentation and the lead's finding, <span class="R">R</span>). This is why the draft checks moved to the <code>release</code> job.</li>
-<li>That the dispatch API would accept <code>ref=refs/tags/vX.Y.Z</code>. The REST and <code>gh workflow run --ref</code> documentation only say "branch or tag name", so the short name is used, and <code>verify</code> fails when a branch has the same name.</li>
+<li>That a read-only token sees no draft releases (taken from the REST documentation and the lead's finding, <span class="R">R</span>).</li>
+<li>That the dispatch API would accept <code>ref=refs/tags/vX.Y.Z</code>. The REST and <code>gh workflow run --ref</code> documentation only say "branch or tag name", so the short name is used (see "Trust change").</li>
 <li>That the dispatched <code>ci.yml</code> run satisfies the required check.</li>
 <li>That a draft release plus <code>force-tag-creation</code> makes release-please find the previous release on the next run.</li>
 <li>That goreleaser publishes the draft that release-please created and appends to its notes as read in its source.</li>
@@ -1829,12 +1801,12 @@ profiles/example.toml.sample          only with --example-profile: an all-commen
 <pre><code>ccshelf update [--check] [--version vX.Y.Z] [--prerelease] [--dry-run]
                [--require-signature] [--rollback] [--yes] [--force] [--allow-downgrade]</code></pre>
 <table><thead><tr><th>Flag</th><th>Meaning</th></tr></thead><tbody>
-<tr><td><code>--check</code></td><td>Print the current version, the latest one and the release notes URL. Exit 0 whether or not an update exists. With <code>--json</code>, the envelope kind <code>update</code>.</td></tr>
+<tr><td><code>--check</code></td><td>Print the current version, the latest one and the release notes URL. Exit 0 whether or not an update exists. With <code>--json</code>, the envelope kind <code>update</code>, fields <code>action</code>, <code>current</code>, <code>latest</code>, <code>updateAvailable</code>, <code>releaseUrl</code>, <code>installMethod</code>, and for an install <code>executable</code>, <code>backup</code> and <code>signature</code>.</td></tr>
 <tr><td><code>--version vX.Y.Z</code></td><td>Install that release. An older one than the running version needs <code>--allow-downgrade</code> (exit 2 otherwise). Cannot be combined with <code>--prerelease</code>.</td></tr>
 <tr><td><code>--prerelease</code></td><td>Let the search for "latest" include pre-releases.</td></tr>
 <tr><td><code>--dry-run</code></td><td>Show what would be downloaded, verified and replaced. Changes nothing, downloads nothing (the release metadata is still fetched).</td></tr>
 <tr><td><code>--require-signature</code></td><td>Fail (exit 1) unless cosign is on <code>PATH</code> (see below). Checked first: before any network access, the dry run and the confirmation (only <code>--check</code>, which changes nothing, ignores it).</td></tr>
-<tr><td><code>--rollback</code></td><td>Restore the previous binary. No network. It runs the backup file (<code>version --json</code>) to check that it is ccshelf. A backup that cannot be run needs <code>--force</code> as well as <code>--yes</code>.</td></tr>
+<tr><td><code>--rollback</code></td><td>Restore the previous binary. No network. The backup is checked first (see "Rollback" in Replacing the running binary).</td></tr>
 <tr><td><code>--yes</code></td><td>Skip the confirmation only. There is no trust decision in an update, so unlike <code>trust --yes</code> nothing is being accepted that a flag could not name.</td></tr>
 <tr><td><code>--force</code></td><td>Also replace a package-managed or development build, reinstall the running version, and (with <code>--rollback</code>) restore a backup that could not be checked. It never implies a downgrade: if the latest release is older than the running version, <code>--force</code> alone still refuses (exit 2).</td></tr>
 <tr><td><code>--allow-downgrade</code></td><td>Allow installing a release older than the running version, whether named with <code>--version</code> or the newest one offered (for example a release that was withdrawn or a mirror that lags). Only this flag does.</td></tr>
@@ -1947,7 +1919,7 @@ profiles/example.toml.sample          only with --example-profile: an all-commen
 <li>If it cannot be run at all (another platform, damaged), it needs <code>--force</code> as well. <code>--yes</code> alone is refused. On a terminal without <code>--yes</code>, the prompt asks to type <code>yes</code>, and the printed equivalent command then contains <code>--force</code>.</li>
 <li>If it runs but is not ccshelf, it is refused whatever the flags.</li>
 </ul>
-<p>The swap keeps the replaced binary as the new <code>.old</code>, so another <code>--rollback</code> can undo a rollback. A rollback never touches the network.</p></li>
+<p>The swap keeps the replaced binary as the new <code>.old</code>, so another <code>--rollback</code> can undo a rollback.</p></li>
 <li><strong>Locking.</strong> <code>update.lock</code> in the cache directory (mode 0600, never a symlink) holds an exclusive operating-system lock (<code>flock</code> on Unix, <code>LockFileEx</code> on Windows) for as long as an update or rollback runs. A second <code>update</code> (or automatic install) fails immediately (exit 1, or silently in the automatic path). The kernel drops the lock when its holder exits for any reason. So:
 <ul>
 <li>A crash leaves nothing to expire.</li>
@@ -1976,7 +1948,7 @@ base_url = ""       # GitHub Enterprise Server only (see above)
 <li>This is a development build.</li>
 </ul></li>
 <li>The check runs at most once per <code>interval</code>, with a <strong>hard 3 s</strong> overall timeout. Any error ends in at most one warning line on a terminal, and the next attempt waits for the interval (a failing network is not retried on every command). The check never changes the command's exit code.</li>
-<li>Both modes act only when somebody is looking. A script, a cron job, a pipeline or a command with its output redirected never makes the automatic network call and never has its binary swapped. <code>ccshelf update --yes</code> is the scripted path.</li>
+<li>So a script, a cron job, a pipeline or a command with its output redirected never makes the automatic network call and never has its binary swapped. <code>ccshelf update --yes</code> is the scripted path.</li>
 <li><code>notify</code> prints one line to stderr: <code>ccshelf 0.2.0 is available (you have 0.1.0). Run: ccshelf update</code> (the package manager's command instead, for a package-managed copy), at most once per 24 hours.</li>
 <li><code>install</code> runs the same verified flow, but only when all of these are true:
 <ul>
@@ -1999,9 +1971,7 @@ base_url = ""       # GitHub Enterprise Server only (see above)
 <tr><td>Directory not writable</td><td>Exit 1 with the exact <code>sudo ...</code> (or Administrator) command.</td></tr>
 <tr><td>Another update running</td><td>Exit 1 (silent for the automatic path).</td></tr>
 <tr><td>A download redirected to a host that is not allowed</td><td>Exit 1. The hint says to list the exact hostname in <code>[update] asset_hosts</code> if you trust it.</td></tr>
-<tr><td><code>--require-signature</code> without cosign</td><td>Exit 1 before any network access, dry run or question.</td></tr>
 <tr><td>Latest release older than the running version</td><td><code>update</code> says up to date. <code>--force</code> alone refuses (exit 2, names <code>--allow-downgrade</code>).</td></tr>
-<tr><td>A child process (cosign, version check) leaves a process holding its pipes</td><td>Fails after at most 2 s past its deadline (fail closed). Nothing replaced.</td></tr>
 <tr><td>Package manager or development build</td><td>Exit 1 with the command to run, or <code>--force</code>.</td></tr>
 <tr><td>No <code>.old</code> for <code>--rollback</code></td><td>Exit 1.</td></tr>
 <tr><td>Downloaded file killed mid-way (crash)</td><td>The old binary is untouched. Stale <code>.ccshelf-update-*</code> files are cleaned on a later update.</td></tr>
@@ -2106,7 +2076,7 @@ $ ccshelf run sre
 profile: sre (extends base)       plugins: 6 on / 10 masked  mcp: pagerduty, grafana
 claude&gt; ...</code></pre>
 <ul>
-<li>Each run writes a generated settings file (content-addressed, in the launcher's own cache dir, so concurrent runs never collide). Then it starts <code>claude --settings &lt;file&gt;</code> and passes back its exit code. The same on macOS, Linux and Windows by design (only macOS has been tested). The launcher modifies nothing shared (<code>~/.claude/settings.json</code>, <code>~/.claude.json</code>, plugin cache), so the two terminals can't affect each other. <em>(masking and parallel runs tested)</em></li>
+<li>Each run writes a content-addressed settings file, starts <code>claude --settings &lt;file&gt;</code> and passes back its exit code (see <a href="#launcher">launcher.md</a>). The same on macOS, Linux and Windows by design (only macOS has been tested). The launcher modifies nothing shared, so the two terminals can't affect each other. <em>(masking and parallel runs tested)</em></li>
 <li>The launcher masks plugins not in the profile with <code>enabledPlugins:false</code>. The list comes from <code>claude plugin list --json</code> (cached for up to five minutes and re-read when installed plugins or managed settings change), so a plugin you installed yesterday doesn't leak into the profile. <em>(masking tested on macOS)</em></li>
 <li>Extra arguments pass through: <code>ccshelf run sre -- --model opus</code>.</li>
 </ul></div>
@@ -2130,7 +2100,7 @@ $ ccshelf diff frontend my-frontend
 + plugins.include: my-experiments@me
 - plugins.include: playwright@acme
 $ ccshelf run my-frontend</code></pre>
-<p>Personal profiles live outside the repo and can <code>extends</code> org profiles. At any level of the chain, a <code>plugins.exclude</code> beats a plugin include and a <code>skills.off</code> beats <code>skills.name_only</code>. So a child cannot re-include what a parent excluded.</p></div>
+<p>Personal profiles live outside the repo and can <code>extends</code> org profiles. A child cannot re-include what a parent excluded (see the <code>extends</code> rule in <a href="#profiles">profiles.md</a>).</p></div>
 <div class="pane" id="workflows-pane-4"><h3 id="workflows-h-4">4. New hire onboarding</h3>
 <ol>
 <li>They open the internal catalog page (linked from the README) and pick the role: "Backend engineer".</li>
@@ -2207,7 +2177,7 @@ $ ccshelf run sre
 sre changed since you last accepted it:
   + mcp.servers: pagerduty-ro (command: npx -y @acme/pagerduty-mcp)
 accept? [y/N]</code></pre>
-<p>The launcher only loads org profiles from sources the org already trusts (an allowlisted marketplace, or a pinned git ref). See "Profile sources and sharing" in <a href="#profiles">profiles.md</a>.</p></div>
+<p>For the sources and trust rules, see "Profile sources and sharing" in <a href="#profiles">profiles.md</a> and SR2 in <a href="#security">security.md</a>.</p></div>
 <div class="pane" id="workflows-pane-12"><h3 id="workflows-h-12">12. Interactive and scripted use of the same command</h3>
 <p>In a terminal, with no arguments, <code>ccshelf</code> offers a picker. With flags it never asks anything.</p>
 <pre><code>$ ccshelf
