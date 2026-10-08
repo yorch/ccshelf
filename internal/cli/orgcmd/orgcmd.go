@@ -88,6 +88,9 @@ func openRepo(c *clicore.Context) (*repo, error) {
 // be read, which is what makes a directory an org data repo (the check
 // requireMarketplace applies to a catalog build).
 func (r *repo) isOrgRepo() bool {
+	if !r.cfg.Catalog.Enabled {
+		return false
+	}
 	if len(r.cfg.Catalog.Marketplaces) == 0 {
 		return false
 	}
@@ -314,6 +317,19 @@ func (r *repo) hostingMarketplace() (string, error) {
 		return "", errors.New("no marketplace is configured (catalog.marketplaces)")
 	}
 	return first, nil
+}
+
+// requireCatalog fails with exit 1 when the repo is profiles-only ([catalog]
+// enabled = false): it has no marketplace, so bundles and the catalog do not
+// exist. A repo that came from a remote or cached catalog has no cfg and
+// passes.
+func requireCatalog(r *repo, what string) error {
+	if r.cfg == nil || r.cfg.Catalog.Enabled {
+		return nil
+	}
+	return withHintErr(
+		ui.Failure(fmt.Errorf("%s: [catalog] enabled = false in ccshelf.toml: this repo has no marketplace, so there are no bundles/catalog", what)),
+		"remove enabled = false from [catalog] in ccshelf.toml to use bundles and the catalog; profile checks still work with \"ccshelf lint\"")
 }
 
 // requireMarketplace fails with exit 1 when the repo is not an org data repo:

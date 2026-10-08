@@ -87,6 +87,9 @@ from the org data repo.`,
 				}
 				return writeRecommendText(out(c), c.Mode, data)
 			}
+			if err := requireCatalog(r, "recommend"); err != nil {
+				return err
+			}
 			cat, lrep, err := catalog.BuildContext(cmd.Context(), r.root, r.cfg, catalog.Options{Now: c.Now})
 			if err != nil {
 				return fmt.Errorf("building the catalog: %w", err)

@@ -111,7 +111,7 @@ org through a git source can use it that way.`,
 			if err != nil {
 				return err
 			}
-			if usePolicy && c.G.Root == "" && !r.isOrgRepo() {
+			if usePolicy && c.G.Root == "" && r.cfg.Catalog.Enabled && !r.isOrgRepo() {
 				// Not an org data repo and none asked for: the managed policy is a
 				// property of the machine, so that part still works.
 				return runPolicyOnly(cmd.Context(), c, doctorOptions{policy: true, installed: installed, strict: strict})
@@ -137,6 +137,9 @@ type doctorOptions struct {
 }
 
 func runDoctor(ctx context.Context, c *clicore.Context, r *repo, o doctorOptions) error {
+	if !r.cfg.Catalog.Enabled && !c.Mode.JSON {
+		fmt.Fprintln(errw(c), "note: [catalog] enabled = false in ccshelf.toml: the checks that need the catalog (overlap, review dates, owners) have nothing to check; profiles and policy are checked")
+	}
 	cat, lrep, err := catalog.BuildContext(ctx, r.root, r.cfg, catalog.Options{Now: c.Now})
 	if err != nil {
 		return fmt.Errorf("building the catalog: %w", err)
