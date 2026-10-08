@@ -219,8 +219,8 @@ type openOpts struct {
 // own account is applied later by run), and builds the sources. When prepare
 // is false git and plugin sources are not fetched or located (used by
 // commands that only need local names).
-func (l *launcher) open(ctx context.Context, cc *clicore.Context, prepare, needClaude bool) (*session, error) {
-	return l.openWith(ctx, cc, openOpts{prepare: prepare, needClaude: needClaude})
+func (l *launcher) open(ctx context.Context, cc *clicore.Context, prepare bool) (*session, error) {
+	return l.openWith(ctx, cc, openOpts{prepare: prepare})
 }
 
 // openWith is open with all the options.

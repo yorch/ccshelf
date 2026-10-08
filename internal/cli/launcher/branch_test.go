@@ -69,6 +69,7 @@ func (g *fakeBranchGit) Names() ([]string, error) {
 	}
 	return g.inner.Names()
 }
+
 func (g *fakeBranchGit) Open(name string) (*profile.File, error) {
 	f, err := g.inner.Open(name)
 	if err != nil {
@@ -77,11 +78,13 @@ func (g *fakeBranchGit) Open(name string) (*profile.File, error) {
 	f.Source = g
 	return f, nil
 }
+
 func (g *fakeBranchGit) use(commit string) {
 	g.rem.used = append(g.rem.used, commit)
 	g.commit = commit
 	g.inner = dirSourceFor(g.rem.orgs[commit])
 }
+
 func (g *fakeBranchGit) Prepare(context.Context) error {
 	if g.rem.headErr != nil {
 		return g.rem.headErr
@@ -91,6 +94,7 @@ func (g *fakeBranchGit) Prepare(context.Context) error {
 	g.use(g.rem.head)
 	return nil
 }
+
 func (g *fakeBranchGit) PrepareCached(_ context.Context, commit string) error {
 	if !g.rem.cached[commit] {
 		return gitsource.ErrNotCached
@@ -99,12 +103,14 @@ func (g *fakeBranchGit) PrepareCached(_ context.Context, commit string) error {
 	g.use(commit)
 	return nil
 }
+
 func (g *fakeBranchGit) PrepareAt(_ context.Context, commit string) error {
 	g.rem.atFetched = append(g.rem.atFetched, commit)
 	g.rem.cached[commit] = true
 	g.use(commit)
 	return nil
 }
+
 func (g *fakeBranchGit) ResolveHead(context.Context) (string, error) {
 	g.rem.resolves++
 	head, err := g.rem.head, g.rem.headErr

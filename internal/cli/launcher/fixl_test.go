@@ -732,7 +732,7 @@ func TestSettleTrustInconsistentClosureIsAFailure(t *testing.T) {
 	org := h.exampleOrg()
 	h.useOrg(org)
 	s0 := sessionForTrust(t, h, false)
-	s, err := s0.l.open(context.Background(), s0.cc, true, false)
+	s, err := s0.l.open(context.Background(), s0.cc, true)
 	if err != nil {
 		t.Fatal(err)
 	}

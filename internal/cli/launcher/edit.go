@@ -123,7 +123,7 @@ func (l *launcher) runEditor(ctx context.Context, cc *clicore.Context, path, pat
 // it cannot be resolved (a missing parent, an unknown MCP server). The edit
 // itself is kept: this is a check, not a gate.
 func (l *launcher) warnUnresolved(ctx context.Context, cc *clicore.Context, name string) {
-	s, err := l.open(ctx, cc, true, false)
+	s, err := l.open(ctx, cc, true)
 	if err != nil {
 		warnf(cc, "could not check that %s resolves: %v", name, err)
 		return

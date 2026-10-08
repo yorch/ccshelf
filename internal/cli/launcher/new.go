@@ -131,7 +131,7 @@ func (l *launcher) newProfile(ctx context.Context, cc *clicore.Context, name str
 		f.scope = []string{"user", "project"}[i]
 	}
 	needSources := len(f.from) > 0 || fullWizard
-	s, err := l.open(ctx, cc, needSources, false)
+	s, err := l.open(ctx, cc, needSources)
 	if err != nil {
 		return err
 	}
