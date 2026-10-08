@@ -344,19 +344,13 @@
 
     <h3 class="sub">Build from source</h3>
     <div class="cmd">
-      <pre id="c-install-go"><code>go install github.com/yorch/ccshelf/cmd/ccshelf@latest
-ccshelf version</code></pre>
-      <button class="copy" type="button" data-copy="c-install-go" hidden>Copy commands</button>
-    </div>
-    <p class="fine">Needs Go 1.27 or newer and installs into <code>$(go env GOPATH)/bin</code> (or <code>GOBIN</code>). Or build from a checkout:</p>
-    <div class="cmd">
       <pre id="c-install"><code>git clone https://github.com/yorch/ccshelf
 cd ccshelf
 go build -o ccshelf ./cmd/ccshelf
 ./ccshelf version</code></pre>
       <button class="copy" type="button" data-copy="c-install" hidden>Copy commands</button>
     </div>
-    <p class="fine">Put the binary on your <code>PATH</code>, or run <code>go install ./cmd/ccshelf</code> from the checkout. <code>ccshelf update</code> leaves a <code>go install</code> copy to Go and prints the command to run.</p>
+    <p class="fine">Needs Go 1.27 or newer. Put the binary on your <code>PATH</code>, or run <code>go install ./cmd/ccshelf</code> from the checkout to install into <code>$(go env GOPATH)/bin</code>. <code>ccshelf update</code> leaves a <code>go install</code> copy to Go and prints the command to run.</p>
 
     <h3 class="sub">Try it</h3>
     <div class="cmd">
