@@ -480,7 +480,7 @@ func (l *launcher) sourceAdd(ctx context.Context, cc *clicore.Context, cmd *cobr
 	for i, ex := range cfg.Sources {
 		if config.SameSource(ex, src) {
 			return ui.Usage(withHint(fmt.Errorf("source %d already is %s %s", i+1, ex.Type, ui.SanitizeLine(ex.SourceLocation())),
-				"to change its ref or branch, use: ccshelf config source pin %d --ref <ref> or --branch <name>. To replace it: ccshelf config source rm %d. To add another folder of the same repository, give a different --path", i+1, i+1))
+				"to change its ref or branch, run: ccshelf config source pin %d --ref <ref> or --branch <name>. To replace it, run: ccshelf config source rm %d. To add another folder of the same repository, give a different --path", i+1, i+1))
 		}
 	}
 	cfg.Sources = append(cfg.Sources, src)
@@ -592,7 +592,7 @@ func (l *launcher) sourcePin(ctx context.Context, cc *clicore.Context, args []st
 		}
 	} else {
 		if !canPrompt(cc) {
-			return ui.Usage(withHint(errors.New("missing argument <n>"), "run: ccshelf config source pin <n> --ref <ref>  (or --branch <name>; ccshelf config source ls lists the numbers)"))
+			return ui.Usage(withHint(errors.New("missing argument <n>"), "run: ccshelf config source pin <n> --ref <ref> (or --branch <name>). ccshelf config source ls lists the numbers"))
 		}
 		if idx, err = pickSource(ctx, cc, cfg, "Pin which source?", config.SourceGit); err != nil {
 			return err

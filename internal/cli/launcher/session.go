@@ -59,6 +59,12 @@ type cachedPreparer interface {
 	PrepareCached(ctx context.Context, commit string) error
 }
 
+// commitPreparer is implemented by git sources that can fetch one known commit
+// by id without resolving any ref (gitsource.Source).
+type commitPreparer interface {
+	PrepareAt(ctx context.Context, commit string) error
+}
+
 // orgConfigSource is implemented by sources that read the org config
 // (ccshelf.toml) themselves, from the pinned tree they verified.
 type orgConfigSource interface {
@@ -119,6 +125,10 @@ type session struct {
 	// resolved on the remote while the sources were prepared, so the periodic
 	// check does not ask the remote a second time.
 	branchFresh map[string]bool
+	// pinned maps a tracked branch (branchKey) to the commit that the profile
+	// being run trusted. It overrides the newest recorded commit, which may
+	// be the one another profile accepted.
+	pinned map[string]string
 	// failed lists the shared sources that could not be loaded; their profiles
 	// are unavailable but nothing else is affected.
 	failed []sourceFailure
@@ -201,6 +211,8 @@ type openOpts struct {
 	// refreshBranches re-resolves the branch of git sources that track one,
 	// and nothing else (run --refresh).
 	refreshBranches bool
+	// pinned makes branch sources use the given commits (see session.pinned).
+	pinned map[string]string
 }
 
 // open loads the configuration, resolves the initial account (the profile's
@@ -227,7 +239,7 @@ func (l *launcher) openWith(ctx context.Context, cc *clicore.Context, o openOpts
 	}
 	s := &session{
 		l: l, cc: cc, cfg: cfg, cfgPath: cfgPath, choice: choice, cwd: cwd,
-		env: claude.Env(cc.Environ(), extra), refresh: o.refresh, refreshBranches: o.refreshBranches, gitIDs: map[string]bool{}, branchFresh: map[string]bool{},
+		env: claude.Env(cc.Environ(), extra), refresh: o.refresh, refreshBranches: o.refreshBranches, gitIDs: map[string]bool{}, branchFresh: map[string]bool{}, pinned: o.pinned,
 	}
 	if o.needClaude {
 		if _, err := s.locate(); err != nil {
@@ -522,14 +534,26 @@ func (s *session) prepareGit(ctx context.Context, newGit GitFactory, sc config.S
 	if err != nil {
 		return nil, err
 	}
+	var perr error
 	if commit := s.lockedCommit(sc); commit != "" {
 		if cp, ok := g.(cachedPreparer); ok && cp.PrepareCached(ctx, commit) == nil {
 			return g, nil
 		}
-		// Not cached, or the cached copy failed its checks: Prepare fetches
-		// again, or reports the problem with the folder to delete.
+		if ap, ok := g.(commitPreparer); ok && sc.Branch != "" {
+			// A branch source never moves to the head on its own: fetch
+			// exactly the trusted commit. A failure is the failure of this
+			// source, not a reason to resolve the head.
+			if perr = ap.PrepareAt(ctx, commit); perr == nil {
+				return g, nil
+			}
+		}
+		// Otherwise (a tag): Prepare fetches again, or reports the problem
+		// with the folder to delete.
 	}
-	err = g.Prepare(ctx)
+	err = perr
+	if perr == nil {
+		err = g.Prepare(ctx)
+	}
 	if err == nil {
 		if sc.Branch != "" {
 			// The head was just read from the remote: this counts as a check.
@@ -612,6 +636,9 @@ func (s *session) lockedCommit(sc config.SourceConfig) string {
 		// looked at by the periodic check or on request (D-54).
 		if s.refresh || s.refreshBranches {
 			return ""
+		}
+		if c := s.pinned[branchLocator(sc)]; c != "" {
+			return c
 		}
 		if c := s.lockedCommits(sc); len(c) > 0 {
 			return c[0]
@@ -882,9 +909,6 @@ func (s *session) sourceLabels() map[string]string {
 	m := map[string]string{}
 	for _, src := range s.sources {
 		m[src.ID()] = profile.PortableSourceID(src)
-		if tr := sourceTracks(src); tr != "" {
-			m[src.ID()] = "git:" + trimLocator(src.(branchSource).Locator()) + " " + tr
-		}
 	}
 	return m
 }

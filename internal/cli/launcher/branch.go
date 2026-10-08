@@ -137,6 +137,64 @@ type movedBranch struct {
 	head, using string
 }
 
+// profileCommit returns the commit that the trust lockfile recorded for the
+// profile name at the source with locator and ref, or "".
+func (s *session) profileCommit(name, locator, ref string) string {
+	var best string
+	var bestAt time.Time
+	for _, e := range s.lockEntries() {
+		if e.Profile != name {
+			continue
+		}
+		recs := e.Sources
+		if len(recs) == 0 {
+			recs = []trust.SourceRecord{{Source: e.Source, Ref: e.Ref, Commit: e.Commit}}
+		}
+		for _, r := range recs {
+			if r.Source == locator && r.Ref == ref && fullSHA.MatchString(r.Commit) && (best == "" || e.AcceptedAt.After(bestAt)) {
+				best, bestAt = r.Commit, e.AcceptedAt
+			}
+		}
+	}
+	return best
+}
+
+// alignBranchCommits makes a run use, for each branch source of the profile,
+// the commit that this profile trusted. The sources are first prepared at the
+// newest commit that any profile accepted, which may be a commit that another
+// profile of the same source accepted later. When the two differ, the sources
+// are prepared again with the profile's own commit from the cache (or fetched
+// by id). The periodic check then offers the newer commit to this profile too.
+func (l *launcher) alignBranchCommits(ctx context.Context, cc *clicore.Context, s *session, name string) *session {
+	r, err := s.resolve(name)
+	if err != nil {
+		return s // the run reports it
+	}
+	pins := map[string]string{}
+	for _, f := range r.Chain {
+		bs, ok := f.Source.(branchSource)
+		if !ok || bs.Branch() == "" {
+			continue
+		}
+		rs, ok := f.Source.(interface{ Ref() string })
+		if !ok {
+			continue
+		}
+		if want := s.profileCommit(name, bs.Locator(), rs.Ref()); want != "" && want != bs.Commit() {
+			pins[branchKey(bs.Locator(), bs.Branch())] = want
+		}
+	}
+	if len(pins) == 0 {
+		return s
+	}
+	s2, err := l.openWith(ctx, cc, openOpts{prepare: true, needClaude: true, pinned: pins})
+	if err != nil {
+		s.warn("cannot use the commit that profile %s trusted: %s. ccshelf uses the newest trusted commit of the source", ui.SanitizeLine(name), ui.SanitizeLine(err.Error()))
+		return s
+	}
+	return s2
+}
+
 // checkBranches is the periodic check of run and dry-run. It returns the
 // session to run with: s, or (when the user accepts a new commit in a
 // terminal) a session prepared with the new commit.
@@ -227,15 +285,23 @@ func (l *launcher) offerBranchUpdate(ctx context.Context, cc *clicore.Context, s
 	case v.State == trust.Trusted:
 		return s2
 	case v.Problem != "" || v.State == trust.ProjectUntrusted:
-		return keep("the new commit cannot be reviewed here")
+		return keep("ccshelf cannot review the new commit here")
 	}
 	for _, m := range moved {
+		// Name the commit that was prepared and diffed. The head may have
+		// moved again since the check.
+		shown := m.head
+		for _, f := range r2.Chain {
+			if bs, ok := f.Source.(branchSource); ok && bs.Branch() == m.src.Branch() && bs.Locator() == m.src.Locator() && bs.Commit() != "" {
+				shown = bs.Commit()
+			}
+		}
 		fmt.Fprintf(cc.Streams.Err, "Branch %s of %s has a new commit: %s (you trusted %s).\n",
-			ui.Sanitize(m.src.Branch()), ui.Sanitize(trimLocator(m.src.Locator())), shortSHA(m.head), shortSHA(m.using))
+			ui.Sanitize(m.src.Branch()), ui.Sanitize(trimLocator(m.src.Locator())), shortSHA(shown), shortSHA(m.using))
 	}
 	fmt.Fprintf(cc.Streams.Err, "Profile %s needs trust (closure %s):\n", ui.Sanitize(r2.Name), v.Hash)
 	v.Describe(cc.Streams.Err)
-	ok, err := ui.ConfirmRisky(ctx, cc.Prompt, fmt.Sprintf("Trust profile %s as shown and run the new commit?", ui.Sanitize(r2.Name)))
+	ok, err := ui.ConfirmRisky(ctx, cc.Prompt, fmt.Sprintf("Trust profile %s as shown and use the new commit?", ui.Sanitize(r2.Name)))
 	if err != nil || !ok {
 		return keep("you did not trust the new commit")
 	}

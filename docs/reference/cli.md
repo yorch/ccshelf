@@ -985,7 +985,7 @@ ccshelf init --account-name work
 |---|---|---|
 | `--account-dir` | `string` | directory of that account (default ~/.claude-<name>) |
 | `--account-name` | `string` | also create an account with this name (see: ccshelf account add) |
-| `--branch` | `string` | branch the git source tracks, instead of --ref; every new commit needs trust again |
+| `--branch` | `string` | branch the git source tracks, instead of --ref (every new commit needs trust again) |
 | `--dir` | `string` | absolute directory of profiles to add as a dir source |
 | `--force` |  | replace an existing configuration file |
 | `--git-url` | `string` | org data repo URL to add as a git source |

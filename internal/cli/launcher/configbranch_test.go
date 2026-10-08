@@ -194,3 +194,31 @@ func TestInitWizardBranch(t *testing.T) {
 		t.Errorf("config: %+v", cfg.Sources)
 	}
 }
+
+func TestGitSourceWithoutRefIsOneUnavailableSource(t *testing.T) {
+	h := newHarness(t)
+	h.writeConfig("[trust]\nrequire_pin = false\n[[sources]]\ntype = \"git\"\nurl = \"" + branchURL + "\"\n")
+	h.writeProfile("mine", personalMine)
+	if code := h.run("run", "mine"); code != 0 || h.started != 1 {
+		t.Fatalf("personal profile: code %d started %d\n%s", code, h.started, h.errb)
+	}
+	h.wantErr("unavailable", `branch = "<name>"`)
+	h.mustRun("ls")
+	h.mustRun("config", "source", "ls")
+	h.mustRun("config", "source", "pin", "1", "--branch", "main", "--yes")
+	if s := h.loadConfig().Sources[0]; s.Branch != "main" {
+		t.Errorf("source: %+v", s)
+	}
+}
+
+func TestInitBranchWarns(t *testing.T) {
+	h := newHarness(t)
+	h.mustRun("init", "--git-url", branchURL, "--branch", "main")
+	h.wantErr("weakens a security setting", "tracks branch main", "every new commit still needs trust")
+	// A tag does not warn.
+	h = newHarness(t)
+	h.mustRun("init", "--git-url", branchURL, "--ref", "v1.0.0")
+	if strings.Contains(h.errb.String(), "weakens") {
+		t.Errorf("a tag warned:\n%s", h.errb)
+	}
+}

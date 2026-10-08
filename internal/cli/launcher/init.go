@@ -53,7 +53,7 @@ The full wizard asks once.`,
 	}
 	c.Flags().StringVar(&f.gitURL, "git-url", "", "org data repo URL to add as a git source")
 	c.Flags().StringVar(&f.ref, "ref", "", "tag or full commit id the git source is pinned to")
-	c.Flags().StringVar(&f.branch, "branch", "", "branch the git source tracks, instead of --ref; every new commit needs trust again")
+	c.Flags().StringVar(&f.branch, "branch", "", "branch the git source tracks, instead of --ref (every new commit needs trust again)")
 	c.Flags().StringVar(&f.path, "path", "profiles", "folder inside the repo that holds the profiles")
 	c.Flags().StringVar(&f.dir, "dir", "", "absolute directory of profiles to add as a dir source")
 	c.Flags().StringVar(&f.accountName, "account-name", "", "also create an account with this name (see: ccshelf account add)")
@@ -122,6 +122,13 @@ func (l *launcher) initConfig(ctx context.Context, cc *clicore.Context, f *initF
 	}
 	if err := cfg.Validate(); err != nil {
 		return ui.Usage(withHint(fmt.Errorf("configuration: %w", err), "a git source needs --ref (a tag or full commit id) or --branch"))
+	}
+	// A branch can move. init only warns: its --yes keeps its meaning (it
+	// confirms the write in the full wizard), and trust is still per commit.
+	for _, src := range cfg.Sources {
+		if src.Type == config.SourceGit && src.Branch != "" {
+			warnf(cc, "this configuration weakens a security setting: %s", config.BranchWarning(src))
+		}
 	}
 	dir, err := profile.PersonalDir()
 	if err != nil {
@@ -234,7 +241,7 @@ func printInitSummary(cc *clicore.Context, path, personalDir, accountDir string,
 		if src.Type == config.SourceGit {
 			line("Org data repo", src.URL)
 			if src.Branch != "" {
-				line("Tracked branch", src.Branch+" (the branch can move; every new commit needs your trust before it runs)")
+				line("Tracked branch", src.Branch+" (the branch can move, and every new commit needs your trust before it runs)")
 			} else {
 				line("Pinned ref", src.Ref)
 			}

@@ -118,8 +118,9 @@ func (l *launcher) runProfile(ctx context.Context, cc *clicore.Context, name str
 		return err
 	}
 	if !refresh {
-		// An explicit refresh already resolved the heads and goes through the
+		// An explicit refresh already checked the heads and goes through the
 		// ordinary trust check below (on_change = "fail" included).
+		s = l.alignBranchCommits(ctx, cc, s, name)
 		s = l.checkBranches(ctx, cc, s, name, yes)
 	}
 	ln, err := s.buildLaunch(ctx, name, pass, yes)
@@ -469,6 +470,9 @@ func (s *session) settleTrust(ctx context.Context, r *profile.Resolved) error {
 	}
 	v := store.CheckWithProject(r, s.proj.Allowed)
 	if v.State == trust.Trusted {
+		// The closure is trusted by content. If a source now has another pin
+		// at the same commit (a tag that became a branch), record that.
+		_, _ = store.Rekey(r)
 		return nil
 	}
 	needs := &trust.NeedsTrustError{Profile: r.Name, Verdict: v}
