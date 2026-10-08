@@ -134,7 +134,7 @@
       </div>
     </div>
     <p class="demo-note">Real <code>ccshelf dry-run</code> output from commit <span id="cap-commit">c2a679d</span>, fictional <code>acme</code> org, fake <code>claude</code>. <a href="https://github.com/yorch/ccshelf/blob/main/site/README.md#the-loadout-demo-is-captured-output">How it's made</a></p>
-    <p class="status"><strong>Status:</strong> implemented; stable releases are available for macOS, Linux and Windows. CI tests all six amd64 and arm64 targets. Open source (MIT). Unofficial: not affiliated with Anthropic.</p>
+    <p class="status"><strong>Status:</strong> implemented. Stable releases are available for macOS, Linux and Windows. CI tests all six amd64 and arm64 targets. Open source (MIT). Unofficial: not affiliated with Anthropic.</p>
   </div>
 </section>
 
@@ -142,9 +142,9 @@
 <section class="sec wrap" id="problem" aria-labelledby="h-problem">
   <div class="sec-head"><h2 id="h-problem">Not every terminal needs every plugin.</h2></div>
   <div class="sec-body prose">
-    <p>An organization with around fifty internal plugins ends up with a crowded session: skills for incident response sit next to skills for CSS, and nobody can say which plugin a task should use. Claude Code enables plugins through settings, so the set you choose is usually the set every session starts with.</p>
+    <p>An organization with around fifty internal plugins gets a crowded session. Skills for incident response sit next to skills for CSS, and nobody can say which plugin a task should use. Claude Code enables plugins through settings, so the set you choose is usually the set every session starts with.</p>
     <p>ccshelf adds two things. A <strong>launcher</strong> that chooses the set per terminal, and a <strong>catalog</strong> that answers "what exists, which should I use, who owns it" from metadata the organization already keeps in git.</p>
-    <p class="evidence">What has been measured so far: in one run on one real setup, hiding MCP servers and claude.ai connectors through the generated settings cut about 5.7k input tokens (19%, from 29.7k to 24.0k). That is a single run, not a benchmark. Whether a smaller set also improves how often the right skill fires is the open Phase 0 routing evaluation. Details in <a href="docs/research/stage0.html">docs/research/stage0.md</a>.</p>
+    <p class="evidence">What we measured so far: in one run on one real setup, hiding MCP servers and claude.ai connectors through the generated settings cut about 5.7k input tokens (19%, from 29.7k to 24.0k). That is a single run, not a benchmark. Whether a smaller set also improves how often the right skill fires is the open Phase 0 routing evaluation. Details in <a href="docs/research/stage0.html">docs/research/stage0.md</a>.</p>
   </div>
 </section>
 
@@ -183,8 +183,8 @@
     </div>
 
     <ol class="steps">
-      <li><strong>Resolve.</strong> Read the profile, follow its <code>extends</code>, and list what is installed with <code>claude plugin list --json</code>. Plugins a profile names but you lack are reported with the install command; nothing is installed silently.</li>
-      <li><strong>Compile.</strong> Write a settings file that sets <code>enabledPlugins</code> to <code>false</code> for every installed plugin the profile does not list. It is regenerated on each run, so a plugin you install tomorrow does not leak in. The same file can hide claude.ai connectors and named MCP servers.</li>
+      <li><strong>Resolve.</strong> Read the profile, follow its <code>extends</code>, and list what is installed with <code>claude plugin list --json</code>. ccshelf reports plugins that a profile names but you lack, with the install command. Nothing is installed silently.</li>
+      <li><strong>Compile.</strong> Write a settings file that sets <code>enabledPlugins</code> to <code>false</code> for every installed plugin the profile does not list. ccshelf regenerates it on each run, so a plugin you install tomorrow does not leak in. The same file can hide claude.ai connectors and named MCP servers.</li>
       <li><strong>Validate.</strong> Claude Code ignores an invalid settings file without a message, so ccshelf checks the generated JSON against a closed schema before every launch.</li>
       <li><strong>Start.</strong> On macOS and Linux ccshelf replaces itself with <code>claude</code> using <code>exec</code>, so job control and exit codes are exactly those of plain <code>claude</code>. On Windows it starts <code>claude</code> and waits.</li>
     </ol>
@@ -192,7 +192,7 @@
     <div class="two">
       <div class="prose">
         <h3>Shared by every profile</h3>
-        <p>Login, session history, auto memory, <code>CLAUDE.md</code> and the plugin cache. There is one copy of each plugin; profiles only change what is enabled. Sessions are not tagged by profile, so <code>/resume</code> lists sessions from every profile. Resuming one under a different profile is untested: its recorded prompt and transcript can still describe the other profile's skills.</p>
+        <p>Login, session history, auto memory, <code>CLAUDE.md</code> and the plugin cache. There is one copy of each plugin. Profiles only change what is enabled. Sessions are not tagged by profile, so <code>/resume</code> lists sessions from every profile. Resuming one under a different profile is untested: its recorded prompt and transcript can still describe the other profile's skills.</p>
       </div>
       <div class="prose">
         <h3>Not hidden by a profile</h3>
@@ -208,8 +208,8 @@
     <p>Metadata lint, a generated static site and <code>catalog.json</code>, and local search, all from the organization's marketplace repository.</p></div>
   <div class="sec-body">
     <div class="prose">
-      <p>Each plugin gets a small sidecar file, <code>catalog/plugins/&lt;name&gt;.toml</code>, with an owner, a status, when to use it and when not to, what it overlaps with and a review date. <code>ccshelf lint</code> fails the pull request when a required field is missing or stale; <code>ccshelf catalog build</code> turns the same data into a site; <code>ccshelf search</code> and <code>ccshelf doctor</code> read it locally.</p>
-      <p>To start, <code>ccshelf catalog init [dir]</code> sets up a new organization repository, or adds the missing pieces to an existing marketplace repository without changing a file that is already there (unless you pass <code>--force</code>, which saves a backup first). It prints a plan first (<code>create</code>, <code>skip-exists</code>, <code>needs-merge</code>), writes the configuration, a sidecar stub per plugin, <code>CODEOWNERS</code>, pinned workflows and a README, and leaves placeholders that <code>ccshelf lint</code> reports as warnings until someone fills them in. There are no built-in profiles. <code>--dry-run</code> writes nothing.</p>
+      <p>Each plugin gets a small sidecar file, <code>catalog/plugins/&lt;name&gt;.toml</code>, with an owner, a status, when to use it and when not to, what it overlaps with and a review date. <code>ccshelf lint</code> fails the pull request when a required field is missing or stale. <code>ccshelf catalog build</code> turns the same data into a site. <code>ccshelf search</code> and <code>ccshelf doctor</code> read it locally.</p>
+      <p>To start, <code>ccshelf catalog init [dir]</code> sets up a new org data repo. It can also add the missing pieces to an existing marketplace repository without changing a file that is already there (unless you pass <code>--force</code>, which saves a backup first). It prints a plan first (<code>create</code>, <code>skip-exists</code>, <code>needs-merge</code>). Then it writes the configuration, a sidecar stub per plugin, <code>CODEOWNERS</code>, pinned workflows and a README. It leaves placeholders that <code>ccshelf lint</code> reports as warnings until someone fills them in. There are no built-in profiles. <code>--dry-run</code> writes nothing.</p>
     </div>
 
     <figure class="cat" aria-labelledby="cat-cap">
@@ -266,7 +266,7 @@
     </figure>
 
     <div class="prose">
-      <p>The site is a plain static directory. Publish it to GitHub Pages or any internal static host; make sure who can see the site matches who may see the plugin list. A pull request that touches only a sidecar needs review from the platform owners through <code>CODEOWNERS</code>, so authors write the metadata and the platform team approves it.</p>
+      <p>The site is a plain static directory. Publish it to GitHub Pages or any internal static host. Make sure that the people who can see the site are the people who may see the plugin list. A pull request that touches only a sidecar needs review from the platform owners through <code>CODEOWNERS</code>, so authors write the metadata and the platform team approves it.</p>
     </div>
   </div>
 </section>
@@ -284,9 +284,9 @@
       <div id="sr3"><dt>No shadowing, protected plugins <span class="badge c-ok">implemented</span></dt>
         <dd>A project profile can never shadow another source's profile. The org config can list plugins and MCP servers (audit, secret scanning) that no profile may mask. <span class="protects">Protects against a repository or a profile switching off a control the organization requires.</span></dd></div>
       <div id="sr4"><dt>Private, verified cache <span class="badge c-ok">implemented</span></dt>
-        <dd>Cache directories are owner-only (mode 0700, files 0600), created without following symlinks, and each content-addressed file is re-hashed before reuse. Secrets are never written to disk or to argv, and output is redacted. <span class="protects">Protects against another local user, or a stale file, changing what <code>claude</code> receives.</span></dd></div>
+        <dd>Cache directories are owner-only (mode 0700, files 0600) and created without following symlinks. ccshelf re-hashes each content-addressed file before reuse. It never writes secrets to disk or to argv, and it redacts output. <span class="protects">Protects against another local user, or a stale file, changing what <code>claude</code> receives.</span></dd></div>
       <div id="sr5"><dt>Hardened CI and releases <span class="badge c-ok">signed release available</span></dt>
-        <dd>The Action is pinned by full commit SHA and embeds the expected checksum of the binary it downloads. Release checksums are signed with cosign, archives have GitHub build provenance and an SBOM, and workflows use <code>permissions: {}</code> and least privilege. <span class="protects">Protects against a tampered binary or a compromised action in your pipeline.</span></dd></div>
+        <dd>The Action is pinned by full commit SHA and embeds the expected checksum of the binary it downloads. cosign signs the release checksums. Archives have GitHub build provenance and an SBOM. Workflows use <code>permissions: {}</code> and least privilege. <span class="protects">Protects against a tampered binary or a compromised action in your pipeline.</span></dd></div>
     </dl>
     <p class="more"><a href="docs/design/security.html">Read the full security design</a> and the <a href="https://github.com/yorch/ccshelf/blob/main/SECURITY.md">security policy</a>.</p>
   </div>
@@ -296,7 +296,7 @@
 <section class="sec wrap" id="platforms" aria-labelledby="h-plat">
   <div class="sec-head"><h2 id="h-plat">Platforms, GitHub and managed policy</h2></div>
   <div class="sec-body">
-    <p class="fine">The test suites pass on native macOS, Linux and Windows CI runners, across amd64 and arm64; only macOS has driven the real <code>claude</code>. GHE Server is designed for but untested.</p>
+    <p class="fine">The test suites pass on native macOS, Linux and Windows CI runners, across amd64 and arm64. Only macOS has driven the real <code>claude</code>. GHE Server is designed for but untested.</p>
     <details class="fold">
       <summary>Build targets and how far each is exercised</summary>
     <table class="targets">
@@ -313,7 +313,7 @@
     <div class="two">
       <div class="prose">
         <h3>GitHub.com, GHE Cloud, GHE Server</h3>
-        <p>No host is hard-coded. Git operations shell out to your own <code>git</code>, so your credential helper and SSH config apply; on GHE hosts use git URL sources. The logic lives in the binary and the GitHub Actions workflow is a thin wrapper, so the same commands run in another CI or locally. Third-party actions such as <code>setup-go</code> need to be mirrored or allowed on GHE Server.</p>
+        <p>No host is hard-coded. Git operations shell out to your own <code>git</code>, so your credential helper and SSH config apply. On GHE hosts, use git URL sources. The logic lives in the binary and the GitHub Actions workflow is a thin wrapper, so the same commands run in another CI or locally. Third-party actions such as <code>setup-go</code> need to be mirrored or allowed on GHE Server.</p>
       </div>
       <div class="prose">
         <h3>Managed policy</h3>
@@ -326,21 +326,21 @@
 <!-- INSTALL -->
 <section class="sec wrap" id="install" aria-labelledby="h-install">
   <div class="sec-head"><h2 id="h-install">Install and quick start</h2>
-    <p>Install the latest release with the script for your platform; it verifies the download before installing. You can also build from source.</p></div>
+    <p>Install the latest release with the script for your platform. It verifies the download before installing. You can also build from source.</p></div>
   <div class="sec-body">
     <h3 class="sub">Linux and macOS</h3>
     <div class="cmd">
       <pre id="c-install-sh"><code>curl -fsSL https://github.com/yorch/ccshelf/releases/latest/download/install.sh | sh</code></pre>
       <button class="copy" type="button" data-copy="c-install-sh" hidden>Copy command</button>
     </div>
-    <p class="fine">Supports amd64 and arm64; WSL uses the Linux installer. Installs into <code>~/.local/bin</code>, without sudo, and needs <code>curl</code>. To pin a version and require cosign signature verification, run <code>curl -fsSL https://github.com/yorch/ccshelf/releases/latest/download/install.sh | sh -s -- --version v0.2.0 --require-signature</code>. SHA-256 verification against that release's <code>checksums.txt</code> is always required; the signature is checked when cosign is installed.</p>
+    <p class="fine">Supports amd64 and arm64. WSL uses the Linux installer. Installs into <code>~/.local/bin</code>, without sudo, and needs <code>curl</code>. To pin a version and require cosign signature verification, run <code>curl -fsSL https://github.com/yorch/ccshelf/releases/latest/download/install.sh | sh -s -- --version v0.2.0 --require-signature</code>. SHA-256 verification against that release's <code>checksums.txt</code> is always required. The installer checks the signature when cosign is installed.</p>
 
     <h3 class="sub">Windows</h3>
     <div class="cmd">
       <pre id="c-install-ps"><code>irm https://github.com/yorch/ccshelf/releases/latest/download/install.ps1 | iex</code></pre>
       <button class="copy" type="button" data-copy="c-install-ps" hidden>Copy command</button>
     </div>
-    <p class="fine">Supports amd64 and arm64 in Windows PowerShell 5.1 or PowerShell 7. Installs into <code>%LOCALAPPDATA%\Programs\ccshelf</code>. Add <code>-AddToPath</code> to update your user PATH. To pin a version and require cosign, run <code>&amp; ([scriptblock]::Create((irm https://github.com/yorch/ccshelf/releases/latest/download/install.ps1))) -Version v0.2.0 -RequireSignature</code>. The binaries are not notarized or Authenticode-signed yet; ccshelf is unofficial and not affiliated with Anthropic. See the <a href="https://github.com/yorch/ccshelf#install">README</a> for all options, manual verification and uninstall instructions.</p>
+    <p class="fine">Supports amd64 and arm64 in Windows PowerShell 5.1 or PowerShell 7. Installs into <code>%LOCALAPPDATA%\Programs\ccshelf</code>. Add <code>-AddToPath</code> to update your user PATH. To pin a version and require cosign, run <code>&amp; ([scriptblock]::Create((irm https://github.com/yorch/ccshelf/releases/latest/download/install.ps1))) -Version v0.2.0 -RequireSignature</code>. The binaries are not notarized or Authenticode-signed yet. ccshelf is unofficial and not affiliated with Anthropic. See the <a href="https://github.com/yorch/ccshelf#install">README</a> for all options, manual verification and uninstall instructions.</p>
 
     <h3 class="sub">Build from source</h3>
     <div class="cmd">
@@ -363,7 +363,7 @@ ccshelf run --account personal sre-night --resume</code></pre>
       <button class="copy" type="button" data-copy="c-use" hidden>Copy commands</button>
     </div>
     <p>Create a personal profile, list profiles from every source, see the resolved plugins and trust closure, print the exact <code>claude</code> command without running it, then run it. The last line shows the argument order: ccshelf flags first, then the profile name, then whatever goes to <code>claude</code>.</p>
-    <p>Every command works with flags alone. On a terminal, missing values are asked for, and the equivalent command line is printed so you can script it later.</p>
+    <p>Every command works with flags alone. On a terminal, ccshelf asks for missing values and prints the equivalent command line, so you can script it later.</p>
 
     <h3 class="sub">For an organization</h3>
     <div class="cmd">
@@ -406,12 +406,12 @@ ccshelf catalog build</code></pre>
       <dl class="cmds">
       <div><dt><code>lint</code></dt><dd>Check marketplace entries, sidecars and profiles.</dd></div>
       <div><dt><code>compile [--check]</code></dt><dd>Regenerate the <code>profile-*</code> bundle plugins, or fail if the committed ones differ.</dd></div>
-      <div><dt><code>catalog init [dir]</code></dt><dd>Set up a new org data repo, or add the missing files to an existing marketplace repo. Prints a plan, leaves existing files alone unless <code>--force</code> (which saves a <code>.bak</code>), <code>--dry-run</code> writes nothing.</dd></div>
+      <div><dt><code>catalog init [dir]</code></dt><dd>Set up a new org data repo, or add the missing files to an existing marketplace repo. Prints a plan and leaves existing files alone unless <code>--force</code> (which saves a <code>.bak</code>). <code>--dry-run</code> writes nothing.</dd></div>
       <div><dt><code>catalog build</code></dt><dd>Build the static catalog site and <code>catalog.json</code>.</dd></div>
       <div><dt><code>search &lt;query&gt;</code></dt><dd>Find plugins and profiles by what they are for.</dd></div>
       <div><dt><code>recommend</code></dt><dd>Suggest profiles from the current directory. Rule-based, no LLM.</dd></div>
       <div><dt><code>doctor [--policy]</code></dt><dd>Overlaps, unused or deprecated plugins in use, stale owners, policy shadowing and the capability matrix.</dd></div>
-      <div><dt><code>update [--check] [--rollback]</code></dt><dd>Replace this binary with the latest release after checking its SHA-256 and, if cosign is installed, its signature. <code>--check</code> only reports; <code>--rollback</code> restores the previous binary. Nothing updates by itself unless you set <code>[update] mode</code>.</dd></div>
+      <div><dt><code>update [--check] [--rollback]</code></dt><dd>Replace this binary with the latest release after checking its SHA-256 and, if cosign is installed, its signature. <code>--check</code> only reports. <code>--rollback</code> restores the previous binary. Nothing updates by itself unless you set <code>[update] mode</code>.</dd></div>
       <div><dt><code>version</code></dt><dd>Print the version. <code>--version</code> works too.</dd></div>
       </dl>
       <h3 class="sub">Exit codes</h3>
@@ -438,19 +438,19 @@ ccshelf catalog build</code></pre>
     </details>
     <details>
       <summary>Is a profile a security boundary?</summary>
-      <p>No. A profile filters what loads. Profiles share your login, history and memory, and a repository's own settings still apply. Real enforcement of permissions and hooks comes only from Claude Code's managed settings; see the <a href="https://code.claude.com/docs" rel="external noopener">Claude Code documentation</a>.</p>
+      <p>No. A profile filters what loads. Profiles share your login, history and memory, and a repository's own settings still apply. Real enforcement of permissions and hooks comes only from Claude Code's managed settings. See the <a href="https://code.claude.com/docs" rel="external noopener">Claude Code documentation</a>.</p>
     </details>
     <details>
       <summary>What happens under managed policy?</summary>
-      <p>ccshelf works within it and never bypasses it. If policy blocks a flag or a settings key, the affected feature is skipped with a warning, or the launch stops, depending on the profile's <code>on_blocked</code>. Policy-enabled plugins stay on and are reported as such. Exit code 3 means a launch was blocked by policy.</p>
+      <p>ccshelf works within it and never bypasses it. If policy blocks a flag or a settings key, ccshelf skips the affected feature with a warning, or stops the launch. The profile's <code>on_blocked</code> setting decides which. Policy-enabled plugins stay on and are reported as such. Exit code 3 means a launch was blocked by policy.</p>
     </details>
     <details>
       <summary>How do accounts fit in?</summary>
-      <p>An account is a separate Claude Code identity and data directory, a different axis from profiles: the account says who you are, the profile says what is active. ccshelf honors an existing <code>CLAUDE_CONFIG_DIR</code> and never unsets it, or you can name accounts and use <code>--account</code>. Each account has its own installed plugins and login; ccshelf never reads or copies credentials.</p>
+      <p>An account is a separate Claude Code identity and data directory, a different axis from profiles. The account says who you are. The profile says what is active. ccshelf honors an existing <code>CLAUDE_CONFIG_DIR</code> and never unsets it, or you can name accounts and use <code>--account</code>. Each account has its own installed plugins and login. ccshelf never reads or copies credentials.</p>
     </details>
     <details>
       <summary>How do I update ccshelf?</summary>
-      <p>Run <code>ccshelf update</code>. It downloads the latest release over HTTPS, checks the archive against the release's <code>checksums.txt</code> (and, when cosign is installed, the signature of that file), runs the new binary once to confirm its version, and replaces the old one, which is kept as <code>ccshelf.old</code> for <code>ccshelf update --rollback</code>. <code>ccshelf update --check</code> only reports. A copy installed by Homebrew, Scoop, WinGet or <code>go install</code> is left to that tool and the command to run is printed. Nothing checks for updates by itself unless you opt in with <code>[update] mode = "notify"</code> (one line when a release exists) or <code>"install"</code> (a newer stable release of the same major version; for 0.x, the same minor). Both act only in an interactive terminal, never in scripts or pipelines (use <code>ccshelf update --yes</code> there); <code>CCSHELF_NO_UPDATE_CHECK=1</code> turns them off and CI is never touched. If the latest release is older than yours, <code>--force</code> does not downgrade; <code>--allow-downgrade</code> does.</p>
+      <p>Run <code>ccshelf update</code>. It downloads the latest release over HTTPS. It checks the archive against the release's <code>checksums.txt</code> (and, when cosign is installed, the signature of that file). It runs the new binary once to confirm its version. Then it replaces the old binary and keeps it as <code>ccshelf.old</code> for <code>ccshelf update --rollback</code>. <code>ccshelf update --check</code> only reports. ccshelf leaves a copy installed by Homebrew, Scoop, WinGet or <code>go install</code> to that tool, and prints the command to run. Nothing checks for updates by itself unless you opt in with <code>[update] mode = "notify"</code> (one line when a release exists) or <code>"install"</code> (a newer stable release of the same major version, or for 0.x, the same minor). Both act only in an interactive terminal, never in scripts or pipelines (use <code>ccshelf update --yes</code> there). <code>CCSHELF_NO_UPDATE_CHECK=1</code> turns them off, and CI is never touched. If the latest release is older than yours, <code>--force</code> does not downgrade. <code>--allow-downgrade</code> does.</p>
     </details>
     <details>
       <summary>Does it change my Claude Code config?</summary>

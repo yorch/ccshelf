@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://ccshelf.invalid/schema/sidecar.schema.json",
   "title": "ccshelf plugin sidecar",
-  "description": "Catalog-only metadata of one plugin, in catalog/plugins/<name>.toml (as the equivalent JSON object). In single-file mode (metadata_source = \"marketplace\") the same fields go in the marketplace entry's metadata object. Unknown keys are errors. Values are checked further by ccshelf lint.",
+  "description": "Catalog-only metadata of one plugin, in catalog/plugins/<name>.toml (as the equivalent JSON object). In single-file mode (metadata_source = \"marketplace\") the same fields go in the marketplace entry's metadata object. Unknown keys are errors. ccshelf lint checks the values further.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -10,10 +10,10 @@
     "status": {"enum": ["active", "experimental", "deprecated"]},
     "when_to_use": {"type": "array", "items": {"type": "string"}, "description": "Phrases for search and for choosing between plugins."},
     "avoid_when": {"type": "array", "items": {"type": "string"}},
-    "overlaps_with": {"type": "array", "items": {"type": "string"}, "description": "Names of plugins a reader might confuse this one with; each must exist."},
-    "superseded_by": {"type": "string", "description": "Replacement plugin; required when status is deprecated, must exist and must not be deprecated."},
-    "review_by": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "description": "YYYY-MM-DD; a TOML local date is accepted. Required for active plugins."},
+    "overlaps_with": {"type": "array", "items": {"type": "string"}, "description": "Names of plugins a reader might confuse this one with. Each must exist."},
+    "superseded_by": {"type": "string", "description": "Replacement plugin. Required when status is deprecated. It must exist and must not be deprecated."},
+    "review_by": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "description": "YYYY-MM-DD. A TOML local date is accepted. Required for active plugins."},
     "support": {"type": "string", "description": "Where to ask for help, for example #sre-help."},
-    "docs": {"type": "string", "pattern": "^https?://", "description": "Documentation link; http or https only."}
+    "docs": {"type": "string", "pattern": "^https?://", "description": "Documentation link, http or https only."}
   }
 }
