@@ -4,27 +4,22 @@
 //
 // # Lifecycle
 //
-// New validates the options without touching the network or the file system.
-// Prepare then resolves the pinned ref to a full commit SHA, makes sure a
-// verified checkout of exactly that commit exists in the private cache, and
-// prepares the Source for use. Until Prepare succeeds, Names, Open and Root
-// return ErrNotPrepared and Commit returns "". ID is "git:<url>@<ref>" before
-// Prepare and "git:<url>@<sha>" after it. The closure only ever sees the
-// second form. Locator and Ref identify the source independently of the
-// commit. Thus the trust package can tell "the tag moved" from "a different
-// source".
+// New does no I/O. Prepare resolves the pinned ref to a full commit SHA and
+// makes sure a verified checkout of exactly that commit exists in the private
+// cache. The closure only sees the "git:<url>@<sha>" form of ID. Locator and
+// Ref identify the source independently of the commit, so the trust package
+// can tell "the tag moved" from "a different source".
 //
 // # Pinning (SR2)
 //
 // A Ref must be a tag or a full commit SHA (40 or 64 hex digits). This package
 // always rejects branch-like names (main, master, HEAD, develop, origin/...,
-// refs/heads/...). On every Prepare, it resolves a tag with `git ls-remote`
-// and prefers the peeled commit of an annotated tag. Thus a tag that was moved
-// on the remote shows up as a different Commit. With Options.RequirePin (what
-// the launcher sets from trust.require_pin, default true), the ref must be a
-// tag or a SHA. Without it, a ref that is not a tag may name a branch that is
-// not branch-like. Prepare resolves such a ref once and still stores it as a
-// SHA. A SHA pin needs no network once its checkout is cached.
+// refs/heads/...). Every Prepare resolves a tag with `git ls-remote` and
+// prefers the peeled commit of an annotated tag, so a moved tag shows up as a
+// different Commit. With Options.RequirePin (trust.require_pin, default true)
+// the ref must be a tag or a SHA. Without it, a ref that is not a tag may name
+// a branch that is not branch-like, and Prepare still stores it as a SHA. A
+// SHA pin needs no network once its checkout is cached.
 //
 // # Checkout and verification
 //
@@ -37,9 +32,8 @@
 // Git never writes a working tree. It only does these steps:
 //
 //   - initializes an object store
-//   - fetches the SHA (--depth 1, --no-tags, --no-recurse-submodules, and a
-//     --filter=blob:limit just above the per-file limit, so a server that
-//     supports filters does not send big blobs)
+//   - fetches the SHA (shallow, no tags, no submodules, and a blob size
+//     filter just above the per-file limit)
 //   - pins HEAD to it
 //   - lists the tree (ls-tree) and reads blobs (cat-file --batch)
 //
@@ -66,14 +60,11 @@
 //
 // # The org config and offline use
 //
-// ccshelf.toml at the source root is a watched file like the folders, with the
-// same hygiene and size limit. This package reads it from the object store
-// first. Its profiles.dir and profiles.mcp_registry say which folder and which
-// registry file are watched. OrgConfig exposes its [protect] lists. If
-// ccshelf.toml does not parse, Prepare fails with an error that wraps
-// orgconfig.ErrInvalid. PrepareCached prepares from an already verified
-// checkout of a known commit (the launcher takes it from the trust lockfile)
-// without contacting the remote.
+// ccshelf.toml at the source root is a watched file, with the same hygiene
+// and size limit. This package reads it from the object store first, because
+// its profiles.dir and profiles.mcp_registry say what is watched. If it does
+// not parse, Prepare fails with an error that wraps orgconfig.ErrInvalid.
+// PrepareCached never contacts the remote.
 //
 // # Process hygiene
 //
@@ -90,24 +81,16 @@
 //   - GIT_ALLOW_PROTOCOL restricts transports to https and ssh.
 //   - Git prompts are disabled.
 //
-// The environment is an allowlist. This package drops every GIT_* variable,
-// so GIT_CONFIG_GLOBAL, GIT_SSL_NO_VERIFY, GIT_EXEC_PATH, GIT_PROXY_COMMAND,
-// GIT_TRACE*, GIT_REPLACE_REF_BASE, GIT_ATTR_SOURCE, GIT_SHALLOW_FILE and the
-// rest cannot redirect or weaken git. The exceptions are GIT_SSH,
-// GIT_SSH_COMMAND, GIT_SSH_VARIANT and GIT_HTTP_PROXY_AUTHMETHOD, which reach
-// the user's git host. It drops SSH_ASKPASS too. Other variables (HOME, PATH,
-// the proxy variables, SSH_AUTH_SOCK) pass through. Git reads the user's git
-// configuration, credential helpers and ssh configuration from HOME and
-// XDG_CONFIG_HOME, so private repositories work.
+// The environment is an allowlist (see keptGitEnv). Every GIT_* variable
+// except the ssh and http-proxy settings is dropped, so the environment cannot
+// redirect or weaken git. SSH_ASKPASS is dropped too. Git still reads the
+// user's git configuration, credential helpers and ssh configuration from
+// HOME and XDG_CONFIG_HOME, so private repositories work.
 //
-// URLs follow config.ValidateGitURL. Only https, ssh or scp-like
-// user@host:path are valid, with no userinfo on https, no password on ssh, no
-// query or fragment, no whitespace, control or invisible formatting
-// characters, no leading "-" and no transport helper. Thus no token can reach
-// Locator, ID, the lockfile, argv or an error message. (file and local paths
-// are accepted with AllowLocal, which exists for tests.) This package
-// sanitizes git's standard error before it enters an error value, because a
-// remote can write to it.
+// URLs follow config.ValidateGitURL, so no token can reach Locator, ID, the
+// lockfile, argv or an error message. (file and local paths are accepted with
+// AllowLocal, which exists for tests.) This package sanitizes git's standard
+// error before it enters an error value, because a remote can write to it.
 //
 // # Content hygiene
 //
@@ -128,11 +111,7 @@
 //   - path components such as "..", ".git", ":" or names with backslashes,
 //     control or invisible characters
 //
-// The profile package reads only those folders. The catalog data (sidecars and
-// marketplace files) is there for the launcher's deprecated-plugin warning and
-// for search and recommend without an org data repo checkout. A marketplace
-// file over the size limit makes the source unusable, like any other watched
-// file. With [catalog] enabled = false in ccshelf.toml (a profiles-only repo),
-// none of the catalog data is watched. Thus a source without it, or with a
-// stray copy, works the same.
+// watchSet says why the catalog data is watched. With [catalog] enabled =
+// false in ccshelf.toml (a profiles-only repo), none of it is watched, so a
+// source without it, or with a stray copy, works the same.
 package gitsource

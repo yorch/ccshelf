@@ -4,21 +4,17 @@
 //
 // # Signals
 //
-// Collect walks a directory (breadth first, at most MaxFiles files and
-// MaxDepth levels), never follows symlinks, skips .git, node_modules, vendor
-// and similar directories, ignores entries it cannot read and names with
-// control characters, and reads only small manifest files (package.json,
-// go.mod, pyproject.toml and the like, at most MaxManifestSize bytes each).
-// File names imply command line tools: a Makefile implies make, a Dockerfile
-// docker, *.tf files terraform.
+// Collect walks a directory with the bounds and skips that its doc comment
+// lists, and reads only small manifest files (package.json, go.mod,
+// pyproject.toml and the like). File names imply command line tools: a
+// Makefile implies make, a Dockerfile docker, *.tf files terraform.
 //
 // # Plugins
 //
 // The package matches plugins on the relevance signals that Claude Code defines
 // (relevance.signals in marketplace.json). The catalog does not carry them,
 // so the caller passes them with WithRelevance (see RelevanceOf). Each kind
-// of signal adds its weight once: cwd 2, filesRead 3, manifestDeps 3, cli 1,
-// hosts 1.
+// of signal adds its weight once (see the weight constants).
 //
 //   - cwd: glob tested against the absolute path of the directory, and
 //     against its repository-relative path and that of every directory above
@@ -53,9 +49,10 @@
 // when_to_use phrase (three or more letters, minus common stopwords, plurals
 // folded) in a vocabulary built from the directory: the names of its last
 // three segments, file extensions and well known file names, implied
-// commands, and dependency names found in manifests. Each distinct match
-// adds 1. Each avoid_when match subtracts 1.5. The output does not list
-// profiles that score under 1.
+// commands, and dependency names found in manifests. Each distinct
+// when_to_use match adds to the score and each avoid_when match subtracts
+// from it (keywordWeight, avoidWeight). The output does not list profiles
+// that score under minProfileScore.
 //
 // # Deprecation
 //

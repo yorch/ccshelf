@@ -12,9 +12,8 @@
 //
 // # Build
 //
-// [Build] turns a [Spec] (installed plugins plus the profile's choices) into
-// a [Result]. [Result.JSON] marshals its Doc deterministically (sorted keys,
-// two-space indent, trailing newline). Semantics:
+// [Build] turns a [Spec] into a [Result]. The [Spec] fields say what each
+// input does. The rules that span fields:
 //
 //   - allow-only mode (the default): Build writes false for every installed
 //     plugin that is not in Include, Protected or Locked. Build writes true
@@ -23,16 +22,9 @@
 //     ids that are not installed go in Missing, and Build does not write them.
 //   - additive mode: Build masks only Exclude entries. Include still writes
 //     true.
-//   - Locked: these are the installed plugins that report RequiredByOrg, plus
-//     the ids in Spec.PolicyLocked. Spec.PolicyLocked is what the caller
-//     learned from managed policy, for example policy.Matrix.LockedPlugins().
-//     The RequiredByOrg marker in `plugin list` is best effort. A settings
-//     file can never mask a locked plugin, so Build never writes one (neither
-//     true nor false) and lists all of them in Locked.
-//   - UserLayerDropped: the session runs with --setting-sources
-//     project,local, so the user layer that enables plugins is gone. Build
-//     writes true for installed protected and locked plugins, because if it
-//     omits them, they stay disabled. Build never writes false for them.
+//   - Locked plugins (RequiredByOrg, a best-effort marker, plus
+//     Spec.PolicyLocked) cannot be masked by a settings file, so Build never
+//     writes one, except as true when UserLayerDropped.
 //   - An empty Installed list in allow-only mode adds the warning "no
 //     installed plugins were found. Nothing will be masked". It usually means
 //     that the plugin listing ran in the wrong place.
@@ -46,26 +38,17 @@
 //   - deniedMcpServers entries are {"serverName": label} objects with full
 //     server labels (for example plugin:context7:context7 or "claude.ai
 //     Shopify"). Build removes duplicates and sorts them.
-//   - HideConnectors writes disableClaudeAiConnectors true, never false.
-//   - Spec.ProtectedMCP lists MCP server labels that must keep working (SR3).
-//     If DenyMCP names one, Build returns [ErrProtectedMCP]. If
-//     HideConnectors is set while a protected label starts with "claude.ai ",
-//     Build returns [ErrProtectedConnector].
-//   - Env may use only names that envpolicy accepts, with values free of
-//     control characters. Profile is the only way to set CCSHELF_PROFILE.
-//     If Env contains it, Build returns an error.
-//   - model must be at most 128 characters matching [A-Za-z0-9._:/\[\]-]+.
+//   - HideConnectors never writes false. Spec.ProtectedMCP (SR3) makes Build
+//     fail rather than hide a protected server or connector.
+//   - Env values must be free of control characters. model must be at most
+//     128 characters matching [A-Za-z0-9._:/\[\]-]+.
 //
 // # Validate
 //
 // [Validate] must run on the exact bytes that ccshelf is about to give to
 // --settings, before every launch. Claude Code silently ignores an invalid
-// settings file (exit 0), and that would turn a mask into no mask. Validate
-// rejects duplicate keys, unknown keys, wrong types and files over 1 MiB, and
-// names the offending key in each error. It applies the same rules as Build
-// (control characters and NUL in env values, model name syntax and length,
-// server label length). It also rejects a UTF-8 byte order mark and invalid
-// UTF-8. A file that contains CCSHELF_PROFILE in env is valid, because the
-// launcher writes it through Build. Validate is stricter than Claude Code.
-// This is safe because Claude Code silently ignores files it cannot parse.
+// settings file (exit 0), and that would turn a mask into no mask. It rejects
+// duplicate keys, unknown keys, wrong types and files over 1 MiB. A file that
+// contains CCSHELF_PROFILE in env is valid, because the launcher writes it
+// through Build.
 package settings
