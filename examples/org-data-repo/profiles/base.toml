@@ -17,9 +17,11 @@ exclude = []
 [mcp]
 servers = []
 claudeai_connectors = "none"
-# strict is inherited. With no servers listed here, every child that lists no
-# servers of its own launches with --strict-mcp-config and an empty MCP set,
-# which drops the user's own MCP servers. Remove it to keep them.
+# strict is inherited by every child that does not set it. Where
+# --strict-mcp-config can be used, only the profile's servers load (none here),
+# so the user's own MCP servers are dropped; under a policy block or a protected
+# MCP server ccshelf falls back to deniedMcpServers. Set strict = false in a
+# child, or remove it here, to keep them.
 strict = true
 
 [session]
