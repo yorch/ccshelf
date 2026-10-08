@@ -77,7 +77,8 @@ type Catalog struct {
 }
 
 // SourceConfig describes one profile source. The order of sources does not
-// matter; profile.Resolve decides collisions and personal shadowing. For git sources Path is the folder inside the repository.
+// matter; profile.Resolve decides collisions and personal shadowing. For git
+// sources Path is the folder inside the repository.
 type SourceConfig struct {
 	Type   string `toml:"type"`
 	Name   string `toml:"name,omitempty"`
