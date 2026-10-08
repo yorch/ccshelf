@@ -31,8 +31,14 @@ path = "~/.config/ccshelf/profiles"      # personal profiles
 [[sources]]
 type = "git"
 url = "git@ghe.example.com:acme/claude-marketplace.git"   # the org data repo (use the GHE URL)
-ref = "v2026.10.1"                              # pinned tag or commit, not a moving branch
+ref = "v2026.10.1"                              # pinned tag or commit. A branch name is refused here; use `branch` below
 path = "profiles"                               # folder inside the repo
+
+# [[sources]]                                   # the same repo, tracking a branch instead of a tag (D-55)
+# type = "git"
+# url = "git@ghe.example.com:acme/claude-marketplace.git"
+# branch = "main"                               # use branch or ref, never both. The branch can move, but trust stays per commit
+# path = "profiles"
 
 # [[sources]]                                   # org profiles shipped as a data-only plugin
 # type = "plugin"
@@ -46,7 +52,8 @@ path = "profiles"                               # folder inside the repo
 # remote_url = "https://catalog.example.com/catalog.json"
 
 [trust]
-require_pin = true            # refuse git sources without a pinned ref (the tag is resolved to a commit SHA)
+require_pin = true            # refuse a `ref` that is not a tag or a full commit. A `branch` is allowed: the key is explicit
+branch_check_interval = "24h" # how often a run checks the remote for a new commit on a tracked branch (1h to 8760h)
 trust_project_profiles = false # project .ccshelf/ folders are ignored unless trusted per repo
 on_change = "prompt"          # prompt | fail. What to do when the resolved closure of an accepted profile changes in ANY way
                               # (there is no auto-accept: `allow` is rejected). Risky changes (a new MCP command, env
@@ -64,6 +71,16 @@ the source files.
 On `strict`: `mcp.servers` is a union across the chain, so a child inherits strict together with every server listed by it and its parents. Only when no level lists a server does strict run with an empty set, which drops the user's own MCP servers. `--strict-mcp-config` with an empty config removes all MCP servers {V} (Stage 0 T5, `../research/stage0.md`). Where the flag cannot be used, the launcher uses `deniedMcpServers` instead (see [launcher.md](launcher.md), "2. What is shared between profiles").
 
 **Trust model (SR1 and SR2).** A shared profile is a closed schema, and MCP definitions live in a reviewed registry. The launcher loads it only from a trusted source, records a hash of its resolved closure in a lockfile and asks before it accepts a change. The full rules are in [security.md](security.md), SR2.
+
+**Tracking a branch (D-55).** A git source with `branch = "<name>"` follows a branch. The name follows `git check-ref-format --branch` and cannot be a full ref such as `refs/heads/main`. Setting `ref` and `branch` together is an error, and so is setting neither. The branch is allowed with `trust.require_pin = true`, because the key is explicit. A `ref = "main"` still fails, and its message points to `branch = "main"`.
+
+- ccshelf resolves `refs/heads/<name>` with `git ls-remote` to a full commit SHA. The checkout, the content check and the lockfile entry are per commit, as for a tag. The lockfile records the ref as `branch:<name>`, so a branch and a tag with the same name never share a record.
+- `run` and `dry-run` use the commit that the profile being run trusted, from the cache, with no network. Two profiles of one source may have been trusted at two commits, and each one keeps its own. If that commit is not in the cache, ccshelf fetches exactly that commit by id. It never checks the branch head to fill a gap. At most once per `trust.branch_check_interval`, they check the remote for a new commit on the branch. ccshelf stores the time of the last attempt for each source in the private cache (`branch-check.json`), also when the attempt fails, so a host that is down does not slow every run.
+- If the head moved, a terminal shows the same diff and question as `ccshelf trust`. If the user accepts, the run uses the new commit. If the user declines, the run uses the trusted commit and says so. Without a terminal, with `--yes`, or with `on_change = "fail"`, ccshelf keeps the trusted commit and prints one line that names the source and `ccshelf trust <profile>`. A failed check prints at most one warning line and never blocks the run.
+- `run --refresh` and `dry-run --refresh` check the head now, whatever the interval says. `ccshelf trust` and `ccshelf ls --refresh` also check the head now. After such a refresh, the normal trust check applies: a prompt on a terminal, or exit 4 without one or with `on_change = "fail"`.
+- `ls`, `show` and `config show` label the source, for example `branch main @ 1a2b3c4`. The commit is the one the source is prepared at, so the label shows what a run uses. In `--json`, the `source` and `sources` fields keep their old format. The label is in the separate `tracks` field (and `trusted_commit` in `config show --json`).
+- If a source is switched from a tag to a branch at the same commit, the next run that finds the closure trusted by content rewrites the refs in the lockfile (`Store.Rekey`). It needs equal hashes, the same URL and the same commit, so it can never create or move trust.
+- Tag and commit sources have no periodic check.
 
 Still undecided:
 - Whether the data-only plugin approach works smoothly when `strictKnownMarketplaces` or other policy applies (untested).

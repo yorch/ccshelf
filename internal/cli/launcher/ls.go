@@ -17,6 +17,7 @@ type lsRow struct {
 	Status      string   `json:"status,omitempty"`
 	Kind        string   `json:"kind"`
 	Source      string   `json:"source"`
+	Tracks      string   `json:"tracks,omitempty"`
 	Shadows     []string `json:"shadows"`
 	Conflict    []string `json:"conflict"`
 	Error       string   `json:"error,omitempty"`
@@ -33,7 +34,7 @@ profiles are listed with their error. Use --json for a stable machine-readable f
 		Args: cobra.NoArgs,
 	}
 	var refresh bool
-	c.Flags().BoolVar(&refresh, "refresh", false, "re-resolve git tags on the remote instead of using the commits the trust lockfile pins")
+	c.Flags().BoolVar(&refresh, "refresh", false, "re-resolve git tags and branches on the remote instead of using the commits the trust lockfile pins")
 	c.RunE = l.do(func(ctx context.Context, cc *clicore.Context, _ *cobra.Command, _ []string) error {
 		s, err := l.openWith(ctx, cc, openOpts{prepare: true, refresh: refresh})
 		if err != nil {
@@ -44,6 +45,12 @@ profiles are listed with their error. Use --json for a stable machine-readable f
 			return ui.Failure(err)
 		}
 		labels := s.sourceLabels()
+		tracks := map[string]string{}
+		for _, src := range s.sources {
+			if tr := sourceTracks(src); tr != "" {
+				tracks[src.ID()] = tr
+			}
+		}
 		rows := make([]lsRow, 0, len(list))
 		for _, p := range list {
 			label := labels[p.Source]
@@ -60,7 +67,7 @@ profiles are listed with their error. Use --json for a stable machine-readable f
 			}
 			rows = append(rows, lsRow{
 				Name: p.Name, Description: ui.Sanitize(p.Description), Owner: ui.Sanitize(p.Owner), Status: p.Status,
-				Kind: p.Kind.String(), Source: ui.Sanitize(label), Shadows: shadows, Conflict: conflict, Error: ui.Sanitize(p.Err),
+				Kind: p.Kind.String(), Source: ui.Sanitize(label), Tracks: ui.Sanitize(tracks[p.Source]), Shadows: shadows, Conflict: conflict, Error: ui.Sanitize(p.Err),
 			})
 		}
 		if cc.Mode.JSON {
@@ -84,7 +91,11 @@ profiles are listed with their error. Use --json for a stable machine-readable f
 			case len(r.Shadows) > 0:
 				desc += " (shadows " + join(r.Shadows) + ")"
 			}
-			table = append(table, []string{r.Name, status, r.Kind, r.Owner, desc})
+			kind := r.Kind
+			if r.Tracks != "" {
+				kind += " (" + r.Tracks + ")"
+			}
+			table = append(table, []string{r.Name, status, kind, r.Owner, desc})
 		}
 		return ui.Table(cc.Streams.Out, []string{"NAME", "STATUS", "KIND", "OWNER", "DESCRIPTION"}, table, cc.Mode)
 	})

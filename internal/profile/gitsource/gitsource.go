@@ -45,7 +45,12 @@ type Options struct {
 	// AllowLocal also file:// and local paths.
 	URL string
 	// Ref is a tag or a full commit SHA. Branch-like names are rejected.
+	// Exactly one of Ref and Branch is set.
 	Ref string
+	// Branch is a branch to track (D-55). It is resolved to a full commit SHA
+	// with `git ls-remote` on every Prepare. Everything after that (the
+	// checkout, the verification, the trust record) is per commit.
+	Branch string
 	// Subpath is the folder inside the repository that holds profiles/, or
 	// is the profiles folder itself. Empty means the repository root.
 	Subpath string
@@ -89,8 +94,19 @@ func New(opts Options) (*Source, error) {
 	if err := validateURL(opts.URL, opts.AllowLocal); err != nil {
 		return nil, err
 	}
-	if err := config.ValidatePin(opts.Ref); err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrNotPinned, err)
+	switch {
+	case opts.Ref != "" && opts.Branch != "":
+		return nil, fmt.Errorf("%w: use ref or branch, not both", ErrNotPinned)
+	case opts.Ref == "" && opts.Branch == "":
+		return nil, fmt.Errorf("%w: a pinned ref is required. Add ref = \"<tag>\" or branch = \"<name>\" to the source", ErrNotPinned)
+	case opts.Branch != "":
+		if err := config.ValidateBranch(opts.Branch); err != nil {
+			return nil, fmt.Errorf("%w: %w", ErrNotPinned, err)
+		}
+	default:
+		if err := config.ValidatePin(opts.Ref); err != nil {
+			return nil, fmt.Errorf("%w: %w", ErrNotPinned, err)
+		}
 	}
 	sub, err := cleanSubpath(opts.Subpath)
 	if err != nil {
@@ -105,8 +121,20 @@ func New(opts Options) (*Source, error) {
 // URL returns the repository URL.
 func (s *Source) URL() string { return s.opts.URL }
 
-// Ref returns the requested tag or SHA.
-func (s *Source) Ref() string { return s.opts.Ref }
+// Ref returns the trust identity of the pin: the requested tag or SHA, or
+// "branch:<name>" for a branch source (config.BranchRefPrefix), which no tag
+// name can equal. The trust package records it next to the locator.
+func (s *Source) Ref() string { return s.pinID() }
+
+// Branch returns the tracked branch, or "" for a tag or SHA source.
+func (s *Source) Branch() string { return s.opts.Branch }
+
+func (s *Source) pinID() string {
+	if s.opts.Branch != "" {
+		return config.BranchRefPrefix + s.opts.Branch
+	}
+	return s.opts.Ref
+}
 
 // Locator returns "git:<url>", the identity of the repository without the
 // commit. The trust package keys lockfile entries on it.
@@ -119,7 +147,7 @@ func (s *Source) ID() string {
 	if s.sha != "" {
 		return "git:" + s.opts.URL + "@" + s.sha
 	}
-	return "git:" + s.opts.URL + "@" + s.opts.Ref
+	return "git:" + s.opts.URL + "@" + s.pinID()
 }
 
 // Kind returns profile.KindOrg.
@@ -196,7 +224,7 @@ func (s *Source) prepared() (profile.Source, error) {
 // checkout and validates its content. It is safe to call more than once and
 // from several goroutines or processes at the same time. Each call
 // re-resolves a tag, so it notices a moved tag.
-func (s *Source) Prepare(ctx context.Context) error { return s.prepare(ctx, "") }
+func (s *Source) Prepare(ctx context.Context) error { return s.prepare(ctx, "", false) }
 
 // PrepareCached is Prepare for a commit that is already known (the launcher
 // takes it from the trust lockfile). It never contacts the remote. The
@@ -210,12 +238,28 @@ func (s *Source) PrepareCached(ctx context.Context, commit string) error {
 	if !fullSHA.MatchString(commit) {
 		return fmt.Errorf("%w: %q is not a full commit SHA", ErrNotPinned, commit)
 	}
-	return s.prepare(ctx, commit)
+	return s.prepare(ctx, commit, false)
 }
 
-// prepare is Prepare and PrepareCached; a non-empty cached is the commit to
-// use without any network access.
-func (s *Source) prepare(ctx context.Context, cached string) error {
+// PrepareAt prepares the source at exactly one known commit. It never resolves
+// the ref or the branch: when the checkout of commit is not in the cache, it
+// fetches that commit by id. The launcher uses it for a branch source whose
+// trusted commit is no longer cached, so a run never moves to the branch head
+// without a trust decision. The fetched commit passes the same verification as
+// any other.
+func (s *Source) PrepareAt(ctx context.Context, commit string) error {
+	commit = strings.ToLower(commit)
+	if !fullSHA.MatchString(commit) {
+		return fmt.Errorf("%w: %q is not a full commit SHA", ErrNotPinned, commit)
+	}
+	return s.prepare(ctx, commit, true)
+}
+
+// prepare is Prepare, PrepareCached and PrepareAt. A non-empty known is the
+// commit to use without resolving a ref. With fetchMissing a checkout that is
+// not cached is fetched by id, otherwise it is ErrNotCached.
+func (s *Source) prepare(ctx context.Context, known string, fetchMissing bool) error {
+	cached := known
 	s.prepMu.Lock()
 	defer s.prepMu.Unlock()
 	timeout := s.opts.Timeout
@@ -237,10 +281,16 @@ func (s *Source) prepare(ctx context.Context, cached string) error {
 		sha = cached
 		checkout = CheckoutDir(base, s.opts.URL, sha)
 		if _, err := os.Lstat(checkout); err != nil {
-			if errors.Is(err, fs.ErrNotExist) {
+			switch {
+			case errors.Is(err, fs.ErrNotExist) && fetchMissing:
+				if checkout, err = s.materialize(ctx, base, sha); err != nil {
+					return err
+				}
+			case errors.Is(err, fs.ErrNotExist):
 				return fmt.Errorf("%w: %s", ErrNotCached, sha)
+			default:
+				return fmt.Errorf("inspecting %s: %w", checkout, err)
 			}
-			return fmt.Errorf("inspecting %s: %w", checkout, err)
 		}
 	} else {
 		if sha, err = s.resolve(ctx, base); err != nil {
@@ -332,8 +382,50 @@ func (s *Source) ensureHooksDir(base string) error {
 	return nil
 }
 
-// resolve turns the ref into a full commit SHA.
+// ResolveHead asks the remote for the commit the tracked branch points to now,
+// with one `git ls-remote`. It fetches nothing and changes nothing on disk
+// except the private hooks folder. It is an error for a source that does not
+// track a branch.
+func (s *Source) ResolveHead(ctx context.Context) (string, error) {
+	if s.opts.Branch == "" {
+		return "", errors.New("git source does not track a branch")
+	}
+	timeout := s.opts.Timeout
+	if timeout == 0 {
+		timeout = DefaultTimeout
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	base, err := s.cacheBase()
+	if err != nil {
+		return "", err
+	}
+	s.prepMu.Lock()
+	defer s.prepMu.Unlock()
+	if err := s.ensureHooksDir(base); err != nil {
+		return "", err
+	}
+	return s.resolveBranch(ctx, base)
+}
+
+// resolveBranch turns the tracked branch into a full commit SHA.
+func (s *Source) resolveBranch(ctx context.Context, base string) (string, error) {
+	name := "refs/heads/" + s.opts.Branch
+	out, err := s.git(ctx, base, "", "ls-remote", "--", s.opts.URL, name)
+	if err != nil {
+		return "", fmt.Errorf("resolving branch %q: %w", s.opts.Branch, err)
+	}
+	if sha := pickRef(out, name); sha != "" {
+		return sha, nil
+	}
+	return "", fmt.Errorf("%w: branch %q was not found in %s", ErrNotPinned, s.opts.Branch, s.opts.URL)
+}
+
+// resolve turns the ref (or the tracked branch) into a full commit SHA.
 func (s *Source) resolve(ctx context.Context, base string) (string, error) {
+	if s.opts.Branch != "" {
+		return s.resolveBranch(ctx, base)
+	}
 	ref := strings.ToLower(s.opts.Ref)
 	if fullSHA.MatchString(ref) {
 		return ref, nil
@@ -432,8 +524,13 @@ func (s *Source) materialize(ctx context.Context, base, sha string) (string, err
 		if fullSHA.MatchString(strings.ToLower(s.opts.Ref)) {
 			return "", fmt.Errorf("fetching commit %s: %w", sha, err)
 		}
-		tag := s.opts.Ref
-		if _, err2 := s.git(ctx, tmp, tmp, append(fetch, "+refs/tags/"+tag+":refs/tags/"+tag)...); err2 != nil {
+		// A server that does not allow fetching a commit by id: fetch the ref
+		// it was resolved from. The commit is checked again after the fetch.
+		spec := "+refs/tags/" + s.opts.Ref + ":refs/tags/" + s.opts.Ref
+		if s.opts.Branch != "" {
+			spec = "+refs/heads/" + s.opts.Branch + ":refs/heads/" + s.opts.Branch
+		}
+		if _, err2 := s.git(ctx, tmp, tmp, append(fetch, spec)...); err2 != nil {
 			return "", fmt.Errorf("fetching commit %s: %w", sha, err)
 		}
 	}

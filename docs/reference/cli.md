@@ -67,7 +67,7 @@ Scripts can rely on these; they never change meaning.
 | [`ccshelf config source`](#ccshelf-config-source) | List, add, pin and remove profile sources |
 | [`ccshelf config source add`](#ccshelf-config-source-add) | Add a profile source (git, dir or plugin) |
 | [`ccshelf config source ls`](#ccshelf-config-source-ls) | List the configured profile sources |
-| [`ccshelf config source pin`](#ccshelf-config-source-pin) | Change the pinned ref of git source number n |
+| [`ccshelf config source pin`](#ccshelf-config-source-pin) | Change the pinned ref or the tracked branch of git source number n |
 | [`ccshelf config source rm`](#ccshelf-config-source-rm) | Remove source number n |
 | [`ccshelf config unset`](#ccshelf-config-unset) | Put one setting back to its default |
 | [`ccshelf init`](#ccshelf-init) | Create the configuration file, optionally from an org data repo |
@@ -106,6 +106,7 @@ ccshelf dry-run [profile] [-- claude args]
 | Flag | Value | Description |
 |---|---|---|
 | `-h`, `--help` |  | help for dry-run |
+| `--refresh` |  | check tracked branches for a new commit now, not only once per trust.branch_check_interval |
 
 ## ccshelf edit
 
@@ -143,7 +144,7 @@ ccshelf ls [flags]
 | Flag | Value | Description |
 |---|---|---|
 | `-h`, `--help` |  | help for ls |
-| `--refresh` |  | re-resolve git tags on the remote instead of using the commits the trust lockfile pins |
+| `--refresh` |  | re-resolve git tags and branches on the remote instead of using the commits the trust lockfile pins |
 
 ## ccshelf new
 
@@ -187,6 +188,8 @@ ccshelf passes the arguments after the profile name (and after -- when no profil
 
 Without a profile name, a terminal gets a picker. Anything else exits with code 2. You must trust a profile from a shared source first (exit code 4 otherwise). --yes never accepts trust. Only an interactive confirmation of the printed closure or "ccshelf trust <profile> --accept <closure-hash>" accepts it.
 
+A git source that tracks a branch runs the commit you trusted, with no network. At most once per trust.branch_check_interval (default 24h), ccshelf asks the remote for the head of the branch. If the head moved, a terminal shows what changed and asks. Without a terminal, or with --yes, ccshelf keeps the trusted commit and prints the command that reviews the update. --refresh checks now.
+
 **Usage**
 
 ```text
@@ -206,6 +209,7 @@ ccshelf run --account personal sre --resume
 | Flag | Value | Description |
 |---|---|---|
 | `-h`, `--help` |  | help for run |
+| `--refresh` |  | check tracked branches for a new commit now, not only once per trust.branch_check_interval |
 | `--yes` |  | answer yes to confirmations other than trust (trust is never auto-accepted) |
 
 ## ccshelf show
@@ -647,13 +651,14 @@ The command writes a change by encoding the file again. Comments and layout are 
 - turning off pinning
 - trusting project profiles
 - installing updates automatically
-- adding a source that is not pinned or whose path is a variable
+- adding a source that tracks a branch, is not pinned or has a path that is
+  a variable
 - changing claude.path or the update source
 ```
 
 Nothing here fetches a source or records trust. Only "ccshelf init" creates the file.
 
-Settings you can change with "config set": trust.on_change, trust.require_pin, trust.trust_project_profiles, update.mode, update.interval, catalog.remote_url, default_account, ui.color, ui.interactive. Anything else (accounts, claude.path, the update source) has its own command or needs "ccshelf config edit".
+Settings you can change with "config set": trust.on_change, trust.require_pin, trust.trust_project_profiles, trust.branch_check_interval, update.mode, update.interval, catalog.remote_url, default_account, ui.color, ui.interactive. Anything else (accounts, claude.path, the update source) has its own command or needs "ccshelf config edit".
 
 **Usage**
 
@@ -727,13 +732,14 @@ ccshelf config path [flags]
 
 ## ccshelf config set
 
-Change one setting of the configuration. The keys are: trust.on_change, trust.require_pin, trust.trust_project_profiles, update.mode, update.interval, catalog.remote_url, default_account, ui.color, ui.interactive. Values:
+Change one setting of the configuration. The keys are: trust.on_change, trust.require_pin, trust.trust_project_profiles, trust.branch_check_interval, update.mode, update.interval, catalog.remote_url, default_account, ui.color, ui.interactive. Values:
 
 ```text
 - true or false
 - trust.on_change: prompt or fail
 - update.mode: off, notify or install
 - update.interval: a duration such as 24h (1h to one year)
+- trust.branch_check_interval: a duration such as 24h (1h to one year)
 - catalog.remote_url: an https URL
 - default_account: an account name
 - ui.color: auto, always or never
@@ -803,7 +809,7 @@ ccshelf config source [command]
 |---|---|
 | [`ccshelf config source add`](#ccshelf-config-source-add) | Add a profile source (git, dir or plugin) |
 | [`ccshelf config source ls`](#ccshelf-config-source-ls) | List the configured profile sources |
-| [`ccshelf config source pin`](#ccshelf-config-source-pin) | Change the pinned ref of git source number n |
+| [`ccshelf config source pin`](#ccshelf-config-source-pin) | Change the pinned ref or the tracked branch of git source number n |
 | [`ccshelf config source rm`](#ccshelf-config-source-rm) | Remove source number n |
 
 ## ccshelf config source add
@@ -811,14 +817,17 @@ ccshelf config source [command]
 Add one profile source with exactly one of these flags:
 
 ```text
-- --git-url, with --ref, and --path for the folder inside the repository
+- --git-url, with --ref or --branch, and --path for the folder inside the
+  repository
 - --dir, an absolute directory
 - --plugin (name@marketplace), with --marketplace and --path
 ```
 
 The command checks the source with the rules of the configuration file and refuses an exact duplicate. For a duplicate, use "config source pin" or "config source rm". The command fetches and trusts nothing.
 
-In a terminal, without any of those flags, the command asks the questions. A git source that is not pinned to a tag or full commit is possible only while trust.require_pin is off. Adding one weakens a setting and needs --yes without a terminal.
+In a terminal, without any of those flags, the command asks the questions.
+
+A source with --branch follows a branch, which can move. A run still uses the commit you trusted, and every new commit needs your trust again. Adding one weakens a setting and needs --yes without a terminal. The same applies to a git source that is not pinned to a tag or full commit. That source is possible only while trust.require_pin is off.
 
 **Usage**
 
@@ -830,6 +839,7 @@ ccshelf config source add [flags]
 
 ```text
 ccshelf config source add --git-url git@ghe.example.com:acme/claude-marketplace.git --ref v2026.10.1
+ccshelf config source add --git-url git@ghe.example.com:acme/claude-marketplace.git --branch main --yes
 ccshelf config source add --dir ~/team-profiles
 ccshelf config source add --plugin org-profiles@acme --marketplace acme/claude-marketplace
 ```
@@ -838,6 +848,7 @@ ccshelf config source add --plugin org-profiles@acme --marketplace acme/claude-m
 
 | Flag | Value | Description |
 |---|---|---|
+| `--branch` | `string` | git source: branch to track, instead of --ref |
 | `--dir` | `string` | dir source: absolute directory of profiles |
 | `--git-url` | `string` | git source: repository URL |
 | `-h`, `--help` |  | help for add |
@@ -867,7 +878,7 @@ ccshelf config source ls [flags]
 
 ## ccshelf config source pin
 
-Change the tag or full commit id that git source number n (see config source ls) is pinned to. The next run that needs a profile from that source fetches the new ref. When its commit differs from the one you trusted, the profile needs your trust again. This command never records trust. Pinning to something that is not a tag or full commit is possible only while trust.require_pin is off, and it needs --yes without a terminal.
+Change the tag or full commit id that git source number n (see config source ls) is pinned to, or make it track a branch with --branch. Give --ref or --branch, not both. A source can switch between a tag or commit and a branch. A branch can move, so a switch to a branch weakens a setting and needs --yes without a terminal. The next run that needs a profile from that source fetches the new ref. When its commit differs from the one you trusted, the profile needs your trust again. This command never records trust. Pinning to something that is not a tag or full commit is possible only while trust.require_pin is off, and it needs --yes without a terminal.
 
 **Usage**
 
@@ -879,12 +890,14 @@ ccshelf config source pin [n] [flags]
 
 ```text
 ccshelf config source pin 1 --ref v2026.11.0
+ccshelf config source pin 1 --branch main --yes
 ```
 
 **Flags**
 
 | Flag | Value | Description |
 |---|---|---|
+| `--branch` | `string` | the branch to track, instead of --ref |
 | `-h`, `--help` |  | help for pin |
 | `--ref` | `string` | the new tag or full commit id |
 | `--yes` |  | confirm the write (and a weakening change), but never accept trust |
@@ -939,7 +952,7 @@ ccshelf config unset update.interval
 
 ## ccshelf init
 
-Create config.toml and your personal profiles directory. With --git-url the org data repo becomes a profile source (pin it with --ref: a tag or a full commit id). With --dir another local profiles directory becomes a source. In a terminal, running without source, account or update values starts the full setup wizard. It shows a summary and asks before writing (default no). Partial flag runs do not prompt. --yes confirms writing only, never trust. The wizard prints an equivalent flag command at the end. Nothing is fetched here. ccshelf fetches profiles from a shared source when you first use them, and they need your trust then.
+Create config.toml and your personal profiles directory. With --git-url the org data repo becomes a profile source. Pin it with --ref (a tag or a full commit id), or track a branch with --branch. A branch can move: ccshelf runs the commit you trusted, and every new commit on the branch needs your trust again. With --dir another local profiles directory becomes a source. In a terminal, running without source, account or update values starts the full setup wizard. It shows a summary and asks before writing (default no). Partial flag runs do not prompt. --yes confirms writing only, never trust. The wizard prints an equivalent flag command at the end. Nothing is fetched here. ccshelf fetches profiles from a shared source when you first use them, and they need your trust then.
 
 Automatic updates are off unless you turn them on:
 
@@ -962,6 +975,7 @@ ccshelf init [flags]
 ```text
 ccshelf init
 ccshelf init --git-url git@ghe.example.com:acme/claude-marketplace.git --ref v2026.10.1
+ccshelf init --git-url git@ghe.example.com:acme/claude-marketplace.git --branch main
 ccshelf init --account-name work
 ```
 
@@ -971,6 +985,7 @@ ccshelf init --account-name work
 |---|---|---|
 | `--account-dir` | `string` | directory of that account (default ~/.claude-<name>) |
 | `--account-name` | `string` | also create an account with this name (see: ccshelf account add) |
+| `--branch` | `string` | branch the git source tracks, instead of --ref (every new commit needs trust again) |
 | `--dir` | `string` | absolute directory of profiles to add as a dir source |
 | `--force` |  | replace an existing configuration file |
 | `--git-url` | `string` | org data repo URL to add as a git source |

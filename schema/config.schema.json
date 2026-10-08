@@ -10,12 +10,14 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["type"],
+      "not": { "required": ["ref", "branch"] },
       "properties": {
         "type": { "enum": ["dir", "git", "plugin"] },
         "name": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,62}$" },
         "path": { "type": "string" },
         "url": { "type": "string" },
-        "ref": { "type": "string" },
+        "ref": { "type": "string", "description": "Git sources only: a tag or a full commit SHA. Use ref or branch, not both." },
+        "branch": { "type": "string", "minLength": 1, "maxLength": 200, "description": "Git sources only: a branch to track. Use branch or ref, not both. Trust stays per commit." },
         "plugin": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9._-]*$" },
         "marketplace": { "type": "string", "minLength": 1, "description": "Plugin sources only: the owner/repo or git URL the plugin's marketplace must have been added from." }
       }
@@ -46,7 +48,8 @@
       "properties": {
         "require_pin": { "type": "boolean" },
         "on_change": { "enum": ["prompt", "fail"] },
-        "trust_project_profiles": { "type": "boolean" }
+        "trust_project_profiles": { "type": "boolean" },
+        "branch_check_interval": { "type": "string", "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|ms|s|m|h))+$", "description": "Go duration, at least 1h, at most 8760h. Default 24h. How often a run checks a tracked branch for a new commit." }
       }
     },
     "accounts": {

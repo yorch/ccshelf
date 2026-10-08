@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 func isolate(t *testing.T) string {
@@ -260,8 +261,16 @@ func TestLoadAccountDefaultDir(t *testing.T) {
 func TestLoadRelaxedPin(t *testing.T) {
 	isolate(t)
 	body := "[trust]\nrequire_pin = false\n[[sources]]\ntype = \"git\"\nurl = \"https://h.example/r.git\"\n"
-	if _, err := Load(write(t, body)); err != nil {
+	if _, err := Load(write(t, body+"ref = \"v1\"\n")); err != nil {
 		t.Fatal(err)
+	}
+	// With pins off, a source with neither key still loads (it is one
+	// unavailable source at run time, as on main). With pins on it is a load error.
+	if _, err := Load(write(t, body)); err != nil {
+		t.Errorf("a git source with neither ref nor branch, pins off: %v", err)
+	}
+	if _, err := Load(write(t, strings.Replace(body, "require_pin = false", "require_pin = true", 1))); err == nil || !strings.Contains(err.Error(), "branch = ") {
+		t.Errorf("neither ref nor branch, pins on: %v", err)
 	}
 	if _, err := Load(write(t, body+"ref = \"-x\"\n")); err == nil {
 		t.Error("dash ref accepted")
@@ -380,5 +389,116 @@ func TestValidatePin(t *testing.T) {
 func TestValidAccountName(t *testing.T) {
 	if !ValidAccountName("work-1") || ValidAccountName("-x") || ValidAccountName("") || ValidAccountName(strings.Repeat("a", 33)) {
 		t.Error("ValidAccountName wrong")
+	}
+}
+
+const branchBody = "[[sources]]\ntype = \"git\"\nurl = \"https://h.example/r.git\"\n"
+
+func TestValidateBranch(t *testing.T) {
+	good := []string{"main", "release/2026.10", "feat/x_y-z", "v1.2", "a.b", "Ünï"}
+	for _, n := range good {
+		if err := ValidateBranch(n); err != nil {
+			t.Errorf("ValidateBranch(%q) = %v; want nil", n, err)
+		}
+	}
+	bad := []string{
+		"", "-x", "--upload-pack=x", "a..b", "refs/heads/main", "refs/tags/v1", "heads/main", "remotes/origin/main",
+		"HEAD", "head", "@", "a@{b", "a b", "a\tb", "a\x7fb", "a~b", "a^b", "a:b", "a?b", "a*b", "a[b", "a\\b",
+		"/a", "a/", "a//b", "a.", "a.lock", "a/b.lock", ".a", "a/.b", "a\u200bb", strings.Repeat("x", 201),
+	}
+	for _, n := range bad {
+		if err := ValidateBranch(n); err == nil {
+			t.Errorf("ValidateBranch(%q) = nil; want an error", n)
+		}
+	}
+}
+
+func TestLoadBranchSource(t *testing.T) {
+	isolate(t)
+	for _, tt := range []struct {
+		name, body, want string
+	}{
+		{"branch", branchBody + "branch = \"main\"\n", ""},
+		{"branch with require_pin", "[trust]\nrequire_pin = true\n" + branchBody + "branch = \"main\"\n", ""},
+		{"branch with pin off", "[trust]\nrequire_pin = false\n" + branchBody + "branch = \"main\"\n", ""},
+		{"both", branchBody + "ref = \"v1\"\nbranch = \"main\"\n", "ref or branch, not both"},
+		{"neither", branchBody, "pinned ref"},
+		{"bad branch", branchBody + "branch = \"-x\"\n", "sources[0].branch"},
+		{"full ref", branchBody + "branch = \"refs/heads/main\"\n", "full ref"},
+		{"token", branchBody + "branch = \"ghp_x\"\n", "credential"},
+		{"ref main hint", branchBody + "ref = \"main\"\n", "branch = \"main\""},
+		{"dir with branch", "[[sources]]\ntype = \"dir\"\npath = \"/x\"\nbranch = \"main\"\n", "dir sources"},
+		{"plugin with branch", "[[sources]]\ntype = \"plugin\"\nplugin = \"a@b\"\nbranch = \"main\"\n", "plugin sources"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Load(write(t, tt.body))
+			switch {
+			case tt.want == "" && err != nil:
+				t.Fatalf("err = %v", err)
+			case tt.want != "" && (err == nil || !strings.Contains(err.Error(), tt.want)):
+				t.Fatalf("err = %v; want containing %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestBranchCheckInterval(t *testing.T) {
+	isolate(t)
+	for _, v := range []string{"1h", "24h", "36h30m", "8760h"} {
+		cfg, err := Load(write(t, "[trust]\nbranch_check_interval = \""+v+"\"\n"))
+		if err != nil {
+			t.Errorf("%s: %v", v, err)
+			continue
+		}
+		if cfg.Trust.BranchCheckInterval != v {
+			t.Errorf("interval = %q", cfg.Trust.BranchCheckInterval)
+		}
+	}
+	for _, v := range []string{"59m", "8761h", "daily", "-2h", "+2h", "24"} {
+		if _, err := Load(write(t, "[trust]\nbranch_check_interval = \""+v+"\"\n")); err == nil {
+			t.Errorf("%q accepted", v)
+		}
+	}
+	if d := Default().Trust.EffectiveBranchCheckInterval(); d != 24*time.Hour {
+		t.Errorf("default = %s", d)
+	}
+	if d := (Trust{BranchCheckInterval: "2h"}).EffectiveBranchCheckInterval(); d != 2*time.Hour {
+		t.Errorf("2h = %s", d)
+	}
+}
+
+func TestTrustRefSeparatesBranchFromTag(t *testing.T) {
+	tag := SourceConfig{Type: SourceGit, URL: "u", Ref: "main-1"}
+	br := SourceConfig{Type: SourceGit, URL: "u", Branch: "main-1"}
+	if tag.TrustRef() == br.TrustRef() {
+		t.Fatalf("a tag and a branch share the trust ref %q", tag.TrustRef())
+	}
+	if br.TrustRef() != "branch:main-1" || tag.TrustRef() != "main-1" {
+		t.Errorf("trust refs = %q, %q", tag.TrustRef(), br.TrustRef())
+	}
+}
+
+func TestPinHintsDoNotEchoInput(t *testing.T) {
+	for _, ref := range []string{"HEAD", "FETCH_HEAD", "origin", "refs-x", "latest"} {
+		err := ValidatePin(ref)
+		if err == nil {
+			t.Fatalf("%s accepted", ref)
+		}
+		if strings.Contains(err.Error(), "branch = ") {
+			t.Errorf("%s: hint echoes the input: %v", ref, err)
+		}
+	}
+	if err := ValidatePin("main"); err == nil || !strings.Contains(err.Error(), `branch = "main"`) {
+		t.Errorf("main: %v", err)
+	}
+	for _, n := range []string{"refs/heads/x", "heads/x", "remotes/x", "Refs/x"} {
+		if err := ValidateBranch(n); err == nil || strings.Contains(err.Error(), "for example") {
+			t.Errorf("%s: %v", n, err)
+		}
+	}
+	for _, e := range []error{ValidatePin("main"), ValidatePin("a/b"), ValidateBranch("refs/x"), ValidateBranch("a b")} {
+		if strings.Contains(e.Error(), ";") {
+			t.Errorf("semicolon in %q", e)
+		}
 	}
 }

@@ -41,7 +41,7 @@ type launch struct {
 }
 
 func (l *launcher) runCmd() *cobra.Command {
-	var yes bool
+	var yes, refresh bool
 	c := &cobra.Command{
 		Use:   "run [profile] [-- claude args]",
 		Short: "Start claude with a profile",
@@ -55,7 +55,13 @@ Without a profile name, a terminal gets a picker. Anything else exits with
 code 2. You must trust a profile from a shared source first (exit code 4
 otherwise). --yes never accepts trust. Only an interactive confirmation of the
 printed closure or "ccshelf trust <profile> --accept <closure-hash>" accepts
-it.`,
+it.
+
+A git source that tracks a branch runs the commit you trusted, with no network.
+At most once per trust.branch_check_interval (default 24h), ccshelf asks the
+remote for the head of the branch. If the head moved, a terminal shows what
+changed and asks. Without a terminal, or with --yes, ccshelf keeps the trusted
+commit and prints the command that reviews the update. --refresh checks now.`,
 		Example: `  ccshelf run sre
   ccshelf run sre -- -p "summarize this repo"
   ccshelf run --account personal sre --resume`,
@@ -63,17 +69,19 @@ it.`,
 	}
 	c.Flags().SetInterspersed(false)
 	c.Flags().BoolVar(&yes, "yes", false, "answer yes to confirmations other than trust (trust is never auto-accepted)")
+	c.Flags().BoolVar(&refresh, "refresh", false, "check tracked branches for a new commit now, not only once per trust.branch_check_interval")
 	c.RunE = l.do(func(ctx context.Context, cc *clicore.Context, cmd *cobra.Command, args []string) error {
 		name, pass, err := splitRunArgs(cmd, args)
 		if err != nil {
 			return err
 		}
-		return l.runProfile(ctx, cc, name, pass, yes, false)
+		return l.runProfile(ctx, cc, name, pass, yes, false, refresh)
 	})
 	return c
 }
 
 func (l *launcher) dryRunCmd() *cobra.Command {
+	var refresh bool
 	c := &cobra.Command{
 		Use:   "dry-run [profile] [-- claude args]",
 		Short: "Print the exact claude command a run would execute",
@@ -84,29 +92,36 @@ command is valid. It never prints environment values from profiles.`,
 		DisableFlagsInUseLine: true,
 	}
 	c.Flags().SetInterspersed(false)
+	c.Flags().BoolVar(&refresh, "refresh", false, "check tracked branches for a new commit now, not only once per trust.branch_check_interval")
 	c.RunE = l.do(func(ctx context.Context, cc *clicore.Context, cmd *cobra.Command, args []string) error {
 		name, pass, err := splitRunArgs(cmd, args)
 		if err != nil {
 			return err
 		}
-		return l.runProfile(ctx, cc, name, pass, false, true)
+		return l.runProfile(ctx, cc, name, pass, false, true, refresh)
 	})
 	return c
 }
 
 // runProfile is the run and dry-run command body.
-func (l *launcher) runProfile(ctx context.Context, cc *clicore.Context, name string, pass []string, yes, dry bool) error {
+func (l *launcher) runProfile(ctx context.Context, cc *clicore.Context, name string, pass []string, yes, dry, refresh bool) error {
 	command := "run"
 	if dry {
 		command = "dry-run"
 	}
-	s, err := l.open(ctx, cc, true, true)
+	s, err := l.openWith(ctx, cc, openOpts{prepare: true, needClaude: true, refreshBranches: refresh})
 	if err != nil {
 		return err
 	}
 	name, picked, err := pickProfile(ctx, cc, name, command, func() ([]ui.Option, error) { return s.profileOptions() })
 	if err != nil {
 		return err
+	}
+	if !refresh {
+		// An explicit refresh already checked the heads and goes through the
+		// ordinary trust check below (on_change = "fail" included).
+		s = l.alignBranchCommits(ctx, cc, s, name)
+		s = l.checkBranches(ctx, cc, s, name, yes)
 	}
 	ln, err := s.buildLaunch(ctx, name, pass, yes)
 	if err != nil {
@@ -124,6 +139,9 @@ func (l *launcher) runProfile(ctx context.Context, cc *clicore.Context, name str
 		}
 		if cc.G.Account != "" {
 			eq = append(eq, "--account", cc.G.Account)
+		}
+		if refresh {
+			eq = append(eq, "--refresh")
 		}
 		eq = append(eq, name)
 		if len(pass) > 0 {
@@ -452,6 +470,9 @@ func (s *session) settleTrust(ctx context.Context, r *profile.Resolved) error {
 	}
 	v := store.CheckWithProject(r, s.proj.Allowed)
 	if v.State == trust.Trusted {
+		// The closure is trusted by content. If a source now has another pin
+		// at the same commit (a tag that became a branch), record that.
+		_, _ = store.Rekey(r)
 		return nil
 	}
 	needs := &trust.NeedsTrustError{Profile: r.Name, Verdict: v}

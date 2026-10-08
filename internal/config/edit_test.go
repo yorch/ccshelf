@@ -27,7 +27,7 @@ func TestSettingsRoundTrip(t *testing.T) {
 	for key, val := range map[string]string{
 		"trust.on_change": "fail", "trust.require_pin": "false", "trust.trust_project_profiles": "true",
 		"update.mode": "notify", "update.interval": "2h", "catalog.remote_url": "https://c.example.com/c.json",
-		"ui.color": "never", "ui.interactive": "never",
+		"ui.color": "never", "ui.interactive": "never", "trust.branch_check_interval": "12h",
 	} {
 		if err := cfg.SetSetting(key, val); err != nil {
 			t.Errorf("set %s: %v", key, err)
@@ -41,6 +41,11 @@ func TestSettingsRoundTrip(t *testing.T) {
 	}
 	if err := cfg.SetSetting("claude.path", "x"); err == nil {
 		t.Error("claude.path must not be settable")
+	}
+	for _, v := range []string{"30m", "9999h", "daily"} {
+		if err := cfg.SetSetting("trust.branch_check_interval", v); err == nil {
+			t.Errorf("trust.branch_check_interval %q must be refused", v)
+		}
 	}
 	if err := cfg.SetSetting("update.interval", "9999h"); err == nil {
 		t.Error("an interval above the maximum must be refused")
@@ -345,5 +350,37 @@ func TestFormatInterval(t *testing.T) {
 		if got := FormatInterval(d); got != want {
 			t.Errorf("%s -> %s, want %s", in, got, want)
 		}
+	}
+}
+
+func TestWeakeningBranchSource(t *testing.T) {
+	git := func(mutate func(s *SourceConfig)) *Config {
+		c := Default()
+		s := SourceConfig{Type: SourceGit, URL: "https://ghe.example.com/acme/profiles.git", Ref: "v1"}
+		mutate(&s)
+		c.Sources = []SourceConfig{s}
+		return c
+	}
+	pinned := git(func(*SourceConfig) {})
+	branch := git(func(s *SourceConfig) { s.Ref, s.Branch = "", "main" })
+	other := git(func(s *SourceConfig) { s.Ref, s.Branch = "", "release" })
+	if got := Weakening(Default(), branch); len(got) != 1 || !strings.Contains(got[0], "branch main") {
+		t.Errorf("adding a branch source: %v", got)
+	}
+	if got := Weakening(pinned, branch); len(got) != 1 {
+		t.Errorf("switching a tag to a branch: %v", got)
+	}
+	if got := Weakening(branch, other); len(got) != 1 {
+		t.Errorf("switching to another branch: %v", got)
+	}
+	if got := Weakening(branch, branch); len(got) != 0 {
+		t.Errorf("unchanged branch source: %v", got)
+	}
+	if got := Weakening(branch, pinned); len(got) != 0 {
+		t.Errorf("switching back to a tag: %v", got)
+	}
+	// A branch source is allowed with require_pin on, so it adds no second finding.
+	if !branch.Trust.RequirePin {
+		t.Fatal("require_pin should be on by default")
 	}
 }

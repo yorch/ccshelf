@@ -17,10 +17,10 @@ import (
 )
 
 type initFlags struct {
-	gitURL, ref, path, dir  string
-	accountName, accountDir string
-	updateMode              string
-	force, yes              bool
+	gitURL, ref, branch, path, dir string
+	accountName, accountDir        string
+	updateMode                     string
+	force, yes                     bool
 }
 
 func (l *launcher) initCmd() *cobra.Command {
@@ -29,8 +29,10 @@ func (l *launcher) initCmd() *cobra.Command {
 		Use:   "init",
 		Short: "Create the configuration file, optionally from an org data repo",
 		Long: `Create config.toml and your personal profiles directory. With --git-url the org
-data repo becomes a profile source (pin it with --ref: a tag or a full commit
-id). With --dir another local profiles directory becomes a source. In a
+data repo becomes a profile source. Pin it with --ref (a tag or a full commit
+id), or track a branch with --branch. A branch can move: ccshelf runs the
+commit you trusted, and every new commit on the branch needs your trust again.
+With --dir another local profiles directory becomes a source. In a
 terminal, running without source, account or update values starts the full
 setup wizard. It shows a summary and asks before writing (default no). Partial
 flag runs do not prompt. --yes confirms writing only, never trust. The wizard
@@ -45,11 +47,13 @@ Automatic updates are off unless you turn them on:
 The full wizard asks once.`,
 		Example: `  ccshelf init
   ccshelf init --git-url git@ghe.example.com:acme/claude-marketplace.git --ref v2026.10.1
+  ccshelf init --git-url git@ghe.example.com:acme/claude-marketplace.git --branch main
   ccshelf init --account-name work`,
 		Args: cobra.NoArgs,
 	}
 	c.Flags().StringVar(&f.gitURL, "git-url", "", "org data repo URL to add as a git source")
 	c.Flags().StringVar(&f.ref, "ref", "", "tag or full commit id the git source is pinned to")
+	c.Flags().StringVar(&f.branch, "branch", "", "branch the git source tracks, instead of --ref (every new commit needs trust again)")
 	c.Flags().StringVar(&f.path, "path", "profiles", "folder inside the repo that holds the profiles")
 	c.Flags().StringVar(&f.dir, "dir", "", "absolute directory of profiles to add as a dir source")
 	c.Flags().StringVar(&f.accountName, "account-name", "", "also create an account with this name (see: ccshelf account add)")
@@ -84,14 +88,20 @@ func (l *launcher) initConfig(ctx context.Context, cc *clicore.Context, f *initF
 		}
 	}
 	asked := false
-	if canPrompt(cc) && f.gitURL == "" && f.ref == "" && f.dir == "" && f.accountName == "" && f.updateMode == "" {
+	if canPrompt(cc) && f.gitURL == "" && f.ref == "" && f.branch == "" && f.dir == "" && f.accountName == "" && f.updateMode == "" {
 		var err error
 		if asked, err = askInit(ctx, cc, f, pathGiven, !keptUpdate.Present()); err != nil {
 			return err
 		}
 	}
+	if f.ref != "" && f.branch != "" {
+		return ui.Usage(errors.New("give --ref or --branch, not both"))
+	}
 	if f.ref != "" && f.gitURL == "" {
 		return ui.Usage(errors.New("--ref needs --git-url"))
+	}
+	if f.branch != "" && f.gitURL == "" {
+		return ui.Usage(errors.New("--branch needs --git-url"))
 	}
 	if f.gitURL != "" {
 		if err := config.ValidateGitURL(f.gitURL); err != nil {
@@ -105,13 +115,20 @@ func (l *launcher) initConfig(ctx context.Context, cc *clicore.Context, f *initF
 		cfg.Update.Mode = f.updateMode
 	}
 	if f.gitURL != "" {
-		cfg.Sources = append(cfg.Sources, config.SourceConfig{Type: config.SourceGit, URL: f.gitURL, Ref: f.ref, Path: f.path})
+		cfg.Sources = append(cfg.Sources, config.SourceConfig{Type: config.SourceGit, URL: f.gitURL, Ref: f.ref, Branch: f.branch, Path: f.path})
 	}
 	if f.dir != "" {
 		cfg.Sources = append(cfg.Sources, config.SourceConfig{Type: config.SourceDir, Path: f.dir})
 	}
 	if err := cfg.Validate(); err != nil {
-		return ui.Usage(withHint(fmt.Errorf("configuration: %w", err), "a git source needs --ref (a tag or full commit id) unless trust.require_pin is off"))
+		return ui.Usage(withHint(fmt.Errorf("configuration: %w", err), "a git source needs --ref (a tag or full commit id) or --branch"))
+	}
+	// A branch can move. init only warns: its --yes keeps its meaning (it
+	// confirms the write in the full wizard), and trust is still per commit.
+	for _, src := range cfg.Sources {
+		if src.Type == config.SourceGit && src.Branch != "" {
+			warnf(cc, "this configuration weakens a security setting: %s", config.BranchWarning(src))
+		}
 	}
 	dir, err := profile.PersonalDir()
 	if err != nil {
@@ -178,7 +195,11 @@ func (l *launcher) initConfig(ctx context.Context, cc *clicore.Context, f *initF
 		}
 		if f.gitURL != "" {
 			rec.Flag("--git-url", f.gitURL)
-			rec.Flag("--ref", f.ref)
+			if f.branch != "" {
+				rec.Flag("--branch", f.branch)
+			} else {
+				rec.Flag("--ref", f.ref)
+			}
 			if f.path != "profiles" {
 				rec.Flag("--path", f.path)
 			}
@@ -219,7 +240,11 @@ func printInitSummary(cc *clicore.Context, path, personalDir, accountDir string,
 	for _, src := range cfg.Sources {
 		if src.Type == config.SourceGit {
 			line("Org data repo", src.URL)
-			line("Pinned ref", src.Ref)
+			if src.Branch != "" {
+				line("Tracked branch", src.Branch+" (the branch can move, and every new commit needs your trust before it runs)")
+			} else {
+				line("Pinned ref", src.Ref)
+			}
 			line("Profiles folder", src.Path)
 		} else {
 			line("Local profiles", src.Path)
@@ -248,11 +273,11 @@ func askInit(ctx context.Context, cc *clicore.Context, f *initFlags, pathGiven, 
 	}
 	if url = strings.TrimSpace(url); url != "" {
 		f.gitURL = url
-		ref, err := cc.Prompt.Input(ctx, "Tag or full commit id to pin it to", "", config.ValidatePin)
+		pin, err := cc.Prompt.Input(ctx, pinPrompt("Tag or full commit id to pin it to"), "", validatePinOrBranch(config.ValidatePin))
 		if err != nil {
 			return false, err
 		}
-		f.ref = ref
+		f.ref, f.branch = splitPinInput(pin)
 		if !pathGiven {
 			p, err := cc.Prompt.Input(ctx, "Folder inside the repo that holds the profiles", f.path, nil)
 			if err != nil {
@@ -298,4 +323,30 @@ func validUpdateMode(m string) bool {
 		}
 	}
 	return false
+}
+
+// pinPrompt adds the way to track a branch to a prompt for a tag or commit.
+func pinPrompt(base string) string {
+	return base + " (or " + config.BranchRefPrefix + "NAME to track a branch)"
+}
+
+// splitPinInput turns the answer of a pin prompt into a ref or a branch: the
+// text "branch:NAME" names a branch (no tag name holds a colon).
+func splitPinInput(s string) (ref, branch string) {
+	if name, ok := strings.CutPrefix(strings.TrimSpace(s), config.BranchRefPrefix); ok {
+		return "", name
+	}
+	return strings.TrimSpace(s), ""
+}
+
+// validatePinOrBranch validates the answer of a pin prompt: a ref by validate,
+// or "branch:NAME" by config.ValidateBranch.
+func validatePinOrBranch(validate func(string) error) func(string) error {
+	return func(s string) error {
+		ref, branch := splitPinInput(s)
+		if branch != "" || strings.HasPrefix(strings.TrimSpace(s), config.BranchRefPrefix) {
+			return config.ValidateBranch(branch)
+		}
+		return validate(ref)
+	}
 }

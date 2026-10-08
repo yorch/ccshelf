@@ -3,12 +3,12 @@
 Command set and the interactive and flag-based interaction model (R6).
 
 ## CLI sketch
-- `run <profile> [-- claude args]`
+- `run <profile> [--refresh] [-- claude args]` (`--refresh` checks tracked branches for a new commit now)
 - `ls`
 - `show <p>` (resolved closure, overrides, token estimate)
 - `diff <a> <b>`
 - `dry-run <p>` (prints exact `claude` command)
-- `init` (create config, optionally from an org data repo URL)
+- `init` (create config, optionally from an org data repo URL, pinned with `--ref` or tracking `--branch`)
 - `new <p> [--scope user|project] [--from <p2>]`
 - `edit <p>`
 - `trust <p>`
@@ -91,7 +91,7 @@ A partial-flag run prints no equivalent command because it asked nothing.
 
 In a terminal, bare `ccshelf config` is a menu (add a source, change a pin, remove a source, change a setting, open in the editor). The menu returns after each action, including a declined write or a refused change (it reports the problem). Only Done or an interrupt leaves it. With no terminal or `--no-interactive` it prints help and exits 2. A command that lacks a value (`source add` with no source flag, `source pin`/`rm` with no number, `set` with no key) asks only on a terminal. Otherwise it exits 2 and names the flag.
 
-- **Allowlist.** `set` and `unset` accept only `trust.on_change`, `trust.require_pin`, `trust.trust_project_profiles`, `update.mode`, `update.interval`, `catalog.remote_url`, `default_account`, `ui.color` and `ui.interactive`. The same validator that the file uses checks each one. The commands refuse these keys with exit 2 and a pointer to the dedicated command or to `config edit`, because they widen what ccshelf trusts or runs:
+- **Allowlist.** `set` and `unset` accept only `trust.on_change`, `trust.require_pin`, `trust.trust_project_profiles`, `trust.branch_check_interval`, `update.mode`, `update.interval`, `catalog.remote_url`, `default_account`, `ui.color` and `ui.interactive`. The same validator that the file uses checks each one. The commands refuse these keys with exit 2 and a pointer to the dedicated command or to `config edit`, because they widen what ccshelf trusts or runs:
   - accounts
   - sources
   - `claude.path`
@@ -101,7 +101,8 @@ In a terminal, bare `ccshelf config` is a menu (add a source, change a pin, remo
   - `trust.require_pin` turned off
   - `trust.trust_project_profiles` turned on
   - `update.mode` set to `install`
-  - a new or re-pinned git source whose ref is not a tag or full commit id (possible only while `require_pin` is off).
+  - a new or re-pinned git source whose ref is not a tag or full commit id (possible only while `require_pin` is off)
+  - a git source that is added with `--branch`, or switched to a branch or to another branch (D-55). The branch can move, but every new commit still needs trust.
 
   A change to what is trusted to supply code or releases also weakens:
   - `claude.path`
@@ -117,6 +118,7 @@ In a terminal, bare `ccshelf config` is a menu (add a source, change a pin, remo
   - changing `trust.on_change`
   - removing a source
   - adding a pinned source (a new source still needs trust before any of its profiles run).
+- **Branches (D-55).** `init --git-url`, `config source add --git-url` and `config source pin` take `--branch <name>` instead of `--ref`. Giving both is a usage error (exit 2). `pin` can switch a source between a tag or commit and a branch, and it clears the other key. In a wizard, the question for a tag or commit also accepts `branch:NAME`, and the printed equivalent command uses `--branch`. `init` also prints the weakening warning for a branch. It never asks for `--yes` because of it, because `init` keeps its meaning for `--yes` (the write in the full wizard). `run` and `dry-run` take `--refresh` (see [profiles.md](profiles.md), "Tracking a branch"). `trust.branch_check_interval` takes a duration from 1h to 8760h and is not a weakening change.
 - **Files.**
   - The file must already exist (exit 1 with a hint to run `init`).
   - A write re-encodes the struct, so **comments and layout are lost**. The summary says so when the file has a `#` comment. The command keeps the previous file as `config.toml.bak` (0600, replaced atomically, a symlink at either name is refused).
@@ -162,7 +164,7 @@ Not in scope for the first release: a full-screen dashboard or persistent TUI ma
   - Labels, hints and errors are single-line sanitized, so a hostile profile cannot forge a prompt line.
   - The terminal's echo state is restored when a secret prompt is cancelled.
 
-  The `CI` variable set to any non-empty value (including `false`) disables prompts. `ccshelf` flags placed after the profile name (they would go to `claude`) exit 2 with a hint, `edit` needs a terminal, and `ls --refresh` re-resolves moved tags. In the printed equivalent command, the CLI redacts secret-looking flags and the argument after one.
+  The `CI` variable set to any non-empty value (including `false`) disables prompts. `ccshelf` flags placed after the profile name (they would go to `claude`) exit 2 with a hint, `edit` needs a terminal, and `ls --refresh` re-resolves moved tags and tracked branches. In the printed equivalent command, the CLI redacts secret-looking flags and the argument after one.
 
 ## `catalog init`: set up an org data repo
 `ccshelf catalog init [dir]` creates a new org data repo, or adds the missing pieces to an existing marketplace repo. It never changes an existing file silently (see [catalog-and-org-repo.md](catalog-and-org-repo.md), "Setting up the data repo"). It follows the interaction rules above:

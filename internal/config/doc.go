@@ -23,6 +23,13 @@
 //   - git sources need a pinned ref when trust.require_pin is true (the
 //     default), see ValidatePin. Its check is a syntax gate, not the security
 //     boundary: trust compares the peeled commit SHA.
+//   - a git source needs exactly one of ref and branch. ValidateBranch checks
+//     a branch (D-55) with the rules of git check-ref-format --branch (no
+//     leading "-", no "..", no full ref such as refs/heads/x). A branch is
+//     allowed with trust.require_pin on, because the key says in plain words
+//     that the source moves. Trust stays per commit. The lockfile records
+//     "branch:<name>" (SourceConfig.TrustRef), which a tag can never equal.
+//   - trust.branch_check_interval is a duration from 1h to 8760h (default 24h).
 //   - git URLs follow ValidateGitURL. Validate also rejects anything that
 //     looks like a token (ghp_, github_pat_, glpat-, xoxb- and others)
 //     anywhere in url, ref, path or name.

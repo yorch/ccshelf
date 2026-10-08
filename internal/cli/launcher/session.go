@@ -59,6 +59,12 @@ type cachedPreparer interface {
 	PrepareCached(ctx context.Context, commit string) error
 }
 
+// commitPreparer is implemented by git sources that can fetch one known commit
+// by id without resolving any ref (gitsource.Source).
+type commitPreparer interface {
+	PrepareAt(ctx context.Context, commit string) error
+}
+
 // orgConfigSource is implemented by sources that read the org config
 // (ccshelf.toml) themselves, from the pinned tree they verified.
 type orgConfigSource interface {
@@ -112,6 +118,17 @@ type session struct {
 	// refresh makes git sources re-resolve their tag on the remote instead of
 	// using the commit the trust lockfile pinned (trust, ls --refresh).
 	refresh bool
+	// refreshBranches is refresh for the git sources that track a branch only
+	// (run --refresh): tags and commits keep using the pinned commit.
+	refreshBranches bool
+	// branchFresh holds the locators of the branch sources whose head was
+	// resolved on the remote while the sources were prepared, so the periodic
+	// check does not ask the remote a second time.
+	branchFresh map[string]bool
+	// pinned maps a tracked branch (branchKey) to the commit that the profile
+	// being run trusted. It overrides the newest recorded commit, which may
+	// be the one another profile accepted.
+	pinned map[string]string
 	// failed lists the shared sources that could not be loaded; their profiles
 	// are unavailable but nothing else is affected.
 	failed []sourceFailure
@@ -191,14 +208,19 @@ type openOpts struct {
 	// refresh re-resolves git tags on the remote even when the trust lockfile
 	// pins a cached commit (the trust command and ls --refresh).
 	refresh bool
+	// refreshBranches re-resolves the branch of git sources that track one,
+	// and nothing else (run --refresh).
+	refreshBranches bool
+	// pinned makes branch sources use the given commits (see session.pinned).
+	pinned map[string]string
 }
 
 // open loads the configuration, resolves the initial account (the profile's
 // own account is applied later by run), and builds the sources. When prepare
 // is false git and plugin sources are not fetched or located (used by
 // commands that only need local names).
-func (l *launcher) open(ctx context.Context, cc *clicore.Context, prepare, needClaude bool) (*session, error) {
-	return l.openWith(ctx, cc, openOpts{prepare: prepare, needClaude: needClaude})
+func (l *launcher) open(ctx context.Context, cc *clicore.Context, prepare bool) (*session, error) {
+	return l.openWith(ctx, cc, openOpts{prepare: prepare})
 }
 
 // openWith is open with all the options.
@@ -217,7 +239,7 @@ func (l *launcher) openWith(ctx context.Context, cc *clicore.Context, o openOpts
 	}
 	s := &session{
 		l: l, cc: cc, cfg: cfg, cfgPath: cfgPath, choice: choice, cwd: cwd,
-		env: claude.Env(cc.Environ(), extra), refresh: o.refresh, gitIDs: map[string]bool{},
+		env: claude.Env(cc.Environ(), extra), refresh: o.refresh, refreshBranches: o.refreshBranches, gitIDs: map[string]bool{}, branchFresh: map[string]bool{}, pinned: o.pinned,
 	}
 	if o.needClaude {
 		if _, err := s.locate(); err != nil {
@@ -508,22 +530,39 @@ func (s *session) addShared(label string, src profile.Source) bool {
 // (trust, ls --refresh), for a ref that is not a tag or SHA pin
 // (trust.require_pin = false), and when nothing usable is cached.
 func (s *session) prepareGit(ctx context.Context, newGit GitFactory, sc config.SourceConfig) (PreparedSource, error) {
-	g, err := newGit(gitsource.Options{URL: sc.URL, Ref: sc.Ref, Subpath: sc.Path, RequirePin: s.cfg.Trust.RequirePin})
+	g, err := newGit(gitOptions(sc, s.cfg.Trust.RequirePin))
 	if err != nil {
 		return nil, err
 	}
+	var perr error
 	if commit := s.lockedCommit(sc); commit != "" {
 		if cp, ok := g.(cachedPreparer); ok && cp.PrepareCached(ctx, commit) == nil {
 			return g, nil
 		}
-		// Not cached, or the cached copy failed its checks: Prepare fetches
-		// again, or reports the problem with the folder to delete.
+		if ap, ok := g.(commitPreparer); ok && sc.Branch != "" {
+			// A branch source never moves to the head on its own: fetch
+			// exactly the trusted commit. A failure is the failure of this
+			// source, not a reason to resolve the head.
+			if perr = ap.PrepareAt(ctx, commit); perr == nil {
+				return g, nil
+			}
+		}
+		// Otherwise (a tag): Prepare fetches again, or reports the problem
+		// with the folder to delete.
 	}
-	err = g.Prepare(ctx)
+	err = perr
+	if perr == nil {
+		err = g.Prepare(ctx)
+	}
 	if err == nil {
+		if sc.Branch != "" {
+			// The head was just read from the remote: this counts as a check.
+			s.branchFresh[branchLocator(sc)] = true
+			s.recordBranchCheck(sc)
+		}
 		return g, nil
 	}
-	if errors.Is(err, orgconfig.ErrInvalid) || s.refresh {
+	if errors.Is(err, orgconfig.ErrInvalid) || s.refresh || (s.refreshBranches && sc.Branch != "") {
 		// A broken org config is fatal, and a review (trust, ls --refresh)
 		// wants the current state of the remote, never an older checkout.
 		return nil, err
@@ -554,11 +593,25 @@ func (s *session) prepareNewestCached(ctx context.Context, g PreparedSource, sc 
 	for _, c := range commits {
 		if cp.PrepareCached(ctx, c) == nil {
 			s.warn("git %s is unreachable (%s), so ccshelf uses the newest verified cached checkout (commit %s), which may be older than %s",
-				ui.Sanitize(sc.URL), ui.SanitizeLine(cause.Error()), shortSHA(c), ui.Sanitize(sc.Ref))
+				ui.Sanitize(sc.URL), ui.SanitizeLine(cause.Error()), shortSHA(c), ui.Sanitize(pinLabel(sc)))
 			return true
 		}
 	}
 	return false
+}
+
+// gitOptions builds the options of the git source for sc.
+func gitOptions(sc config.SourceConfig, requirePin bool) gitsource.Options {
+	return gitsource.Options{URL: sc.URL, Ref: sc.Ref, Branch: sc.Branch, Subpath: sc.Path, RequirePin: requirePin}
+}
+
+// pinLabel names what a git source follows, for messages: the ref, or
+// "branch <name>".
+func pinLabel(sc config.SourceConfig) string {
+	if sc.Branch != "" {
+		return "branch " + sc.Branch
+	}
+	return sc.Ref
 }
 
 func shortSHA(c string) string {
@@ -577,6 +630,21 @@ var fullSHA = regexp.MustCompile(`^([0-9a-f]{40}|[0-9a-f]{64})$`)
 // between two acceptances) the most recent one wins; a profile accepted
 // against the other commit then needs a new review, as it should.
 func (s *session) lockedCommit(sc config.SourceConfig) string {
+	if sc.Branch != "" {
+		// A branch source stays on the commit the user trusted, whatever
+		// require_pin says: the branch is explicit, and a new head is only
+		// looked at by the periodic check or on request (D-55).
+		if s.refresh || s.refreshBranches {
+			return ""
+		}
+		if c := s.pinned[branchLocator(sc)]; c != "" {
+			return c
+		}
+		if c := s.lockedCommits(sc); len(c) > 0 {
+			return c[0]
+		}
+		return ""
+	}
 	if s.refresh || !s.cfg.Trust.RequirePin || fullSHA.MatchString(strings.ToLower(sc.Ref)) {
 		return ""
 	}
@@ -603,7 +671,7 @@ func (s *session) lockedCommits(sc config.SourceConfig) []string {
 			recs = []trust.SourceRecord{{Source: e.Source, Ref: e.Ref, Commit: e.Commit}}
 		}
 		for _, r := range recs {
-			if r.Source == locator && r.Ref == sc.Ref && fullSHA.MatchString(r.Commit) {
+			if r.Source == locator && r.Ref == sc.TrustRef() && fullSHA.MatchString(r.Commit) {
 				found = append(found, rec{r.Commit, e.AcceptedAt})
 			}
 		}
@@ -843,6 +911,15 @@ func (s *session) sourceLabels() map[string]string {
 		m[src.ID()] = profile.PortableSourceID(src)
 	}
 	return m
+}
+
+// sourceTracks describes a source that follows a branch, for example
+// "branch main @ 1a2b3c4", and returns "" for every other source.
+func sourceTracks(src profile.Source) string {
+	if bs, ok := src.(branchSource); ok && bs.Branch() != "" {
+		return branchLabel(bs.Branch(), bs.Commit())
+	}
+	return ""
 }
 
 // pruneStamp is the cache file whose content is the time of the last pruning.

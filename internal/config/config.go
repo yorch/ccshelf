@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"time"
 	"unicode"
 
 	toml "github.com/pelletier/go-toml/v2"
@@ -80,11 +81,15 @@ type Catalog struct {
 // matter. profile.Resolve decides collisions and personal shadowing. For git
 // sources, Path is the folder inside the repository.
 type SourceConfig struct {
-	Type   string `toml:"type"`
-	Name   string `toml:"name,omitempty"`
-	Path   string `toml:"path,omitempty"`
-	URL    string `toml:"url,omitempty"`
-	Ref    string `toml:"ref,omitempty"`
+	Type string `toml:"type"`
+	Name string `toml:"name,omitempty"`
+	Path string `toml:"path,omitempty"`
+	URL  string `toml:"url,omitempty"`
+	Ref  string `toml:"ref,omitempty"`
+	// Branch is, for git sources, a branch to track instead of a tag or a
+	// commit (D-55). It is mutually exclusive with Ref. Trust stays per
+	// commit: every new commit on the branch needs trust again.
+	Branch string `toml:"branch,omitempty"`
 	Plugin string `toml:"plugin,omitempty"`
 	// Marketplace is, for plugin sources, the source (owner/repo or a git
 	// URL) the plugin's marketplace must have been added from (SR2). The
@@ -98,6 +103,73 @@ type Trust struct {
 	RequirePin           bool   `toml:"require_pin"`
 	OnChange             string `toml:"on_change"`
 	TrustProjectProfiles bool   `toml:"trust_project_profiles"`
+	// BranchCheckInterval is a Go duration string (for example "24h"): how
+	// often a run checks a tracked branch for a new commit. Empty means 24h.
+	BranchCheckInterval string `toml:"branch_check_interval,omitempty"`
+}
+
+// EffectiveBranchCheckInterval returns trust.branch_check_interval with the
+// default applied. An invalid value (Validate reports it) falls back to the
+// default.
+func (t Trust) EffectiveBranchCheckInterval() time.Duration {
+	if t.BranchCheckInterval == "" {
+		return DefaultBranchCheckInterval
+	}
+	d, err := ParseUpdateInterval(t.BranchCheckInterval)
+	if err != nil || d < MinUpdateInterval || d > MaxUpdateInterval {
+		return DefaultBranchCheckInterval
+	}
+	return d
+}
+
+// DefaultBranchCheckInterval is used when trust.branch_check_interval is empty.
+const DefaultBranchCheckInterval = 24 * time.Hour
+
+// BranchRefPrefix starts the trust identity of a branch source. A tag name
+// never holds ":", so a branch and a tag with the same name never collide.
+const BranchRefPrefix = "branch:"
+
+// TrustRef returns the ref that the trust lockfile records for a git source:
+// the tag or commit, or "branch:<name>" for a branch source.
+func (s SourceConfig) TrustRef() string {
+	if s.Branch != "" {
+		return BranchRefPrefix + s.Branch
+	}
+	return s.Ref
+}
+
+// ValidateBranch reports why name is not an acceptable branch to track, or
+// nil. It applies the rules of "git check-ref-format --branch" without running
+// git, and refuses full ref names (refs/..., heads/..., remotes/...) and HEAD.
+func ValidateBranch(name string) error {
+	switch {
+	case name == "":
+		return errors.New("a branch name is required")
+	case len(name) > 200:
+		return errors.New("a branch name is at most 200 characters")
+	case strings.HasPrefix(name, "-"):
+		return fmt.Errorf("branch %q must not start with '-'", name)
+	case name == "@" || strings.EqualFold(name, "HEAD"):
+		return fmt.Errorf("%q is not a branch name", name)
+	case strings.Contains(name, ".."), strings.Contains(name, "@{"), strings.Contains(name, "//"):
+		return fmt.Errorf("branch %q contains \"..\", \"@{\" or \"//\"", name)
+	case strings.HasPrefix(name, "/"), strings.HasSuffix(name, "/"), strings.HasSuffix(name, "."):
+		return fmt.Errorf("branch %q must not start with \"/\" or end with \"/\" or \".\"", name)
+	case strings.IndexFunc(name, func(r rune) bool {
+		return unicode.IsSpace(r) || unicode.IsControl(r) || unicode.Is(unicode.Cf, r) || strings.ContainsRune("~^:?*[\\", r)
+	}) >= 0:
+		return fmt.Errorf("branch %q contains a space, a control character or one of ~ ^ : ? * [ \\", name)
+	}
+	first, _, _ := strings.Cut(strings.ToLower(name), "/")
+	if first == "refs" || ((first == "heads" || first == "remotes") && strings.Contains(name, "/")) {
+		return fmt.Errorf("branch %q looks like a full ref name. Give the branch name only", name)
+	}
+	for _, part := range strings.Split(name, "/") {
+		if strings.HasPrefix(part, ".") || strings.HasSuffix(part, ".lock") {
+			return fmt.Errorf("branch %q has a part that starts with \".\" or ends with \".lock\"", name)
+		}
+	}
+	return nil
 }
 
 // Account names a separate Claude Code configuration directory.
@@ -180,7 +252,7 @@ func ValidatePin(ref string) error {
 		return nil
 	}
 	if strings.Contains(ref, "/") {
-		return fmt.Errorf("ref %q contains \"/\": a pin is a tag name or a full commit SHA, never a branch or a full ref path", ref)
+		return fmt.Errorf("ref %q contains \"/\": a pin is a tag name or a full commit SHA, never a branch or a full ref path (to track a branch, use branch instead of ref)", ref)
 	}
 	if !tagRe.MatchString(ref) {
 		return fmt.Errorf("ref %q contains characters that are not allowed: a pin is a tag name (letters, digits and . _ + - only) or a full 40-hex commit SHA", ref)
@@ -192,13 +264,23 @@ func ValidatePin(ref string) error {
 	}
 	switch {
 	case reservedRefs[lower] || reservedRefLeaders[first]:
-		return fmt.Errorf("ref %q looks like a branch or a moving reference. Pin a tag or a full 40-hex commit SHA", ref)
+		return fmt.Errorf("ref %q looks like a branch or a moving reference. Pin a tag or a full 40-hex commit SHA.%s", ref, branchHint(lower))
 	case strings.Contains(ref, ".."), strings.HasSuffix(ref, "."), strings.HasSuffix(lower, ".lock"):
 		return fmt.Errorf("ref %q is not a valid git tag name", ref)
 	case hexRe.MatchString(ref) && len(ref) >= 7 && len(ref) < 40:
 		return fmt.Errorf("ref %q looks like an abbreviated commit id, which is ambiguous. Use the full 40-hex SHA or a tag", ref)
 	}
 	return nil
+}
+
+// branchHint suggests the branch key for the usual names of a default branch.
+// It names only a fixed list, so no input is echoed back.
+func branchHint(lower string) string {
+	switch lower {
+	case "main", "master", "develop", "development", "dev", "trunk":
+		return fmt.Sprintf(" To track the branch, use branch = %q.", lower)
+	}
+	return ""
 }
 
 // Load reads and validates the configuration at path. A missing file yields
@@ -368,6 +450,17 @@ func (c *Config) Validate() error {
 		add("claude.path: contains a NUL byte")
 	}
 	c.Update.validate(add)
+	if c.Trust.BranchCheckInterval != "" {
+		d, err := ParseUpdateInterval(c.Trust.BranchCheckInterval)
+		switch {
+		case err != nil:
+			add("trust.branch_check_interval: %q is not a duration such as 24h", c.Trust.BranchCheckInterval)
+		case d < MinUpdateInterval:
+			add("trust.branch_check_interval: %q is shorter than the minimum %s", c.Trust.BranchCheckInterval, MinUpdateInterval)
+		case d > MaxUpdateInterval:
+			add("trust.branch_check_interval: %q is longer than the maximum %s", c.Trust.BranchCheckInterval, MaxUpdateInterval)
+		}
+	}
 	if c.Catalog.RemoteURL != "" {
 		u, err := url.Parse(c.Catalog.RemoteURL)
 		switch {
@@ -392,7 +485,7 @@ func (c *Config) Validate() error {
 			} else if err := checkDirSourcePath(s.Path); err != nil {
 				add("%s.path: %v", p, err)
 			}
-			if s.URL != "" || s.Ref != "" || s.Plugin != "" || s.Marketplace != "" {
+			if s.URL != "" || s.Ref != "" || s.Branch != "" || s.Plugin != "" || s.Marketplace != "" {
 				add("%s: dir sources take only path", p)
 			}
 		case SourceGit:
@@ -401,7 +494,7 @@ func (c *Config) Validate() error {
 			if !pluginIDRe.MatchString(s.Plugin) {
 				add("%s.plugin: %q must be name@marketplace", p, s.Plugin)
 			}
-			if s.URL != "" || s.Ref != "" {
+			if s.URL != "" || s.Ref != "" || s.Branch != "" {
 				add("%s: plugin sources take only plugin, path and marketplace", p)
 			}
 			if s.Marketplace != "" {
@@ -477,7 +570,7 @@ func (c *Config) validateGit(p string, s SourceConfig, add func(string, ...any))
 	if err := ValidateGitURL(s.URL); err != nil {
 		add("%s.url: %v", p, err)
 	}
-	for field, v := range map[string]string{"url": s.URL, "ref": s.Ref, "path": s.Path, "name": s.Name} {
+	for field, v := range map[string]string{"url": s.URL, "ref": s.Ref, "branch": s.Branch, "path": s.Path, "name": s.Name} {
 		if k := credentialMarker(v); k != "" {
 			add("%s.%s: looks like it embeds a credential (%s...). Never put tokens in the configuration", p, field, k)
 		}
@@ -488,11 +581,27 @@ func (c *Config) validateGit(p string, s SourceConfig, add func(string, ...any))
 	if s.Marketplace != "" {
 		add("%s: git sources do not take marketplace", p)
 	}
-	if c.Trust.RequirePin {
+	switch {
+	case s.Ref != "" && s.Branch != "":
+		add("%s: use ref or branch, not both", p)
+	case s.Ref == "" && s.Branch == "":
+		// With pins required this is a load error (as before). With pins off
+		// it is one unavailable source (gitsource.New reports it), so the
+		// personal profiles and "config source pin" keep working.
+		if c.Trust.RequirePin {
+			add("%s: a pinned ref is required. Add ref = \"<tag>\" or branch = \"<name>\"", p)
+		}
+	case s.Branch != "":
+		// An explicit branch is allowed even with trust.require_pin: the
+		// config says in plain words that the source moves (D-55).
+		if err := ValidateBranch(s.Branch); err != nil {
+			add("%s.branch: %v", p, err)
+		}
+	case c.Trust.RequirePin:
 		if err := ValidatePin(s.Ref); err != nil {
 			add("%s.ref: %v", p, err)
 		}
-	} else if s.Ref != "" {
+	default:
 		if !refCharsRe.MatchString(s.Ref) || strings.HasPrefix(s.Ref, "-") || strings.Contains(s.Ref, "..") {
 			add("%s.ref: %q contains characters that are not allowed", p, s.Ref)
 		}

@@ -93,7 +93,7 @@ touches the network. Add others with --profile. For cmd.exe, --write-cmd-shims
 				return ui.Usage(withHint(errors.New("missing argument <shell>"), "one of: %s", strings.Join(shellinit.Shells(), ", ")))
 			}
 		}
-		s, err := l.open(ctx, cc, false, false)
+		s, err := l.open(ctx, cc, false)
 		if err != nil {
 			return err
 		}

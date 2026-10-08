@@ -45,7 +45,7 @@ The exit code is 0 whether or not they differ. --json has an "identical" field.`
 		Args: cobra.MaximumNArgs(2),
 	}
 	c.RunE = l.do(func(ctx context.Context, cc *clicore.Context, _ *cobra.Command, args []string) error {
-		s, err := l.open(ctx, cc, true, false)
+		s, err := l.open(ctx, cc, true)
 		if err != nil {
 			return err
 		}

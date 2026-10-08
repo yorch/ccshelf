@@ -26,7 +26,7 @@ versioned machine-readable form.`,
 		Args: cobra.MaximumNArgs(1),
 	}
 	c.RunE = l.do(func(ctx context.Context, cc *clicore.Context, _ *cobra.Command, args []string) error {
-		s, err := l.open(ctx, cc, true, false)
+		s, err := l.open(ctx, cc, true)
 		if err != nil {
 			return err
 		}
@@ -49,6 +49,12 @@ versioned machine-readable form.`,
 			return ui.WriteJSON(cc.Streams.Out, "profile", showData(r, state, s.sourceLabels()))
 		}
 		fmt.Fprint(cc.Streams.Out, profile.Describe(r))
+		for _, f := range r.Chain {
+			if tr := sourceTracks(f.Source); tr != "" {
+				fmt.Fprintf(cc.Streams.Out, "Source: git:%s tracks %s\n", ui.Sanitize(trimLocator(f.Source.(branchSource).Locator())), ui.Sanitize(tr))
+				break
+			}
+		}
 		fmt.Fprintf(cc.Streams.Out, "Trust: %s\n", state)
 		return nil
 	})
@@ -99,29 +105,32 @@ type showItem struct {
 }
 
 type showDoc struct {
-	Name         string      `json:"name"`
-	Description  string      `json:"description,omitempty"`
-	Owner        string      `json:"owner,omitempty"`
-	Status       string      `json:"status"`
-	SupersededBy string      `json:"superseded_by,omitempty"`
-	Kind         string      `json:"kind"`
-	Chain        []string    `json:"chain"`
-	Sources      []string    `json:"sources"`
-	Account      string      `json:"account,omitempty"`
-	PluginMode   string      `json:"plugin_mode"`
-	Include      []string    `json:"plugins_include"`
-	Exclude      []string    `json:"plugins_exclude"`
-	SkillsOff    []string    `json:"skills_off"`
-	SkillsName   []string    `json:"skills_name_only"`
-	MCP          showMCP     `json:"mcp"`
-	Session      showSession `json:"session"`
-	OnBlocked    string      `json:"on_blocked"`
-	WhenToUse    []string    `json:"when_to_use"`
-	AvoidWhen    []string    `json:"avoid_when"`
-	Warnings     []string    `json:"warnings"`
-	ClosureHash  string      `json:"closure_hash"`
-	Closure      []showItem  `json:"closure"`
-	Trust        string      `json:"trust"`
+	Name         string   `json:"name"`
+	Description  string   `json:"description,omitempty"`
+	Owner        string   `json:"owner,omitempty"`
+	Status       string   `json:"status"`
+	SupersededBy string   `json:"superseded_by,omitempty"`
+	Kind         string   `json:"kind"`
+	Chain        []string `json:"chain"`
+	// Tracks lists, for sources that follow a branch, "branch main @ 1a2b3c4".
+	// Sources keeps its format.
+	Tracks      []string    `json:"tracks,omitempty"`
+	Sources     []string    `json:"sources"`
+	Account     string      `json:"account,omitempty"`
+	PluginMode  string      `json:"plugin_mode"`
+	Include     []string    `json:"plugins_include"`
+	Exclude     []string    `json:"plugins_exclude"`
+	SkillsOff   []string    `json:"skills_off"`
+	SkillsName  []string    `json:"skills_name_only"`
+	MCP         showMCP     `json:"mcp"`
+	Session     showSession `json:"session"`
+	OnBlocked   string      `json:"on_blocked"`
+	WhenToUse   []string    `json:"when_to_use"`
+	AvoidWhen   []string    `json:"avoid_when"`
+	Warnings    []string    `json:"warnings"`
+	ClosureHash string      `json:"closure_hash"`
+	Closure     []showItem  `json:"closure"`
+	Trust       string      `json:"trust"`
 }
 
 func nz(s []string) []string {
@@ -158,6 +167,9 @@ func showData(r *profile.Resolved, state string, labels map[string]string) showD
 			id = l
 		}
 		d.Sources = append(d.Sources, id)
+		if tr := sourceTracks(f.Source); tr != "" {
+			d.Tracks = append(d.Tracks, tr)
+		}
 	}
 	for _, w := range r.Warnings {
 		d.Warnings = append(d.Warnings, ui.Sanitize(w))
@@ -168,6 +180,7 @@ func showData(r *profile.Resolved, state string, labels map[string]string) showD
 	d.Description = ui.Sanitize(d.Description)
 	d.Owner = ui.Sanitize(d.Owner)
 	d.Sources = uniqKeep(d.Sources)
+	d.Tracks = uniqKeep(d.Tracks)
 	return d
 }
 
