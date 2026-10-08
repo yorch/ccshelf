@@ -106,5 +106,7 @@
 // profile package. The catalog data (sidecars and marketplace files) is there
 // for the launcher's deprecated-plugin warning and for search and recommend
 // without an org data repo checkout; a marketplace file over the size limit
-// makes the source unusable, like any other watched file.
+// makes the source unusable, like any other watched file. With [catalog]
+// enabled = false in ccshelf.toml (a profiles-only repo) none of the catalog
+// data is watched, so a source without it, or with a stray copy, works the same.
 package gitsource

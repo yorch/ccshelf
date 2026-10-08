@@ -65,10 +65,17 @@ func newWatch(cfg *orgconfig.Config) watchSet {
 	if cfg == nil {
 		cfg = orgconfig.Default()
 	}
-	w := watchSet{dirs: []string{path.Clean(cfg.Profiles.Dir), promptsDir, sidecar.Dir}, files: []string{orgconfig.FileName}, catalog: []string{sidecar.Dir}}
-	for _, m := range cfg.Catalog.Marketplaces {
-		w.files = append(w.files, path.Clean(m))
-		w.catalog = append(w.catalog, path.Clean(m))
+	w := watchSet{dirs: []string{path.Clean(cfg.Profiles.Dir), promptsDir}, files: []string{orgconfig.FileName}}
+	// A profiles-only repo ([catalog] enabled = false) has no catalog data: the
+	// sidecars and marketplace files are not watched, so a stray one is neither
+	// verified nor written to the cache.
+	if cfg.Catalog.Enabled {
+		w.dirs = append(w.dirs, sidecar.Dir)
+		w.catalog = []string{sidecar.Dir}
+		for _, m := range cfg.Catalog.Marketplaces {
+			w.files = append(w.files, path.Clean(m))
+			w.catalog = append(w.catalog, path.Clean(m))
+		}
 	}
 	reg := path.Clean(cfg.Profiles.MCPRegistry)
 	if d := path.Dir(reg); d != "." {
