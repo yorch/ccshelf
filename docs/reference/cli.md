@@ -399,7 +399,7 @@ profiles/example.toml.sample, an all-comment sample, is written only with
 --example-profile.
 ```
 
---profiles-only sets up an org data repo that holds profiles (and prompts/ and mcp/registry.toml) but no plugin marketplace and no catalog: ccshelf.toml gets [catalog] enabled = false, and the command writes ccshelf.toml, .github/CODEOWNERS, a README.md, .gitattributes, .gitignore and only the validate workflow (lint). No marketplace.json, sidecars, catalog.yml or release.yml. --marketplace-name and --sidecars stub are usage errors with it, and so is a directory that already has .claude-plugin/marketplace.json.
+--profiles-only sets up an org data repo that holds profiles (and prompts/ and mcp/registry.toml) but no plugin marketplace and no catalog: ccshelf.toml gets [catalog] enabled = false, and the command writes ccshelf.toml, .github/CODEOWNERS, a README.md, .gitattributes, .gitignore and only the validate workflow (lint). No marketplace.json, sidecars, catalog.yml or release.yml. --marketplace-name, --owner and --sidecars stub are usage errors with it, and so is a directory that already has a marketplace file. An existing ccshelf.toml must already have [catalog] enabled = false (add it yourself, or use --force to replace the file), and --no-config is refused unless it has.
 
 The workflows call the ccshelf action pinned by full commit SHA. Pass --ccshelf-ref <40-hex SHA> and --ccshelf-version <vX.Y.Z> to pin it (a tag given as --ccshelf-ref sets the version only). Without them the workflows contain a placeholder and fail with a clear message until you pin them.
 
