@@ -156,11 +156,18 @@ func Describe(r *Resolved) string {
 		}
 		fmt.Fprintf(&b, "  server %s: %s %s\n", n, s.Type, target)
 	}
+	// Unset values print their effective behavior so a reader can tell
+	// "not set" from a value: unset connectors keep claude.ai connectors,
+	// and unset strict is not strict.
 	if m.MCP.ClaudeAIConnectors != "" {
 		fmt.Fprintf(&b, "  claudeai_connectors: %s\n", m.MCP.ClaudeAIConnectors)
+	} else {
+		b.WriteString("  claudeai_connectors: keep (default)\n")
 	}
 	if m.MCP.Strict != nil {
 		fmt.Fprintf(&b, "  strict: %t\n", *m.MCP.Strict)
+	} else {
+		b.WriteString("  strict: false (default)\n")
 	}
 	b.WriteString("Session:\n")
 	if m.Session.Model != "" {

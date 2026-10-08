@@ -1071,3 +1071,22 @@ func TestCommandBase(t *testing.T) {
 		t.Error("isVersionSuffix")
 	}
 }
+
+// Describe prints the effective behavior of unset MCP controls, so a reader can
+// tell "not set" from a value; the resolved manifest stays unset.
+func TestDescribeUnsetMCPControlsShowDefaults(t *testing.T) {
+	root := mk(t, map[string]string{"profiles/a.toml": "name = \"a\"\n"})
+	r, err := Resolve("a", []Source{src(KindOrg, root)}, ResolveOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := Describe(r)
+	for _, want := range []string{"  claudeai_connectors: keep (default)\n", "  strict: false (default)\n"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("Describe lacks %q:\n%s", want, out)
+		}
+	}
+	if r.Merged.MCP.ClaudeAIConnectors != "" || r.Merged.MCP.Strict != nil {
+		t.Errorf("resolved MCP controls must stay unset: %+v", r.Merged.MCP)
+	}
+}
