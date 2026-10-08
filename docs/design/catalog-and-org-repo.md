@@ -128,6 +128,18 @@ support = "#sre-help"                # where to ask for help
 docs = "https://wiki.example/sre-kit"
 ```
 
+## Profiles-only org data repo (decided 2026-10-08, D-52)
+An organization can keep only profiles (plus `prompts/` and `mcp/registry.toml`) in its org data repo, with no plugin marketplace and no catalog. `[catalog] enabled = false` in `ccshelf.toml` says so; the key defaults to `true`, so every existing repo is unchanged.
+
+| Command | With `enabled = false` |
+|---|---|
+| `ccshelf lint` | Skips every check that needs a marketplace, plugins, sidecars or bundles (CAT001 to CAT042, CAT044, CAT046, CAT048 and CAT050 to CAT053). Keeps the profile checks (PRF*), the MCP registry, prompts, protect lists and the CODEOWNERS checks (CAT043, CAT045, CAT047; CAT043 also fires when there are profiles but no CODEOWNERS). A marketplace file or `bundles/` that exists anyway is **CAT061** (warning, "ignored"), and `[catalog]` keys other than `enabled` are **CAT062** (warning). |
+| `ccshelf compile`, `catalog build`, `search`, `recommend` | Exit 1: `[catalog] enabled = false in ccshelf.toml: this repo has no marketplace, so there are no bundles/catalog`, with a hint. Nothing is written. `search` and `recommend` still use a configured remote catalog or org source when run outside the repo (a profiles-only source is not a catalog source). |
+| `ccshelf doctor` | Checks profiles and, with `--policy`, managed policy; the catalog checks have nothing to check, and a note says so. |
+| Launcher | Unchanged: a `dir` source or a `git` source works without a marketplace. A git source does not watch `catalog/plugins/` or marketplace files when the catalog is off. |
+
+`ccshelf catalog init --profiles-only` sets such a repo up (see below). It is a repo for the roles of an organization whose plugins come from marketplaces that live elsewhere.
+
 ## Generated bundles
 `ccshelf compile` writes `bundles/profile-<name>/.claude-plugin/plugin.json` (name, version, `dependencies`) from `profiles/<name>.toml`. Because marketplaces serve files from git, these are committed; CI runs `ccshelf compile --check` and fails the PR if a committed bundle differs from what would be generated. The `marketplace.json` entry for each bundle (name, `source: ./bundles/profile-frontend`, category `profile`) is written by hand once; `lint` checks that every profile has an entry and every bundle entry has a profile. (Alternative: generate those entries into `marketplace.json`; rejected for now because mixing generated and hand-written entries in one JSON file invites merge conflicts.)
 
@@ -140,6 +152,7 @@ max_review_age_days = 180
 taxonomy = "catalog/taxonomy.toml"
 
 [catalog]
+# enabled = false                    # profiles-only repo: no marketplace, sidecars, bundles or catalog (see below)
 title = "Acme plugin catalog"
 metadata_source = "sidecar"          # sidecar | marketplace (single-file mode)
 marketplaces = [".claude-plugin/marketplace.json"]   # more than one marketplace may feed one catalog
@@ -208,7 +221,7 @@ README.md                             what the repo is, how to add a plugin, pro
 .gitattributes, .gitignore            LF endings (the compile drift check compares bytes); dist/ and suggestion files
 profiles/example.toml.sample          only with --example-profile: an all-comment sample, never a profile
 ```
-Every group has a `--no-<group>` flag. There are **no built-in default profiles** (R5): roles are the organization's choice, and the one sample is commented out and carries a `.sample` suffix so that `ccshelf` never loads it. No organization name, host or data is in the templates.
+Every group has a `--no-<group>` flag. **`--profiles-only`** (D-52) writes only `ccshelf.toml` (with `[catalog] enabled = false`), `.github/CODEOWNERS` (profiles, `mcp/`, `prompts/`, `ccshelf.toml`, `docs/` and `.github/` owned by the platform owners), a profiles-only `README.md`, `.gitattributes`, `.gitignore` and `.github/workflows/validate.yml` with the lint step only (no `compile --check`, no catalog preview, no `catalog.yml`, no `release.yml`); `--marketplace-name` is not needed and is a usage error with it, as is `--sidecars stub`, and so is a directory that already has `.claude-plugin/marketplace.json`. There are **no built-in default profiles** (R5): roles are the organization's choice, and the one sample is commented out and carries a `.sample` suffix so that `ccshelf` never loads it. No organization name, host or data is in the templates.
 
 ### Placeholders and the lint result
 A sidecar stub has the owner (the owner the existing CODEOWNERS names for the plugin directory, else `--owner`, else the first platform owner), `status = "experimental"` (an unreviewed entry should not claim `active`) and `when_to_use = ["TODO(ccshelf): ..."]`. The fields that `lint.require` demands and that can hold a placeholder (`avoid_when`, `support`) get one; the ones that cannot (`review_by`, `overlaps_with`, `superseded_by`, `docs`) are left out, so lint reports them as errors (CAT013) exactly where work is needed. A marketplace entry whose `plugin.json` has no description gets `TODO(ccshelf): describe what <name> does`. `ccshelf lint` reports every remaining marker as warning **CAT048**, so the result for a freshly generated repo is deterministic: **no errors; warnings only CAT048 (one per placeholder) and, in adopt mode, whatever the existing files already had or the not yet merged CODEOWNERS suggestions leave uncovered (CAT044, CAT045, CAT046)**. A new repo without plugins lints with no findings at all, also with `--strict`.
