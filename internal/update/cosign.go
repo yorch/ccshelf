@@ -23,8 +23,8 @@ var execWaitDelay = 2 * time.Second
 // ErrSignature means the keyless signature of checksums.txt did not verify.
 var ErrSignature = errors.New("signature verification failed")
 
-// LookPath finds name in the directories of pathEnv, the value of PATH. Only
-// absolute directories are searched (an empty or relative entry such as "."
+// LookPath finds name in the directories of pathEnv, the value of PATH. It
+// searches only absolute directories (an empty or relative entry such as "."
 // would let a file in the working directory stand in for a tool), the match
 // must be a regular file, and on Unix it must be executable. On Windows the
 // extensions of pathext (default ".exe") are tried.
@@ -83,7 +83,7 @@ func scrubEnv(environ []string) []string {
 
 // VerifyCosign runs "cosign verify-blob" for the keyless bundle of
 // checksumsPath. cosign is the binary at cosignPath (found on PATH by the
-// caller). The certificate identity and issuer are pinned exactly; there is no
+// caller). The certificate identity and issuer are pinned exactly. There is no
 // regular expression and no way to turn the check off from here.
 func VerifyCosign(ctx context.Context, cosignPath string, environ []string, bundlePath, checksumsPath, identity, issuer string) error {
 	ctx, cancel := context.WithTimeout(ctx, CosignTimeout)

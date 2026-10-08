@@ -4,7 +4,7 @@
     {
       "id": "settings-masking",
       "state": "available",
-      "reason": "the generated --settings file is not a sideload flag and cannot be disabled by policy; keys that managed settings lock (force-enabled plugins) still win"
+      "reason": "the generated --settings file is not a sideload flag, and policy cannot disable it. Keys that managed settings lock (force-enabled plugins) still win"
     },
     {
       "id": "hide-connectors",
@@ -14,7 +14,7 @@
     {
       "id": "deny-mcp-servers",
       "state": "available",
-      "reason": "deniedMcpServers is valid in any settings file; entries need full server names such as plugin:context7:context7"
+      "reason": "deniedMcpServers is valid in any settings file. Entries need full server names such as plugin:context7:context7"
     },
     {
       "id": "add-mcp-config",
@@ -53,7 +53,7 @@
     {
       "id": "forced-plugins",
       "state": "blocked",
-      "reason": "these plugins are force-enabled by policy and cannot be masked; they stay on in every profile",
+      "reason": "these plugins are force-enabled by policy and cannot be masked. They stay on in every profile",
       "source": "enabledPlugins / required by your org",
       "items": [
         "audit-logger@acme",
@@ -69,7 +69,7 @@
     "server-managed settings cannot be read locally"
   ],
   "warnings": [
-    "managed key disableAllHooks should be a boolean; ignoring the value"
+    "managed key disableAllHooks should be a boolean, so ccshelf ignores the value"
   ],
   "partial_visibility": false,
   "partial_reasons": [],

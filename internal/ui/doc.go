@@ -18,7 +18,7 @@
 //     --no-interactive is absent, CI is unset and TERM is not dumb (rule 2).
 //     Color follows NO_COLOR, --no-color, TERM=dumb and whether stdout is a
 //     terminal (rule 7). On Windows the console's virtual-terminal mode is
-//     enabled best effort; when that fails the mode falls back to plain output
+//     enabled best effort. When that fails, the mode falls back to plain output
 //     without color.
 //
 //  2. Pick the prompter from the mode, and ask only for values that no flag
@@ -35,9 +35,9 @@
 //     return ui.MissingFlags(hint, "--plugin", "--skill-off") itself before
 //     prompting. Prompts and menus are written to Streams.Err so Streams.Out
 //     stays clean for results. The launcher prompts only before it starts
-//     claude and never leaves a prompt open afterwards (rule 6); the TTY
+//     claude and never leaves a prompt open afterwards (rule 6). The TTY
 //     prompter restores raw input and scoped output before every keyboard
-//     prompt returns (D-46); Secret saves and restores the terminal state on
+//     prompt returns (D-46). Secret saves and restores the terminal state on
 //     every exit, including cancellation and interrupts.
 //
 //  3. Record what the user chose and finish with the equivalent command (rule 4):
@@ -48,12 +48,12 @@
 //     rec.Print(streams.Err, runtime.GOOS)
 //
 //     Equivalent quotes for the user's shell (PowerShell on Windows, POSIX
-//     elsewhere; QuoteCmd exists for cmd.exe) and refuses control characters.
+//     elsewhere, and QuoteCmd exists for cmd.exe) and refuses control characters.
 //     Never record a secret.
 //
 //  4. Print results with Table and WriteJSON. Table sanitizes cells, truncates
 //     to mode.Width counting wide Unicode characters, and uses ASCII in plain
-//     mode. WriteJSON writes {"version":1,"kind":...,"data":...}; within a
+//     mode. WriteJSON writes {"version":1,"kind":...,"data":...}. Within a
 //     version fields may be added but never removed, renamed or retyped.
 //     Status prefixes ok:, warn: or error: so color is never the only signal.
 //     Pass any text that came from a profile or catalog through Sanitize, and
@@ -67,7 +67,7 @@
 //     }
 //
 //     Wrap errors with ui.Usage, ui.Policy, ui.TrustRequired or ui.Failure to
-//     choose the code; CodeOf also maps *MissingFlagError to 2 and
+//     choose the code. CodeOf also maps *MissingFlagError to 2 and
 //     ErrAborted and context.Canceled to 130.
 //
 // # Exit codes (rule 8)

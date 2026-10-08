@@ -190,7 +190,7 @@ func (d *detector) fileInto(t *tier, dir, path string, kind SourceKind, what str
 	t.srcs = append(t.srcs, i)
 	if err != nil {
 		d.unreadable(t, what+" "+path, "malformed: "+err.Error())
-		d.p.Warnings = append(d.p.Warnings, fmt.Sprintf("%s %s is malformed (%v); the effective policy is unknown, it is NOT treated as no policy", what, path, err))
+		d.p.Warnings = append(d.p.Warnings, fmt.Sprintf("%s %s is malformed (%v). The effective policy is unknown, and ccshelf does NOT treat it as no policy", what, path, err))
 		return
 	}
 	t.present = true
@@ -228,7 +228,7 @@ func (d *detector) plist() *tier {
 	m, perr := parseDoc(out)
 	if perr != nil {
 		d.unreadable(t, "managed preferences "+plistDomain, "malformed: "+perr.Error())
-		d.p.Warnings = append(d.p.Warnings, fmt.Sprintf("managed preferences %s are malformed (%v); the effective policy is unknown", plistDomain, perr))
+		d.p.Warnings = append(d.p.Warnings, fmt.Sprintf("managed preferences %s are malformed (%v). The effective policy is unknown", plistDomain, perr))
 		return t
 	}
 	t.present, t.m = true, m
@@ -304,7 +304,7 @@ func (d *detector) registry(h Hive, admin bool) *tier {
 	if strings.TrimSpace(val) == "" {
 		if h == HKLM {
 			d.unreadable(t, loc, "empty value")
-			d.p.Warnings = append(d.p.Warnings, loc+" is empty; the effective policy is unknown")
+			d.p.Warnings = append(d.p.Warnings, loc+" is empty. The effective policy is unknown")
 		}
 		t.present = true
 		return t

@@ -28,7 +28,8 @@ const (
 type Method struct {
 	// Kind is one of the Method* constants.
 	Kind string
-	// Command is what to run instead of self-updating; empty for MethodManual.
+	// Command is what to run instead of self-updating. It is empty for
+	// MethodManual.
 	Command string
 }
 
@@ -41,7 +42,8 @@ type DetectInput struct {
 	// GOOS selects the path syntax and the rules that apply.
 	GOOS string
 	// Paths are the executable as invoked and as resolved through symlinks
-	// (either may be empty); a package manager is recognized by either.
+	// (either may be empty). DetectInstall recognizes a package manager by
+	// either.
 	Paths []string
 	// Home, GOBIN and GOPATH are the user's home directory and the Go
 	// environment values (GOPATH may hold several entries).
@@ -160,7 +162,7 @@ var detectRules = []rule{
 
 // DetectInstall recognizes a copy of ccshelf that a package manager (or an
 // image) owns, which ccshelf must not replace behind its back. The table is
-// ordered; the first rule matching any of the paths decides. A container is
+// ordered. The first rule matching any of the paths decides. A container is
 // reported last, so a Homebrew or Go install inside one still gets its own
 // command.
 func DetectInstall(in DetectInput) Method {

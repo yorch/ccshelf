@@ -12,5 +12,5 @@
 //	go test -race ./internal/e2e/...
 //
 // An opt-in smoke test against a real claude lives behind the realclaude build
-// tag; see realclaude_test.go.
+// tag. See realclaude_test.go.
 package e2e

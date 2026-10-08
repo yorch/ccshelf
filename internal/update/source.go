@@ -45,10 +45,10 @@ type Source struct {
 	API string
 	// AssetHosts are extra hosts (besides the web host) that a download may be
 	// redirected to. NewSource fills in GitHub's release-asset hosts for
-	// github.com; a GitHub Enterprise Server serves assets itself.
+	// github.com. A GitHub Enterprise Server serves assets itself.
 	AssetHosts []string
 	// AllowLoopbackHTTP lets a plain-http loopback base URL through. It is for
-	// tests; production wiring passes [config.LoopbackHTTPAllowed], which is
+	// tests. Production wiring passes [config.LoopbackHTTPAllowed], which is
 	// false except in the end-to-end test build.
 	AllowLoopbackHTTP bool
 
@@ -58,8 +58,8 @@ type Source struct {
 
 // NewSource builds the Source for repo, the repository this binary was
 // released from (the compiled-in version.Repo). baseURL is "" for github.com,
-// or https://host (a GitHub Enterprise Server; optionally
-// https://host/owner/repo to name a different repository to download from).
+// or https://host for a GitHub Enterprise Server. Optionally,
+// https://host/owner/repo names a different repository to download from.
 // The signer identity stays repo's, whatever baseURL says.
 func NewSource(repo, baseURL string, allowLoopbackHTTP bool) (Source, error) {
 	s := Source{AllowLoopbackHTTP: allowLoopbackHTTP, SignerRepo: repo}
@@ -96,7 +96,7 @@ func NewSource(repo, baseURL string, allowLoopbackHTTP bool) (Source, error) {
 }
 
 // WithSigner returns s with the signer repository replaced by signerRepo
-// ("owner/name"; the host is always github.com). It is a trust decision the
+// ("owner/name", and the host is always github.com). It is a trust decision the
 // user makes in [update] cosign_identity_repo. An empty signerRepo keeps s.
 func (s Source) WithSigner(signerRepo string) (Source, error) {
 	if signerRepo == "" {
@@ -119,9 +119,9 @@ func (s Source) ExtraAssetHosts() []string {
 }
 
 // WithAssetHosts returns s with hosts added to the hosts a download may be
-// redirected to (exact hostnames, already validated by the configuration; they
-// are checked again here). They are additions: the release host and, for
-// github.com, GitHub's asset hosts stay.
+// redirected to. The hosts are exact hostnames that the configuration already
+// validated, and WithAssetHosts checks them again. They are additions: the
+// release host and, for github.com, GitHub's asset hosts stay.
 func (s Source) WithAssetHosts(hosts []string) (Source, error) {
 	if len(hosts) == 0 {
 		return s, nil

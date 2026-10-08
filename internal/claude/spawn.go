@@ -35,7 +35,7 @@ func excerpt(s string, n int) string {
 
 // Spawn runs bin with args and waits for it, on every OS and never through a
 // shell. A nil env inherits the current environment. It returns the exit code
-// (128+n when a signal killed the process on Unix); a non-zero exit is not an
+// (128+n when a signal killed the process on Unix). A non-zero exit is not an
 // error. The error is non-nil when the process cannot start or ctx ended.
 func Spawn(ctx context.Context, bin string, args, env []string, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
 	return spawnDir(ctx, "", bin, args, env, stdin, stdout, stderr)
@@ -69,7 +69,7 @@ func spawnDir(ctx context.Context, dir, bin string, args, env []string, stdin io
 var StartHook func(bin string, args, env []string) (int, error)
 
 // Start launches the interactive claude. On Unix it replaces the current
-// process (syscall.Exec), so it returns only on error; on Windows it spawns
+// process (syscall.Exec), so it returns only on error. On Windows it spawns
 // the child with inherited stdio, ignores Ctrl+C in the launcher, forwards
 // termination and returns the child's exit code. A nil env inherits.
 func Start(bin string, args, env []string) (int, error) {

@@ -8,8 +8,8 @@ import (
 
 // Scripted is a Prompter for tests that answers from a queue.
 //
-// Answer types by prompt: Select takes an int (index); MultiSelect takes
-// []int; Confirm takes a bool; Input and Secret take a string. Any answer may
+// Answer types by prompt: Select takes an int (index), MultiSelect takes
+// []int, Confirm takes a bool, and Input and Secret take a string. Any answer may
 // instead be an error, which the prompt returns (for example ErrAborted). A
 // prompt of the wrong kind, or a prompt with the queue empty, is an error, and
 // Done reports answers that were never used.

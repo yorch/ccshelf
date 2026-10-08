@@ -98,8 +98,8 @@ func QuotePowerShell(s string) (string, error) {
 }
 
 // QuoteCmd quotes s as one word for cmd.exe. A word of safe characters stays
-// bare; a word with spaces and no cmd metacharacter is wrapped in double
-// quotes using the CommandLineToArgvW rules; any other word has every
+// bare. A word with spaces and no cmd metacharacter is wrapped in double
+// quotes using the CommandLineToArgvW rules. Any other word has every
 // metacharacter escaped with ^ as well. A '%' cannot be escaped reliably
 // outside a batch file, so a string containing one is refused, as are control
 // characters (ErrUnquotable).

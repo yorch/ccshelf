@@ -19,9 +19,10 @@ var ErrLocked = errors.New("another ccshelf update is in progress")
 // AcquireLock takes the update lock in dir: an exclusive operating-system
 // lock (flock on Unix, LockFileEx on Windows) on the file LockName, which is
 // created with mode 0600 and never deleted. The kernel drops the lock when the
-// holder exits for any reason, so a crash leaves nothing to expire, two
+// holder exits for any reason. Thus a crash leaves nothing to expire, two
 // processes can never both take over a stale lock, and a release can never
-// remove a newer holder's lock. A symlink at the lock's name is refused. The
+// remove a newer holder's lock. AcquireLock refuses a symlink at the lock's
+// name. The
 // returned release function is idempotent.
 func AcquireLock(dir string) (release func(), err error) {
 	path := filepath.Join(dir, LockName)

@@ -21,7 +21,7 @@ const (
 	// without --allow-downgrade, a malformed version).
 	KindUsage
 	// KindManaged is a binary that a package manager owns or a development
-	// build; --force overrides.
+	// build. --force overrides it.
 	KindManaged
 	// KindNotWritable is a directory the user cannot write.
 	KindNotWritable

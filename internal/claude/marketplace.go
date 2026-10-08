@@ -58,7 +58,7 @@ func (m Marketplace) Origin() (string, error) {
 }
 
 // UnmarshalJSON decodes one marketplace object. Known keys with the wrong type
-// are errors; unknown keys land in Extra.
+// are errors. Unknown keys land in Extra.
 func (m *Marketplace) UnmarshalJSON(data []byte) error {
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil || raw == nil {
@@ -114,7 +114,7 @@ func parseMarketplaces(data []byte) ([]Marketplace, error) {
 
 // ListMarketplaces returns the configured marketplaces as seen from dir, sorted
 // by name. It runs the read-only `claude plugin marketplace list --json`. env is
-// the child environment (nil inherits); when ctx has no deadline a 30 second
+// the child environment (nil inherits). When ctx has no deadline, a 30 second
 // timeout applies. Any other output shape is an error.
 func ListMarketplaces(ctx context.Context, bin, dir string, env []string) ([]Marketplace, error) {
 	ctx, cancel := withDefaultTimeout(ctx, DefaultTimeout)

@@ -115,7 +115,7 @@ func Evaluate(p *Policy, installed []claude.Plugin) *Matrix {
 
 	set(Feature{
 		ID: SettingsMasking, State: Available,
-		Reason: "the generated --settings file is not a sideload flag and cannot be disabled by policy; keys that managed settings lock (force-enabled plugins) still win",
+		Reason: "the generated --settings file is not a sideload flag, and policy cannot disable it. Keys that managed settings lock (force-enabled plugins) still win",
 	})
 	set(Feature{
 		ID: HideConnectors, State: Available,
@@ -123,7 +123,7 @@ func Evaluate(p *Policy, installed []claude.Plugin) *Matrix {
 	})
 	set(Feature{
 		ID: DenyMCPServers, State: Available,
-		Reason: "deniedMcpServers is valid in any settings file; entries need full server names such as plugin:context7:context7",
+		Reason: "deniedMcpServers is valid in any settings file. Entries need full server names such as plugin:context7:context7",
 	})
 	set(Feature{
 		ID: AppendSystemPromptFile, State: Available,
@@ -169,7 +169,7 @@ func Evaluate(p *Policy, installed []claude.Plugin) *Matrix {
 		}
 	}
 	if len(m.mcpFilters) > 0 && mcp.State != Blocked {
-		mcp.Reason += "; managed " + strings.Join(m.mcpFilters, ", ") + " still filter the servers it adds"
+		mcp.Reason += ". Managed " + strings.Join(m.mcpFilters, ", ") + " still filter the servers that --mcp-config adds"
 	}
 	set(mcp)
 	set(strict)
@@ -202,7 +202,7 @@ func Evaluate(p *Policy, installed []claude.Plugin) *Matrix {
 	if len(m.forced) > 0 {
 		fp = Feature{
 			ID: ForcedPlugins, State: Blocked, Source: "enabledPlugins / required by your org", Items: m.forced,
-			Reason: "these plugins are force-enabled by policy and cannot be masked; they stay on in every profile",
+			Reason: "these plugins are force-enabled by policy and cannot be masked. They stay on in every profile",
 		}
 	}
 	if fp.State == Available && p.PartialVisibility {
@@ -331,7 +331,7 @@ func (m *Matrix) Plan(need Needs, onBlocked string) (*Applied, error) {
 		}
 	}
 	if a.ExtraMCPServers && len(m.mcpFilters) > 0 {
-		a.Warnings = append(a.Warnings, "managed "+strings.Join(m.mcpFilters, ", ")+" will filter the MCP servers this profile adds; servers not admitted are not used")
+		a.Warnings = append(a.Warnings, "managed "+strings.Join(m.mcpFilters, ", ")+" will filter the MCP servers this profile adds. Servers not admitted are not used")
 	}
 	if len(a.Locked) > 0 {
 		a.Warnings = append(a.Warnings, "always on by policy, cannot be masked: "+strings.Join(a.Locked, ", "))

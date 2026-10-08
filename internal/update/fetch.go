@@ -39,7 +39,7 @@ var (
 	ErrTooLarge = errors.New("response is larger than the allowed size")
 	// ErrTruncated means a response ended before its declared length.
 	ErrTruncated = errors.New("download was cut short")
-	// ErrRedirect means a redirect was refused by the redirect policy.
+	// ErrRedirect means the redirect policy refused a redirect.
 	ErrRedirect = errors.New("redirect refused")
 )
 

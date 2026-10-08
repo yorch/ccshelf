@@ -7,7 +7,7 @@
 // read, or is malformed, is reported as Unknown plus a Warning and is never
 // silently treated as "no policy". Server-managed settings (claude.ai admin
 // console, Claude apps gateway) cannot be read locally and are always listed
-// as Unknown. Only key names and typed, redacted fields are kept; values that
+// as Unknown. Only key names and typed, redacted fields are kept. Values that
 // could be secrets (headers, URLs with credentials, command arguments) are
 // never stored or printed.
 //
@@ -32,12 +32,12 @@
 //     document is present. The legacy C:\ProgramData\ClaudeCode path is not
 //     read (the docs say Claude Code does not read it either).
 //   - Drop-ins: managed-settings.json first, then every *.json in
-//     managed-settings.d in alphabetical order; hidden files and other
-//     extensions are ignored; single values are replaced by the later file,
-//     lists combine without duplicates, nested blocks merge key by key, and
+//     managed-settings.d in alphabetical order. Hidden files and other
+//     extensions are ignored. The later file replaces single values, lists
+//     combine without duplicates, nested blocks merge key by key, and
 //     entries of extraKnownMarketplaces and managedMcpServers replace whole.
 //   - By default ("first-wins") the highest-ranked admin source that sets at
-//     least one policy key supplies the policy; a few keys are read from every
+//     least one policy key supplies the policy. A few keys are read from every
 //     admin source (allowAllClaudeAiMcps, allowManagedMcpServersOnly,
 //     deniedMcpServers, disableClaudeAiConnectors, and allowedMcpServers when
 //     the MCP lock is on). With managedSourcesBehavior "merge" every admin
@@ -58,17 +58,17 @@
 //   - macOS per-user preferences (/Library/Managed Preferences/<user>/...)
 //     are not read and are listed as Unknown.
 //
-// Drop-in files must end in lower-case ".json"; hidden files and other
+// Drop-in files must end in lower-case ".json". Hidden files and other
 // extensions (a ".JSON" file included) are ignored, as the docs say Claude
 // Code ignores files that do not end in ".json". Such files are not listed.
 //
 // Documents are limited to 1 MiB. The resolved target must be a regular file
-// (checked with Stat before opening, so a FIFO or device cannot block), it is
+// (checked with Stat before opening, so a FIFO or device cannot block). It is
 // opened non-blocking and read with a context deadline. A symbolic link is
 // followed when its target stays inside the managed directory or, on Unix,
 // when the target is a regular file owned by root that is not group or world
-// writable (the way configuration management links policy into place);
-// otherwise the source is Unknown with the reason. On Windows file ownership
+// writable (the way configuration management links policy into place).
+// Otherwise the source is Unknown with the reason. On Windows file ownership
 // is not evaluated, so a link that leaves the managed directory is never
 // followed (documented limitation). An empty file counts as {}. A present
 // but unparseable file, plist or HKLM value is Unreadable. A broken HKCU value
@@ -83,7 +83,7 @@
 // settings-reference):
 //
 //   - allowedMarketplaces is read as strictKnownMarketplaces and
-//     additionalMarketplaces as extraKnownMarketplaces; with both spellings in
+//     additionalMarketplaces as extraKnownMarketplaces. With both spellings in
 //     one document the canonical value wins and a warning is recorded.
 //   - Lock keys (disableSideloadFlags, allowManagedHooksOnly,
 //     allowManagedPermissionRulesOnly, allowManagedMcpServersOnly, and
@@ -96,9 +96,9 @@
 //     allowAllClaudeAiMcps) accept JSON booleans only: any other value, a
 //     quoted boolean included, is dropped with a warning. null removes the key.
 //   - A strictKnownMarketplaces or allowedMcpServers value that is not an
-//     array is enforced as an empty allowlist (admits nothing) with a warning;
-//     a wholly invalid blockedMarketplaces or deniedMcpServers value is
-//     dropped; an invalid entry is stripped and the valid subset kept. Rule
+//     array is enforced as an empty allowlist (admits nothing) with a warning.
+//     A wholly invalid blockedMarketplaces or deniedMcpServers value is
+//     dropped. An invalid entry is stripped and the valid subset kept. Rule
 //     entries whose serverName, serverUrl or serverCommand have the wrong
 //     type are dropped and counted in one warning.
 //
@@ -132,7 +132,7 @@
 // Every other top-level key is listed by name in Policy.Other and ignored.
 // The task text used a flat disableBypassPermissionsMode; the documented key is
 // permissions.disableBypassPermissionsMode, which is what is read. Typed keys
-// with the wrong type produce a Warning; see "Normalization before merging"
+// with the wrong type produce a Warning. See "Normalization before merging"
 // for what each one reads as.
 //
 // # Capability matrix
@@ -147,7 +147,7 @@
 // # Blind spots
 //
 // Server-managed settings cannot be read locally and rank above every local
-// source; Text and JSON always say so (JSON: "server_managed_readable":
+// source. Text and JSON always say so (JSON: "server_managed_readable":
 // false, additive to version 1). Machine-specific blind spots set
 // Policy.PartialVisibility with reasons: WSL with a Windows policy folder
 // that is absent or unreadable, or that turns on wslInheritsWindowsSettings
