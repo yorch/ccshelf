@@ -38,7 +38,7 @@ const (
 )
 
 // DefaultGroups returns the groups that are generated unless skipped. The
-// example profile is not among them: it is written only on request.
+// example profile is not among them: the plan writes it only on request.
 func DefaultGroups() []Group {
 	return []Group{GroupConfig, GroupMarketplace, GroupSidecars, GroupCodeowners, GroupWorkflows, GroupReadme, GroupGitattributes, GroupGitignore}
 }
@@ -46,7 +46,8 @@ func DefaultGroups() []Group {
 // Params are the user's choices. The zero value is valid except that some
 // values are needed depending on what gets generated (see MissingError).
 type Params struct {
-	// Mode forces new or adopt; empty detects it from the target.
+	// Mode forces new or adopt. When it is empty, Build detects it from the
+	// target.
 	Mode Mode
 	// MarketplaceName is the marketplace "name" (--marketplace-name).
 	MarketplaceName string
@@ -67,10 +68,10 @@ type Params struct {
 	// RunnerLabel is the fallback of runs-on (--runner-label).
 	RunnerLabel string
 	// DefaultBranch is the branch that the catalog workflow publishes from
-	// (--default-branch); empty means "main".
+	// (--default-branch). An empty value means "main".
 	DefaultBranch string
 	// BranchSource says where DefaultBranch was taken from when the caller
-	// detected it instead of being told ("origin/HEAD" or "HEAD"); the plan
+	// detected it instead of being told ("origin/HEAD" or "HEAD"). The plan
 	// notes it. It is empty for an explicit value.
 	BranchSource string
 	// Skip holds the groups not to generate.
@@ -97,7 +98,7 @@ func (p *Params) Enabled(g Group) bool {
 	return !p.Skip[g]
 }
 
-// FieldError is an invalid value; Flag names the flag that carries it.
+// FieldError is an invalid value. Flag names the flag that carries it.
 type FieldError struct {
 	Flag string
 	Msg  string

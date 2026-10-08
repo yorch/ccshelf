@@ -26,13 +26,13 @@ type Input struct {
 	// Profile is the profile name (^[a-z0-9][a-z0-9-]{0,62}$).
 	Profile string
 	// Marketplace is the name of the org marketplace that will host the
-	// bundle (required, same character set as a plugin part). Plugins of
-	// this marketplace are written as bare names; plugins of any other
-	// marketplace are written as {"marketplace", "name"} objects.
+	// bundle (required, same character set as a plugin part). Compile writes
+	// plugins of this marketplace as bare names. It writes plugins of any
+	// other marketplace as {"marketplace", "name"} objects.
 	Marketplace string
 	// Plugins are the profile's resolved plugins.include ids, name@marketplace.
-	// An empty list marks an abstract profile (such as a shared base): it is
-	// skipped, not an error.
+	// An empty list marks an abstract profile (such as a shared base): Compile
+	// skips it, and it is not an error.
 	Plugins []string
 }
 
@@ -100,7 +100,7 @@ func render(name string, deps []any) ([]byte, error) {
 }
 
 // Compile generates one bundle manifest per input with plugins, sorted by
-// profile name. Profiles without plugins are reported in Result.Skipped. It
+// profile name. It reports profiles without plugins in Result.Skipped. It
 // rejects invalid profile names, duplicate profiles, a missing or invalid
 // marketplace and invalid plugin ids.
 func Compile(in []Input) (*Result, error) {

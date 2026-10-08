@@ -107,7 +107,7 @@ func (c *checker) entry(ref *PluginRef) {
 	case desc == "":
 		hint := "describe what the plugin does in one or two sentences"
 		if !p.Source.IsLocal() {
-			hint = "external-source plugins need a description because their contents cannot be inspected"
+			hint = "external-source plugins need a description because the lint cannot inspect their contents"
 		}
 		c.add(Error, "CAT005", fmt.Sprintf("plugin %s has no description", q(p.Name)), ref, "", 0, hint)
 	case utf8.RuneCountInString(desc) < c.cfg.Lint.MinDescriptionLength:
@@ -196,7 +196,7 @@ func (c *checker) nameFormat(ref *PluginRef) {
 func (c *checker) source(ref *PluginRef) {
 	p := ref.Plugin
 	if !p.Source.IsLocal() {
-		c.add(Info, "CAT031", fmt.Sprintf("plugin %s comes from %s; its contents cannot be inspected", q(p.Name), q(p.Source.Summary())), ref, "", 0, "")
+		c.add(Info, "CAT031", fmt.Sprintf("plugin %s comes from %s, so the lint cannot inspect its contents", q(p.Name), q(p.Source.Summary())), ref, "", 0, "")
 		return
 	}
 	if ref.InfoErr != nil {
@@ -216,7 +216,7 @@ func (c *checker) source(ref *PluginRef) {
 		return
 	}
 	if ref.Info.HasHooks {
-		c.add(Info, "CAT040", fmt.Sprintf("plugin %s ships hooks", q(p.Name)), ref, "", 0, "hooks run commands on developers' machines; they need platform review")
+		c.add(Info, "CAT040", fmt.Sprintf("plugin %s ships hooks", q(p.Name)), ref, "", 0, "hooks run commands on developers' machines, so they need platform review")
 	}
 	if ref.Info.HasMCP || ref.Info.HasLSP {
 		what := "MCP servers"
@@ -226,7 +226,7 @@ func (c *checker) source(ref *PluginRef) {
 				what = "MCP and LSP servers"
 			}
 		}
-		c.add(Info, "CAT041", fmt.Sprintf("plugin %s ships %s", q(p.Name), what), ref, "", 0, what+" run code on developers' machines; they need platform review")
+		c.add(Info, "CAT041", fmt.Sprintf("plugin %s ships %s", q(p.Name), what), ref, "", 0, what+" run code on developers' machines, so they need platform review")
 	}
 }
 
@@ -322,7 +322,7 @@ func (c *checker) metadata(ref *PluginRef, names map[string]*PluginRef) {
 	}
 	c.review(ref, sc, status, addAt)
 	if sc.Docs != "" && !IsHTTPURL(sc.Docs) {
-		addAt(Error, "CAT028", "docs", fmt.Sprintf("plugin %s: docs %s is not an http or https URL", q(p.Name), q(sc.Docs)), "only http and https links are rendered in the catalog")
+		addAt(Error, "CAT028", "docs", fmt.Sprintf("plugin %s: docs %s is not an http or https URL", q(p.Name), q(sc.Docs)), "the catalog renders only http and https links")
 	}
 }
 
@@ -331,7 +331,7 @@ func (c *checker) supersession(ref *PluginRef, sc *sidecar.Sidecar, names map[st
 	target := sc.SupersededBy
 	switch {
 	case target == p.Name:
-		addAt(Error, "CAT017", "superseded_by", fmt.Sprintf("plugin %s is superseded by itself", q(p.Name)), "")
+		addAt(Error, "CAT017", "superseded_by", fmt.Sprintf("plugin %s: superseded_by names the plugin itself", q(p.Name)), "")
 		return
 	case names[target] == nil:
 		addAt(Error, "CAT016", "superseded_by", fmt.Sprintf("plugin %s: superseded_by names %s, which is not in the marketplace", q(p.Name), q(target)), "")
@@ -447,7 +447,7 @@ func (c *checker) relevance(ref *PluginRef) {
 		switch {
 		case feature != "":
 			c.add(Warning, "CAT027", fmt.Sprintf("plugin %s: pattern %s uses %s, which Go's RE2 lacks", q(p.Name), q(m.Pattern), feature), ref, "", 0,
-				"fine if Claude Code evaluates it as a JavaScript regular expression; this tool cannot check it")
+				"this is correct if Claude Code evaluates it as a JavaScript regular expression, but this tool cannot check it")
 		case err != nil:
 			c.add(Error, "CAT026", fmt.Sprintf("plugin %s: pattern %s is not a valid regular expression: %v", q(p.Name), q(m.Pattern), err), ref, "", 0, "")
 		}
@@ -456,7 +456,7 @@ func (c *checker) relevance(ref *PluginRef) {
 
 // NonRE2Feature names a regular-expression feature that JavaScript supports
 // and Go's RE2 does not, or returns "" when none is found. It scans the
-// pattern textually and understands backslash escapes; it does not parse
+// pattern textually and understands backslash escapes. It does not parse
 // character classes, so it can report a false positive inside [...].
 func NonRE2Feature(p string) string {
 	for i := 0; i < len(p); i++ {
@@ -592,7 +592,7 @@ func (c *checker) ownership(ref *PluginRef) {
 	}
 	owners := co.Owners(probeFile(dir))
 	if len(owners) == 0 {
-		c.add(Warning, "CAT044", fmt.Sprintf("plugin %s: %s is not covered by CODEOWNERS", q(p.Name), dirLabel(dir)), ref, "", 0, "add a line such as /"+strings.TrimSuffix(dir, "/")+"/ @team")
+		c.add(Warning, "CAT044", fmt.Sprintf("plugin %s: CODEOWNERS does not cover %s", q(p.Name), dirLabel(dir)), ref, "", 0, "add a line such as /"+strings.TrimSuffix(dir, "/")+"/ @team")
 	} else if sc := c.d.Sidecars[p.Name]; sc != nil && sc.Owner != "" && !containsFold(owners, sc.Owner) {
 		c.out = append(c.out, Finding{
 			Severity: Warning, Code: "CAT046", Plugin: p.Name, File: sc.File, Line: sc.LineOf("owner"),
@@ -670,7 +670,7 @@ func (c *checker) codeownersGeneral() {
 	githubOpen := co.Covers(".github/CODEOWNERS")
 	if !githubOpen {
 		c.out = append(c.out, Finding{
-			Severity: Warning, Code: "CAT045", Message: "/.github/ is not covered by CODEOWNERS", File: c.d.OwnersPath,
+			Severity: Warning, Code: "CAT045", Message: "CODEOWNERS does not cover /.github/", File: c.d.OwnersPath,
 			Hint: "without it a plugin team can edit workflows and CODEOWNERS itself",
 		})
 	}
@@ -718,8 +718,8 @@ func (c *checker) platformPaths(co *codeowners.File, githubUncovered bool) {
 		if !owned {
 			c.out = append(c.out, Finding{
 				Severity: Warning, Code: "CAT045", File: c.d.OwnersPath,
-				Message: fmt.Sprintf("/%s is not owned by a platform owner in CODEOWNERS (owners: %s)", p, ownersText(got)),
-				Hint:    "a plugin team could change it without platform review; remember the last matching rule wins",
+				Message: fmt.Sprintf("CODEOWNERS does not give /%s to a platform owner (owners: %s)", p, ownersText(got)),
+				Hint:    "a plugin team could change it without platform review. Remember that the last matching rule wins",
 			})
 		}
 	}
@@ -754,7 +754,7 @@ func (c *checker) orphanDirs(co *codeowners.File) {
 			}
 			c.out = append(c.out, Finding{
 				Severity: Warning, Code: "CAT044", File: c.d.OwnersPath,
-				Message: fmt.Sprintf("directory %s has no marketplace entry and is not covered by CODEOWNERS", q(d+"/")),
+				Message: fmt.Sprintf("directory %s has no marketplace entry and CODEOWNERS does not cover it", q(d+"/")),
 				Hint:    "add a CODEOWNERS line or a catch-all rule so new directories get a reviewer",
 			})
 		}
@@ -820,7 +820,7 @@ func (c *checker) profiles() {
 			c.add(Error, "CAT052", fmt.Sprintf("bundle entry %s must have the source ./%s, found %s", q(name), want, q(src.Summary())), ref, "", 0, "")
 		}
 		if ref.Plugin.Version != "" {
-			c.add(Error, "CAT053", fmt.Sprintf("bundle entry %s sets version %s; leave it out so the commit SHA is the version", q(name), q(ref.Plugin.Version)), ref, "", 0, "decision D-17")
+			c.add(Error, "CAT053", fmt.Sprintf("bundle entry %s sets version %s: remove it so that the commit SHA is the version", q(name), q(ref.Plugin.Version)), ref, "", 0, "decision D-17")
 		}
 	}
 }

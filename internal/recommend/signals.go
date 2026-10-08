@@ -32,7 +32,7 @@ const (
 	maxNameLen       = 255
 )
 
-// Signals describe a directory. Collect fills it; tests and callers may also
+// Signals describe a directory. Collect fills it. Tests and callers may also
 // build one by hand.
 type Signals struct {
 	// Cwd is the absolute directory.

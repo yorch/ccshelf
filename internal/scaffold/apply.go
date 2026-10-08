@@ -13,7 +13,7 @@ import (
 // ApplyOptions tune Apply.
 type ApplyOptions struct {
 	// WriteSuggestions writes the suggestion of every needs-merge entry to
-	// <file>.ccshelf-suggested. Without it, suggestions are only reported.
+	// <file>.ccshelf-suggested. Without it, Apply only reports suggestions.
 	WriteSuggestions bool
 }
 
@@ -23,10 +23,10 @@ type Result struct {
 	Overwritten []string
 	Backups     []string
 	Suggestions []string
-	// Refused lists the suggestion files that were not written because a
+	// Refused lists the suggestion files that Apply did not write because a
 	// file of that name exists and this tool did not write it.
 	Refused []string
-	// RolledBack lists the files of Created and Suggestions that were removed
+	// RolledBack lists the files of Created and Suggestions that Apply removed
 	// again after a failure (see Apply).
 	RolledBack []string
 }
@@ -95,7 +95,7 @@ func apply(fsys FS, plan *Plan, opt ApplyOptions, res *Result, create func(strin
 		case ActionCreate:
 			if err := create(e.Path, e.Content); err != nil {
 				if errors.Is(err, fs.ErrExist) {
-					return fmt.Errorf("%s appeared after the plan was made; nothing of it was changed (run the command again)", e.Path)
+					return fmt.Errorf("%s appeared after ccshelf made the plan, so ccshelf did not change it (run the command again)", e.Path)
 				}
 				return fmt.Errorf("creating %s: %w", e.Path, err)
 			}
@@ -106,7 +106,7 @@ func apply(fsys FS, plan *Plan, opt ApplyOptions, res *Result, create func(strin
 				return fmt.Errorf("re-reading %s: %w", e.Path, err)
 			}
 			if string(cur) != string(e.Old) {
-				return fmt.Errorf("%s changed after the plan was made; it was not replaced (run the command again)", e.Path)
+				return fmt.Errorf("%s changed after ccshelf made the plan, so ccshelf did not replace it (run the command again)", e.Path)
 			}
 			if err := fsys.WriteNew(e.Path+BackupSuffix, e.Old, e.OldMode); err != nil {
 				return fmt.Errorf("saving the backup of %s: %w", e.Path, err)

@@ -42,15 +42,15 @@ type Lint struct {
 	Require []string `toml:"require"`
 	// RequireWhenDeprecated lists sidecar fields needed for deprecated plugins.
 	RequireWhenDeprecated []string `toml:"require_when_deprecated"`
-	// MaxReviewAgeDays is how long past review_by an entry may be before it is
-	// reported stale.
+	// MaxReviewAgeDays is how long past review_by an entry may be before the
+	// lint reports it as stale.
 	MaxReviewAgeDays int `toml:"max_review_age_days"`
 	// Taxonomy is the repo-relative path of the taxonomy file.
 	Taxonomy string `toml:"taxonomy"`
 	// MinDescriptionLength is the shortest accepted marketplace description.
 	MinDescriptionLength int `toml:"min_description_length"`
 	// PlatformOwners are the CODEOWNERS owners that must cover plugin hooks and
-	// .mcp.json files; empty disables that rule.
+	// .mcp.json files. An empty list disables that rule.
 	PlatformOwners []string `toml:"platform_owners"`
 }
 
@@ -65,7 +65,7 @@ type Catalog struct {
 	// GitData enables last-change, contributor and tag data (needs git).
 	GitData bool `toml:"git_data"`
 	// ReleaseTagPattern is the git glob (git describe --match) that selects
-	// release tags for the changed-since-tag data; it never selects the
+	// release tags for the changed-since-tag data. It never selects the
 	// per-plugin tags <plugin>--v<version>. Default "v[0-9]*".
 	ReleaseTagPattern string `toml:"release_tag_pattern"`
 	// BaseURL is the public URL of the catalog site, used for links only.
@@ -129,8 +129,8 @@ func Default() *Config {
 
 const marketplaceDefault = ".claude-plugin/marketplace.json"
 
-// Load reads <root>/ccshelf.toml. A missing file returns Default(). The
-// result is validated, including that every path stays inside root. Use Find
+// Load reads <root>/ccshelf.toml. A missing file returns Default(). Load
+// validates the result, including that every path stays inside root. Use Find
 // when the caller must tell a missing file from a present one.
 func Load(root string) (*Config, error) {
 	cfg, _, err := Find(root)
@@ -140,7 +140,7 @@ func Load(root string) (*Config, error) {
 // Find is Load that also reports whether the file exists. A missing file
 // returns Default() and found == false, which is not an error: callers that
 // rely on [protect] (the launcher) use found to warn that nothing is
-// protected instead of silently using the defaults. The result is validated,
+// protected instead of silently using the defaults. Find validates the result,
 // including that every path stays inside root.
 func Find(root string) (cfg *Config, found bool, err error) {
 	data, err := safepath.ReadFile(root, FileName, MaxFileSize)
@@ -307,7 +307,7 @@ func (c *Config) Validate() error {
 			// The launcher's directory source refuses these (profile.Layout), so
 			// the validator must too: a value accepted here but refused there
 			// would make a valid org config unusable.
-			add("%s: %q has the component %q; use plain components (no empty or dot-prefixed ones, so write \"profiles\", not \"./profiles\")", key, p, c)
+			add("%s: %q has the component %q: use plain components (no empty or dot-prefixed ones, so write \"profiles\", not \"./profiles\")", key, p, c)
 		}
 	}
 
@@ -325,7 +325,7 @@ func (c *Config) Validate() error {
 }
 
 // CheckPaths verifies that every configured path stays inside root once
-// symlinks are resolved. Paths that do not exist yet are accepted.
+// symlinks are resolved. It accepts paths that do not exist yet.
 func (c *Config) CheckPaths(root string) error {
 	paths := [][2]string{
 		{"lint.taxonomy", c.Lint.Taxonomy},

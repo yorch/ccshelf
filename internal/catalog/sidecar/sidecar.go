@@ -44,8 +44,8 @@ type Sidecar struct {
 	AvoidWhen    []string `toml:"avoid_when" json:"avoid_when,omitempty"`
 	OverlapsWith []string `toml:"overlaps_with" json:"overlaps_with,omitempty"`
 	SupersededBy string   `toml:"superseded_by" json:"superseded_by,omitempty"`
-	// ReviewBy is the date as YYYY-MM-DD text; empty when absent. A TOML local
-	// date is converted. Use ReviewDate to parse it.
+	// ReviewBy is the date as YYYY-MM-DD text. It is empty when absent. The
+	// package converts a TOML local date. Use ReviewDate to parse it.
 	ReviewBy string `toml:"review_by" json:"review_by,omitempty"`
 	Support  string `toml:"support" json:"support,omitempty"`
 	Docs     string `toml:"docs" json:"docs,omitempty"`
@@ -54,7 +54,7 @@ type Sidecar struct {
 	// the marketplace file in single-file mode).
 	File string `toml:"-" json:"-"`
 	// Line is the line of the first key, FieldLines the line of each key
-	// (sidecar files only; zero in single-file mode).
+	// (sidecar files only, zero in single-file mode).
 	Line       int            `toml:"-" json:"-"`
 	FieldLines map[string]int `toml:"-" json:"-"`
 	// Present lists the fields that were set, even to an empty value.
@@ -272,7 +272,7 @@ var nameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 // sidecar mode from catalog/plugins/*.toml, in single-file mode from the
 // metadata of the entries of the configured marketplaces (which it loads
 // itself). The map key is the plugin name. A missing sidecar directory gives
-// an empty map. Per-file problems are returned as Problems; the error is for
+// an empty map. It returns per-file problems as Problems. The error is for
 // failures that stop the whole load.
 func LoadSidecars(root string, cfg *orgconfig.Config) (map[string]*Sidecar, []Problem, error) {
 	if !cfg.Catalog.Enabled {
@@ -300,7 +300,7 @@ func LoadSidecars(root string, cfg *orgconfig.Config) (map[string]*Sidecar, []Pr
 }
 
 // FromMarketplace reads single-file metadata from every entry of a loaded
-// marketplace. Entries without metadata are left out of the map.
+// marketplace. The map leaves out entries without metadata.
 func FromMarketplace(file string, m *marketplace.Marketplace) (map[string]*Sidecar, []Problem) {
 	out := map[string]*Sidecar{}
 	var probs []Problem

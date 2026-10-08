@@ -17,9 +17,9 @@
 //	}
 //
 // A bare name resolves in the marketplace of the declaring plugin (docs:
-// plugins/dependencies, "Declare dependencies"). A plugin of another
-// marketplace is written as an object with its keys sorted, and the array is
-// sorted by "name@marketplace":
+// plugins/dependencies, "Declare dependencies"). Compile writes a plugin of
+// another marketplace as an object with its keys sorted, and it sorts the
+// array by "name@marketplace":
 //
 //	{
 //	  "dependencies": [
@@ -36,7 +36,7 @@
 // Claude Code installs such a dependency only if the hosting (root)
 // marketplace lists the other one in allowCrossMarketplaceDependenciesOn in
 // its marketplace.json (docs: plugins/dependencies, "Depend on a plugin from
-// another marketplace"); BundleInfo.CrossMarketplaces reports which ones a
+// another marketplace"). BundleInfo.CrossMarketplaces reports which ones a
 // bundle needs so the CLI can warn or lint. There is no version (the commit
 // SHA is the version), no description and no marketplace key at the top
 // level. Output is 2-space JSON, UTF-8, LF line endings and a single
@@ -47,8 +47,8 @@
 //
 // # The bundles directory is generated
 //
-// There is no marker inside a bundle, so the whole bundles/ directory is
-// treated as generated output. Check reports as drift every path that is not
+// There is no marker inside a bundle, so the package treats the whole
+// bundles/ directory as generated output. Check reports as drift every path that is not
 // profile-<name>/.claude-plugin/plugin.json of a wanted bundle: extra files
 // inside a wanted bundle (hooks/, .mcp.json...), profile-* directories that
 // no profile produces (Drift.Stale, every path inside them) and anything
@@ -60,9 +60,9 @@
 //
 // # Line endings
 //
-// Check compares bytes. A file whose LF was converted to CRLF by a Windows
-// checkout is reported as Modified (the diff says that only line endings
-// differ). The data repo must keep LF: the starter template should ship a
+// Check compares bytes. When a Windows checkout converts the LF of a file to
+// CRLF, Check reports the file as Modified (the diff says that only line
+// endings differ). The data repo must keep LF: the starter template should ship a
 // .gitattributes with "*.json text eol=lf" (this tool repo does), otherwise
 // core.autocrlf on Windows makes the drift check fail on a clean checkout.
 //

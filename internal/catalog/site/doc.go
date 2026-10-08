@@ -13,14 +13,15 @@
 // inline script or style and no event handler attributes. The catalog data
 // sits in a <script type="application/json"> block, which browsers never
 // execute, with every "<" written as < so no text can close the block
-// early. The script creates elements and sets textContent; it never parses
+// early. The script creates elements and sets textContent. It never parses
 // an HTML string, and it makes a link only for an absolute http or https URL
 // (checked again in JavaScript), always with rel="noopener noreferrer".
 // Embedding the data lets the page work from file:// where browsers refuse
 // to fetch a neighboring JSON file.
 //
-// The site is published output, so files are written with mode 0644 and a new
-// directory with 0755 (the 0600/0700 private-cache rule covers the tool's
-// cache, not this). Each file goes to a temporary name and is renamed, and an existing symbolic link at a target path
-// is refused instead of followed.
+// The site is published output, so Write gives files mode 0644 and a new
+// directory mode 0755 (the 0600/0700 private-cache rule covers the tool's
+// cache, not this). Write writes each file to a temporary name and renames
+// it. It refuses an existing symbolic link at a target path instead of
+// following it.
 package site

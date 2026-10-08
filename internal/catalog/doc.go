@@ -14,6 +14,6 @@
 // escaping for CATALOG.md, and the site builds its DOM with textContent only.
 //
 // Output is deterministic: sorted, no absolute paths, and no timestamp
-// unless Options.Now is set. Profiles are parsed by another package, so the
+// unless Options.Now is set. Another package parses the profiles, so the
 // caller passes them in as []ProfileInfo.
 package catalog

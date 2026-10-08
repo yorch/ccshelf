@@ -1,7 +1,7 @@
 // Package codeowners parses CODEOWNERS files and answers "who owns this
 // path" with GitHub's semantics.
 //
-// Supported: comments (a line or trailing part starting with #; \# is a
+// Supported: comments (a line or trailing part starting with #, where \# is a
 // literal #), the last matching pattern wins, a leading / anchors the pattern
 // to the repository root, a pattern containing a / elsewhere is anchored too,
 // a trailing / matches a directory and everything below it, * (not across

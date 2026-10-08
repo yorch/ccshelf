@@ -22,7 +22,7 @@ import (
 // BundlePrefix is the name prefix of generated profile bundle plugins.
 const BundlePrefix = "profile-"
 
-// PluginRef is a marketplace entry together with what was learned about it.
+// PluginRef is a marketplace entry together with what the lint learned about it.
 type PluginRef struct {
 	// MarketplaceFile is the repo-relative marketplace.json the entry is in.
 	MarketplaceFile string
@@ -31,8 +31,8 @@ type PluginRef struct {
 	Plugin          marketplace.Plugin
 	// Line is the line of the entry's name in the marketplace file, 0 if unknown.
 	Line int
-	// Info is the inspection of an in-repo plugin (External for others); nil
-	// when inspection failed (see InfoErr).
+	// Info is the inspection of an in-repo plugin (External for others). It is
+	// nil when inspection failed (see InfoErr).
 	Info    *marketplace.PluginInfo
 	InfoErr error
 	// Dup is true for the second and later entries with the same name.
@@ -63,7 +63,7 @@ type Data struct {
 	Sidecars map[string]*sidecar.Sidecar
 	// Taxonomy is nil when the file does not exist.
 	Taxonomy *sidecar.Taxonomy
-	// Owners is nil when no CODEOWNERS file exists; OwnersPath is its location.
+	// Owners is nil when no CODEOWNERS file exists. OwnersPath is its location.
 	Owners     *codeowners.File
 	OwnersPath string
 	// Profiles are the names of the profile manifests (file names without .toml).
@@ -139,8 +139,8 @@ func entryLines(data []byte) map[string]int {
 }
 
 // LoadData reads everything the rules need. Problems with individual files
-// become findings in Data.Findings; the error is only for a root that cannot
-// be used at all.
+// become findings in Data.Findings. The error is only for a root that
+// LoadData cannot use at all.
 func LoadData(root string, cfg *orgconfig.Config) (*Data, error) {
 	st, err := safepath.Stat(root, ".")
 	if err != nil {
@@ -201,14 +201,14 @@ func (d *Data) noteDisabledCatalog(root string, cfg *orgconfig.Config) {
 	const hint = "delete it, or remove enabled = false from [catalog] in ccshelf.toml to use the catalog"
 	for _, mf := range cfg.Catalog.Marketplaces {
 		if _, err := safepath.Stat(root, mf); err == nil {
-			warn("CAT061", mf, "marketplace file is ignored because [catalog] enabled = false", hint)
+			warn("CAT061", mf, "the lint ignores the marketplace file because [catalog] enabled = false", hint)
 		}
 	}
 	if st, err := safepath.Stat(root, "bundles"); err == nil && st.IsDir() {
-		warn("CAT061", "bundles", "bundles/ is ignored because [catalog] enabled = false", hint)
+		warn("CAT061", "bundles", "the lint ignores bundles/ because [catalog] enabled = false", hint)
 	}
 	if len(cfg.CatalogIgnored) > 0 {
-		warn("CAT062", orgconfig.FileName, "[catalog] keys are ignored because enabled = false: "+strings.Join(cfg.CatalogIgnored, ", "),
+		warn("CAT062", orgconfig.FileName, "these [catalog] keys have no effect because enabled = false: "+strings.Join(cfg.CatalogIgnored, ", "),
 			"remove them, or remove enabled = false to use the catalog")
 	}
 }

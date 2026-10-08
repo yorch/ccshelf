@@ -112,7 +112,7 @@
 
   if (!data || !Array.isArray(data.plugins)) {
     clear(results);
-    results.appendChild(el('p', { cls: 'empty', text: 'The catalog data could not be read.' }));
+    results.appendChild(el('p', { cls: 'empty', text: 'This page cannot read the catalog data.' }));
     return;
   }
 
@@ -233,7 +233,7 @@
         call.appendChild(use);
         call.appendChild(document.createTextNode(' instead.'));
       } else {
-        call.appendChild(document.createTextNode('Deprecated. No replacement is named.'));
+        call.appendChild(document.createTextNode('Deprecated. The entry names no replacement.'));
       }
       card.appendChild(call);
     }
@@ -334,7 +334,7 @@
     countEl.textContent = groups.length + ' groups of overlapping plugins';
     clear(results);
     if (!groups.length) {
-      results.appendChild(el('p', { cls: 'empty', text: 'No overlapping plugins are declared.' }));
+      results.appendChild(el('p', { cls: 'empty', text: 'No plugin declares an overlap.' }));
       return;
     }
     groups.forEach(function (g) {

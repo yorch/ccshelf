@@ -106,9 +106,10 @@ func RelevanceOf(ms ...*marketplace.Marketplace) map[string]*marketplace.Relevan
 }
 
 // ForCatalog recommends plugins and profiles for the signals. It is
-// deterministic, offline and rule based. Deprecated plugins and profiles are
-// never recommended: the entry named by superseded_by is recommended instead
-// (with Replaces set) when it exists and is not deprecated itself.
+// deterministic, offline and rule based. It never recommends deprecated
+// plugins and profiles: it recommends the entry named by superseded_by
+// instead (with Replaces set) when that entry exists and is not deprecated
+// itself.
 func ForCatalog(c *catalog.Catalog, sig *Signals, profiles []ProfileInfo, opts ...Option) []Recommendation {
 	if sig == nil {
 		return nil

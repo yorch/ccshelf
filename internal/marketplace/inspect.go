@@ -20,8 +20,8 @@ const maxManifestSize = 1 << 20
 
 // PluginInfo describes an in-repo plugin directory.
 type PluginInfo struct {
-	// External is true for a plugin whose source is not in this repository;
-	// nothing else is filled in.
+	// External is true for a plugin whose source is not in this repository.
+	// Inspect fills in nothing else.
 	External bool
 	// Dir is the plugin directory relative to the repository root.
 	Dir string
@@ -57,14 +57,14 @@ type PluginInfo struct {
 	// configuration (inline, in the entry, or in an ExecFile). They are files
 	// that run code and so need the same ownership as the configuration.
 	ScriptRefs []string
-	// Skills counts skills/*/SKILL.md; Agents counts agents/*.md; Commands
+	// Skills counts skills/*/SKILL.md, Agents counts agents/*.md and Commands
 	// counts commands/*.md.
 	Skills, Agents, Commands int
 }
 
 // Inspect looks at the plugin directory of a local plugin. It never follows a
 // symlink out of root. A missing directory fails with an error wrapping
-// fs.ErrNotExist; a malformed plugin.json is an error naming the file.
+// fs.ErrNotExist. A malformed plugin.json gives an error that names the file.
 func Inspect(root string, p Plugin) (*PluginInfo, error) {
 	if !p.Source.IsLocal() {
 		return &PluginInfo{External: true}, nil
@@ -233,7 +233,7 @@ func decodeManifest(data []byte) (*manifest, error) {
 			if prev == key {
 				return nil, fmt.Errorf("duplicate key %q", key)
 			}
-			return nil, fmt.Errorf("keys %q and %q differ only in letter case; Claude Code and this tool could read different ones", prev, key)
+			return nil, fmt.Errorf("keys %q and %q differ only in letter case, so Claude Code and this tool could read different ones", prev, key)
 		}
 		folded[lower] = key
 		m.fields[key] = raw
