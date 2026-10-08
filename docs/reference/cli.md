@@ -594,7 +594,7 @@ ccshelf completion <bash|zsh|fish|powershell> [flags]
 
 Show the effective configuration, and add, pin or remove profile sources and change a few settings in place, without editing config.toml by hand. Every subcommand works with flags alone; in a terminal, "ccshelf config" alone opens a menu, and a change is shown and confirmed (default no) before it is written.
 
-Changes are written by re-encoding the file: comments and layout are lost, and the previous file is kept as config.toml.bak. A change that weakens a security setting (turning off pinning, trusting project profiles, installing updates automatically, or adding a source that is not pinned) needs --yes when there is no terminal. Nothing here fetches a source or records trust. Only "ccshelf init" creates the file.
+Changes are written by re-encoding the file: comments and layout are lost, and the previous file is kept as config.toml.bak. A change that weakens a security setting (turning off pinning, trusting project profiles, installing updates automatically, adding a source that is not pinned or whose path is a variable, or changing claude.path or the update source) needs --yes when there is no terminal. Nothing here fetches a source or records trust. Only "ccshelf init" creates the file.
 
 Settings you can change with "config set": trust.on_change, trust.require_pin, trust.trust_project_profiles, update.mode, update.interval, catalog.remote_url, default_account, ui.color, ui.interactive. Anything else (accounts, claude.path, the update source) has its own command or needs "ccshelf config edit".
 
