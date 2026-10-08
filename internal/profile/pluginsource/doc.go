@@ -2,8 +2,8 @@
 // Claude Code plugin that is already installed: the "data-only plugin" way of
 // shipping an org's profiles.
 //
-// Status: planned for later, after testing under managed policy. This source
-// is untested against a real Claude Code. It only consumes what
+// Status: implemented (D-22), newer than the dir and git sources. This source
+// is untested against a real Claude Code under managed policy. It only consumes what
 // `claude plugin list --json` reports (through the injected Installed
 // function) and never installs, enables or updates anything. D-13 keeps it
 // behind the git source.
