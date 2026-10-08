@@ -58,7 +58,7 @@ This describes the **private repo an adopting organization keeps** (R5): its mar
 1. **Native first.** `marketplace.json` and plugin folders stay exactly what Claude Code expects, so `/plugin` works with the repo unchanged.
 2. **Hand-written data is small and reviewable. Everything else is derived.** CI builds the catalog site and `catalog.json`, and they are not committed.
 3. **Ownership is routable.** Review rules must be expressible in `CODEOWNERS` (which works per file, not per JSON entry).
-4. **Pinned and releasable.** Consumers pin a tag of this org data repo for profile sources. Plugins are tagged `<plugin>--v<version>` for native dependency resolution.
+4. **Pinned and releasable.** Consumers pin a tag of this org data repo for profile sources, or track a branch of it with an explicit `branch` key (D-54). Plugins are tagged `<plugin>--v<version>` for native dependency resolution.
 5. **Works for small and large registries.** ~50 plugins is the design point. A single-file mode exists for tiny registries.
 
 ## Layout
@@ -319,7 +319,7 @@ The templates live in `internal/scaffold/templates/` and are embedded into the b
 
 ## Consumption
 - **Plugins:** users add the marketplace natively (`extraKnownMarketplaces` or `/plugin marketplace add <git URL>`), and bundles install profile plugin sets in one step.
-- **Profiles:** users configure a `git` source pointing at this org data repo at a pinned tag, or a local clone as a `dir` source (see [profiles.md](profiles.md), "Profile sources and sharing"). The `plugin` source (profiles shipped inside a plugin) also exists. It is newer than `dir` and `git`.
+- **Profiles:** users configure a `git` source pointing at this org data repo at a pinned tag (or tracking a branch, see D-54), or a local clone as a `dir` source (see [profiles.md](profiles.md), "Profile sources and sharing"). The `plugin` source (profiles shipped inside a plugin) also exists. It is newer than `dir` and `git`.
 - **Catalog:** the published site, and `ccshelf search` or `ccshelf doctor` reading the same data locally. `ccshelf search` can also read the published `catalog.json` directly when the user's `config.toml` sets `[catalog] remote_url`. This is useful when developers should not need an org data repo checkout.
 
 ## Variants

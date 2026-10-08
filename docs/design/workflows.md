@@ -124,7 +124,7 @@ Platform owner publishes, everyone else consumes.
 1. The org data repo contains `profiles/*.toml`. CI runs `ccshelf lint` on every PR, and the platform team tags a release (for example `v2026.10.1`) when profiles change.
 2. A user (or `ccshelf init` with the repo URL, proposed) adds the org data repo as a `git` source pinned to that tag in `~/.config/ccshelf/config.toml`. A team could also ship a config for it in a project repo. (A `plugin` source, with profiles shipped inside a data-only plugin, also exists. It is newer than `dir` and `git`, see [profiles.md](profiles.md).)
 3. `ccshelf ls` shows profiles from all sources, labeled by origin (personal, project, org). A personal profile with the same name wins.
-4. When the pinned tag moves and a profile adds an MCP command or env value, the launcher shows the diff and asks before accepting: `ccshelf trust sre`. The launcher stores accepted hashes in a lockfile.
+4. When the pinned tag moves (or a tracked branch gets a new commit) and a profile adds an MCP command or env value, the launcher shows the diff and asks before accepting: `ccshelf trust sre`. The launcher stores accepted hashes in a lockfile.
 ```
 $ ccshelf ls
 frontend   org       active   React, CSS and accessibility work
