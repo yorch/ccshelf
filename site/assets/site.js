@@ -192,18 +192,50 @@
     }
 
     /* ---- Copy buttons ---- */
+    // Each button shows an icon and keeps its text for screen readers; CSS puts it beside the
+    // code, never over it, and one shared status line announces the result. The icons are
+    // static markup (no page data); the HTML parser puts <svg> in the SVG namespace.
+    var icon = function (cls, body) {
+      var box = document.createElement('span');
+      box.innerHTML = '<svg class="copy-ico ' + cls + '" viewBox="0 0 24 24" width="18" height="18" ' +
+        'aria-hidden="true" focusable="false">' + body + '</svg>';
+      return box.firstChild;
+    };
     var buttons = document.querySelectorAll('button.copy[data-copy]');
+    var status = null;
+    if (buttons.length) {
+      status = document.createElement('p');
+      status.className = 'sr-only';
+      status.setAttribute('role', 'status');
+      document.body.appendChild(status);
+    }
     for (var b = 0; b < buttons.length; b++) {
       (function (btn) {
         var target = document.getElementById(btn.getAttribute('data-copy'));
         if (!target) return;
+        var label = btn.textContent.replace(/\s+/g, ' ').trim() || 'Copy';
+        var text = document.createElement('span');
+        text.className = 'sr-only';
+        text.textContent = label;
+        btn.textContent = '';
+        btn.appendChild(icon('ico-copy', '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/>'));
+        btn.appendChild(icon('ico-done', '<path d="M5 12.5l4.5 4.5L19 7.5"/>'));
+        btn.appendChild(text);
+        btn.title = label;
         btn.hidden = false;
         btn.parentNode.classList.add('has-copy');
+        var timer = 0;
         btn.addEventListener('click', function () {
-          var text = target.textContent.replace(/\n$/, '');
-          var done = function (msg) {
-            btn.textContent = msg;
-            window.setTimeout(function () { btn.textContent = 'Copy commands'; }, 1800);
+          var done = function (msg, ok) {
+            btn.classList.toggle('copied', ok);
+            btn.title = msg;
+            status.textContent = msg;
+            window.clearTimeout(timer);
+            timer = window.setTimeout(function () {
+              btn.classList.remove('copied');
+              btn.title = label;
+              status.textContent = '';
+            }, 1800);
           };
           var fallback = function () {
             var sel = window.getSelection();
@@ -211,10 +243,10 @@
             range.selectNodeContents(target);
             sel.removeAllRanges();
             sel.addRange(range);
-            done('Selected, press Ctrl+C');
+            done('Selected, press Ctrl+C', false);
           };
           if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(text).then(function () { done('Copied'); }, fallback);
+            navigator.clipboard.writeText(target.textContent.replace(/\n$/, '')).then(function () { done('Copied', true); }, fallback);
           } else {
             fallback();
           }
