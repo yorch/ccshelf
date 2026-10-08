@@ -199,12 +199,21 @@ func ValidatePin(ref string) error {
 // Load reads and validates the configuration at path. A missing file yields
 // Default(). Unknown keys and invalid values are errors.
 func Load(path string) (*Config, error) {
-	cfg := Default()
-	f, err := os.Open(path)
+	raw, err := ReadFile(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return cfg, nil
+			return Default(), nil
 		}
+		return nil, err
+	}
+	return Parse(raw, path)
+}
+
+// ReadFile reads the raw bytes of the configuration file at path, refusing a
+// file larger than MaxFileSize. A missing file wraps fs.ErrNotExist.
+func ReadFile(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
 		return nil, fmt.Errorf("opening config %s: %w", path, err)
 	}
 	defer f.Close()
@@ -215,28 +224,35 @@ func Load(path string) (*Config, error) {
 	if len(raw) > MaxFileSize {
 		return nil, fmt.Errorf("config %s is larger than %d bytes", path, MaxFileSize)
 	}
+	return raw, nil
+}
+
+// Parse decodes and validates configuration text. name only labels errors
+// (a file name); nothing is read from disk.
+func Parse(raw []byte, name string) (*Config, error) {
+	cfg := Default()
 	dec := toml.NewDecoder(bytes.NewReader(raw)).DisallowUnknownFields()
 	if err := dec.Decode(cfg); err != nil {
-		return nil, fmt.Errorf("config %s: %w", path, describeDecode(err))
+		return nil, fmt.Errorf("config %s: %w", name, describeDecode(err))
 	}
 	// The decoder matches keys case-insensitively; only the documented
 	// spelling is accepted, so a reviewer never sees two spellings of one key.
 	issues, err := tomlkeys.Check(raw, Config{})
 	if err != nil {
-		return nil, fmt.Errorf("config %s: %w", path, err)
+		return nil, fmt.Errorf("config %s: %w", name, err)
 	}
 	if len(issues) > 0 {
 		errs := make([]error, len(issues))
 		for i, is := range issues {
 			errs[i] = fmt.Errorf("%s: %s", is.Path, is)
 		}
-		return nil, fmt.Errorf("config %s: %w", path, errors.Join(errs...))
+		return nil, fmt.Errorf("config %s: %w", name, errors.Join(errs...))
 	}
 	if err := cfg.expand(); err != nil {
-		return nil, fmt.Errorf("config %s: %w", path, err)
+		return nil, fmt.Errorf("config %s: %w", name, err)
 	}
 	if err := cfg.Validate(); err != nil {
-		return nil, fmt.Errorf("config %s: %w", path, err)
+		return nil, fmt.Errorf("config %s: %w", name, err)
 	}
 	return cfg, nil
 }
@@ -665,19 +681,34 @@ func knownList(m map[string]Account) string {
 	return strings.Join(names, ", ")
 }
 
-// Save validates cfg and writes it to path atomically with mode 0600, creating
-// the directory with mode 0700. It refuses to replace a symlink.
-func Save(path string, cfg *Config) error {
+// Encode validates cfg and returns the TOML text Save would write.
+func Encode(cfg *Config) ([]byte, error) {
 	if cfg == nil {
-		return errors.New("saving config: nil config")
+		return nil, errors.New("saving config: nil config")
 	}
 	if err := cfg.Validate(); err != nil {
-		return fmt.Errorf("saving config: %w", err)
+		return nil, fmt.Errorf("saving config: %w", err)
 	}
 	data, err := toml.Marshal(cfg)
 	if err != nil {
-		return fmt.Errorf("encoding config: %w", err)
+		return nil, fmt.Errorf("encoding config: %w", err)
 	}
+	return data, nil
+}
+
+// Save validates cfg and writes it to path atomically with mode 0600, creating
+// the directory with mode 0700. It refuses to replace a symlink.
+func Save(path string, cfg *Config) error {
+	data, err := Encode(cfg)
+	if err != nil {
+		return err
+	}
+	return writeAtomic(path, data)
+}
+
+// writeAtomic writes data to path through a temporary file in the same
+// directory (mode 0600) and a rename. It refuses to replace a symlink.
+func writeAtomic(path string, data []byte) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("creating %s: %w", dir, err)
