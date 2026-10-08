@@ -92,9 +92,9 @@ Releases are cut from a **release pull request** that a bot keeps up to date; no
 
    | Secret | Publishes to | Token needs |
    |---|---|---|
-   | `HOMEBREW_TAP_TOKEN` | Homebrew cask in `ccshelf/homebrew-tap` | contents write on that repository |
-   | `SCOOP_BUCKET_TOKEN` | Scoop manifest in `ccshelf/scoop-bucket` | contents write on that repository |
-   | `WINGET_TOKEN` | WinGet pull request to `microsoft/winget-pkgs` from the `ccshelf/winget-pkgs` fork | contents write on the fork and pull request creation |
+   | `HOMEBREW_TAP_TOKEN` | Homebrew cask in `yorch/homebrew-tap` | contents write on that repository |
+   | `SCOOP_BUCKET_TOKEN` | Scoop manifest in `yorch/scoop-bucket` | contents write on that repository |
+   | `WINGET_TOKEN` | WinGet pull request to `microsoft/winget-pkgs` from the `yorch/winget-pkgs` fork | contents write on the fork and pull request creation |
 
    Use fine-grained tokens scoped to exactly those repositories.
 8. Verify the published release as a user would, following "Verifying a release" in [SECURITY.md](SECURITY.md), and run the documented one-liners from the README (`install.sh | sh`, and `install.ps1` on Windows) against it in a scratch directory (`--bin-dir`/`-BinDir`) before announcing it. Changing `scripts/install.sh` or `install.ps1` is a security-sensitive change: keep `scripts/test_install.sh` (with `--mutants`) and `scripts/test_install.ps1` green and update "What the installer verifies" in SECURITY.md. The macOS and Windows binaries are not notarized or signed yet, so Gatekeeper and SmartScreen may warn; targets without a native CI runner are noted as built but not natively tested.

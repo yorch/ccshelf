@@ -81,7 +81,7 @@ Every release publishes archives, `checksums.txt`, its keyless cosign bundle (`c
 2. Check the archive against the signed checksums:
 
    ```sh
-   sha256sum --check --ignore-missing checksums.txt   # macOS: shasum -a 256 -c
+   sha256sum --check --ignore-missing checksums.txt   # macOS: shasum -a 256 --check --ignore-missing checksums.txt
    ```
 
 3. Verify the build provenance attestation (needs the [GitHub CLI](https://cli.github.com/)):

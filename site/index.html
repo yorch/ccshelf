@@ -350,7 +350,7 @@ go build -o ccshelf ./cmd/ccshelf
 ./ccshelf version</code></pre>
       <button class="copy" type="button" data-copy="c-install" hidden>Copy commands</button>
     </div>
-    <p class="fine">Needs Go 1.27 or newer. Put the binary on your <code>PATH</code>, or run <code>go install ./cmd/ccshelf</code> from the checkout.</p>
+    <p class="fine">Needs Go 1.27 or newer. Put the binary on your <code>PATH</code>, or run <code>go install ./cmd/ccshelf</code> from the checkout to install into <code>$(go env GOPATH)/bin</code>. <code>ccshelf update</code> leaves a <code>go install</code> copy to Go and prints the command to run.</p>
 
     <h3 class="sub">Try it</h3>
     <div class="cmd">
