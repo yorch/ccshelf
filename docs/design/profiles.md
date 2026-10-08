@@ -34,7 +34,7 @@ url = "git@ghe.example.com:acme/claude-marketplace.git"   # the org data repo (u
 ref = "v2026.10.1"                              # pinned tag or commit. A branch name is refused here; use `branch` below
 path = "profiles"                               # folder inside the repo
 
-# [[sources]]                                   # the same repo, tracking a branch instead of a tag (D-54)
+# [[sources]]                                   # the same repo, tracking a branch instead of a tag (D-55)
 # type = "git"
 # url = "git@ghe.example.com:acme/claude-marketplace.git"
 # branch = "main"                               # use branch or ref, never both. The branch can move, but trust stays per commit
@@ -72,7 +72,7 @@ On `strict`: `mcp.servers` is a union across the chain, so a child inherits stri
 
 **Trust model (SR1 and SR2).** A shared profile is a closed schema, and MCP definitions live in a reviewed registry. The launcher loads it only from a trusted source, records a hash of its resolved closure in a lockfile and asks before it accepts a change. The full rules are in [security.md](security.md), SR2.
 
-**Tracking a branch (D-54).** A git source with `branch = "<name>"` follows a branch. The name follows `git check-ref-format --branch` and cannot be a full ref such as `refs/heads/main`. Setting `ref` and `branch` together is an error, and so is setting neither. The branch is allowed with `trust.require_pin = true`, because the key is explicit. A `ref = "main"` still fails, and its message points to `branch = "main"`.
+**Tracking a branch (D-55).** A git source with `branch = "<name>"` follows a branch. The name follows `git check-ref-format --branch` and cannot be a full ref such as `refs/heads/main`. Setting `ref` and `branch` together is an error, and so is setting neither. The branch is allowed with `trust.require_pin = true`, because the key is explicit. A `ref = "main"` still fails, and its message points to `branch = "main"`.
 
 - ccshelf resolves `refs/heads/<name>` with `git ls-remote` to a full commit SHA. The checkout, the content check and the lockfile entry are per commit, as for a tag. The lockfile records the ref as `branch:<name>`, so a branch and a tag with the same name never share a record.
 - `run` and `dry-run` use the commit that the profile being run trusted, from the cache, with no network. Two profiles of one source may have been trusted at two commits, and each one keeps its own. If that commit is not in the cache, ccshelf fetches exactly that commit by id. It never checks the branch head to fill a gap. At most once per `trust.branch_check_interval`, they check the remote for a new commit on the branch. ccshelf stores the time of the last attempt for each source in the private cache (`branch-check.json`), also when the attempt fails, so a host that is down does not slow every run.

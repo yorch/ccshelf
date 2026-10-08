@@ -19,7 +19,7 @@ import (
 )
 
 // This file holds the update path of a git source that tracks a branch
-// (D-54). A run stays on the commit the user trusted, with no network. At most
+// (D-55). A run stays on the commit the user trusted, with no network. At most
 // once per trust.branch_check_interval it asks the remote where the branch
 // points. A new head is a change of the closure, so it needs trust again: the
 // check only tells the user, or asks in a terminal. It never runs a commit that

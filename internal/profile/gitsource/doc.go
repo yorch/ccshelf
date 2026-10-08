@@ -21,7 +21,7 @@
 // a branch that is not branch-like, and Prepare still stores it as a SHA. A
 // SHA pin needs no network once its checkout is cached.
 //
-// # Branches (D-54)
+// # Branches (D-55)
 //
 // Options.Branch tracks a branch instead. It is the only way to follow a
 // moving ref, and it is explicit: Ref still refuses branch-like names. The

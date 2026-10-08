@@ -300,7 +300,7 @@ func (s SourceConfig) SourceLocation() string {
 //     tag or full commit id, which can only happen while require_pin is off
 //   - adds a git source that tracks a branch, or switches one to a branch (or
 //     to another branch). The branch can move without notice, but every new
-//     commit still needs trust before it runs (D-54)
+//     commit still needs trust before it runs (D-55)
 //   - adds a dir source whose path starts with $ (ccshelf reads the variable
 //     at every run, so what it names can change without a config change)
 //   - changes what is trusted to supply code or releases: claude.path,

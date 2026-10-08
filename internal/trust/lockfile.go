@@ -355,7 +355,7 @@ func (s *Store) Accept(r *profile.Resolved, expectedHash string) error {
 // Rekey updates the refs of the recorded sources of a closure that is already
 // trusted, and reports whether it wrote anything. It exists for a source that
 // changes how it is pinned without changing what it resolves to: a tag source
-// that becomes a branch source at the same commit (D-54). The verdict is
+// that becomes a branch source at the same commit (D-55). The verdict is
 // Trusted by content, but the lockfile would keep the old ref, and a later
 // move of the new ref would then be a generic "Changed" instead of a moved
 // ref.

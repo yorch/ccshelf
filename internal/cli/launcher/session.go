@@ -633,7 +633,7 @@ func (s *session) lockedCommit(sc config.SourceConfig) string {
 	if sc.Branch != "" {
 		// A branch source stays on the commit the user trusted, whatever
 		// require_pin says: the branch is explicit, and a new head is only
-		// looked at by the periodic check or on request (D-54).
+		// looked at by the periodic check or on request (D-55).
 		if s.refresh || s.refreshBranches {
 			return ""
 		}

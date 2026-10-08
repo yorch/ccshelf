@@ -24,7 +24,7 @@ As defense in depth, the env policy first applies a denylist of known-dangerous 
 
   Only the identity item (name, description, owner, status, `when_to_use`, `avoid_when`, `model`, `effort`) is not risky. With `[trust] on_change = "fail"` a changed or moved closure exits 4 even on a terminal.
 - When trust is granted, ccshelf resolves a tag to a commit SHA and stores it in the lockfile. `run` uses the pinned commit (from the cache, without network, when it is already fetched). Only `ccshelf trust` and `ccshelf ls --refresh` notice a tag that later points elsewhere, and they show it as an untrusted update. Recommend tag-protection rulesets on the org data repo. Once a day, ccshelf prunes cache files older than the retention age. It never prunes the checkouts a lock pins.
-- A source can track a **branch** only through the explicit `branch` key (D-54). The `ref` key still refuses branch names.
+- A source can track a **branch** only through the explicit `branch` key (D-55). The `ref` key still refuses branch names.
   - Trust stays per commit. ccshelf resolves the branch head to a commit SHA, and every new commit on the branch is an untrusted update (`TagMoved`, shown as "the branch ... now points to").
   - Each profile runs the commit that it trusted. If that checkout is not in the cache, ccshelf fetches it by that commit id, never by the head.
   - `run` uses the trusted commit with no network. At most once per `trust.branch_check_interval` (default 24h), it checks the branch head with one `git ls-remote`.

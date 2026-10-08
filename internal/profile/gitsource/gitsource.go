@@ -47,7 +47,7 @@ type Options struct {
 	// Ref is a tag or a full commit SHA. Branch-like names are rejected.
 	// Exactly one of Ref and Branch is set.
 	Ref string
-	// Branch is a branch to track (D-54). It is resolved to a full commit SHA
+	// Branch is a branch to track (D-55). It is resolved to a full commit SHA
 	// with `git ls-remote` on every Prepare. Everything after that (the
 	// checkout, the verification, the trust record) is per commit.
 	Branch string

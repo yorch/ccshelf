@@ -87,7 +87,7 @@ type SourceConfig struct {
 	URL  string `toml:"url,omitempty"`
 	Ref  string `toml:"ref,omitempty"`
 	// Branch is, for git sources, a branch to track instead of a tag or a
-	// commit (D-54). It is mutually exclusive with Ref. Trust stays per
+	// commit (D-55). It is mutually exclusive with Ref. Trust stays per
 	// commit: every new commit on the branch needs trust again.
 	Branch string `toml:"branch,omitempty"`
 	Plugin string `toml:"plugin,omitempty"`
@@ -593,7 +593,7 @@ func (c *Config) validateGit(p string, s SourceConfig, add func(string, ...any))
 		}
 	case s.Branch != "":
 		// An explicit branch is allowed even with trust.require_pin: the
-		// config says in plain words that the source moves (D-54).
+		// config says in plain words that the source moves (D-55).
 		if err := ValidateBranch(s.Branch); err != nil {
 			add("%s.branch: %v", p, err)
 		}

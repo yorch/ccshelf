@@ -102,7 +102,7 @@ In a terminal, bare `ccshelf config` is a menu (add a source, change a pin, remo
   - `trust.trust_project_profiles` turned on
   - `update.mode` set to `install`
   - a new or re-pinned git source whose ref is not a tag or full commit id (possible only while `require_pin` is off)
-  - a git source that is added with `--branch`, or switched to a branch or to another branch (D-54). The branch can move, but every new commit still needs trust.
+  - a git source that is added with `--branch`, or switched to a branch or to another branch (D-55). The branch can move, but every new commit still needs trust.
 
   A change to what is trusted to supply code or releases also weakens:
   - `claude.path`
@@ -118,7 +118,7 @@ In a terminal, bare `ccshelf config` is a menu (add a source, change a pin, remo
   - changing `trust.on_change`
   - removing a source
   - adding a pinned source (a new source still needs trust before any of its profiles run).
-- **Branches (D-54).** `init --git-url`, `config source add --git-url` and `config source pin` take `--branch <name>` instead of `--ref`. Giving both is a usage error (exit 2). `pin` can switch a source between a tag or commit and a branch, and it clears the other key. In a wizard, the question for a tag or commit also accepts `branch:NAME`, and the printed equivalent command uses `--branch`. `init` also prints the weakening warning for a branch. It never asks for `--yes` because of it, because `init` keeps its meaning for `--yes` (the write in the full wizard). `run` and `dry-run` take `--refresh` (see [profiles.md](profiles.md), "Tracking a branch"). `trust.branch_check_interval` takes a duration from 1h to 8760h and is not a weakening change.
+- **Branches (D-55).** `init --git-url`, `config source add --git-url` and `config source pin` take `--branch <name>` instead of `--ref`. Giving both is a usage error (exit 2). `pin` can switch a source between a tag or commit and a branch, and it clears the other key. In a wizard, the question for a tag or commit also accepts `branch:NAME`, and the printed equivalent command uses `--branch`. `init` also prints the weakening warning for a branch. It never asks for `--yes` because of it, because `init` keeps its meaning for `--yes` (the write in the full wizard). `run` and `dry-run` take `--refresh` (see [profiles.md](profiles.md), "Tracking a branch"). `trust.branch_check_interval` takes a duration from 1h to 8760h and is not a weakening change.
 - **Files.**
   - The file must already exist (exit 1 with a hint to run `init`).
   - A write re-encodes the struct, so **comments and layout are lost**. The summary says so when the file has a `#` comment. The command keeps the previous file as `config.toml.bak` (0600, replaced atomically, a symlink at either name is refused).

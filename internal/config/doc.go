@@ -24,7 +24,7 @@
 //     default), see ValidatePin. Its check is a syntax gate, not the security
 //     boundary: trust compares the peeled commit SHA.
 //   - a git source needs exactly one of ref and branch. ValidateBranch checks
-//     a branch (D-54) with the rules of git check-ref-format --branch (no
+//     a branch (D-55) with the rules of git check-ref-format --branch (no
 //     leading "-", no "..", no full ref such as refs/heads/x). A branch is
 //     allowed with trust.require_pin on, because the key says in plain words
 //     that the source moves. Trust stays per commit. The lockfile records
