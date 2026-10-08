@@ -61,40 +61,8 @@ you start yourself.`,
 		if picked {
 			printEquivalent(cc, ui.NewRecorder("edit", name))
 		}
-		if !canPrompt(cc) {
-			// An editor needs a terminal. Do not start one for a script or a
-			// pipe: it could hang or write into the wrong stream.
-			return ui.Usage(withHint(errors.New("edit opens an editor and needs a terminal; none is available"),
-				"use: ccshelf edit %s --path, and open the printed file yourself", name))
-		}
-		editor := cc.Getenv("VISUAL")
-		if editor == "" {
-			editor = cc.Getenv("EDITOR")
-		}
-		if editor == "" {
-			return ui.Usage(withHint(errors.New("no editor configured"),
-				"set $VISUAL or $EDITOR, or use: ccshelf edit %s --path", name))
-		}
-		fields, err := parseEditor(editor)
-		if err != nil {
-			return ui.Usage(fmt.Errorf("$VISUAL or $EDITOR: %w", err))
-		}
-		if len(fields) == 0 {
-			return ui.Usage(errors.New("$VISUAL and $EDITOR are blank"))
-		}
-		argv := append(append([]string(nil), fields[1:]...), path)
-		// The editor shares the terminal, so Ctrl+C reaches it as well as us:
-		// it must not cancel the editor (unsaved edits would be lost), so the
-		// editor runs on a context that cannot be canceled and an interrupt
-		// is swallowed here while it runs.
-		release := ignoreInterrupt()
-		code, err := l.opt.Spawn(context.WithoutCancel(ctx), fields[0], argv, cc.Environ(), cc.Streams.In, cc.Streams.Out, cc.Streams.Err)
-		release()
-		if err != nil {
-			return ui.Failure(fmt.Errorf("running the editor %q: %w", ui.Sanitize(fields[0]), err))
-		}
-		if code != 0 {
-			return ui.Failure(fmt.Errorf("the editor exited with status %d; the file may be unchanged", code))
+		if err := l.runEditor(ctx, cc, path, "ccshelf edit "+name+" --path"); err != nil {
+			return err
 		}
 		raw, err := os.ReadFile(path) //nolint:gosec // path is built from the validated name in the personal profiles directory
 		if err != nil {
@@ -108,6 +76,47 @@ you start yourself.`,
 		return nil
 	})
 	return c
+}
+
+// runEditor opens path in $VISUAL or $EDITOR and waits for it. pathCmd is the
+// command shown in hints that prints the file name instead. It needs a
+// terminal: an editor started for a script or a pipe could hang or write into
+// the wrong stream.
+func (l *launcher) runEditor(ctx context.Context, cc *clicore.Context, path, pathCmd string) error {
+	if !canPrompt(cc) {
+		return ui.Usage(withHint(errors.New("edit opens an editor and needs a terminal; none is available"),
+			"use: %s, and open the printed file yourself", pathCmd))
+	}
+	editor := cc.Getenv("VISUAL")
+	if editor == "" {
+		editor = cc.Getenv("EDITOR")
+	}
+	if editor == "" {
+		return ui.Usage(withHint(errors.New("no editor configured"),
+			"set $VISUAL or $EDITOR, or use: %s", pathCmd))
+	}
+	fields, err := parseEditor(editor)
+	if err != nil {
+		return ui.Usage(fmt.Errorf("$VISUAL or $EDITOR: %w", err))
+	}
+	if len(fields) == 0 {
+		return ui.Usage(errors.New("$VISUAL and $EDITOR are blank"))
+	}
+	argv := append(append([]string(nil), fields[1:]...), path)
+	// The editor shares the terminal, so Ctrl+C reaches it as well as us:
+	// it must not cancel the editor (unsaved edits would be lost), so the
+	// editor runs on a context that cannot be canceled and an interrupt
+	// is swallowed here while it runs.
+	release := ignoreInterrupt()
+	code, err := l.opt.Spawn(context.WithoutCancel(ctx), fields[0], argv, cc.Environ(), cc.Streams.In, cc.Streams.Out, cc.Streams.Err)
+	release()
+	if err != nil {
+		return ui.Failure(fmt.Errorf("running the editor %q: %w", ui.Sanitize(fields[0]), err))
+	}
+	if code != 0 {
+		return ui.Failure(fmt.Errorf("the editor exited with status %d; the file may be unchanged", code))
+	}
+	return nil
 }
 
 // warnUnresolved resolves the edited profile across all sources and warns when

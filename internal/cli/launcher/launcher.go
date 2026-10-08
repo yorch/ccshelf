@@ -83,6 +83,7 @@ func CommandsWith(get clicore.Provider, opt Options) []*cobra.Command {
 		l.initCmd(),
 		l.trustCmd(),
 		l.accountCmd(),
+		l.configCmd(),
 		l.shellInitCmd(),
 		l.versionCmd(),
 		l.completionCmd(),

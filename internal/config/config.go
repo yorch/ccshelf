@@ -199,12 +199,21 @@ func ValidatePin(ref string) error {
 // Load reads and validates the configuration at path. A missing file yields
 // Default(). Unknown keys and invalid values are errors.
 func Load(path string) (*Config, error) {
-	cfg := Default()
-	f, err := os.Open(path)
+	raw, err := ReadFile(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return cfg, nil
+			return Default(), nil
 		}
+		return nil, err
+	}
+	return Parse(raw, path)
+}
+
+// ReadFile reads the raw bytes of the configuration file at path, refusing a
+// file larger than MaxFileSize. A missing file wraps fs.ErrNotExist.
+func ReadFile(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
 		return nil, fmt.Errorf("opening config %s: %w", path, err)
 	}
 	defer f.Close()
@@ -215,30 +224,65 @@ func Load(path string) (*Config, error) {
 	if len(raw) > MaxFileSize {
 		return nil, fmt.Errorf("config %s is larger than %d bytes", path, MaxFileSize)
 	}
+	return raw, nil
+}
+
+// Parse decodes and validates configuration text. name only labels errors
+// (a file name); nothing is read from disk.
+func Parse(raw []byte, name string) (*Config, error) { return parse(raw, name, true) }
+
+// ParseUnexpanded is Parse for a command that rewrites the file: ~ and
+// variables in account directories and claude.path are validated as they would
+// expand, but the returned Config keeps the text the user wrote, so writing it
+// back changes nothing the user did not ask to change.
+func ParseUnexpanded(raw []byte, name string) (*Config, error) { return parse(raw, name, false) }
+
+func parse(raw []byte, name string, expand bool) (*Config, error) {
+	cfg := Default()
 	dec := toml.NewDecoder(bytes.NewReader(raw)).DisallowUnknownFields()
 	if err := dec.Decode(cfg); err != nil {
-		return nil, fmt.Errorf("config %s: %w", path, describeDecode(err))
+		return nil, fmt.Errorf("config %s: %w", name, describeDecode(err))
 	}
 	// The decoder matches keys case-insensitively; only the documented
 	// spelling is accepted, so a reviewer never sees two spellings of one key.
 	issues, err := tomlkeys.Check(raw, Config{})
 	if err != nil {
-		return nil, fmt.Errorf("config %s: %w", path, err)
+		return nil, fmt.Errorf("config %s: %w", name, err)
 	}
 	if len(issues) > 0 {
 		errs := make([]error, len(issues))
 		for i, is := range issues {
 			errs[i] = fmt.Errorf("%s: %s", is.Path, is)
 		}
-		return nil, fmt.Errorf("config %s: %w", path, errors.Join(errs...))
+		return nil, fmt.Errorf("config %s: %w", name, errors.Join(errs...))
+	}
+	if !expand {
+		if err := cfg.ValidateUnexpanded(); err != nil {
+			return nil, fmt.Errorf("config %s: %w", name, err)
+		}
+		return cfg, nil
 	}
 	if err := cfg.expand(); err != nil {
-		return nil, fmt.Errorf("config %s: %w", path, err)
+		return nil, fmt.Errorf("config %s: %w", name, err)
 	}
 	if err := cfg.Validate(); err != nil {
-		return nil, fmt.Errorf("config %s: %w", path, err)
+		return nil, fmt.Errorf("config %s: %w", name, err)
 	}
 	return cfg, nil
+}
+
+// ValidateUnexpanded is Validate for a Config whose paths still hold ~ and
+// variables as written (see ParseUnexpanded): it checks an expanded copy.
+func (c *Config) ValidateUnexpanded() error {
+	cp := *c
+	cp.Accounts = make(map[string]Account, len(c.Accounts))
+	for k, v := range c.Accounts {
+		cp.Accounts[k] = v
+	}
+	if err := cp.expand(); err != nil {
+		return err
+	}
+	return cp.Validate()
 }
 
 func describeDecode(err error) error {
@@ -579,11 +623,29 @@ func checkDirSourcePath(p string) error {
 	case p == "~" || strings.HasPrefix(p, "~/") || strings.HasPrefix(p, `~\`):
 		return nil
 	case strings.HasPrefix(p, "$"):
+		if v := cwdVariable(p); v != "" {
+			return fmt.Errorf("%q starts with $%s, the directory you run ccshelf from: a cloned repository could then supply profiles as if they were yours (SR2); use an absolute path, or ~", p, v)
+		}
 		return nil // expanded later; ResolvedPath requires an absolute result
 	case filepath.IsAbs(p):
 		return nil
 	}
 	return fmt.Errorf("%q must be absolute or start with ~ (a relative path would depend on the working directory)", p)
+}
+
+// cwdVariable returns PWD or OLDPWD when p starts with that variable ($PWD,
+// ${PWD}, ${PWD:-x}), and "" otherwise.
+func cwdVariable(p string) string {
+	rest := strings.TrimPrefix(p, "$")
+	rest = strings.TrimPrefix(rest, "{")
+	n := 0
+	for n < len(rest) && (rest[n] == '_' || rest[n] >= '0' && rest[n] <= '9' || rest[n] >= 'A' && rest[n] <= 'Z' || rest[n] >= 'a' && rest[n] <= 'z') {
+		n++
+	}
+	if name := rest[:n]; name == "PWD" || name == "OLDPWD" {
+		return name
+	}
+	return ""
 }
 
 // samePath reports whether a and b name the same path on the running OS.
@@ -665,19 +727,50 @@ func knownList(m map[string]Account) string {
 	return strings.Join(names, ", ")
 }
 
-// Save validates cfg and writes it to path atomically with mode 0600, creating
-// the directory with mode 0700. It refuses to replace a symlink.
-func Save(path string, cfg *Config) error {
+// Encode validates cfg and returns the TOML text Save would write.
+func Encode(cfg *Config) ([]byte, error) {
 	if cfg == nil {
-		return errors.New("saving config: nil config")
+		return nil, errors.New("saving config: nil config")
 	}
 	if err := cfg.Validate(); err != nil {
-		return fmt.Errorf("saving config: %w", err)
+		return nil, fmt.Errorf("saving config: %w", err)
 	}
 	data, err := toml.Marshal(cfg)
 	if err != nil {
-		return fmt.Errorf("encoding config: %w", err)
+		return nil, fmt.Errorf("encoding config: %w", err)
 	}
+	return data, nil
+}
+
+// EncodeUnexpanded is Encode for a Config that holds paths as written (see
+// ParseUnexpanded).
+func EncodeUnexpanded(cfg *Config) ([]byte, error) {
+	if cfg == nil {
+		return nil, errors.New("saving config: nil config")
+	}
+	if err := cfg.ValidateUnexpanded(); err != nil {
+		return nil, fmt.Errorf("saving config: %w", err)
+	}
+	data, err := toml.Marshal(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("encoding config: %w", err)
+	}
+	return data, nil
+}
+
+// Save validates cfg and writes it to path atomically with mode 0600, creating
+// the directory with mode 0700. It refuses to replace a symlink.
+func Save(path string, cfg *Config) error {
+	data, err := Encode(cfg)
+	if err != nil {
+		return err
+	}
+	return writeAtomic(path, data)
+}
+
+// writeAtomic writes data to path through a temporary file in the same
+// directory (mode 0600) and a rename. It refuses to replace a symlink.
+func writeAtomic(path string, data []byte) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("creating %s: %w", dir, err)

@@ -59,6 +59,17 @@ Scripts can rely on these; they never change meaning.
 | [`ccshelf account ls`](#ccshelf-account-ls) | List the configured accounts |
 | [`ccshelf account rm`](#ccshelf-account-rm) | Forget an account (its directory is left alone) |
 | [`ccshelf completion`](#ccshelf-completion) | Print a shell completion script |
+| [`ccshelf config`](#ccshelf-config) | Show and change the configuration file |
+| [`ccshelf config edit`](#ccshelf-config-edit) | Edit config.toml in $VISUAL or $EDITOR, checked before it replaces the file |
+| [`ccshelf config path`](#ccshelf-config-path) | Print the configuration file path in use |
+| [`ccshelf config set`](#ccshelf-config-set) | Change one setting |
+| [`ccshelf config show`](#ccshelf-config-show) | Print the effective configuration |
+| [`ccshelf config source`](#ccshelf-config-source) | List, add, pin and remove profile sources |
+| [`ccshelf config source add`](#ccshelf-config-source-add) | Add a profile source (git, dir or plugin) |
+| [`ccshelf config source ls`](#ccshelf-config-source-ls) | List the configured profile sources |
+| [`ccshelf config source pin`](#ccshelf-config-source-pin) | Change the pinned ref of git source number n |
+| [`ccshelf config source rm`](#ccshelf-config-source-rm) | Remove source number n |
+| [`ccshelf config unset`](#ccshelf-config-unset) | Put one setting back to its default |
 | [`ccshelf init`](#ccshelf-init) | Create the configuration file, optionally from an org data repo |
 | [`ccshelf shell-init`](#ccshelf-shell-init) | Print shell functions cs-<profile> that run each profile |
 | [`ccshelf update`](#ccshelf-update) | Update ccshelf to the latest release (verified), or roll back |
@@ -578,6 +589,275 @@ ccshelf completion <bash|zsh|fish|powershell> [flags]
 | Flag | Value | Description |
 |---|---|---|
 | `-h`, `--help` |  | help for completion |
+
+## ccshelf config
+
+Show the effective configuration, and add, pin or remove profile sources and change a few settings in place, without editing config.toml by hand. Every subcommand works with flags alone; in a terminal, "ccshelf config" alone opens a menu, and a change is shown and confirmed (default no) before it is written.
+
+Changes are written by re-encoding the file: comments and layout are lost, and the previous file is kept as config.toml.bak. A change that weakens a security setting (turning off pinning, trusting project profiles, installing updates automatically, adding a source that is not pinned or whose path is a variable, or changing claude.path or the update source) needs --yes when there is no terminal. Nothing here fetches a source or records trust. Only "ccshelf init" creates the file.
+
+Settings you can change with "config set": trust.on_change, trust.require_pin, trust.trust_project_profiles, update.mode, update.interval, catalog.remote_url, default_account, ui.color, ui.interactive. Anything else (accounts, claude.path, the update source) has its own command or needs "ccshelf config edit".
+
+**Usage**
+
+```text
+ccshelf config [flags]
+ccshelf config [command]
+```
+
+**Examples**
+
+```text
+ccshelf config show
+ccshelf config source add --git-url git@ghe.example.com:acme/claude-marketplace.git --ref v2026.10.1
+ccshelf config source pin 1 --ref v2026.11.0
+ccshelf config set update.mode notify
+ccshelf config edit
+```
+
+**Flags**
+
+| Flag | Value | Description |
+|---|---|---|
+| `-h`, `--help` |  | help for config |
+
+**Subcommands**
+
+| Command | What it does |
+|---|---|
+| [`ccshelf config edit`](#ccshelf-config-edit) | Edit config.toml in $VISUAL or $EDITOR, checked before it replaces the file |
+| [`ccshelf config path`](#ccshelf-config-path) | Print the configuration file path in use |
+| [`ccshelf config set`](#ccshelf-config-set) | Change one setting |
+| [`ccshelf config show`](#ccshelf-config-show) | Print the effective configuration |
+| [`ccshelf config source`](#ccshelf-config-source) | List, add, pin and remove profile sources |
+| [`ccshelf config unset`](#ccshelf-config-unset) | Put one setting back to its default |
+
+## ccshelf config edit
+
+Open a copy of config.toml (mode 0600, in the same folder) in the editor named by $VISUAL or $EDITOR (split on spaces, quotes group words, never run through a shell). When the editor exits, the copy is checked like the real file. Only if it is valid does it replace config.toml (comments are kept: the text is written as you saved it), and the previous file is kept as config.toml.bak. If it is invalid, the errors are printed with line numbers, config.toml is left untouched and the copy is kept so you can fix it. It needs a terminal and an existing file (ccshelf init creates it).
+
+--path prints the file name instead, for scripts and for editors you start yourself.
+
+**Usage**
+
+```text
+ccshelf config edit [flags]
+```
+
+**Flags**
+
+| Flag | Value | Description |
+|---|---|---|
+| `-h`, `--help` |  | help for edit |
+| `--path` |  | print the configuration file path instead of opening it |
+| `--yes` |  | confirm the write after the check; never accepts trust |
+
+## ccshelf config path
+
+Print the path of config.toml (the --config file when given). The file need not exist.
+
+**Usage**
+
+```text
+ccshelf config path [flags]
+```
+
+**Flags**
+
+| Flag | Value | Description |
+|---|---|---|
+| `-h`, `--help` |  | help for path |
+
+## ccshelf config set
+
+Change one setting of the configuration. The keys are: trust.on_change, trust.require_pin, trust.trust_project_profiles, update.mode, update.interval, catalog.remote_url, default_account, ui.color, ui.interactive. Values: true or false; trust.on_change prompt or fail; update.mode off, notify or install; update.interval a duration such as 24h (1h to one year); an https URL for catalog.remote_url; an account name for default_account; ui.color auto, always or never; ui.interactive auto or never. Anything else is refused: accounts and sources have their own commands, and the rest needs "config edit".
+
+Turning trust.require_pin off, trust.trust_project_profiles on, or update.mode to install weakens a security setting and needs --yes without a terminal.
+
+**Usage**
+
+```text
+ccshelf config set [key] [value] [flags]
+```
+
+**Examples**
+
+```text
+ccshelf config set update.mode notify
+ccshelf config set update.interval 48h
+ccshelf config set trust.on_change fail
+```
+
+**Flags**
+
+| Flag | Value | Description |
+|---|---|---|
+| `-h`, `--help` |  | help for set |
+| `--yes` |  | confirm the write (and a weakening change); never accepts trust |
+
+## ccshelf config show
+
+Print the sources (numbered from 1; the numbers are the ones config source pin and rm take), trust, update, catalog, accounts and ui settings. A value the file does not set is marked (default). A missing file shows the defaults.
+
+**Usage**
+
+```text
+ccshelf config show [flags]
+```
+
+**Flags**
+
+| Flag | Value | Description |
+|---|---|---|
+| `-h`, `--help` |  | help for show |
+
+## ccshelf config source
+
+Change the [[sources]] of the configuration. Sources are numbered from 1 in the order of "config source ls"; the order carries no meaning. Nothing is fetched and no trust is recorded: shared profiles are fetched, and need your trust, when you first use them.
+
+**Usage**
+
+```text
+ccshelf config source [command]
+```
+
+**Flags**
+
+| Flag | Value | Description |
+|---|---|---|
+| `-h`, `--help` |  | help for source |
+
+**Subcommands**
+
+| Command | What it does |
+|---|---|
+| [`ccshelf config source add`](#ccshelf-config-source-add) | Add a profile source (git, dir or plugin) |
+| [`ccshelf config source ls`](#ccshelf-config-source-ls) | List the configured profile sources |
+| [`ccshelf config source pin`](#ccshelf-config-source-pin) | Change the pinned ref of git source number n |
+| [`ccshelf config source rm`](#ccshelf-config-source-rm) | Remove source number n |
+
+## ccshelf config source add
+
+Add one profile source: exactly one of --git-url (with --ref, and --path for the folder inside the repository), --dir (an absolute directory) or --plugin (name@marketplace, with --marketplace and --path). The source is checked with the rules of the configuration file, and an exact duplicate is refused: use "config source pin" or "config source rm". Nothing is fetched or trusted.
+
+In a terminal, without any of those flags, the questions are asked. Adding a git source that is not pinned to a tag or full commit (possible only while trust.require_pin is off) weakens a setting and needs --yes without a terminal.
+
+**Usage**
+
+```text
+ccshelf config source add [flags]
+```
+
+**Examples**
+
+```text
+ccshelf config source add --git-url git@ghe.example.com:acme/claude-marketplace.git --ref v2026.10.1
+ccshelf config source add --dir ~/team-profiles
+ccshelf config source add --plugin org-profiles@acme --marketplace acme/claude-marketplace
+```
+
+**Flags**
+
+| Flag | Value | Description |
+|---|---|---|
+| `--dir` | `string` | dir source: absolute directory of profiles |
+| `--git-url` | `string` | git source: repository URL |
+| `-h`, `--help` |  | help for add |
+| `--marketplace` | `string` | plugin source: the marketplace source the plugin must come from (owner/repo or git URL) |
+| `--path` | `string` | git or plugin source: folder inside the repository or plugin (git default: profiles) |
+| `--plugin` | `string` | plugin source: name@marketplace |
+| `--ref` | `string` | git source: tag or full commit id to pin to |
+| `--yes` |  | confirm the write (and a weakening change); never accepts trust |
+
+## ccshelf config source ls
+
+List the [[sources]] with the numbers that config source pin and rm take. Your personal profiles directory is always searched and is not listed.
+
+**Usage**
+
+```text
+ccshelf config source ls [flags]
+```
+
+**Aliases:** `ls`, `list`
+
+**Flags**
+
+| Flag | Value | Description |
+|---|---|---|
+| `-h`, `--help` |  | help for ls |
+
+## ccshelf config source pin
+
+Change the tag or full commit id that git source number n (see config source ls) is pinned to. The next run that needs a profile from that source fetches the new ref, and when its commit differs from the one you trusted the profile needs your trust again; this command never records trust. Pinning to something that is not a tag or full commit is possible only while trust.require_pin is off and needs --yes without a terminal.
+
+**Usage**
+
+```text
+ccshelf config source pin [n] [flags]
+```
+
+**Examples**
+
+```text
+ccshelf config source pin 1 --ref v2026.11.0
+```
+
+**Flags**
+
+| Flag | Value | Description |
+|---|---|---|
+| `-h`, `--help` |  | help for pin |
+| `--ref` | `string` | the new tag or full commit id |
+| `--yes` |  | confirm the write (and a weakening change); never accepts trust |
+
+## ccshelf config source rm
+
+Remove the source with number n (see config source ls). Profiles from it no longer appear. Trust records already made for its profiles are kept as they are and are not deleted.
+
+**Usage**
+
+```text
+ccshelf config source rm [n] [flags]
+```
+
+**Aliases:** `rm`, `remove`
+
+**Examples**
+
+```text
+ccshelf config source rm 2
+```
+
+**Flags**
+
+| Flag | Value | Description |
+|---|---|---|
+| `-h`, `--help` |  | help for rm |
+| `--yes` |  | confirm the write; never accepts trust |
+
+## ccshelf config unset
+
+Put one setting back to its default (the same keys as config set). The key is removed from the file where it can be, and otherwise written with its default.
+
+**Usage**
+
+```text
+ccshelf config unset [key] [flags]
+```
+
+**Examples**
+
+```text
+ccshelf config unset update.interval
+```
+
+**Flags**
+
+| Flag | Value | Description |
+|---|---|---|
+| `-h`, `--help` |  | help for unset |
+| `--yes` |  | confirm the write; never accepts trust |
 
 ## ccshelf init
 

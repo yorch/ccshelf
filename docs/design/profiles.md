@@ -11,6 +11,8 @@ Claude Code has no native concept of a profile repo: marketplaces distribute plu
 | `git` | The launcher clones/pulls a repo into `~/.cache/ccshelf/<name>` at a pinned `ref`. | Works for a profiles-only repo. Adds an auth and fetch path of its own. |
 | `dir` | A local directory, e.g. `~/.config/ccshelf/profiles/` (personal) or `.ccshelf/profiles/` in a project repo (per-project defaults). | Always available. |
 
+After `ccshelf init`, `ccshelf config source add`, `pin` and `rm` add, re-pin and remove `[[sources]]` entries, and `ccshelf config set` changes a few settings, without editing the file by hand (see [cli.md](cli.md), D-50).
+
 Config sketch (`~/.config/ccshelf/config.toml`):
 ```toml
 # The order of sources does not matter. Every source is checked, and a
