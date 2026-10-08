@@ -1,6 +1,6 @@
 # A sample profile manifest. ccshelf loads only profiles/<name>.toml files, so this
 # file (note the .sample suffix) is not used: copy it to profiles/<name>.toml, remove
-# the leading "# " from the lines you want, and run "ccshelf lint"[[if not .ProfilesOnly]] and "ccshelf compile"[[end]].
+# the leading "# " from the lines you want, and run "ccshelf lint".
 # ccshelf has no built-in profiles: which roles exist, and what they contain, is your
 # organization's choice. The full format is in the ccshelf documentation (profiles).
 #
@@ -14,7 +14,7 @@
 #
 # [plugins]
 # mode = "allow-only"               # only the listed plugins are enabled
-# include = [[.PluginRef]]
+# include = ["my-plugin@your-marketplace"]
 # exclude = []
 #
 # [mcp]

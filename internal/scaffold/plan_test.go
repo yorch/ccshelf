@@ -408,3 +408,51 @@ func TestSymlinkedDirectoryIsLeftAlone(t *testing.T) {
 }
 
 var _ = fs.ErrNotExist
+
+func TestProfilesOnlyPlan(t *testing.T) {
+	p := baseParams()
+	p.MarketplaceName = ""
+	p.ProfilesOnly = true
+	plan, err := Build(newMem(nil), p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var paths []string
+	for _, e := range plan.Entries {
+		paths = append(paths, e.Path)
+	}
+	want := ".gitattributes .github/CODEOWNERS .github/workflows/validate.yml .gitignore README.md ccshelf.toml"
+	if got := strings.Join(paths, " "); got != want {
+		t.Errorf("entries = %s, want %s", got, want)
+	}
+	// Without a platform owner it still asks for that, and never for a marketplace name.
+	p.PlatformOwners = nil
+	_, err = Build(newMem(nil), p)
+	var me *MissingError
+	if !errors.As(err, &me) || strings.Join(me.Flags, ",") != "--platform-owners" {
+		t.Errorf("err = %v", err)
+	}
+}
+
+func TestProfilesOnlyConflicts(t *testing.T) {
+	p := baseParams() // has a marketplace name
+	p.ProfilesOnly = true
+	_, err := Build(newMem(nil), p)
+	var fe *FieldError
+	if !errors.As(err, &fe) || fe.Flag != "--marketplace-name" {
+		t.Errorf("--marketplace-name with --profiles-only: %v", err)
+	}
+	p.MarketplaceName = ""
+	fsys := newMem(map[string]string{".claude-plugin/marketplace.json": `{"name":"x","plugins":[]}`})
+	_, err = Build(fsys, p)
+	if !errors.As(err, &fe) || fe.Flag != "--profiles-only" {
+		t.Errorf("existing marketplace: %v", err)
+	}
+	// An existing profiles-only config without the flag would grow a marketplace.
+	q := baseParams()
+	fsys = newMem(map[string]string{"ccshelf.toml": "[catalog]\nenabled = false\n"})
+	_, err = Build(fsys, q)
+	if !errors.As(err, &fe) || fe.Flag != "--profiles-only" {
+		t.Errorf("disabled catalog without the flag: %v", err)
+	}
+}

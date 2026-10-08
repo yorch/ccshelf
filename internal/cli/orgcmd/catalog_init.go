@@ -28,6 +28,7 @@ type initFlags struct {
 	runnerLabel, mode, sidecars string
 	defaultBranch               string
 	exampleProfile              bool
+	profilesOnly                bool
 	skip                        map[scaffold.Group]*bool
 	dryRun, yes, force          bool
 	writeSuggestions, gitInit   bool
@@ -116,6 +117,14 @@ Generated files (each group can be left out with a --no-<group> flag):
   profiles/example.toml.sample, an all-comment sample, is written only with
   --example-profile.
 
+--profiles-only sets up an org data repo that holds profiles (and prompts/
+and mcp/registry.toml) but no plugin marketplace and no catalog: ccshelf.toml
+gets [catalog] enabled = false, and the command writes ccshelf.toml,
+.github/CODEOWNERS, a README.md, .gitattributes, .gitignore and only the
+validate workflow (lint). No marketplace.json, sidecars, catalog.yml or
+release.yml. --marketplace-name and --sidecars stub are usage errors with it,
+and so is a directory that already has .claude-plugin/marketplace.json.
+
 The workflows call the ccshelf action pinned by full commit SHA. Pass
 --ccshelf-ref <40-hex SHA> and --ccshelf-version <vX.Y.Z> to pin it (a tag
 given as --ccshelf-ref sets the version only). Without them the workflows
@@ -129,6 +138,7 @@ print the plan). Nothing is committed, pushed or fetched; --git-init only runs
 git init when the directory is not a repository yet.`,
 		Example: `  ccshelf catalog init ./acme-claude --marketplace-name acme --org "Acme Corp" --platform-owners @acme/platform --yes
   ccshelf catalog init . --platform-owners @acme/platform --dry-run
+  ccshelf catalog init ./acme-profiles --profiles-only --platform-owners @acme/platform --yes
   ccshelf catalog init . --mode adopt --platform-owners @acme/platform --write-suggestions --yes`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 1 {
@@ -155,6 +165,7 @@ git init when the directory is not a repository yet.`,
 	fl.StringVar(&f.defaultBranch, "default-branch", "", "default branch the catalog workflow publishes from (default: read from an existing repository, else main)")
 	fl.StringVar(&f.mode, "mode", "", "new or adopt (default: detected from the directory)")
 	fl.StringVar(&f.sidecars, "sidecars", "stub", "sidecar files for the plugins found: stub or none")
+	fl.BoolVar(&f.profilesOnly, "profiles-only", false, "set up a repo of profiles only: no marketplace, sidecars, bundles or catalog (ccshelf.toml gets [catalog] enabled = false; only the validate workflow is written)")
 	fl.BoolVar(&f.exampleProfile, "example-profile", false, "also write profiles/example.toml.sample, an all-comment sample")
 	for _, sg := range skipGroups {
 		v := new(bool)
@@ -171,12 +182,12 @@ git init when the directory is not a repository yet.`,
 }
 
 // params builds the scaffold parameters from the flags.
-func (f *initFlags) params() (scaffold.Params, error) {
+func (f *initFlags) params(sidecarsSet bool) (scaffold.Params, error) {
 	p := scaffold.Params{
 		Mode: scaffold.Mode(f.mode), MarketplaceName: f.marketplaceName, Org: f.org, Owner: f.owner,
 		PlatformOwners: append([]string(nil), f.platformOwners...),
 		CcshelfRef:     f.ccshelfRef, CcshelfVersion: f.ccshelfVersion, RunnerLabel: f.runnerLabel, DefaultBranch: f.defaultBranch,
-		Skip: map[scaffold.Group]bool{}, ExampleProfile: f.exampleProfile, Force: f.force,
+		Skip: map[scaffold.Group]bool{}, ExampleProfile: f.exampleProfile, Force: f.force, ProfilesOnly: f.profilesOnly,
 	}
 	for g, v := range f.skip {
 		if *v {
@@ -189,6 +200,9 @@ func (f *initFlags) params() (scaffold.Params, error) {
 		p.Skip[scaffold.GroupSidecars] = true
 	default:
 		return p, ui.Usage(fmt.Errorf("--sidecars: %q is not stub or none", ui.SanitizeLine(f.sidecars)))
+	}
+	if f.profilesOnly && f.sidecars == "stub" && sidecarsSet {
+		return p, ui.Usage(errors.New("--sidecars stub cannot be combined with --profiles-only: a profiles-only repo has no sidecars"))
 	}
 	if err := p.Validate(); err != nil {
 		return p, ui.Usage(err)
@@ -244,7 +258,7 @@ func homeDir(c *clicore.Context) string {
 }
 
 func runCatalogInit(ctx context.Context, c *clicore.Context, cmd *cobra.Command, f *initFlags, args []string) error {
-	p, err := f.params()
+	p, err := f.params(cmd.Flags().Changed("sidecars"))
 	if err != nil {
 		return err
 	}
@@ -563,7 +577,7 @@ func finishInit(c *clicore.Context, tgt *scaffold.Target, plan *scaffold.Plan, f
 	}
 	if changed {
 		fmt.Fprintln(w, "next steps:")
-		for i, s := range nextSteps(tgt, plan, gitDone) {
+		for i, s := range nextSteps(tgt, plan, gitDone, f.profilesOnly) {
 			fmt.Fprintf(w, "  %d. %s\n", i+1, s)
 		}
 	}
@@ -576,7 +590,7 @@ func finishInit(c *clicore.Context, tgt *scaffold.Target, plan *scaffold.Plan, f
 	return nil
 }
 
-func nextSteps(tgt *scaffold.Target, plan *scaffold.Plan, gitDone bool) []string {
+func nextSteps(tgt *scaffold.Target, plan *scaffold.Plan, gitDone, profilesOnly bool) []string {
 	cd := ""
 	if tgt.Dir != "" {
 		cd = "cd " + quoteForSteps(tgt.Dir) + ", then "
@@ -589,14 +603,24 @@ func nextSteps(tgt *scaffold.Target, plan *scaffold.Plan, gitDone bool) []string
 	if plan.NeedsPin {
 		steps = append(steps, "pin the ccshelf action in "+strings.Join(plan.PinFiles, " and ")+": a full commit SHA and the release tag, then delete the guard job and its needs line (until then the guard job fails and the other jobs are skipped)")
 	}
-	steps = append(steps,
-		cd+"run: ccshelf lint",
-		"run: ccshelf compile --check  (it needs profiles/*.toml only once you add profiles)",
-		"run: ccshelf catalog build --out dist/catalog")
+	if profilesOnly {
+		steps = append(steps,
+			"add your profiles as profiles/<name>.toml (this repo has no built-in profiles; --example-profile writes a sample)",
+			cd+"run: ccshelf lint")
+	} else {
+		steps = append(steps,
+			cd+"run: ccshelf lint",
+			"run: ccshelf compile --check  (it needs profiles/*.toml only once you add profiles)",
+			"run: ccshelf catalog build --out dist/catalog")
+	}
 	if !plan.HasGit && !gitDone {
 		steps = append(steps, "create the repository: git init, then commit and push it to your Git host (this command never commits or pushes)")
 	}
-	steps = append(steps, "set up the repository rulesets: code-owner review on the default branch, protected v* tags, and the github-pages environment limited to the default branch")
+	if profilesOnly {
+		steps = append(steps, "set up the repository ruleset: code-owner review on the default branch")
+	} else {
+		steps = append(steps, "set up the repository rulesets: code-owner review on the default branch, protected v* tags, and the github-pages environment limited to the default branch")
+	}
 	if plan.Count(scaffold.ActionMerge) > 0 {
 		steps = append(steps, "merge the suggested lines into the files marked needs-merge")
 	}
@@ -631,6 +655,9 @@ func equivalent(tgt *scaffold.Target, f *initFlags, p scaffold.Params) *ui.Recor
 	str("--default-branch", p.DefaultBranch)
 	if f.sidecars == "none" {
 		rec.Flag("--sidecars", "none")
+	}
+	if p.ProfilesOnly {
+		rec.Bool("--profiles-only")
 	}
 	if p.ExampleProfile {
 		rec.Bool("--example-profile")

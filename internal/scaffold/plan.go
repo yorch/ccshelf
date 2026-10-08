@@ -178,7 +178,11 @@ func (b *builder) run() error {
 	}
 	b.addSidecars()
 	b.addCodeowners()
-	for _, w := range []string{"validate", "catalog", "release"} {
+	workflows := []string{"validate", "catalog", "release"}
+	if b.p.ProfilesOnly {
+		workflows = workflows[:1]
+	}
+	for _, w := range workflows {
 		b.addWorkflow(w)
 	}
 	if b.p.BranchSource != "" && b.p.Enabled(GroupWorkflows) {
@@ -290,6 +294,9 @@ func (b *builder) load() error {
 		}
 	}
 	b.name = b.p.MarketplaceName
+	if b.p.ProfilesOnly && b.mktSeen {
+		return &FieldError{"--profiles-only", pathMarketplace + " already exists, so this repo has a plugin marketplace; use catalog init without --profiles-only, or remove the file"}
+	}
 	if b.mkt != nil {
 		switch {
 		case ValidMarketplaceName(b.mkt.Name):
@@ -311,6 +318,9 @@ func (b *builder) load() error {
 				b.note("%s exists but is not valid (%s); it is left alone and the default lint.require is assumed for the sidecars", pathConfig, ui.SanitizeLine(firstLine(err.Error())))
 			} else {
 				b.cfg = c
+				if !c.Catalog.Enabled && !b.p.ProfilesOnly {
+					return &FieldError{"--profiles-only", pathConfig + " has [catalog] enabled = false, so this is a profiles-only repo; pass --profiles-only (without it the marketplace, sidecars and catalog workflows would be added)"}
+				}
 			}
 		}
 	}
@@ -374,6 +384,9 @@ func (b *builder) requirePlatform(what string) ([]string, bool) {
 
 // computeTargets decides which plugins get sidecar stubs.
 func (b *builder) computeTargets() {
+	if b.p.ProfilesOnly {
+		return // no plugins, no marketplace, no sidecars
+	}
 	if !b.p.Enabled(GroupSidecars) && !b.p.Enabled(GroupMarketplace) && !b.p.Enabled(GroupCodeowners) {
 		return
 	}
@@ -437,6 +450,7 @@ type view struct {
 	BranchCode      string // Markdown code span
 	PlatformOwners  string // Markdown code spans
 	PluginRef       string // TOML array holding one string
+	ProfilesOnly    bool   // a repo without marketplace and catalog
 }
 
 func render(name string, v view) ([]byte, error) {
@@ -607,7 +621,7 @@ func (b *builder) addLines(path string, g Group, tmpl string) {
 
 func (b *builder) addReadme() {
 	b.file(pathReadme, GroupReadme, kindPlain, func(strict bool) ([]byte, bool) {
-		if b.name == "" {
+		if b.name == "" && !b.p.ProfilesOnly {
 			if strict {
 				b.need("--marketplace-name", "the name of the marketplace, lower case letters, digits and hyphens")
 			}
@@ -620,6 +634,14 @@ func (b *builder) addReadme() {
 		codes := make([]string, len(pl))
 		for i, o := range pl {
 			codes[i] = mdCode(o)
+		}
+		if b.p.ProfilesOnly {
+			org := ""
+			if b.p.Org != "" {
+				org = mdEscape(b.p.Org)
+			}
+			data, err := render("README.profiles-only.md.tmpl", view{Org: org, BranchCode: mdCode(b.p.branch()), PlatformOwners: strings.Join(codes, ", "), ProfilesOnly: true})
+			return data, err == nil
 		}
 		data, err := render("README.md.tmpl", view{Org: mdEscape(b.p.org(b.name)), MarketplaceCode: mdCode(b.name), BranchCode: mdCode(b.p.branch()), PlatformOwners: strings.Join(codes, ", ")})
 		return data, err == nil
@@ -642,7 +664,7 @@ func (b *builder) addWorkflow(name string) {
 			b.plan.NeedsPin = true
 			b.plan.PinFiles = append(b.plan.PinFiles, ".github/workflows/"+name+".yml")
 		}
-		data, err := render(name+".yml.tmpl", view{Pin: pn, Comment: b.comment(pn), Runner: b.p.runner(), Branch: b.p.branch()})
+		data, err := render(name+".yml.tmpl", view{Pin: pn, Comment: b.comment(pn), Runner: b.p.runner(), Branch: b.p.branch(), ProfilesOnly: b.p.ProfilesOnly})
 		return data, err == nil
 	}, nil)
 }
@@ -662,7 +684,7 @@ func (b *builder) addExampleProfile() {
 		if m == "" {
 			m = "your-marketplace"
 		}
-		data, err := render("example-profile.toml.sample.tmpl", view{PluginRef: tomlArray([]string{"my-plugin@" + m})})
+		data, err := render("example-profile.toml.sample.tmpl", view{PluginRef: tomlArray([]string{"my-plugin@" + m}), ProfilesOnly: b.p.ProfilesOnly})
 		return data, err == nil
 	}, nil)
 }

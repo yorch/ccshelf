@@ -59,6 +59,13 @@ func TestGoldenNewRepo(t *testing.T) {
 	compareTree(t, dir, filepath.Join("testdata", "golden", "new"))
 }
 
+func TestGoldenProfilesOnly(t *testing.T) {
+	dir := t.TempDir()
+	p := Params{Org: "Acme", PlatformOwners: []string{"@acme/platform"}, CcshelfRef: strings.Repeat("a", 40), CcshelfVersion: "v0.1.0", ProfilesOnly: true, ExampleProfile: true}
+	run(t, dir, p, ApplyOptions{})
+	compareTree(t, dir, filepath.Join("testdata", "golden", "profiles-only"))
+}
+
 func TestGoldenAdoptRepo(t *testing.T) {
 	dir := t.TempDir()
 	repo := legacyRepo()
