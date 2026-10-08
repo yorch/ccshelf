@@ -93,51 +93,59 @@ func newCatalogInit(get clicore.Provider) *cobra.Command {
 		Use:   "init [dir]",
 		Short: "Set up a new org data repo, or add the missing pieces to an existing marketplace repo",
 		Long: `Bootstrap an org data repo in dir (default: --root, else the current directory).
-This is the organization's setup; "ccshelf init" is each developer's own.
+This is the organization's setup. "ccshelf init" is each developer's own.
 
 Modes (detected, or forced with --mode):
   new    an empty or missing directory (a lone .git counts as empty).
   adopt  a directory with content, such as a marketplace repo that has
-         .claude-plugin/marketplace.json and/or plugins/. Nothing existing is
-         changed: the command prints a plan and only creates files that are
-         missing. An existing file is reported as skip-exists (and as
-         up to date when it already equals what would be written), or as
-         needs-merge for CODEOWNERS, .gitattributes and .gitignore, with the
-         lines to add; --write-suggestions saves them next to the file as
-         <name>.ccshelf-suggested. A marketplace.json is never rewritten.
-         --force replaces the other differing files after saving <file>.bak.
+         .claude-plugin/marketplace.json and/or plugins/. The command changes
+         nothing that exists. It prints a plan and only creates the files
+         that are missing. It reports an existing file as one of these:
+           - skip-exists (and up to date when it already equals what the
+             command would write)
+           - needs-merge for CODEOWNERS, .gitattributes and .gitignore, with
+             the lines to add. --write-suggestions saves them next to the
+             file as <name>.ccshelf-suggested.
+         The command never rewrites a marketplace.json. --force replaces the
+         other differing files after it saves <file>.bak.
 
-Generated files (each group can be left out with a --no-<group> flag):
-  ccshelf.toml, .claude-plugin/marketplace.json (a skeleton; in adopt mode it
-  lists the plugins found under plugins/), catalog/plugins/<name>.toml (a stub
-  per plugin: the owner from CODEOWNERS or --owner, status experimental, and
-  TODO(ccshelf) placeholders that ccshelf lint reports as warnings, CAT048),
-  .github/CODEOWNERS, .github/workflows/{validate,catalog,release}.yml,
-  README.md, .gitattributes and .gitignore. ccshelf has no built-in profiles:
-  profiles/example.toml.sample, an all-comment sample, is written only with
-  --example-profile.
+Generated files (a --no-<group> flag leaves out its group):
+  - ccshelf.toml
+  - .claude-plugin/marketplace.json: a skeleton. In adopt mode, it lists the
+    plugins found under plugins/.
+  - catalog/plugins/<name>.toml: a stub per plugin with the owner from
+    CODEOWNERS or --owner, status experimental, and TODO(ccshelf)
+    placeholders that ccshelf lint reports as warnings (CAT048).
+  - .github/CODEOWNERS
+  - .github/workflows/{validate,catalog,release}.yml
+  - README.md, .gitattributes and .gitignore
+ccshelf has no built-in profiles. The command writes
+profiles/example.toml.sample, an all-comment sample, only with
+--example-profile.
 
 --profiles-only sets up an org data repo that holds profiles (and prompts/
-and mcp/registry.toml) but no plugin marketplace and no catalog: ccshelf.toml
-gets [catalog] enabled = false, and the command writes ccshelf.toml,
+and mcp/registry.toml) but no plugin marketplace and no catalog. ccshelf.toml
+gets [catalog] enabled = false. The command writes ccshelf.toml,
 .github/CODEOWNERS, a README.md, .gitattributes, .gitignore and only the
-validate workflow (lint). No marketplace.json, sidecars, catalog.yml or
-release.yml. --marketplace-name, --owner and --sidecars stub are usage errors
-with it, and so is a directory that already has a marketplace file. An existing
-ccshelf.toml must already have [catalog] enabled = false (add it yourself, or
-use --force to replace the file), and --no-config is refused unless it has.
+validate workflow (lint). It writes no marketplace.json, sidecars, catalog.yml
+or release.yml. These are usage errors with --profiles-only:
+  - --marketplace-name, --owner and --sidecars stub
+  - a directory that already has a marketplace file
+An existing ccshelf.toml must already have [catalog] enabled = false. Add it
+yourself, or use --force to replace the file. The command refuses --no-config
+unless the file has it.
 
 The workflows call the ccshelf action pinned by full commit SHA. Pass
---ccshelf-ref <40-hex SHA> and --ccshelf-version <vX.Y.Z> to pin it (a tag
-given as --ccshelf-ref sets the version only). Without them the workflows
+--ccshelf-ref <40-hex SHA> and --ccshelf-version <vX.Y.Z> to pin it. A tag
+given as --ccshelf-ref sets the version only. Without them, the workflows
 contain a placeholder and fail with a clear message until you pin them.
 
-Flags are the contract: every value can be passed as a flag. In a terminal,
-the values that are missing are asked for, the plan is shown, and the
-equivalent flag command is printed. Without a terminal, a missing value is a
-usage error (exit 2) naming the flag, and writing needs --yes (or --dry-run to
-print the plan). Nothing is committed, pushed or fetched; --git-init only runs
-git init when the directory is not a repository yet.`,
+Flags are the contract: you can give every value as a flag. In a terminal, the
+command asks for the missing values, shows the plan and prints the equivalent
+flag command. Without a terminal, a missing value is a usage error (exit 2)
+that names the flag. Writing needs --yes (or --dry-run to print the plan).
+The command commits, pushes and fetches nothing. --git-init only runs git init
+when the directory is not a repository yet.`,
 		Example: `  ccshelf catalog init ./acme-claude --marketplace-name acme --org "Acme Corp" --platform-owners @acme/platform --yes
   ccshelf catalog init . --platform-owners @acme/platform --dry-run
   ccshelf catalog init ./acme-profiles --profiles-only --platform-owners @acme/platform --yes
@@ -160,14 +168,14 @@ git init when the directory is not a repository yet.`,
 	fl.StringVar(&f.marketplaceName, "marketplace-name", "", "marketplace name (lower case letters, digits and hyphens)")
 	fl.StringVar(&f.org, "org", "", "display name of the organization (default: the marketplace name)")
 	fl.StringVar(&f.owner, "owner", "", "default owner of the plugin sidecars (default: the first platform owner)")
-	fl.StringSliceVar(&f.platformOwners, "platform-owners", nil, "CODEOWNERS owners of everything that runs code or shapes the catalog (@user, @org/team or an email address; repeatable)")
+	fl.StringSliceVar(&f.platformOwners, "platform-owners", nil, "CODEOWNERS owners of everything that runs code or shapes the catalog (@user, @org/team or an email address, repeatable)")
 	fl.StringVar(&f.ccshelfRef, "ccshelf-ref", "", "full 40-hex commit SHA of the ccshelf action to pin, or a release tag vX.Y.Z (sets the version only)")
 	fl.StringVar(&f.ccshelfVersion, "ccshelf-version", "", "ccshelf release tag the action installs, such as v0.1.0")
 	fl.StringVar(&f.runnerLabel, "runner-label", "", "fallback of runs-on in the workflows when the RUNNER_LABEL variable is unset (default "+scaffold.DefaultRunnerLabel+")")
 	fl.StringVar(&f.defaultBranch, "default-branch", "", "default branch the catalog workflow publishes from (default: read from an existing repository, else main)")
 	fl.StringVar(&f.mode, "mode", "", "new or adopt (default: detected from the directory)")
 	fl.StringVar(&f.sidecars, "sidecars", "stub", "sidecar files for the plugins found: stub or none")
-	fl.BoolVar(&f.profilesOnly, "profiles-only", false, "set up a repo of profiles only: no marketplace, sidecars, bundles or catalog (ccshelf.toml gets [catalog] enabled = false; only the validate workflow is written)")
+	fl.BoolVar(&f.profilesOnly, "profiles-only", false, "set up a repo of profiles only: no marketplace, sidecars, bundles or catalog (ccshelf.toml gets [catalog] enabled = false, and the command writes only the validate workflow)")
 	fl.BoolVar(&f.exampleProfile, "example-profile", false, "also write profiles/example.toml.sample, an all-comment sample")
 	for _, sg := range skipGroups {
 		v := new(bool)
@@ -336,7 +344,7 @@ func runCatalogInit(ctx context.Context, c *clicore.Context, cmd *cobra.Command,
 	gitWanted := f.gitInit && !plan.HasGit
 	if gitWanted {
 		if top := gitdata.EnclosingWorkTree(ctx, tgt.Dir); top != "" {
-			plan.Notes = append(plan.Notes, fmt.Sprintf("--git-init would create a repository inside the work tree of %s (a nested repository, which that repository will see as an untracked directory or a submodule candidate); if that is not what you want, leave --git-init out and put the directory elsewhere", ui.SanitizeLine(top)))
+			plan.Notes = append(plan.Notes, fmt.Sprintf("--git-init would create a repository inside the work tree of %s (a nested repository, which that repository will see as an untracked directory or a submodule candidate). If that is not what you want, leave --git-init out and put the directory elsewhere", ui.SanitizeLine(top)))
 		}
 	}
 	data.Notes = append([]string{}, plan.Notes...)
@@ -351,7 +359,7 @@ func runCatalogInit(ctx context.Context, c *clicore.Context, cmd *cobra.Command,
 	}
 	if !f.yes {
 		if !interactive {
-			return ui.MissingFlags("confirm writing the files; --dry-run prints the plan and writes nothing", "--yes")
+			return ui.MissingFlags("confirm writing the files, or use --dry-run to print the plan and write nothing", "--yes")
 		}
 		ok, err := c.Prompt.Confirm(ctx, "Write these files?", false)
 		if err != nil {
@@ -376,7 +384,7 @@ func runCatalogInit(ctx context.Context, c *clicore.Context, cmd *cobra.Command,
 	}
 	if gitWanted {
 		if err := gitdata.Init(ctx, tgt.Dir); err != nil {
-			return ui.Failure(withHintErr(fmt.Errorf("git init: %w", err), "the files were written; run git init yourself"))
+			return ui.Failure(withHintErr(fmt.Errorf("git init: %w", err), "the files are written, so run git init yourself"))
 		}
 		data.GitInit = true
 	}
@@ -447,7 +455,7 @@ func printInitPlan(w io.Writer, dir string, plan *scaffold.Plan, f *initFlags) {
 		fmt.Fprintf(w, "note: %s\n", ui.SanitizeLine(n))
 	}
 	if n := plan.Count(scaffold.ActionMerge); n > 0 && !f.writeSuggestions {
-		fmt.Fprintf(w, "note: %s need a merge by hand; --write-suggestions saves the lines to add as <name>%s\n", plural(n, "file", "files"), scaffold.SuggestionSuffix)
+		fmt.Fprintf(w, "note: %s need a merge by hand. --write-suggestions saves the lines to add as <name>%s\n", plural(n, "file", "files"), scaffold.SuggestionSuffix)
 	}
 }
 
@@ -496,11 +504,11 @@ func (e *applyFailure) Hint() string {
 	kept := len(e.res.Created) - len(e.res.RolledBack)
 	switch {
 	case len(e.res.Created) == 0:
-		return "nothing new was written; fix the problem and run the command again"
+		return "nothing new was written. Fix the problem and run the command again"
 	case kept <= 0:
-		return fmt.Sprintf("the %s written before the failure %s removed again (rolled back: %s); fix the problem and run the command again", plural(len(e.res.Created), "file", "files"), pluralVerb(len(e.res.Created)), listFiles(e.res.RolledBack))
+		return fmt.Sprintf("the %s written before the failure %s removed again (rolled back: %s). Fix the problem and run the command again", plural(len(e.res.Created), "file", "files"), pluralVerb(len(e.res.Created)), listFiles(e.res.RolledBack))
 	}
-	return fmt.Sprintf("written before the failure: %s; rolled back: %s; %d stay (run the command again to see what is left)", listFiles(e.res.Created), listFiles(e.res.RolledBack), kept)
+	return fmt.Sprintf("written before the failure: %s. Rolled back: %s. %d stay (run the command again to see what is left)", listFiles(e.res.Created), listFiles(e.res.RolledBack), kept)
 }
 
 // ErrorData is the machine-readable part of the failure (--json).
@@ -546,7 +554,7 @@ func finishInit(c *clicore.Context, tgt *scaffold.Target, plan *scaffold.Plan, f
 		data.Suggestions = append(data.Suggestions, res.Suggestions...)
 		data.Refused = append(data.Refused, res.Refused...)
 		for _, r := range res.Refused {
-			data.Notes = append(data.Notes, r+" exists and was not written by ccshelf: it was not replaced (move it away and run the command again)")
+			data.Notes = append(data.Notes, r+" exists and ccshelf did not write it, so ccshelf did not replace it (move it away and run the command again)")
 		}
 	}
 	if c.Mode.JSON {
@@ -600,17 +608,17 @@ func nextSteps(tgt *scaffold.Target, plan *scaffold.Plan, gitDone, profilesOnly 
 	var steps []string
 	if files := plan.MarkerFiles(); len(files) > 0 && profilesOnly {
 		steps = append(steps, "replace the "+scaffold.Placeholder+" placeholder in the files written: "+strings.Join(files, ", ")+
-			" (the unpinned ccshelf action; ccshelf lint does not read workflows, so search for it yourself)")
+			" (the unpinned ccshelf action. ccshelf lint does not read workflows, so search for it yourself)")
 	} else if len(files) > 0 {
 		steps = append(steps, "replace every "+scaffold.Placeholder+" in the files written: "+strings.Join(files, ", ")+
-			" (ccshelf lint lists the ones in the marketplace descriptions and the catalog sidecars as CAT048 warnings; it does not read the workflows or the README, so search those yourself)")
+			" (ccshelf lint lists the ones in the marketplace descriptions and the catalog sidecars as CAT048 warnings. It does not read the workflows or the README, so search those yourself)")
 	}
 	if plan.NeedsPin {
 		steps = append(steps, "pin the ccshelf action in "+strings.Join(plan.PinFiles, " and ")+": a full commit SHA and the release tag, then delete the guard job and its needs line (until then the guard job fails and the other jobs are skipped)")
 	}
 	if profilesOnly {
 		steps = append(steps,
-			"add your profiles as profiles/<name>.toml (this repo has no built-in profiles; --example-profile writes a sample)",
+			"add your profiles as profiles/<name>.toml (this repo has no built-in profiles, and --example-profile writes a sample)",
 			cd+"run: ccshelf lint")
 	} else {
 		steps = append(steps,
@@ -785,7 +793,7 @@ func askMissing(ctx context.Context, c *clicore.Context, tgt *scaffold.Target, p
 			if flag == "--owner" {
 				def = ""
 			}
-			v, err := c.Prompt.Input(ctx, strings.TrimPrefix(flag, "--")+" ("+hint+"); several owners separated by commas", def, func(s string) error {
+			v, err := c.Prompt.Input(ctx, strings.TrimPrefix(flag, "--")+" ("+hint+", several owners separated by commas)", def, func(s string) error {
 				return validOwnerList(s, flag == "--platform-owners")
 			})
 			if err != nil {
@@ -826,7 +834,7 @@ func validOwnerList(s string, many bool) error {
 
 // askPin asks for the ccshelf action pin; empty answers leave the placeholder.
 func askPin(ctx context.Context, c *clicore.Context, p *scaffold.Params) error {
-	sha, err := c.Prompt.Input(ctx, "Full commit SHA of the ccshelf action to pin (empty to pin later; the workflows fail until you do)", "", func(s string) error {
+	sha, err := c.Prompt.Input(ctx, "Full commit SHA of the ccshelf action to pin (empty to pin later, but the workflows fail until you do)", "", func(s string) error {
 		if s == "" || scaffold.ValidRef(s) {
 			return nil
 		}

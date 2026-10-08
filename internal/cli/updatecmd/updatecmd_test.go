@@ -103,7 +103,7 @@ func TestUpdateYes(t *testing.T) {
 	}
 	e := h.errb.String()
 	has(t, e, "updated ccshelf 0.1.0 -> 0.2.0")
-	has(t, e, "SHA-256 (cosign was not found")
+	has(t, e, "SHA-256 (ccshelf did not find cosign")
 	has(t, e, "ccshelf update --rollback")
 	if h.out.Len() != 0 {
 		t.Errorf("stdout must stay empty for a human run, got %q", h.out)
@@ -388,7 +388,7 @@ func TestPackageManagedAndDev(t *testing.T) {
 		}
 		// --check says the right command.
 		h.mustRun("update", "--check")
-		has(t, h.out.String(), "installed with homebrew; run: brew upgrade ccshelf")
+		has(t, h.out.String(), "installed with homebrew, so run: brew upgrade ccshelf")
 		h.mustRun("update", "--yes", "--force")
 		if h.exeContent() != string(fakeBinary("0.2.0")) {
 			t.Error("--force did not replace it")
@@ -421,7 +421,7 @@ func TestNotWritableGivesTheExactCommand(t *testing.T) {
 	if code := h.run("update", "--yes"); code != ui.ExitFailure {
 		t.Fatalf("exit = %d, want 1\n%s", code, h.errb)
 	}
-	has(t, h.errb.String(), "hint: "+h.binDir+" is not writable by you; run: sudo "+h.exe+" update --yes --version v0.2.0")
+	has(t, h.errb.String(), "hint: you cannot write to "+h.binDir+", so run: sudo "+h.exe+" update --yes --version v0.2.0")
 	if downloads(h) != 0 {
 		t.Error("downloaded into an unwritable directory")
 	}
@@ -440,7 +440,7 @@ func TestElevatedAdvice(t *testing.T) {
 			"unix latest", "linux", "/usr/local/bin",
 			flags{},
 			&update.Plan{Exe: "/usr/local/bin/ccshelf", Target: update.Release{Tag: "v0.2.0"}},
-			"/usr/local/bin is not writable by you; run: sudo /usr/local/bin/ccshelf update --yes --version v0.2.0",
+			"you cannot write to /usr/local/bin, so run: sudo /usr/local/bin/ccshelf update --yes --version v0.2.0",
 		},
 		{
 			"unix pinned", "darwin", "/opt/x y",

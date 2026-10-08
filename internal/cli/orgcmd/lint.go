@@ -39,8 +39,8 @@ profile-* bundle entries.
 
 Formats: text (default), json (same as the global --json: the common
 {"version","kind":"lint","data":{"summary","findings"}} envelope) and github (workflow
-annotations, one ::error/::warning/::notice line per finding). Exit code 1
-when there is any error finding (with --strict, any warning too).`,
+annotations, one ::error/::warning/::notice line per finding). The exit code
+is 1 when there is any error finding (with --strict, also any warning).`,
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			c, err := get()

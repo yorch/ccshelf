@@ -60,7 +60,7 @@ func (s *session) deprecationWarnings(r *profile.Resolved) []string {
 		seen[id] = true
 		msg := fmt.Sprintf("plugin %s is deprecated", ui.SanitizeLine(id))
 		if sc.SupersededBy != "" {
-			msg += "; use " + ui.SanitizeLine(sc.SupersededBy)
+			msg += ": use " + ui.SanitizeLine(sc.SupersededBy)
 		}
 		out = append(out, msg+fmt.Sprintf(" (profile %s includes it)", ui.SanitizeLine(r.Name)))
 	}

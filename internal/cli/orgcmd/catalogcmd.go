@@ -58,20 +58,27 @@ func newCatalogBuild(get clicore.Provider) *cobra.Command {
 		Use:   "build",
 		Short: "Write catalog.json, CATALOG.md and the static site",
 		Long: `Build the catalog from the org data repo and write it into --out (default
-` + defaultOut + `, relative to the current directory): catalog.json, CATALOG.md and, unless
---no-site, the static site (index.html, app.js, style.css; with --no-site the
-files of an earlier site build are removed from --out). Nothing is written
-outside --out, and the output is published files: directories 0755, files 0644.
+` + defaultOut + `, relative to the current directory):
+  - catalog.json
+  - CATALOG.md
+  - the static site (index.html, app.js, style.css), unless --no-site
 
---out must not be the repo root or contain it, must not lie inside the repo's
-source directories (profiles, bundles, catalog, plugins, .github and so on)
-and must not pass through a symbolic link below the working directory or the
-repo root. A directory that is not an org data repo (its marketplace file
-cannot be read or parsed) is an error, exit 1, and nothing is written.
+With --no-site, the command removes the files of an earlier site build from
+--out. The command writes nothing outside --out. The output is published
+files: directories 0755, files 0644.
 
-The catalog has no timestamp unless --timestamp is given, so the output is
-reproducible. Lint findings are printed to stderr; a repo with lint errors
-still produces its catalog (for previews) but the command exits 1.`,
+--out must not:
+  - be the repo root or contain it
+  - be inside the repo's source directories (profiles, bundles, catalog,
+    plugins, .github and so on)
+  - pass through a symbolic link below the working directory or the repo root
+
+A directory that is not an org data repo (its marketplace file cannot be read
+or parsed) is an error (exit 1), and the command writes nothing.
+
+The catalog has no timestamp unless you give --timestamp, so the output is
+reproducible. The command prints lint findings to stderr. A repo with lint
+errors still produces its catalog (for previews), but the command exits 1.`,
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			c, err := get()
@@ -214,8 +221,8 @@ func newSearch(get clicore.Provider, opt Options) *cobra.Command {
 		Short: "Search the plugin catalog of the org data repo",
 		Long: `Search the catalog of the org data repo (--root, default the current
 directory). Every word of the query must match a field (name, display name,
-tags, category, when_to_use, description or owner); better matches come first,
-ties by name.
+tags, category, when_to_use, description or owner). Better matches come
+first. Equal matches sort by name.
 
 Outside an org data repo and without --root, [catalog].remote_url in the user
 config takes precedence and retrieves catalog.json over HTTPS for this search.
@@ -277,7 +284,7 @@ error.`,
 
 func writeSearchText(w io.Writer, mode ui.Mode, d searchJSON) error {
 	if len(d.Matches) == 0 {
-		return ui.EmptyState(w, fmt.Sprintf("no plugin matches %q", d.Query), "try fewer or broader words; search matches every word in your query")
+		return ui.EmptyState(w, fmt.Sprintf("no plugin matches %q", d.Query), "try fewer or broader words, because search matches every word in your query")
 	}
 	rows := make([][]string, 0, len(d.Matches))
 	for _, m := range d.Matches {

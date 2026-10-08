@@ -23,16 +23,21 @@ func (l *launcher) configCmd() *cobra.Command {
 		Short: "Show and change the configuration file",
 		Long: `Show the effective configuration, and add, pin or remove profile sources and
 change a few settings in place, without editing config.toml by hand. Every
-subcommand works with flags alone; in a terminal, "ccshelf config" alone opens
-a menu, and a change is shown and confirmed (default no) before it is written.
+subcommand works with flags alone. In a terminal, "ccshelf config" alone opens
+a menu, and the command shows a change and asks you to confirm it (default no)
+before it writes it.
 
-Changes are written by re-encoding the file: comments and layout are lost, and
-the previous file is kept as config.toml.bak. A change that weakens a security
-setting (turning off pinning, trusting project profiles, installing updates
-automatically, adding a source that is not pinned or whose path is a variable,
-or changing claude.path or the update source) needs --yes when there is no
-terminal. Nothing here fetches a source or records trust. Only "ccshelf
-init" creates the file.
+The command writes a change by encoding the file again. Comments and layout
+are lost, and the command keeps the previous file as config.toml.bak. When
+there is no terminal, a change that weakens a security setting needs --yes.
+These changes weaken a security setting:
+  - turning off pinning
+  - trusting project profiles
+  - installing updates automatically
+  - adding a source that is not pinned or whose path is a variable
+  - changing claude.path or the update source
+Nothing here fetches a source or records trust. Only "ccshelf init" creates
+the file.
 
 Settings you can change with "config set": ` + strings.Join(config.SettingKeys(), ", ") + `.
 Anything else (accounts, claude.path, the update source) has its own command or
@@ -197,9 +202,10 @@ func (l *launcher) configShowCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "show",
 		Short: "Print the effective configuration",
-		Long: `Print the sources (numbered from 1; the numbers are the ones config source pin
-and rm take), trust, update, catalog, accounts and ui settings. A value the file
-does not set is marked (default). A missing file shows the defaults.`,
+		Long: `Print the sources (numbered from 1, with the numbers that config source pin
+and rm take), trust, update, catalog, accounts and ui settings. The command
+marks a value that the file does not set with (default). A missing file shows
+the defaults.`,
 		Args: cobra.NoArgs,
 	}
 	c.RunE = l.do(func(_ context.Context, cc *clicore.Context, _ *cobra.Command, _ []string) error {
@@ -228,11 +234,11 @@ func printConfig(cc *clicore.Context, path string, exists bool, cfg *config.Conf
 	}
 	p("Config file: %s", s(path))
 	if !exists {
-		p("  (the file does not exist; defaults are shown. Create it with: ccshelf init)")
+		p("  (the file does not exist, so the defaults are shown. Create it with: ccshelf init)")
 	}
 	p("Sources:")
 	if len(cfg.Sources) == 0 {
-		p("  (none configured; add one with: ccshelf config source add)")
+		p("  (none configured. Add one with: ccshelf config source add)")
 	}
 	for i, src := range cfg.Sources {
 		p("  %d. %s %s", i+1, src.Type, s(src.SourceLocation()))
@@ -315,9 +321,9 @@ func (l *launcher) configSourceCmd() *cobra.Command {
 		Use:   "source",
 		Short: "List, add, pin and remove profile sources",
 		Long: `Change the [[sources]] of the configuration. Sources are numbered from 1 in the
-order of "config source ls"; the order carries no meaning. Nothing is fetched
-and no trust is recorded: shared profiles are fetched, and need your trust, when
-you first use them.`,
+order of "config source ls". The order carries no meaning. The command fetches
+nothing and records no trust. ccshelf fetches shared profiles when you first
+use them, and they need your trust then.`,
 		Args: cobra.NoArgs,
 	}
 	c.AddCommand(l.configSourceLsCmd(), l.configSourceAddCmd(), l.configSourcePinCmd(), l.configSourceRmCmd())
@@ -329,7 +335,7 @@ func (l *launcher) configSourceLsCmd() *cobra.Command {
 		Use:     "ls",
 		Aliases: []string{"list"},
 		Short:   "List the configured profile sources",
-		Long:    "List the [[sources]] with the numbers that config source pin and rm take. Your personal profiles directory is always searched and is not listed.",
+		Long:    "List the [[sources]] with the numbers that config source pin and rm take. ccshelf always searches your personal profiles directory, and the list does not show it.",
 		Args:    cobra.NoArgs,
 	}
 	c.RunE = l.do(func(_ context.Context, cc *clicore.Context, _ *cobra.Command, _ []string) error {
@@ -363,15 +369,19 @@ func (l *launcher) configSourceAddCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "add",
 		Short: "Add a profile source (git, dir or plugin)",
-		Long: `Add one profile source: exactly one of --git-url (with --ref, and --path for the
-folder inside the repository), --dir (an absolute directory) or --plugin
-(name@marketplace, with --marketplace and --path). The source is checked with the
-rules of the configuration file, and an exact duplicate is refused: use
-"config source pin" or "config source rm". Nothing is fetched or trusted.
+		Long: `Add one profile source with exactly one of these flags:
+  - --git-url, with --ref, and --path for the folder inside the repository
+  - --dir, an absolute directory
+  - --plugin (name@marketplace), with --marketplace and --path
 
-In a terminal, without any of those flags, the questions are asked. Adding a git
-source that is not pinned to a tag or full commit (possible only while
-trust.require_pin is off) weakens a setting and needs --yes without a terminal.`,
+The command checks the source with the rules of the configuration file and
+refuses an exact duplicate. For a duplicate, use "config source pin" or
+"config source rm". The command fetches and trusts nothing.
+
+In a terminal, without any of those flags, the command asks the questions. A
+git source that is not pinned to a tag or full commit is possible only while
+trust.require_pin is off. Adding one weakens a setting and needs --yes without
+a terminal.`,
 		Example: `  ccshelf config source add --git-url git@ghe.example.com:acme/claude-marketplace.git --ref v2026.10.1
   ccshelf config source add --dir ~/team-profiles
   ccshelf config source add --plugin org-profiles@acme --marketplace acme/claude-marketplace`,
@@ -384,7 +394,7 @@ trust.require_pin is off) weakens a setting and needs --yes without a terminal.`
 	fl.StringVar(&f.dir, "dir", "", "dir source: absolute directory of profiles")
 	fl.StringVar(&f.plugin, "plugin", "", "plugin source: name@marketplace")
 	fl.StringVar(&f.marketplace, "marketplace", "", "plugin source: the marketplace source the plugin must come from (owner/repo or git URL)")
-	fl.BoolVar(&f.yes, "yes", false, "confirm the write (and a weakening change); never accepts trust")
+	fl.BoolVar(&f.yes, "yes", false, "confirm the write (and a weakening change), but never accept trust")
 	c.RunE = l.do(func(ctx context.Context, cc *clicore.Context, cmd *cobra.Command, _ []string) error {
 		return l.sourceAdd(ctx, cc, cmd, &f)
 	})
@@ -429,24 +439,24 @@ func (l *launcher) sourceAdd(ctx context.Context, cc *clicore.Context, cmd *cobr
 	for i, ex := range cfg.Sources {
 		if config.SameSource(ex, src) {
 			return ui.Usage(withHint(fmt.Errorf("source %d already is %s %s", i+1, ex.Type, ui.SanitizeLine(ex.SourceLocation())),
-				"to change its ref use: ccshelf config source pin %d --ref <ref>; to replace it: ccshelf config source rm %d; to add another folder of the same repository give a different --path", i+1, i+1))
+				"to change its ref, use: ccshelf config source pin %d --ref <ref>. To replace it: ccshelf config source rm %d. To add another folder of the same repository, give a different --path", i+1, i+1))
 		}
 	}
 	cfg.Sources = append(cfg.Sources, src)
 	return l.commitConfig(ctx, cc, &writePlan{
 		file: file, next: cfg, yes: f.yes, rec: rec,
-		note: "Nothing is fetched or trusted here; profiles from a shared source are fetched, and need your trust, when you first use them.",
+		note: "Nothing is fetched or trusted here. ccshelf fetches profiles from a shared source when you first use them, and they need your trust then.",
 	})
 }
 
 func sourceHint(src config.SourceConfig) string {
 	switch src.Type {
 	case config.SourceGit:
-		return "a git source needs a remote URL (https://, ssh:// or git@host:path) and --ref (a tag or full commit id) unless trust.require_pin is off; use --dir for a local folder"
+		return "a git source needs a remote URL (https://, ssh:// or git@host:path) and --ref (a tag or full commit id) unless trust.require_pin is off. Use --dir for a local folder"
 	case config.SourceDir:
 		return "a dir source is an absolute path, or one starting with ~"
 	}
-	return "a plugin source is name@marketplace; --marketplace is owner/repo or a git URL"
+	return "a plugin source is name@marketplace, and --marketplace is owner/repo or a git URL"
 }
 
 func sourceFromFlags(cmd *cobra.Command, f *sourceAddFlags) (config.SourceConfig, error) {
@@ -501,15 +511,15 @@ func (l *launcher) configSourcePinCmd() *cobra.Command {
 		Short: "Change the pinned ref of git source number n",
 		Long: `Change the tag or full commit id that git source number n (see config source ls)
 is pinned to. The next run that needs a profile from that source fetches the new
-ref, and when its commit differs from the one you trusted the profile needs your
-trust again; this command never records trust. Pinning to something that is not
-a tag or full commit is possible only while trust.require_pin is off and needs
---yes without a terminal.`,
+ref. When its commit differs from the one you trusted, the profile needs your
+trust again. This command never records trust. Pinning to something that is not
+a tag or full commit is possible only while trust.require_pin is off, and it
+needs --yes without a terminal.`,
 		Example: "  ccshelf config source pin 1 --ref v2026.11.0",
 		Args:    cobra.MaximumNArgs(1),
 	}
 	c.Flags().StringVar(&ref, "ref", "", "the new tag or full commit id")
-	c.Flags().BoolVar(&yes, "yes", false, "confirm the write (and a weakening change); never accepts trust")
+	c.Flags().BoolVar(&yes, "yes", false, "confirm the write (and a weakening change), but never accept trust")
 	c.RunE = l.do(func(ctx context.Context, cc *clicore.Context, _ *cobra.Command, args []string) error {
 		return l.sourcePin(ctx, cc, args, ref, yes)
 	})
@@ -540,7 +550,7 @@ func (l *launcher) sourcePin(ctx context.Context, cc *clicore.Context, args []st
 	}
 	src := &cfg.Sources[idx]
 	if src.Type != config.SourceGit {
-		return ui.Usage(withHint(fmt.Errorf("source %d is a %s source; only git sources have a ref", idx+1, src.Type), "run: ccshelf config source ls"))
+		return ui.Usage(withHint(fmt.Errorf("source %d is a %s source, and only git sources have a ref", idx+1, src.Type), "run: ccshelf config source ls"))
 	}
 	if ref == "" {
 		if !canPrompt(cc) {
@@ -565,7 +575,7 @@ func (l *launcher) sourcePin(ctx context.Context, cc *clicore.Context, args []st
 	}
 	return l.commitConfig(ctx, cc, &writePlan{
 		file: file, next: cfg, yes: yes, rec: rec,
-		note: "Nothing is fetched or trusted here; if the new ref resolves to a different commit, profiles from this source need your trust again on the next run.",
+		note: "Nothing is fetched or trusted here. If the new ref resolves to a different commit, profiles from this source need your trust again on the next run.",
 	})
 }
 
@@ -588,12 +598,12 @@ func (l *launcher) configSourceRmCmd() *cobra.Command {
 		Aliases: []string{"remove"},
 		Short:   "Remove source number n",
 		Long: `Remove the source with number n (see config source ls). Profiles from it no
-longer appear. Trust records already made for its profiles are kept as they are
-and are not deleted.`,
+longer appear. The command keeps the trust records already made for its
+profiles as they are, and does not delete them.`,
 		Example: "  ccshelf config source rm 2",
 		Args:    cobra.MaximumNArgs(1),
 	}
-	c.Flags().BoolVar(&yes, "yes", false, "confirm the write; never accepts trust")
+	c.Flags().BoolVar(&yes, "yes", false, "confirm the write, but never accept trust")
 	c.RunE = l.do(func(ctx context.Context, cc *clicore.Context, _ *cobra.Command, args []string) error {
 		return l.sourceRm(ctx, cc, args, yes)
 	})
@@ -638,7 +648,7 @@ func refuseKey(key string) error {
 	case key == "sources" || strings.HasPrefix(key, "sources"):
 		hint = "sources have their own commands: ccshelf config source add, pin and rm"
 	}
-	return ui.Usage(withHint(fmt.Errorf("%s cannot be changed with config set; the settings you can change are: %s", ui.SanitizeLine(key), strings.Join(config.SettingKeys(), ", ")), "%s", hint))
+	return ui.Usage(withHint(fmt.Errorf("%s cannot be changed with config set (the settings you can change are: %s)", ui.SanitizeLine(key), strings.Join(config.SettingKeys(), ", ")), "%s", hint))
 }
 
 func (l *launcher) configSetCmd() *cobra.Command {
@@ -647,11 +657,17 @@ func (l *launcher) configSetCmd() *cobra.Command {
 		Use:   "set [key] [value]",
 		Short: "Change one setting",
 		Long: `Change one setting of the configuration. The keys are: ` + strings.Join(config.SettingKeys(), ", ") + `.
-Values: true or false; trust.on_change prompt or fail; update.mode off, notify
-or install; update.interval a duration such as 24h (1h to one year); an https URL
-for catalog.remote_url; an account name for default_account; ui.color auto,
-always or never; ui.interactive auto or never. Anything else is refused: accounts
-and sources have their own commands, and the rest needs "config edit".
+Values:
+  - true or false
+  - trust.on_change: prompt or fail
+  - update.mode: off, notify or install
+  - update.interval: a duration such as 24h (1h to one year)
+  - catalog.remote_url: an https URL
+  - default_account: an account name
+  - ui.color: auto, always or never
+  - ui.interactive: auto or never
+The command refuses anything else. Accounts and sources have their own
+commands, and the rest needs "config edit".
 
 Turning trust.require_pin off, trust.trust_project_profiles on, or update.mode to
 install weakens a security setting and needs --yes without a terminal.`,
@@ -660,7 +676,7 @@ install weakens a security setting and needs --yes without a terminal.`,
   ccshelf config set trust.on_change fail`,
 		Args: cobra.MaximumNArgs(2),
 	}
-	c.Flags().BoolVar(&yes, "yes", false, "confirm the write (and a weakening change); never accepts trust")
+	c.Flags().BoolVar(&yes, "yes", false, "confirm the write (and a weakening change), but never accept trust")
 	c.RunE = l.do(func(ctx context.Context, cc *clicore.Context, _ *cobra.Command, args []string) error {
 		return l.setOrUnset(ctx, cc, args, yes, false)
 	})
@@ -672,12 +688,13 @@ func (l *launcher) configUnsetCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "unset [key]",
 		Short: "Put one setting back to its default",
-		Long: `Put one setting back to its default (the same keys as config set). The key is
-removed from the file where it can be, and otherwise written with its default.`,
+		Long: `Put one setting back to its default (the same keys as config set). The
+command removes the key from the file where it can. Otherwise it writes the key
+with its default.`,
 		Example: "  ccshelf config unset update.interval",
 		Args:    cobra.MaximumNArgs(1),
 	}
-	c.Flags().BoolVar(&yes, "yes", false, "confirm the write; never accepts trust")
+	c.Flags().BoolVar(&yes, "yes", false, "confirm the write, but never accept trust")
 	c.RunE = l.do(func(ctx context.Context, cc *clicore.Context, _ *cobra.Command, args []string) error {
 		return l.setOrUnset(ctx, cc, args, yes, true)
 	})
@@ -753,19 +770,19 @@ func (l *launcher) configEditCmd() *cobra.Command {
 		Short: "Edit config.toml in $VISUAL or $EDITOR, checked before it replaces the file",
 		Long: `Open a copy of config.toml (mode 0600, in the same folder) in the editor named by
 $VISUAL or $EDITOR (split on spaces, quotes group words, never run through a
-shell). When the editor exits, the copy is checked like the real file. Only if it
-is valid does it replace config.toml (comments are kept: the text is written as
-you saved it), and the previous file is kept as config.toml.bak. If it is
-invalid, the errors are printed with line numbers, config.toml is left
-untouched and the copy is kept so you can fix it. It needs a terminal and an
-existing file (ccshelf init creates it).
+shell). When the editor exits, the command checks the copy like the real file.
+The copy replaces config.toml only if it is valid. Comments are kept, because
+the command writes the text as you saved it. It keeps the previous file as
+config.toml.bak. If the copy is invalid, the command prints the errors with
+line numbers, does not touch config.toml and keeps the copy so you can fix it.
+The command needs a terminal and an existing file (ccshelf init creates it).
 
 --path prints the file name instead, for scripts and for editors you start
 yourself.`,
 		Args: cobra.NoArgs,
 	}
 	c.Flags().BoolVar(&printPath, "path", false, "print the configuration file path instead of opening it")
-	c.Flags().BoolVar(&yes, "yes", false, "confirm the write after the check; never accepts trust")
+	c.Flags().BoolVar(&yes, "yes", false, "confirm the write after the check, but never accept trust")
 	c.RunE = l.do(func(ctx context.Context, cc *clicore.Context, _ *cobra.Command, _ []string) error {
 		return l.editConfig(ctx, cc, printPath, yes, nil)
 	})
@@ -787,7 +804,7 @@ func (l *launcher) editConfig(ctx context.Context, cc *clicore.Context, printPat
 		return nil
 	}
 	if !canPrompt(cc) {
-		return ui.Usage(withHint(errors.New("edit opens an editor and needs a terminal; none is available"),
+		return ui.Usage(withHint(errors.New("edit opens an editor and needs a terminal, but none is available"),
 			"use: ccshelf config edit --path, and open the printed file yourself"))
 	}
 	// The original may be invalid: this is also how it is repaired.
@@ -796,7 +813,7 @@ func (l *launcher) editConfig(ctx context.Context, cc *clicore.Context, printPat
 	case err != nil:
 		return ui.Failure(err)
 	case fi.Mode()&fs.ModeSymlink != 0:
-		return ui.Failure(withHint(fmt.Errorf("%s is a symbolic link", ui.SanitizeLine(path)), "ccshelf never replaces a link; point --config at the real file"))
+		return ui.Failure(withHint(fmt.Errorf("%s is a symbolic link", ui.SanitizeLine(path)), "ccshelf never replaces a link. Point --config at the real file"))
 	case !fi.Mode().IsRegular():
 		return ui.Failure(fmt.Errorf("%s is not a regular file", ui.SanitizeLine(path)))
 	}
@@ -837,7 +854,7 @@ func (l *launcher) editConfig(ctx context.Context, cc *clicore.Context, printPat
 	if _, err := config.ParseUnexpanded(edited, copyPath); err != nil {
 		keep = true
 		return ui.Failure(withHint(fmt.Errorf("the edited configuration is invalid, so %s was not changed:\n%s", ui.SanitizeLine(path), ui.Sanitize(err.Error())),
-			"your edit is kept in %s; a new ccshelf config edit starts from the current file, so copy your fix over from it", ui.SanitizeLine(copyPath)))
+			"your edit is kept in %s. A new ccshelf config edit starts from the current file, so copy your fix over from it", ui.SanitizeLine(copyPath)))
 	}
 	err = l.commitConfig(ctx, cc, &writePlan{file: file, nextRaw: edited, yes: yes, rec: rec})
 	if err != nil {

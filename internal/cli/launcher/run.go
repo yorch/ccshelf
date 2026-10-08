@@ -47,14 +47,15 @@ func (l *launcher) runCmd() *cobra.Command {
 		Short: "Start claude with a profile",
 		Long: `Start claude with a profile: the plugins, skills and MCP servers it names.
 
-Arguments after the profile name (and after -- when no profile is given) are
-passed to claude unchanged, so flags of ccshelf itself must come before the
-profile name: ccshelf run --account work sre --resume.
+ccshelf passes the arguments after the profile name (and after -- when no
+profile is given) to claude unchanged. Thus flags of ccshelf itself must come
+before the profile name: ccshelf run --account work sre --resume.
 
-Without a profile name, a terminal gets a picker; anything else exits with
-code 2. A profile from a shared source must be trusted first (exit code 4
-otherwise); --yes never accepts trust, only an interactive confirmation of the
-printed closure or "ccshelf trust <profile> --accept <closure-hash>" does.`,
+Without a profile name, a terminal gets a picker. Anything else exits with
+code 2. You must trust a profile from a shared source first (exit code 4
+otherwise). --yes never accepts trust. Only an interactive confirmation of the
+printed closure or "ccshelf trust <profile> --accept <closure-hash>" accepts
+it.`,
 		Example: `  ccshelf run sre
   ccshelf run sre -- -p "summarize this repo"
   ccshelf run --account personal sre --resume`,
@@ -77,9 +78,9 @@ func (l *launcher) dryRunCmd() *cobra.Command {
 		Use:   "dry-run [profile] [-- claude args]",
 		Short: "Print the exact claude command a run would execute",
 		Long: `Run the whole pipeline of "run" (including the trust check) and print the exact
-claude command instead of starting it. The generated settings, MCP config and
-prompt files are written to the private cache so the printed command is valid.
-Environment values from profiles are never printed.`,
+claude command instead of starting it. The command writes the generated
+settings, MCP config and prompt files to the private cache, so the printed
+command is valid. It never prints environment values from profiles.`,
 		DisableFlagsInUseLine: true,
 	}
 	c.Flags().SetInterspersed(false)
@@ -222,7 +223,7 @@ func (s *session) buildLaunch(ctx context.Context, name string, pass []string, y
 	if m.Status == profile.StatusDeprecated {
 		msg := fmt.Sprintf("profile %s is deprecated", r.Name)
 		if m.SupersededBy != "" {
-			msg += "; use " + m.SupersededBy
+			msg += ": use " + m.SupersededBy
 		}
 		warn("%s", msg)
 	}
@@ -286,7 +287,7 @@ func (s *session) buildLaunch(ctx context.Context, name string, pass []string, y
 	if err != nil {
 		var be *policy.BlockedError
 		if errors.As(err, &be) {
-			return nil, ui.Policy(withHint(err, "the profile has policy.on_blocked = \"fail\"; set it to \"warn\" to drop the blocked part instead"))
+			return nil, ui.Policy(withHint(err, "the profile has policy.on_blocked = \"fail\". Set it to \"warn\" to drop the blocked part instead"))
 		}
 		return nil, ui.Failure(err)
 	}
@@ -299,7 +300,7 @@ func (s *session) buildLaunch(ctx context.Context, name string, pass []string, y
 		warn("%s", w)
 	}
 	if denyRoute {
-		warn("mcp.strict: --strict-mcp-config is not used (%s); the known plugin MCP servers outside the profile are denied instead, while MCP servers from your own settings or project files stay available", strictWhy)
+		warn("mcp.strict: --strict-mcp-config is not used (%s). ccshelf denies the known plugin MCP servers outside the profile instead. MCP servers from your own settings or project files stay available", strictWhy)
 	}
 
 	// Settings: build, validate, write, re-read, validate again.
@@ -339,7 +340,7 @@ func (s *session) buildLaunch(ctx context.Context, name string, pass []string, y
 	if len(res.Missing) > 0 {
 		for _, id := range res.Missing {
 			if validPluginID(id) {
-				warn("plugin %s is in the profile but not installed; install it inside Claude Code with: /plugin install %s", id, id)
+				warn("plugin %s is in the profile but not installed. Install it inside Claude Code with: /plugin install %s", id, id)
 			} else {
 				warn("plugin %q is in the profile but not installed (and is not a valid plugin id)", ui.SanitizeLine(id))
 			}
@@ -426,7 +427,7 @@ func (s *session) buildLaunch(ctx context.Context, name string, pass []string, y
 			// against a real claude here {U}, so only the risk is stated.
 			warn("the argument %s after the profile name can override what the profile generated", name)
 		case "--resume", "-r", "--continue", "-c":
-			warn("%s resumes a session that may have been started under another profile; its recorded prompt and skill list are reused", name)
+			warn("%s resumes a session that another profile may have started. The session reuses its recorded prompt and skill list", name)
 		}
 	}
 	ln.PassFrom = len(ln.Args)
@@ -447,19 +448,19 @@ func (s *session) settleTrust(ctx context.Context, r *profile.Resolved) error {
 	}
 	store, err := trust.Open(lock)
 	if err != nil {
-		return ui.Failure(withHint(fmt.Errorf("trust lockfile: %w", err), "fix or remove %s; nothing runs on an unreadable trust record", lock))
+		return ui.Failure(withHint(fmt.Errorf("trust lockfile: %w", err), "fix or remove %s. Nothing runs on an unreadable trust record", lock))
 	}
 	v := store.CheckWithProject(r, s.proj.Allowed)
 	if v.State == trust.Trusted {
 		return nil
 	}
 	needs := &trust.NeedsTrustError{Profile: r.Name, Verdict: v}
-	review := fmt.Sprintf("review it with: ccshelf trust %s; accept it with: ccshelf trust %s --accept %s", r.Name, r.Name, v.Hash)
+	review := fmt.Sprintf("review it with: ccshelf trust %s. Accept it with: ccshelf trust %s --accept %s", r.Name, r.Name, v.Hash)
 	switch {
 	case v.Problem != "":
 		// An inconsistent closure is a bug or tampering, not something a
 		// person can review and accept: exit 1, not "needs trust" (exit 4).
-		return ui.Failure(withHint(fmt.Errorf("profile %s: %w: %s", ui.SanitizeLine(r.Name), trust.ErrInconsistentClosure, ui.SanitizeLine(v.Problem)), "the closure cannot be trusted; this is a bug or a tampered file"))
+		return ui.Failure(withHint(fmt.Errorf("profile %s: %w: %s", ui.SanitizeLine(r.Name), trust.ErrInconsistentClosure, ui.SanitizeLine(v.Problem)), "the closure cannot be trusted. This is a bug or a tampered file"))
 	case v.State == trust.ProjectUntrusted:
 		return ui.TrustRequired(withHint(needs, "review the .ccshelf folder, then run: ccshelf trust --project"))
 	}

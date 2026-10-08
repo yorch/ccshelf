@@ -34,12 +34,15 @@ id). With --dir another local profiles directory becomes a source. In a
 terminal, running without source, account or update values starts the full
 setup wizard. It shows a summary and asks before writing (default no). Partial
 flag runs do not prompt. --yes confirms writing only, never trust. The wizard
-prints an equivalent flag command at the end. Nothing is fetched here: profiles
-from a shared source are fetched, and need your trust, when you first use them.
+prints an equivalent flag command at the end. Nothing is fetched here. ccshelf
+fetches profiles from a shared source when you first use them, and they need
+your trust then.
 
-Automatic updates are off unless you turn them on: --update-mode notify checks
-for a newer release once a day and prints one line when there is one, install
-also installs it (same major version only). The full wizard asks once.`,
+Automatic updates are off unless you turn them on:
+  - --update-mode notify checks for a newer release once a day and prints one
+    line when there is one.
+  - --update-mode install also installs it (same major version only).
+The full wizard asks once.`,
 		Example: `  ccshelf init
   ccshelf init --git-url git@ghe.example.com:acme/claude-marketplace.git --ref v2026.10.1
   ccshelf init --account-name work`,
@@ -70,7 +73,7 @@ func (l *launcher) initConfig(ctx context.Context, cc *clicore.Context, f *initF
 	}
 	if f.updateMode != "" && !validUpdateMode(f.updateMode) {
 		return ui.Usage(withHint(fmt.Errorf("--update-mode %q is not one of %s", ui.Sanitize(f.updateMode), strings.Join(config.UpdateModes(), ", ")),
-			"off never checks; notify prints one line when a release exists; install also installs it"))
+			"off never checks, notify prints one line when a release exists, and install also installs it"))
 	}
 	// An [update] section of the file being replaced is kept, and is never asked
 	// about again: init asks once.
@@ -93,7 +96,7 @@ func (l *launcher) initConfig(ctx context.Context, cc *clicore.Context, f *initF
 	if f.gitURL != "" {
 		if err := config.ValidateGitURL(f.gitURL); err != nil {
 			return ui.Usage(withHint(fmt.Errorf("--git-url: %w", err),
-				"use a remote URL (https://, ssh:// or git@host:path); for a local folder of profiles use --dir <absolute path>"))
+				"use a remote URL (https://, ssh:// or git@host:path). For a local folder of profiles, use --dir <absolute path>"))
 		}
 	}
 	cfg := config.Default()
@@ -229,12 +232,12 @@ func printInitSummary(cc *clicore.Context, path, personalDir, accountDir string,
 		line("New account", "none (existing Claude account unchanged)")
 	}
 	line("Automatic updates", cfg.Update.EffectiveMode())
-	fmt.Fprintln(cc.Streams.Err, "  No sources are fetched or trusted; shared profiles need separate trust.")
+	fmt.Fprintln(cc.Streams.Err, "  No sources are fetched or trusted. Shared profiles need separate trust.")
 }
 
 // askInit is the init wizard. It reports whether it asked anything.
 func askInit(ctx context.Context, cc *clicore.Context, f *initFlags, pathGiven, askUpdate bool) (bool, error) {
-	url, err := cc.Prompt.Input(ctx, "Org data repo URL (optional; Enter to skip, no fetch or trust here)", "", func(s string) error {
+	url, err := cc.Prompt.Input(ctx, "Org data repo URL (optional, Enter to skip, nothing is fetched or trusted here)", "", func(s string) error {
 		if s == "" {
 			return nil
 		}
@@ -263,7 +266,7 @@ func askInit(ctx context.Context, cc *clicore.Context, f *initFlags, pathGiven, 
 		return false, err
 	}
 	f.dir = strings.TrimSpace(dir)
-	name, err := cc.Prompt.Input(ctx, "Separate Claude account name (optional; Enter to keep your existing account)", "", func(s string) error {
+	name, err := cc.Prompt.Input(ctx, "Separate Claude account name (optional, Enter to keep your existing account)", "", func(s string) error {
 		if s == "" || config.ValidAccountName(s) {
 			return nil
 		}

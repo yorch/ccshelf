@@ -241,7 +241,7 @@ func (l *launcher) newProfile(ctx context.Context, cc *clicore.Context, name str
 		if sameDir(filepath.Dir(filepath.Dir(dir)), home, cc.GOOS) {
 			warnf(cc, "Creation does not enable or trust project profiles. The launcher does not discover the home directory as a project; move .ccshelf into a project folder before explicitly enabling and reviewing it.")
 		} else {
-			warnf(cc, "Creation does not enable or trust project profiles. They are off by default until explicitly enabled and reviewed. Set trust.trust_project_profiles = true, then review with: ccshelf trust --project; review the resolved profile with: ccshelf trust %s", name)
+			warnf(cc, "Creation does not enable or trust project profiles. They are off by default until explicitly enabled and reviewed. Set trust.trust_project_profiles = true, then review with: ccshelf trust --project. Review the resolved profile with: ccshelf trust %s", name)
 		}
 	}
 	if asked {
@@ -463,7 +463,7 @@ func (s *session) newNamespaces(ctx context.Context, prepared bool, destination 
 				}
 				s.addShared(label, g)
 			case config.SourcePlugin:
-				s.failSource(fmt.Sprintf("sources[%d] (plugin %s)", i, ui.Sanitize(sc.Plugin)), errors.New("plugin namespaces have no verified offline cache; use the full terminal new wizard or --from <parent> to prepare sources as part of content gathering"), nil)
+				s.failSource(fmt.Sprintf("sources[%d] (plugin %s)", i, ui.Sanitize(sc.Plugin)), errors.New("plugin namespaces have no verified offline cache, so use the full terminal new wizard or --from <parent> to prepare sources as part of content gathering"), nil)
 			}
 		}
 	}
@@ -523,7 +523,7 @@ func (s *session) unavailableNamespace(label string, err error) {
 func (s *session) prepareNewCached(ctx context.Context, g PreparedSource, sc config.SourceConfig) error {
 	cp, ok := g.(cachedPreparer)
 	if !ok {
-		return errors.New("no verified cached namespace; prepare the source explicitly")
+		return errors.New("no verified cached namespace (prepare the source explicitly)")
 	}
 	commits := s.lockedCommits(sc)
 	if fullSHA.MatchString(strings.ToLower(sc.Ref)) {
@@ -540,7 +540,7 @@ func (s *session) prepareNewCached(ctx context.Context, g PreparedSource, sc con
 			return nil
 		}
 	}
-	return errors.New("no usable verified cached namespace; prepare the source explicitly")
+	return errors.New("no usable verified cached namespace (prepare the source explicitly)")
 }
 
 func (s *session) checkNewName(name, scope string) error {
@@ -551,7 +551,7 @@ func (s *session) checkNewName(name, scope string) error {
 		}
 		for _, existing := range names {
 			if existing == name {
-				return ui.Failure(fmt.Errorf("profile %q already exists in %s; creation would shadow an existing name", name, src.ID()))
+				return ui.Failure(fmt.Errorf("profile %q already exists in %s, and creation would shadow an existing name", name, src.ID()))
 			}
 		}
 	}

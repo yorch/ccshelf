@@ -79,7 +79,7 @@ with the remaining arguments passed through. Load it with:
   ccshelf shell-init pwsh | Out-String | Invoke-Expression
 
 Only profiles from local directories are listed, so starting a shell never
-touches the network; add others with --profile. For cmd.exe, --write-cmd-shims
+touches the network. Add others with --profile. For cmd.exe, --write-cmd-shims
 <dir> writes cs-<profile>.cmd files into a directory on PATH.`,
 		Args: cobra.MaximumNArgs(1),
 	}

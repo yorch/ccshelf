@@ -38,7 +38,7 @@ func TestRunWarnsOnceAboutDeprecatedPlugins(t *testing.T) {
 	if code := h.run("run", "seo"); code != 0 || h.started != 1 {
 		t.Fatalf("a deprecated plugin must not block: code %d\n%s", code, h.errb)
 	}
-	want := "plugin seo-tools@acme is deprecated; use docs-writer (profile seo includes it)"
+	want := "plugin seo-tools@acme is deprecated: use docs-writer (profile seo includes it)"
 	if got := strings.Count(h.errb.String(), want); got != 1 {
 		t.Errorf("warning shown %d times, want once:\n%s", got, h.errb)
 	}
@@ -111,7 +111,7 @@ func TestDeprecationWarningFromAGitSource(t *testing.T) {
 	if code := h.run("run", "seo"); code != 0 {
 		t.Fatalf("code %d\n%s", code, h.errb)
 	}
-	if !strings.Contains(h.errb.String(), "seo-tools@acme is deprecated; use docs-writer") {
+	if !strings.Contains(h.errb.String(), "seo-tools@acme is deprecated: use docs-writer") {
 		t.Errorf("no warning:\n%s", h.errb)
 	}
 }

@@ -11,6 +11,6 @@
 // bundles, 2 for usage errors and 3 when managed policy blocks something
 // (doctor --policy).
 //
-// Commands(get) returns the commands; the root command in internal/cli adds
+// Commands(get) returns the commands. The root command in internal/cli adds
 // them. The launcher's init command (including init --org) is not here.
 package orgcmd
