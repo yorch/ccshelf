@@ -7,11 +7,11 @@ The committed `site/` is only the hand-written part. Its links to `docs/` resolv
 ## Build and preview
 
 ```sh
-make site-build                                   # builds dist/site (gitignored) and validates it
+just site-build                                   # builds dist/site (gitignored) and validates it
 python3 -m http.server 8000 --directory dist/site # then open http://localhost:8000/
 ```
 
-Or open `dist/site/index.html` directly. `make docs-site` renders only the docs pages into `dist/site/docs` (no validation), for quick iteration on the Markdown or on `assets/docs.css`.
+Or open `dist/site/index.html` directly. `just docs-site` renders only the docs pages into `dist/site/docs` (no validation), for quick iteration on the Markdown or on `assets/docs.css`.
 
 ## The documentation section
 
@@ -25,7 +25,7 @@ Or open `dist/site/index.html` directly. `make docs-site` renders only the docs 
 ## Check
 
 ```sh
-make site-check              # unit tests of the validator and the docs builder, then build dist/site and validate it
+just site-check              # unit tests of the validator and the docs builder, then build dist/site and validate it
 bash scripts/check-site.sh   # build dist/site and validate it (no unit tests)
 bash scripts/check-site.sh --built <dir>   # validate an existing directory
 ```

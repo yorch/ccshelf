@@ -4,16 +4,16 @@ Thanks for helping. `ccshelf` is an unofficial, MIT-licensed tool for Claude Cod
 
 ## Development setup
 
-You need Go (the version in `go.mod`), `make`, `bash`, and `python3` for the docs targets. Nothing else.
+You need Go (the version in `go.mod`), [`just`](https://github.com/casey/just) (1.15 or later), `bash`, and `python3` for the docs recipes. Nothing else. Install `just` with your package manager (`brew install just`, `winget install Casey.Just`, `apt install just` on Debian 13 or Ubuntu 24.04 and later) or a prebuilt binary from its releases page. On Windows the recipes run in Git Bash.
 
 ```sh
 git clone https://github.com/yorch/ccshelf && cd ccshelf   # OWNER: update if the repository moves
-make tools     # installs pinned golangci-lint, govulncheck, goreleaser and actionlint into $(go env GOPATH)/bin
-make build     # dist/ccshelf
-make ci        # everything CI runs, locally
+just tools     # installs pinned golangci-lint, govulncheck, goreleaser and actionlint into $(go env GOPATH)/bin
+just build     # dist/ccshelf
+just ci        # everything CI runs, locally
 ```
 
-`make help` lists every target. Useful ones: `make test-race`, `make cover` (HTML report plus a threshold), `make lint`, `make fmt`, `make cross` (all six targets), `make docs` and `make docs-check`, `make examples-check`.
+`just` with no arguments lists every recipe. Useful ones: `just test-race`, `just cover` (HTML report plus a threshold), `just lint`, `just fmt`, `just cross` (all six targets), `just docs` and `just docs-check`, `just examples-check`. `just test` and `just test-race` take packages and flags (`just test ./internal/config -run Edit`). To override a variable, use `just version=1.2.3 build` or the environment (`VERSION=1.2.3 just build`).
 
 ## Repository layout
 
@@ -61,7 +61,7 @@ Also: never bypass or probe managed policy by trial, no telemetry, and no networ
 
 ## Code style
 
-- `gofmt` and `gofumpt` clean (`make fmt`), `go vet` and `golangci-lint` clean (`.golangci.yml`).
+- `gofmt` and `gofumpt` clean (`just fmt`), `go vet` and `golangci-lint` clean (`.golangci.yml`).
 - Every exported identifier documented. Every package has a `doc.go`.
 - Wrap errors with context: `fmt.Errorf("reading profile %q: %w", name, err)`. No panics for expected conditions.
 - `context.Context` is the first parameter of anything that runs a process or blocks on I/O.
@@ -78,7 +78,7 @@ The `pr-title` check (its own workflow, `pr-title.yml`, required next to `ci-ok`
 ## Documentation rules
 
 - Follow [AGENTS.md "Documentation conventions"](AGENTS.md#documentation-conventions): the docs layout, the decision log, the glossary terms, the `{V}` `{R}` `{U}` markers, mockup labels and the generated `docs/report.html`.
-- `make docs` rebuilds the report (`python3 docs/build_report.py`). CI runs `python3 docs/build_report.py --check`.
+- `just docs` rebuilds the report (`python3 docs/build_report.py`). CI runs `python3 docs/build_report.py --check`.
 - Write messages, help text and docs in the plain style of [AGENTS.md](AGENTS.md#writing-style-asd-ste100): short active sentences, no semicolons, one name for one thing, and no lost hedges or conditions.
 
 ## Workflow rules (SR5)

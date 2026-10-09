@@ -18,7 +18,7 @@ status=0
 while IFS= read -r f; do
   [ -f "$f" ] || continue
   case "$f" in
-    *.go|*.md|*.yml|*.yaml|*.toml|*.json|*.sh|*.py|*.html|*.txt|Makefile|.gitignore|.gitattributes|.editorconfig|CODEOWNERS|LICENSE) ;;
+    *.go|*.md|*.yml|*.yaml|*.toml|*.json|*.sh|*.py|*.html|*.txt|justfile|.gitignore|.gitattributes|.editorconfig|CODEOWNERS|LICENSE) ;;
     *) continue ;;
   esac
   case "$f" in testdata/*|*/testdata/*) continue ;; esac

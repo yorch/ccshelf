@@ -126,7 +126,7 @@ Tools: the `asd-ste100` skill (`github.com/danyuchn/asd-ste100-skill`, MIT) appl
   3. It fills in the deploy-time addresses.
 - All URLs are relative, so the site works from `file://` and from a Pages project subpath.
 - The repository address lives in one place: the `href` of `#repo` in `site/index.html` (`REPO_URL`). Never hard-code it elsewhere.
-- A strict `<meta>` CSP forbids inline scripts, styles and handlers. After any edit, run `make site-check` (or `bash scripts/check-site.sh`, which builds `dist/site` first). Every claim on the page must be traceable to `docs/`.
+- A strict `<meta>` CSP forbids inline scripts, styles and handlers. After any edit, run `just site-check` (or `bash scripts/check-site.sh`, which builds `dist/site` first). Every claim on the page must be traceable to `docs/`.
 - **The documentation is published through `scripts/build_docs.py`** (D-35). It renders `docs/**/*.md` into `dist/site/docs/` at build time. It reuses the parser of `docs/build_report.py`, so the Markdown subset in "Documentation conventions" is the whole contract.
   - Never commit generated HTML.
   - Add each new Markdown file to `PAGES` in `scripts/build_docs.py`. Otherwise the build fails.

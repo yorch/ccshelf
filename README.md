@@ -123,6 +123,6 @@ ccshelf catalog init . --platform-owners @acme/platform --write-suggestions --ye
 
 On a terminal, ccshelf asks for missing values. The design is in [docs/design/catalog-and-org-repo.md](docs/design/catalog-and-org-repo.md).
 
-The project website lives in [site/](site/). It is static, and the build generates the /docs pages from the Markdown. `make site-check` checks it. A workflow deploys it to GitHub Pages automatically on every change to `main` (`.github/workflows/pages.yml`, see [site/README.md](site/README.md)).
+The project website lives in [site/](site/). It is static, and the build generates the /docs pages from the Markdown. `just site-check` checks it. A workflow deploys it to GitHub Pages automatically on every change to `main` (`.github/workflows/pages.yml`, see [site/README.md](site/README.md)).
 
 Licensed under the [MIT License](LICENSE).

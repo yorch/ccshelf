@@ -9,7 +9,7 @@
 *.sh    text eol=lf
 *.py    text eol=lf
 *.html  text eol=lf
-Makefile text eol=lf
+justfile text eol=lf
 
 # Golden files and fixtures must keep exact bytes, including on Windows checkouts.
 testdata/** text eol=lf
