@@ -169,3 +169,42 @@ func TestPrepareAtFetchesTheKnownCommitNotTheHead(t *testing.T) {
 		t.Error("PrepareAt accepted a name")
 	}
 }
+
+func TestIsAncestorIsOfflineAndStrict(t *testing.T) {
+	f := newFixture(t)
+	first := f.seed()
+	f.git("branch", "-M", "main")
+	f.write("profiles/more.toml", "name = \"more\"\ndescription = \"d\"\n")
+	second := f.commit("more")
+	f.write("profiles/third.toml", "name = \"third\"\ndescription = \"d\"\n")
+	third := f.commit("third")
+	s := f.branchSource("main")
+	ctx := context.Background()
+	for _, c := range []string{first, second, third} {
+		if err := s.PrepareAt(ctx, c); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The checkouts are shallow: the direct parent is proven by the commit object.
+	if !s.IsAncestor(ctx, first, second) || !s.IsAncestor(ctx, second, third) {
+		t.Error("a direct parent was not proven")
+	}
+	// The same commit, a descendant as the older commit, and a gap the shallow
+	// checkout cannot prove are all "not known".
+	if s.IsAncestor(ctx, second, second) || s.IsAncestor(ctx, second, first) || s.IsAncestor(ctx, first, third) {
+		t.Error("an ancestor was claimed without proof")
+	}
+	// No remote use: with the remote gone, the answer is the same.
+	if err := os.RemoveAll(f.url()[len("file://"):]); err == nil {
+		if !s.IsAncestor(ctx, first, second) {
+			t.Error("IsAncestor needed the remote")
+		}
+	}
+	// A commit with no cached checkout is not known.
+	if err := os.RemoveAll(CheckoutDir(f.cache, f.url(), second)); err != nil {
+		t.Fatal(err)
+	}
+	if s.IsAncestor(ctx, first, second) {
+		t.Error("IsAncestor answered for a commit that is not cached")
+	}
+}
