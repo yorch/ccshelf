@@ -61,3 +61,20 @@ These facts come from the [official docs](https://code.claude.com/docs) {V}, che
 - The added directory is editable by Claude. The launcher must check the directory before each launch.
 - CLAUDE.md `@` imports in the added directory must be prevented. Otherwise a file outside the profile could enter the context.
 - `claudeMd` in `--settings` is ignored. The launcher cannot deliver instructions through the settings file.
+
+## Extractor in the Claude Code 2.1.295 binary (2026-10-09)
+
+**Question:** Which text of a CLAUDE.md file does Claude Code read as an `@` import?
+
+**Method:** A reviewer read the strings of the Claude Code 2.1.295 binary. Function names in the minified code are examples only. They change between versions, so a later version needs a new reading.
+
+What the code does {V} (read from the binary, not run end to end):
+- A function called from `FOe` lexes the file text with `new mC({gfm:false}).lex(...)`. `mC` is the bundled copy of the `marked` Markdown lexer, with GitHub extensions off.
+- It walks the tokens and skips the tokens of type `code` (fenced and indented blocks) and `codespan`.
+- It scans an `html` token only when the token starts with `<!--`, after it removes the comments.
+- It runs the pattern `/(?:^|\s)@((?:[^\s\\]|\\ )+)/g` on each `text` token separately. The `^` therefore matches at the start of every text token, also after an inline token such as emphasis or a link.
+- It keeps a path that starts with `./`, `~/` or `/`, or that matches `^[a-zA-Z0-9._-]`. It drops a path that starts with `@` or with a run of `#%^&*()`.
+
+What is not known {R}: the token boundaries. A differential run compared inputs with `marked` 16.4.2 and the extractor logic above. The version of `marked` inside the binary is unknown, so the boundaries are reported, not verified. The run found inputs that import a file although a code-span or fence rule would hide them. Examples: inline HTML or a link destination that wins over a code span, a code span that pairs across a line break, a fence closer with a trailing `~` or backtick, and a fence inside a list item.
+
+Consequence for ccshelf: the import check looks at raw characters and has no Markdown exemption. See [profiles.md](../design/profiles.md), "Instructions".

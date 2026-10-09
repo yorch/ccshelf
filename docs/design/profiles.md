@@ -176,7 +176,7 @@ files = ["prompts/company.md", "prompts/frontend.md"]   # Paths below prompts/ i
                               # rules as append_system_prompt_file. At most 32 files, no duplicates. The launcher joins the
                               # files into one CLAUDE.md (see "Instructions" below).
 inherit = true                # true (default): the files come after the files of the parent profiles.
-                              # false: drop the files of all earlier profiles in the chain.
+                              # false: drop the files of the parent profiles (the profiles it extends, directly or not).
 
 # ---- Policy behavior ----
 [policy]
@@ -192,8 +192,10 @@ Merge rules:
 - The same path from the same source appears once. The resolver removes duplicates after the drops, and the first one stays.
 - One file is at most 64 KiB. The joined text is at most 64 KiB. Over the limit, the profile does not resolve.
 - The launcher joins the files in order. It changes CRLF to LF, trims the trailing newlines of each file and puts one blank line between files.
-- The resolver refuses an `@` that is followed by a character that is not white space or a backslash. Claude Code expands such a token into the content of another file. The extractor of Claude Code 2.1.295 reads `@` tokens in every text token of a Markdown lexer, and it skips only code and code span tokens {V}. Token boundaries are inside the lexer, for example after `*`, `]` or `)`, so the check does not copy it {R}. The check is stricter. An `@` stays allowed in four cases: after a letter or a digit (an email address), after an odd number of backslashes, inside a single-line code span, and inside a closed fenced code block (a closing line must exist, and an unterminated fence is not skipped).
-- The resolver also refuses a file with a leading byte order mark, with a first line of `---` (front matter, which Claude Code reads in memory files), with a carriage return that is not part of a CRLF line end, with `<!--`, or with a line that starts with an HTML tag. Each message names the line and what to change.
+- The resolver refuses every `@` that is followed by a character that is not white space or a backslash. Claude Code expands such a token into the content of another file. The extractor of Claude Code 2.1.295 lexes the file with a Markdown lexer, skips code and code span tokens, and runs the pattern `(?:^|\s)@(...)` on each text token {V} ([stage 0 note](../research/instructions-stage0.md#extractor-in-the-claude-code-2-1-295-binary-2026-10-09)). The check does not copy the lexer. It looks at the raw characters and has no exemption for code spans, fenced blocks or other Markdown structure. Thus the tokenization does not matter. Two cases stay allowed: an `@` after a letter or a digit (an email address) and an `@` after an odd number of backslashes. The one remaining assumption is that no Markdown construct makes a text token start directly after a letter or a digit that precedes the `@` in the raw text {R}. A differential run against the extractor supports it.
+- The check refuses the character references `&#64;`, `&#x40;` and `&commat;` too, as defense in depth.
+- Limitation: the rule refuses `@` inside code too. Write `\@types/node` or `\@property` to keep the character. Inside code the backslash stays visible. A later change may relax the rule when evidence supports it.
+- The resolver also refuses a file with a leading byte order mark, with a first line of `---` (front matter, which Claude Code reads in memory files), or with a carriage return that is not part of a CRLF line end. Each message names the line and what to change.
 - The resolver runs the check on each file and again on the joined text, because a fence can start in one file and end in the next.
 - The generated `CLAUDE.md` starts with the line `# Instructions from the ccshelf profile <name>` and a blank line. The header keeps the file from starting with front matter. The closure holds the header as the item `00 header`, so a new header text needs trust again. The size limit does not count the header.
 - A project profile may not set `[instructions]`, and it may not extend a profile of another kind that sets it (SR2).
