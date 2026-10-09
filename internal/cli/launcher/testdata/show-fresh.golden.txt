@@ -10,7 +10,7 @@ MCP:
 Session:
   inherit_user_settings: true
 Instructions:
-  inherit = false in fresh dropped the files of earlier profiles
+  inherit = false in fresh dropped the files of its parent profiles
   1. prompts/team.md (profile fresh, dir:org, 24 bytes, sha256:3840bf1bf5f2)
   joined: 71 bytes, sha256:9d0e70ce3831
 Policy:

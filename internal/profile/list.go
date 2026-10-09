@@ -184,7 +184,7 @@ func Describe(r *Resolved) string {
 	if len(r.Instructions) > 0 || r.InstructionsCutBy != "" {
 		b.WriteString("Instructions:\n")
 		if r.InstructionsCutBy != "" {
-			fmt.Fprintf(&b, "  inherit = false in %s dropped the files of earlier profiles\n", r.InstructionsCutBy)
+			fmt.Fprintf(&b, "  inherit = false in %s dropped the files of its parent profiles\n", r.InstructionsCutBy)
 		}
 		for i, f := range r.Instructions {
 			fmt.Fprintf(&b, "  %d. %s (profile %s, %s, %d bytes, sha256:%s)\n", i+1, f.Path, f.Profile, f.Source, f.Bytes, f.Digest[:12])

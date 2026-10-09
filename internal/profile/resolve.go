@@ -38,7 +38,7 @@ type Resolved struct {
 	Instructions     []InstructionFile
 	InstructionsText []byte
 	// InstructionsCutBy names the last profile whose inherit = false dropped
-	// instructions files of earlier profiles. It is "" when nothing was dropped.
+	// instructions files of its ancestors. It is "" when nothing was dropped.
 	InstructionsCutBy string
 	Warnings          []string
 	Closure           Closure

@@ -188,11 +188,14 @@ on_blocked = "warn"           # warn | fail. What to do when org policy blocks s
 
 Merge rules:
 - The resolver walks the `extends` chain in its normal order, root parent first. It collects the files of each profile and reads each file from the source root of the profile that lists it.
-- A profile with `inherit = false` drops every file collected before it. Its own files, and the files of its children, still apply. `show` prints the profile whose `inherit = false` dropped files.
-- The same path from the same source appears once. The first one stays.
+- A profile with `inherit = false` drops the files declared by its ancestors: the profiles it extends, directly or not. Files of a profile that is not its ancestor stay. Thus the order of `extends` does not change which files stay. It only changes the join order. In a diamond (`base` is extended by `l` and by `r`, and `r` sets `inherit = false`), the files of `base` are dropped and the files of `l` stay. Its own files, and the files of its children, still apply. `show` prints the profile whose `inherit = false` dropped files.
+- The same path from the same source appears once. The resolver removes duplicates after the drops, and the first one stays.
 - One file is at most 64 KiB. The joined text is at most 64 KiB. Over the limit, the profile does not resolve.
 - The launcher joins the files in order. It changes CRLF to LF, trims the trailing newlines of each file and puts one blank line between files.
-- An instructions file may not contain an `@` import token: an `@` at the start of the text or after white space, followed by a character that is not white space. Claude Code expands such a token into the content of another file. Put the token in backticks or in a fenced code block. Code spans and fenced blocks are not expanded {V}.
+- The resolver refuses an `@` that is followed by a character that is not white space or a backslash. Claude Code expands such a token into the content of another file. The extractor of Claude Code 2.1.295 reads `@` tokens in every text token of a Markdown lexer, and it skips only code and code span tokens {V}. Token boundaries are inside the lexer, for example after `*`, `]` or `)`, so the check does not copy it {R}. The check is stricter. An `@` stays allowed in four cases: after a letter or a digit (an email address), after an odd number of backslashes, inside a single-line code span, and inside a closed fenced code block (a closing line must exist, and an unterminated fence is not skipped).
+- The resolver also refuses a file with a leading byte order mark, with a first line of `---` (front matter, which Claude Code reads in memory files), with a carriage return that is not part of a CRLF line end, with `<!--`, or with a line that starts with an HTML tag. Each message names the line and what to change.
+- The resolver runs the check on each file and again on the joined text, because a fence can start in one file and end in the next.
+- The generated `CLAUDE.md` starts with the line `# Instructions from the ccshelf profile <name>` and a blank line. The header keeps the file from starting with front matter. The closure holds the header as the item `00 header`, so a new header text needs trust again. The size limit does not count the header.
 - A project profile may not set `[instructions]`, and it may not extend a profile of another kind that sets it (SR2).
 - The closure pins every effective file with its content hash. The order is part of the closure, so a reorder needs trust again.
 
