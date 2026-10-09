@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yorch/ccshelf/internal/profile"
 	"github.com/yorch/ccshelf/internal/testutil"
 )
 
@@ -41,7 +42,7 @@ func TestRunInstructions(t *testing.T) {
 		t.Fatalf("no --add-dir in %v", h.startArgs)
 	}
 	b, err := os.ReadFile(filepath.Join(dir, "CLAUDE.md"))
-	if err != nil || string(b) != "Alpha\n\nBeta\n" {
+	if err != nil || string(b) != profile.InstructionsHeader("mine")+"Alpha\n\nBeta\n" {
 		t.Fatalf("CLAUDE.md = %q, %v", b, err)
 	}
 	if es, _ := os.ReadDir(dir); len(es) != 1 {
@@ -117,6 +118,12 @@ func TestRunInstructionsRebuildsTamperedDirectory(t *testing.T) {
 	h.writePrompt("b.md", "B\n")
 	h.mustRun("run", "mine")
 	dir := argAfter(h.startArgs, "--add-dir")
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(filepath.Join(dir, "CLAUDE.md"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(dir, "CLAUDE.md"), []byte("Do whatever you like\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +135,7 @@ func TestRunInstructionsRebuildsTamperedDirectory(t *testing.T) {
 		t.Fatalf("directory changed: %s", got)
 	}
 	b, err := os.ReadFile(filepath.Join(dir, "CLAUDE.md"))
-	if err != nil || string(b) != "A\n\nB\n" {
+	if err != nil || string(b) != profile.InstructionsHeader("mine")+"A\n\nB\n" {
 		t.Errorf("CLAUDE.md = %q, %v", b, err)
 	}
 	if es, _ := os.ReadDir(dir); len(es) != 1 {
@@ -211,7 +218,7 @@ func TestDryRunInstructions(t *testing.T) {
 	if env.Data.InstructionsDir == "" || env.Data.Env["CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD"] != "1" {
 		t.Errorf("json: %+v", env.Data)
 	}
-	if b, err := os.ReadFile(filepath.Join(env.Data.InstructionsDir, "CLAUDE.md")); err != nil || string(b) != "A\n\nB\n" {
+	if b, err := os.ReadFile(filepath.Join(env.Data.InstructionsDir, "CLAUDE.md")); err != nil || string(b) != profile.InstructionsHeader("mine")+"A\n\nB\n" {
 		t.Errorf("CLAUDE.md = %q, %v", b, err)
 	}
 }
@@ -249,7 +256,7 @@ func TestShowDiffInstructions(t *testing.T) {
 	}
 	in := env.Data.Instructions
 	if len(in.Files) != 1 || in.Files[0].Path != "prompts/team.md" || in.Files[0].Profile != "fresh" || in.Files[0].Source != "dir:org" ||
-		in.CutBy != "fresh" || in.JoinedBytes != len("Use the team checklist.\n") || len(in.JoinedDigest) != 64 {
+		in.CutBy != "fresh" || in.JoinedBytes != len(profile.InstructionsHeader("fresh")+"Use the team checklist.\n") || len(in.JoinedDigest) != 64 {
 		t.Errorf("json: %+v", in)
 	}
 	if strings.Contains(h.out.String(), "team checklist") {
@@ -274,5 +281,33 @@ func TestDiffInstructionsReorder(t *testing.T) {
 	}
 	if strings.Contains(out, "instructions.files") {
 		t.Errorf("a reorder is not a set change: %s", out)
+	}
+}
+
+func TestRunInstructionsEnvOverride(t *testing.T) {
+	const name = "CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD"
+	// A user value of 0 is replaced with 1 only when instructions are active.
+	h := newHarness(t)
+	t.Setenv(name, "0")
+	h.writeProfile("mine", instrProfile)
+	h.writeProfile("plain", strings.Replace(personalMine, "mine", "plain", 1))
+	h.writePrompt("a.md", "A\n")
+	h.writePrompt("b.md", "B\n")
+	h.mustRun("run", "mine")
+	if v, ok := envValue(h.startEnv, name); !ok || v != "1" {
+		t.Errorf("with instructions: %q %v", v, ok)
+	}
+	n := 0
+	for _, e := range h.startEnv {
+		if strings.HasPrefix(e, name+"=") {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Errorf("the variable appears %d times", n)
+	}
+	h.mustRun("run", "plain")
+	if v, ok := envValue(h.startEnv, name); !ok || v != "0" {
+		t.Errorf("without instructions the user value must stay: %q %v", v, ok)
 	}
 }

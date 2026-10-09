@@ -384,15 +384,25 @@ func (r *resolver) merge(res *Resolved, req *File) error {
 			promptFrom = f
 		}
 		if !c.Instructions.Inherits() {
-			if len(instr) > 0 {
+			// inherit = false drops only the files of the ancestors of this
+			// profile. The files of a sibling parent stay.
+			anc := r.ancestors(f)
+			kept := instr[:0]
+			dropped := false
+			for _, x := range instr {
+				if anc[x.from.Name] {
+					dropped = true
+					continue
+				}
+				kept = append(kept, x)
+			}
+			instr = kept
+			if dropped {
 				cutBy = f.Name
 			}
-			instr = instr[:0]
 		}
 		for _, p := range c.Instructions.Files {
-			if !hasInstr(instr, f.Source.ID(), p) {
-				instr = append(instr, instrRef{f, p})
-			}
+			instr = append(instr, instrRef{f, p})
 		}
 		if c.Session.InheritUserSettings != nil {
 			v := *c.Session.InheritUserSettings
@@ -476,7 +486,7 @@ func (r *resolver) merge(res *Resolved, req *File) error {
 		res.Prompt = normalizeNewlines(b)
 	}
 	res.InstructionsCutBy = cutBy
-	return r.readInstructions(res, instr)
+	return r.readInstructions(res, dedupeInstr(instr))
 }
 
 // instrRef is one instructions file chosen by the merge, before it is read.
@@ -485,13 +495,40 @@ type instrRef struct {
 	path string
 }
 
-func hasInstr(list []instrRef, sourceID, path string) bool {
+// dedupeInstr keeps the first entry of each source and path. It runs after
+// the drops, so that a drop of one declaration does not remove a later
+// declaration of the same file.
+func dedupeInstr(list []instrRef) []instrRef {
+	seen := map[string]bool{}
+	var out []instrRef
 	for _, x := range list {
-		if x.path == path && x.from.Source.ID() == sourceID {
-			return true
+		k := x.from.Source.ID() + "\x00" + x.path
+		if !seen[k] {
+			seen[k] = true
+			out = append(out, x)
 		}
 	}
-	return false
+	return out
+}
+
+// ancestors returns the names of all profiles that f extends, directly or
+// not.
+func (r *resolver) ancestors(f *File) map[string]bool {
+	out := map[string]bool{}
+	var walk func(*File)
+	walk = func(g *File) {
+		for _, p := range g.Manifest.Extends {
+			if out[p] {
+				continue
+			}
+			out[p] = true
+			if pf := r.cache[p]; pf != nil {
+				walk(pf)
+			}
+		}
+	}
+	walk(f)
+	return out
 }
 
 // readInstructions reads each chosen file from the source root of the
@@ -518,8 +555,8 @@ func (r *resolver) readInstructions(res *Resolved, refs []instrRef) error {
 			return fmt.Errorf("instructions.files of %s: %w", f.Name, err)
 		}
 		b = normalizeNewlines(b)
-		if line, tok := FindImport(string(b)); line != 0 {
-			return fmt.Errorf("instructions file %s of %s, line %d: %s", p, f.Name, line, importProblem(tok))
+		if line, msg := CheckInstructionsText(string(b)); line != 0 {
+			return fmt.Errorf("instructions file %s of %s, line %d: %s", p, f.Name, line, msg)
 		}
 		res.Instructions = append(res.Instructions, InstructionFile{
 			Profile: f.Name, Source: PortableSourceID(f.Source), Path: p,
@@ -527,7 +564,18 @@ func (r *resolver) readInstructions(res *Resolved, refs []instrRef) error {
 		})
 		parts = append(parts, b)
 	}
-	res.InstructionsText = joinInstructions(parts)
+	body := joinInstructions(parts)
+	if len(body) > MaxInstructionsSize {
+		return fmt.Errorf("the instructions files add up to %d bytes, and the limit is %d bytes", len(body), MaxInstructionsSize)
+	}
+	if len(body) > 0 {
+		res.InstructionsText = append([]byte(InstructionsHeader(res.Name)), body...)
+		// The joined text is checked again: a fence or a code span can
+		// start in one file and end in the next.
+		if line, msg := CheckInstructionsText(string(res.InstructionsText)); line != 0 {
+			return fmt.Errorf("the joined instructions text of %s, line %d: %s", res.Name, line, msg)
+		}
+	}
 	// Merged shows the effective result: the paths in join order, and
 	// inherit = false when it dropped files.
 	res.Merged.Instructions = Instructions{}
@@ -537,9 +585,6 @@ func (r *resolver) readInstructions(res *Resolved, refs []instrRef) error {
 	if res.InstructionsCutBy != "" {
 		no := false
 		res.Merged.Instructions.Inherit = &no
-	}
-	if len(res.InstructionsText) > MaxInstructionsSize {
-		return fmt.Errorf("the instructions files add up to %d bytes, and the limit is %d bytes", len(res.InstructionsText), MaxInstructionsSize)
 	}
 	return nil
 }

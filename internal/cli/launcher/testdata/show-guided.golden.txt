@@ -12,10 +12,11 @@ Session:
 Instructions:
   1. prompts/company.md (profile base, dir:org, 32 bytes, sha256:6c57cda4ef1f)
   2. prompts/team.md (profile guided, dir:org, 24 bytes, sha256:3840bf1bf5f2)
-  joined: 57 bytes, sha256:bb6c2b363730
+  joined: 105 bytes, sha256:bd1071707f69
 Policy:
   on_blocked: warn
-Closure: sha256:d03e1bbaa1bb42c03dcbfec96271990edd044432a3ab494b33a1cf983aa9f1ed
+Closure: sha256:f27a9fc44af33c34fd030f2d357dba3bcc44831565aff33bc74777b38c942cdf
+  instruction 00 header 801c4092f840 risky
   instruction 01 prompts/company.md 6c57cda4ef1f risky
   instruction 02 prompts/team.md 3840bf1bf5f2 risky
   profile base 4ce5f376ca74

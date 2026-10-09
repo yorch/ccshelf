@@ -21,7 +21,6 @@ import (
 	"github.com/yorch/ccshelf/internal/ui"
 )
 
-// launch is everything needed to start claude, produced by the run pipeline.
 // Names used for the instructions directory of a launch.
 const (
 	instructionsPrefix = "instructions"
@@ -31,6 +30,7 @@ const (
 	additionalDirsClaudeMDEnv = "CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD"
 )
 
+// launch is everything needed to start claude, produced by the run pipeline.
 type launch struct {
 	Bin  string
 	Args []string

@@ -165,6 +165,13 @@ func buildClosure(res *Resolved) (Closure, error) {
 	if res.Merged.Session.AppendSystemPromptFile != "" {
 		items = append(items, ClosureItem{Kind: ItemPrompt, Name: res.Merged.Session.AppendSystemPromptFile, Digest: digest(res.Prompt), Risky: true})
 	}
+	if len(res.InstructionsText) > 0 {
+		// The generated header is part of what Claude Code reads. It comes
+		// from the profile name (already in the closure) and a fixed
+		// template, so the template is pinned here: a new template needs
+		// trust again.
+		items = append(items, ClosureItem{Kind: ItemInstruction, Name: "00 header", Digest: digest([]byte(InstructionsHeader(res.Name))), Risky: true})
+	}
 	for i, f := range res.Instructions {
 		items = append(items, ClosureItem{Kind: ItemInstruction, Name: fmt.Sprintf("%02d %s", i+1, f.Path), Digest: f.Digest, Risky: true})
 	}

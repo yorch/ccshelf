@@ -1,11 +1,13 @@
 package profile
 
 import (
-	"fmt"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
-// MaxInstructionsSize is the largest joined instructions text accepted. Each
+// MaxInstructionsSize is the largest joined text of the instructions files
+// accepted, not counting the header. Each
 // single file is also limited to [MaxPromptSize].
 const MaxInstructionsSize = 64 << 10
 
@@ -24,6 +26,14 @@ type InstructionFile struct {
 	Digest string
 
 	content []byte
+}
+
+// InstructionsHeader returns the fixed first lines of the generated CLAUDE.md
+// for a profile. They make sure that the file never starts with front matter,
+// and they tell the model where the text comes from. The profile name matches
+// [ValidName], so it holds only lower-case letters, digits and "-".
+func InstructionsHeader(profile string) string {
+	return "# Instructions from the ccshelf profile " + profile + "\n\n"
 }
 
 // joinInstructions joins the normalized contents with a blank line between
@@ -46,62 +56,100 @@ func joinInstructions(parts [][]byte) []byte {
 	return out
 }
 
-// FindImport looks for a CLAUDE.md import token in text: an "@" at the start
-// of a line or after white space, followed by a character that is not white
-// space. Claude Code expands such a token as a file import. The scan skips
-// fenced code blocks (``` or ~~~) and inline code spans, where Claude Code
-// does not expand imports. An unterminated fence runs to the end of the text.
-// It returns the 1-based line and the token, or line 0 when there is none.
-// It accepts LF and CRLF line ends.
-func FindImport(text string) (line int, token string) {
+// CheckInstructionsText checks the text of one instructions file, or the
+// joined text, against what Claude Code does with a CLAUDE.md file. It returns
+// the 1-based line and a message that says what to change, or line 0 when the
+// text is acceptable.
+//
+// Claude Code expands "@path" tokens in memory files into the content of other
+// files. The check does not copy its parser. It is stricter, so that a
+// difference between the two parsers cannot hide a token:
+//   - A text with a leading byte order mark, a first line of "---" (front
+//     matter), a carriage return that is not part of a CRLF line end, an HTML
+//     comment, or a line that starts with an HTML tag is refused.
+//   - An "@" is refused when a character that is not white space or a
+//     backslash follows it, unless a letter or a digit precedes it (an email
+//     address) or an odd number of backslashes precede it.
+//   - The "@" checks skip fenced code blocks and single-line code spans. A
+//     fence is skipped only when a closing line exists. An unterminated fence
+//     is not skipped.
+func CheckInstructionsText(text string) (int, string) {
+	if strings.HasPrefix(text, "\ufeff") {
+		return 1, "starts with a byte order mark. Remove the mark"
+	}
+	first, _, _ := strings.Cut(text, "\n")
+	if strings.TrimSpace(first) == "---" {
+		return 1, "starts with a line of \"---\", which Claude Code reads as front matter. Start the file with another line"
+	}
+	for i := 0; i < len(text); i++ {
+		if text[i] == '\r' && (i+1 >= len(text) || text[i+1] != '\n') {
+			return 1 + strings.Count(text[:i], "\n"), "contains a carriage return that is not part of a line end. Use LF or CRLF line ends"
+		}
+	}
 	lines := strings.Split(text, "\n")
-	var para []string
-	paraStart := 0
-	flush := func() (int, string) {
-		if len(para) == 0 {
-			return 0, ""
-		}
-		l, t := scanParagraph(strings.Join(para, "\n"))
-		defer func() { para = para[:0] }()
-		if l == 0 {
-			return 0, ""
-		}
-		return paraStart + l, t
+	for i, ln := range lines {
+		lines[i] = strings.TrimSuffix(ln, "\r")
 	}
-	var fenceCh byte
-	fenceLen := 0
-	for i, raw := range lines {
-		ln := strings.TrimRight(raw, "\r")
-		if fenceCh != 0 {
-			if isFenceClose(ln, fenceCh, fenceLen) {
-				fenceCh = 0
-			}
+	exempt := fencedLines(lines)
+	for i, ln := range lines {
+		if strings.Contains(ln, "<!--") {
+			return i + 1, "contains an HTML comment (\"<!--\"). Remove the comment"
+		}
+		if startsHTML(ln) {
+			return i + 1, "starts with an HTML tag. Begin the line with other text, or put the tag in a code span (backticks)"
+		}
+		if exempt[i] {
 			continue
 		}
-		if ch, n := fenceOpen(ln); ch != 0 {
-			if l, t := flush(); l != 0 {
-				return l, t
+		if tok := importToken(ln); tok != "" {
+			if len(tok) > 40 {
+				tok = tok[:40] + "..."
 			}
-			fenceCh, fenceLen = ch, n
-			continue
+			return i + 1, "contains the import token " + quote(tok) + ". Claude Code reads it as a file import. Put the token in a code span (backticks) or in a closed fenced code block, or write a backslash before the @"
 		}
-		if strings.TrimSpace(ln) == "" {
-			if l, t := flush(); l != 0 {
-				return l, t
-			}
-			continue
-		}
-		if len(para) == 0 {
-			paraStart = i
-		}
-		para = append(para, ln)
 	}
-	return flush()
+	return 0, ""
+}
+
+func quote(s string) string { return "\"" + strings.ReplaceAll(s, "\"", "'") + "\"" }
+
+// startsHTML reports whether ln starts, after up to three spaces, with "<"
+// and a letter, "/", "!" or "?".
+func startsHTML(ln string) bool {
+	t := strings.TrimLeft(ln, " ")
+	if len(ln)-len(t) > 3 || len(t) < 2 || t[0] != '<' {
+		return false
+	}
+	c := t[1]
+	return c == '/' || c == '!' || c == '?' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+}
+
+// fencedLines marks the lines of every closed fenced code block, the opening
+// and closing lines included.
+func fencedLines(lines []string) []bool {
+	out := make([]bool, len(lines))
+	for i := 0; i < len(lines); i++ {
+		ch, n := fenceOpen(lines[i])
+		if ch == 0 {
+			continue
+		}
+		for j := i + 1; j < len(lines); j++ {
+			if isFenceClose(lines[j], ch, n) {
+				for k := i; k <= j; k++ {
+					out[k] = true
+				}
+				i = j
+				break
+			}
+		}
+	}
+	return out
 }
 
 // fenceOpen reports the fence character and length when ln opens a fenced
-// code block: up to three spaces, then three or more backticks or tildes. The
-// info string of a backtick fence may not contain a backtick.
+// code block: up to three spaces, then three or more backticks or tildes, then
+// an optional info string. The info string of a backtick fence may not contain
+// a backtick.
 func fenceOpen(ln string) (byte, int) {
 	s := strings.TrimLeft(ln, " ")
 	if len(ln)-len(s) > 3 || len(s) < 3 || (s[0] != '`' && s[0] != '~') {
@@ -118,7 +166,8 @@ func fenceOpen(ln string) (byte, int) {
 }
 
 // isFenceClose reports whether ln closes a fence of character ch and length
-// n: up to three spaces, at least n of ch, then only white space.
+// n: up to three spaces, then only ch, at least n times, then only spaces and
+// tabs.
 func isFenceClose(ln string, ch byte, n int) bool {
 	s := strings.TrimLeft(ln, " ")
 	if len(ln)-len(s) > 3 {
@@ -128,41 +177,85 @@ func isFenceClose(ln string, ch byte, n int) bool {
 	for k < len(s) && s[k] == ch {
 		k++
 	}
-	return k >= n && strings.TrimSpace(s[k:]) == ""
+	return k >= n && strings.Trim(s[k:], " \t") == ""
 }
 
-// scanParagraph scans text without fences. Inline code spans may cross line
-// ends but not blank lines, and the caller passes one paragraph at a time.
-func scanParagraph(p string) (int, string) {
-	line := 1
-	for i := 0; i < len(p); {
-		switch c := p[i]; {
-		case c == '\n':
-			line++
-			i++
-		case c == '`':
-			n := 0
-			for i+n < len(p) && p[i+n] == '`' {
-				n++
-			}
-			end := closingRun(p, i+n, n)
-			if end < 0 {
-				i += n // no closing run: literal backticks
+// importToken returns the first import token in ln outside code spans, or "".
+func importToken(ln string) string {
+	for i := 0; i < len(ln); {
+		switch ln[i] {
+		case '`':
+			if oddBackslashes(ln, i) {
+				i++
 				continue
 			}
-			line += strings.Count(p[i:end], "\n")
-			i = end
-		case c == '@' && (i == 0 || isSpace(p[i-1])) && i+1 < len(p) && !isSpace(p[i+1]):
-			j := i + 1
-			for j < len(p) && !isSpace(p[j]) {
-				j++
+			n := 0
+			for i+n < len(ln) && ln[i+n] == '`' {
+				n++
 			}
-			return line, p[i:j]
+			if end := closingRun(ln, i+n, n); end >= 0 {
+				i = end
+			} else {
+				i += n
+			}
+		case '@':
+			if isImportAt(ln, i) {
+				j := i + 1
+				for j < len(ln) && !isSpaceByte(ln, j) {
+					j++
+				}
+				return ln[i:j]
+			}
+			i++
 		default:
 			i++
 		}
 	}
-	return 0, ""
+	return ""
+}
+
+// isImportAt reports whether the "@" at ln[i] must be refused.
+func isImportAt(ln string, i int) bool {
+	if i+1 >= len(ln) {
+		return false
+	}
+	next, _ := utf8.DecodeRuneInString(ln[i+1:])
+	if jsSpace(next) || next == '\\' {
+		return false
+	}
+	if oddBackslashes(ln, i) {
+		return false
+	}
+	if i > 0 {
+		prev, _ := utf8.DecodeLastRuneInString(ln[:i])
+		if unicode.IsLetter(prev) || unicode.IsNumber(prev) {
+			return false
+		}
+	}
+	return true
+}
+
+func isSpaceByte(ln string, j int) bool {
+	r, _ := utf8.DecodeRuneInString(ln[j:])
+	return jsSpace(r) || r == '\\'
+}
+
+// jsSpace reports whether r matches "\s" of a JavaScript regular expression.
+func jsSpace(r rune) bool {
+	switch r {
+	case '\t', '\n', '\v', '\f', '\r', ' ', 0xa0, 0x1680, 0x2028, 0x2029, 0x202f, 0x205f, 0x3000, 0xfeff:
+		return true
+	}
+	return r >= 0x2000 && r <= 0x200a
+}
+
+// oddBackslashes reports whether an odd number of backslashes precede ln[i].
+func oddBackslashes(ln string, i int) bool {
+	n := 0
+	for j := i - 1; j >= 0 && ln[j] == '\\'; j-- {
+		n++
+	}
+	return n%2 == 1
 }
 
 // closingRun returns the index just after the first run of exactly n
@@ -183,16 +276,4 @@ func closingRun(p string, from, n int) int {
 		i += k
 	}
 	return -1
-}
-
-func isSpace(c byte) bool {
-	return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\v' || c == '\f'
-}
-
-// importProblem formats the refusal text for an import token.
-func importProblem(token string) string {
-	if len(token) > 40 {
-		token = token[:40] + "..."
-	}
-	return fmt.Sprintf("contains the import token %q outside a code span. Put the token in backticks", token)
 }

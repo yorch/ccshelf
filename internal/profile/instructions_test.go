@@ -10,56 +10,99 @@ import (
 	"testing"
 )
 
-func TestFindImport(t *testing.T) {
-	cases := []struct {
-		name string
-		text string
-		line int
-		tok  string
-	}{
-		{"empty", "", 0, ""},
-		{"plain text", "Use the style guide.\n", 0, ""},
-		{"start of text", "@docs/x.md\n", 1, "@docs/x.md"},
-		{"after space", "see @docs/x.md now\n", 1, "@docs/x.md"},
-		{"after tab", "see\t@docs/x.md\n", 1, "@docs/x.md"},
-		{"after newline", "one\n\n@x\n", 3, "@x"},
-		{"second line of paragraph", "one\n@x\n", 2, "@x"},
-		{"email", "mail ops@example.com please\n", 0, ""},
-		{"lone at", "write @ then space\n", 0, ""},
-		{"at end of text", "ends with @", 0, ""},
-		{"after paren", "(@x)\n", 0, ""},
-		{"inline code", "see `@docs/x.md` now\n", 0, ""},
-		{"inline code double backticks", "see ``a ` @x`` now\n", 0, ""},
-		{"inline code then import", "`@a` and @b\n", 1, "@b"},
-		{"unclosed backtick", "an ` @x\n", 1, "@x"},
-		{"mismatched backtick runs", "`` @x` and\n", 1, "@x`"},
-		{"inline code across lines", "start `a\n@x` end\n", 0, ""},
-		{"inline code does not cross blank line", "start `a\n\n@x` end\n", 3, "@x`"},
-		{"backtick fence", "text\n```\n@x\n```\nafter\n", 0, ""},
-		{"backtick fence with info", "```sh\n@x\n```\n", 0, ""},
-		{"tilde fence", "~~~\n@x\n~~~\n", 0, ""},
-		{"fence indented three spaces", "   ```\n@x\n   ```\n", 0, ""},
-		{"import after fence", "```\n@a\n```\n@b\n", 4, "@b"},
-		{"import before fence", "@a\n```\n@b\n```\n", 1, "@a"},
-		{"unterminated fence", "```\n@x\nmore\n", 0, ""},
-		{"longer fence needs longer close", "````\n```\n@x\n````\n@y\n", 5, "@y"},
-		{"short closer does not close", "````\n@x\n```\n@y\n", 0, ""},
-		{"tilde does not close backtick fence", "```\n~~~\n@x\n", 0, ""},
-		{"closer with text does not close", "```\n``` x\n@y\n", 0, ""},
-		{"backtick fence info with backtick is not a fence", "``` a`b\n@x\n", 2, "@x"},
-		{"four space indent is not a fence", "    ```\n@x\n", 2, "@x"},
-		{"crlf import", "one\r\n@x\r\n", 2, "@x"},
-		{"crlf fence", "```\r\n@x\r\n```\r\n@y\r\n", 4, "@y"},
-		{"crlf blank line paragraph", "a `b\r\n\r\n@x\r\n", 3, "@x"},
-		{"at before carriage return", "@\r\nx\r\n", 0, ""},
+func TestCheckInstructionsText(t *testing.T) {
+	refuse := map[string]string{
+		// The corpus of bypasses found in review. Claude Code imports every one.
+		"fence opener then fence in next file": "```\nhi\n\n```\n@/etc/passwd\n",
+		"unterminated fence":                   "```\n@/etc/passwd\n",
+		"code span then at":                    "`x`@/etc/passwd\n",
+		"emphasis star":                        "*@/etc/passwd*\n",
+		"strong":                               "**@/etc/passwd**\n",
+		"emphasis underscore":                  "_@x_\n",
+		"link text":                            "[@/etc/passwd](https://x)\n",
+		"after link":                           "[a](b)@/etc/passwd\n",
+		"escaped star":                         "\\*@/etc/passwd\n",
+		"html tag then at":                     "<b>@/etc/passwd\n",
+		"unmatched backtick heading":           "# Title `\n@/etc/passwd `\n",
+		"unmatched backtick list":              "- a `\n- @/etc/passwd `\n",
+		"escaped backtick":                     "\\` @/etc/passwd `\n",
+		"nbsp before at":                       "a\u00a0@/etc/passwd\n",
+		"line separator before at":             "a\u2028@/etc/passwd\n",
+		"ideographic space before at":          "a\u3000@/etc/passwd\n",
+		"bom":                                  "\ufeffhello\n",
+		"fence closed by backtick tilde":       "```\n```~\n@/etc/passwd\n",
+		"fence in comment":                     "<!--\n```\n-->\n@/etc/passwd\n```\n",
+		"fence in html block":                  "<div>\n```\n</div>\n\n@/etc/passwd\n```\n",
+		"lone cr":                              "a `x\r\r@/etc/passwd `\n",
+		// Other refusals.
+		"start of text":                  "@docs/x.md\n",
+		"after space":                    "see @docs/x.md now\n",
+		"after tab":                      "see\t@docs/x.md\n",
+		"after newline":                  "one\n\n@x\n",
+		"after paren":                    "(@x)\n",
+		"second line of paragraph":       "one\n@x\n",
+		"import after closed fence":      "```\n@a\n```\n@b\n",
+		"import before closed fence":     "@a\n```\n@b\n```\n",
+		"unclosed span with import":      "an ` @x\n",
+		"span does not cross lines":      "start `a\n@x` end\n",
+		"front matter":                   "---\nname: x\n---\n",
+		"front matter with spaces":       "---  \nx\n",
+		"html comment":                   "text <!-- hidden --> more\n",
+		"html comment in code span":      "`<!--`\n",
+		"html tag at line start":         "<div>\ntext\n",
+		"closing tag at line start":      "</div>\n",
+		"html tag after three spaces":    "   <span>x\n",
+		"html tag inside a closed fence": "```\n<div>\n```\n",
+		"declaration":                    "<!DOCTYPE html>\n",
+		"short closer does not close":    "````\n@x\n```\n@y\n",
+		"four space indent is no fence":  "    ```\n@x\n    ```\n",
+		"tilde does not close backtick":  "```\n~~~\n@x\n",
+		"closer with text":               "```\n``` x\n@y\n",
+		"info string with backtick":      "``` a`b\n@x\n```\n",
 	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			line, tok := FindImport(c.text)
-			if line != c.line || tok != c.tok {
-				t.Errorf("FindImport(%q) = %d, %q; want %d, %q", c.text, line, tok, c.line, c.tok)
+	for name, text := range refuse {
+		t.Run("refuse "+name, func(t *testing.T) {
+			if line, msg := CheckInstructionsText(text); line == 0 || msg == "" {
+				t.Errorf("accepted %q", text)
 			}
 		})
+	}
+	allow := map[string]string{
+		"empty":                       "",
+		"plain":                       "Use the style guide.\n",
+		"email":                       "mail ops@example.com please\n",
+		"foo at bar":                  "foo@bar\n",
+		"digit before at":             "user1@x.org\n",
+		"unicode letter before at":    "josé@example.com\n",
+		"lone at":                     "write @ then space\n",
+		"at before backslash":         "@\\x\n",
+		"at at end of text":           "ends with @",
+		"escaped at":                  "an \\@docs/x.md here\n",
+		"scoped package in code span": "install `@types/node` now\n",
+		"double backtick span":        "see ``a ` @x`` now\n",
+		"closed backtick fence":       "text\n```\n@x\n```\nafter\n",
+		"fence with info string":      "```sh\n@x\n```\n",
+		"closed tilde fence":          "~~~\n@x\n~~~\n",
+		"fence indented three spaces": "   ```\n@x\n   ```\n",
+		"longer fence needs longer":   "````\n```\n@x\n````\nend\n",
+		"fence closer with spaces":    "```\n@x\n```  \t\n",
+		"crlf fence":                  "```\r\n@x\r\n```\r\nend\r\n",
+		"dashes after first line":     "Title\n---\n",
+		"angle bracket not a tag":     "a < b and 3 <4\n",
+		"line starts with spaced lt":  "< x\n",
+	}
+	for name, text := range allow {
+		t.Run("allow "+name, func(t *testing.T) {
+			if line, msg := CheckInstructionsText(text); line != 0 {
+				t.Errorf("refused %q at line %d: %s", text, line, msg)
+			}
+		})
+	}
+	// Line numbers.
+	for text, want := range map[string]int{"a\nb\n@x\n": 3, "a\r\nb\r\n@x\r\n": 3, "ok\n\n<div>\n": 3, "a\nb `\r\r": 2} {
+		if line, _ := CheckInstructionsText(text); line != want {
+			t.Errorf("%q: line %d; want %d", text, line, want)
+		}
 	}
 }
 
@@ -154,6 +197,9 @@ func TestInstructionsMerge(t *testing.T) {
 			if got := instrPaths(r); !reflect.DeepEqual(got, want) {
 				t.Errorf("files = %v; want %v", got, want)
 			}
+			if text != "" {
+				text = InstructionsHeader(top) + text
+			}
 			if string(r.InstructionsText) != text {
 				t.Errorf("text = %q; want %q", r.InstructionsText, text)
 			}
@@ -194,11 +240,34 @@ func TestInstructionsMerge(t *testing.T) {
 		"r": "[instructions]\nfiles = [\"prompts/c.md\"]\n",
 		"x": "extends = [\"r\", \"l\"]\n",
 	}, "x", []string{"r:prompts/c.md", "l:prompts/b.md"}, "C\n\nB\n")
-	run("second parent inherit false drops the first", map[string]string{
+	run("inherit false keeps the files of a sibling parent", map[string]string{
 		"l": "[instructions]\nfiles = [\"prompts/b.md\"]\n",
 		"r": "[instructions]\ninherit = false\nfiles = [\"prompts/c.md\"]\n",
 		"x": "extends = [\"l\", \"r\"]\n",
-	}, "x", []string{"r:prompts/c.md"}, "C\n")
+	}, "x", []string{"l:prompts/b.md", "r:prompts/c.md"}, "B\n\nC\n")
+	run("sibling order does not change what stays", map[string]string{
+		"l": "[instructions]\nfiles = [\"prompts/b.md\"]\n",
+		"r": "[instructions]\ninherit = false\nfiles = [\"prompts/c.md\"]\n",
+		"x": "extends = [\"r\", \"l\"]\n",
+	}, "x", []string{"r:prompts/c.md", "l:prompts/b.md"}, "C\n\nB\n")
+	diamond := func(order string) map[string]string {
+		return map[string]string{
+			"base": "[instructions]\nfiles = [\"prompts/a.md\"]\n",
+			"l":    "extends = [\"base\"]\n[instructions]\nfiles = [\"prompts/b.md\"]\n",
+			"r":    "extends = [\"base\"]\n[instructions]\ninherit = false\nfiles = [\"prompts/c.md\"]\n",
+			"x":    "extends = " + order + "\n[instructions]\nfiles = [\"prompts/d.md\"]\n",
+		}
+	}
+	run("diamond drops the common ancestor only", diamond(`["l", "r"]`), "x",
+		[]string{"l:prompts/b.md", "r:prompts/c.md", "x:prompts/d.md"}, "B\n\nC\n\nD\n")
+	run("diamond in the other order", diamond(`["r", "l"]`), "x",
+		[]string{"r:prompts/c.md", "l:prompts/b.md", "x:prompts/d.md"}, "C\n\nB\n\nD\n")
+	run("drop does not remove a later declaration of the same file", map[string]string{
+		"base": "[instructions]\nfiles = [\"prompts/a.md\"]\n",
+		"l":    "extends = [\"base\"]\n[instructions]\nfiles = [\"prompts/a.md\"]\n",
+		"r":    "extends = [\"base\"]\n[instructions]\ninherit = false\n",
+		"x":    "extends = [\"l\", \"r\"]\n",
+	}, "x", []string{"l:prompts/a.md"}, "A\n")
 	run("duplicate keeps the first", map[string]string{
 		"p": "[instructions]\nfiles = [\"prompts/a.md\", \"prompts/b.md\"]\n",
 		"x": "extends = [\"p\"]\n[instructions]\nfiles = [\"prompts/b.md\", \"prompts/c.md\"]\n",
@@ -226,7 +295,7 @@ func TestInstructionsAcrossSources(t *testing.T) {
 	if got := instrPaths(r); !reflect.DeepEqual(got, want) {
 		t.Fatalf("files = %v; want %v", got, want)
 	}
-	if string(r.InstructionsText) != "ORG-SHARED\n\nORG\n\nPERSONAL-SHARED\n\nMINE\n" {
+	if string(r.InstructionsText) != InstructionsHeader("mine")+"ORG-SHARED\n\nORG\n\nPERSONAL-SHARED\n\nMINE\n" {
 		t.Errorf("text = %q", r.InstructionsText)
 	}
 	for _, f := range r.Instructions {
@@ -278,7 +347,7 @@ func TestInstructionsRefusals(t *testing.T) {
 		body := strings.Repeat("y", MaxInstructionsSize-1) + "\n"
 		root := mk(t, instrTree(prof("prompts/a.md"), map[string]string{"a.md": body}))
 		r, err := Resolve("x", []Source{src(KindOrg, root)}, ResolveOptions{})
-		if err != nil || len(r.InstructionsText) != MaxInstructionsSize {
+		if err != nil || len(r.InstructionsText) != MaxInstructionsSize+len(InstructionsHeader("x")) {
 			t.Errorf("err = %v", err)
 		}
 	})
@@ -365,7 +434,8 @@ func TestInstructionsClosure(t *testing.T) {
 			}
 		}
 	}
-	if len(items) != 2 || items[0].Name != "01 prompts/a.md" || items[1].Name != "02 prompts/b.md" || items[0].Digest != digest([]byte("A\n")) {
+	if len(items) != 3 || items[0].Name != "00 header" || items[0].Digest != digest([]byte(InstructionsHeader("x"))) ||
+		items[1].Name != "01 prompts/a.md" || items[2].Name != "02 prompts/b.md" || items[1].Digest != digest([]byte("A\n")) {
 		t.Fatalf("items = %+v", items)
 	}
 
@@ -410,5 +480,61 @@ func TestInstructionsKeepExistingHashes(t *testing.T) {
 	b, err = ControlsJSON(&Manifest{Name: "a", Instructions: Instructions{Files: []string{"prompts/a.md", "prompts/b.md"}}})
 	if err != nil || !strings.Contains(string(b), `"instructions.files":["prompts/a.md","prompts/b.md"]`) {
 		t.Errorf("controls JSON = %s, %v", b, err)
+	}
+}
+
+func TestInstructionsJoinedTextIsChecked(t *testing.T) {
+	// Each file passes alone. The fence of the first file closes on the
+	// opening line of the second, and the token comes out of the fence.
+	files := instrTree(map[string]string{"x": "[instructions]\nfiles = [\"prompts/a.md\", \"prompts/b.md\"]\n"},
+		map[string]string{"a.md": "```\nhi\n", "b.md": "```\n@/etc/passwd\n```\n"})
+	for _, f := range []string{"a.md", "b.md"} {
+		if line, msg := CheckInstructionsText(files["prompts/"+f]); line != 0 {
+			t.Fatalf("%s alone: line %d: %s", f, line, msg)
+		}
+	}
+	root := mk(t, files)
+	_, err := Resolve("x", []Source{src(KindOrg, root)}, ResolveOptions{})
+	if err == nil || !strings.Contains(err.Error(), "the joined instructions text of x") || !strings.Contains(err.Error(), "import token") {
+		t.Errorf("err = %v", err)
+	}
+}
+
+func TestInstructionsFileRefusals(t *testing.T) {
+	for name, c := range map[string]struct{ text, want string }{
+		"front matter": {"---\ntitle: x\n---\nBody\n", "front matter"},
+		"bom":          {"\ufeffText\n", "byte order mark"},
+		"comment":      {"a\n<!-- x -->\n", "HTML comment"},
+		"html":         {"a\n<div>\n", "HTML tag"},
+		"lone cr":      {"a\rb\n", "carriage return"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := mk(t, instrTree(map[string]string{"x": "[instructions]\nfiles = [\"prompts/a.md\"]\n"}, map[string]string{"a.md": c.text}))
+			_, err := Resolve("x", []Source{src(KindOrg, root)}, ResolveOptions{})
+			if err == nil || !strings.Contains(err.Error(), "prompts/a.md of x") || !strings.Contains(err.Error(), c.want) {
+				t.Errorf("err = %v", err)
+			}
+		})
+	}
+}
+
+func TestInstructionsCutBy(t *testing.T) {
+	prompts := map[string]string{"a.md": "A\n", "b.md": "B\n"}
+	r := resolveOne(t, instrTree(map[string]string{
+		"base": "[instructions]\nfiles = [\"prompts/a.md\"]\n",
+		"l":    "[instructions]\nfiles = [\"prompts/b.md\"]\n",
+		"x":    "extends = [\"base\", \"l\"]\n[instructions]\ninherit = false\n",
+	}, prompts), "x")
+	if r.InstructionsCutBy != "x" || len(r.Instructions) != 0 {
+		t.Errorf("cut by %q, files %v", r.InstructionsCutBy, instrPaths(r))
+	}
+	// Nothing to drop: no cut is reported.
+	r = resolveOne(t, instrTree(map[string]string{
+		"l": "[instructions]\nfiles = [\"prompts/b.md\"]\n",
+		"r": "[instructions]\ninherit = false\n",
+		"x": "extends = [\"l\", \"r\"]\n",
+	}, prompts), "x")
+	if r.InstructionsCutBy != "" || len(r.Instructions) != 1 {
+		t.Errorf("cut by %q, files %v", r.InstructionsCutBy, instrPaths(r))
 	}
 }

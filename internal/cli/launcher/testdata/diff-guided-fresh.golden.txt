@@ -3,4 +3,4 @@
 instructions.files:
   - prompts/company.md
 instructions.inherit: (unset) -> false (set in fresh)
-instructions (sha256): bb6c2b363730 -> 3840bf1bf5f2
+instructions (sha256): bd1071707f69 -> 9d0e70ce3831

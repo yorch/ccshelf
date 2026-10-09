@@ -12,10 +12,11 @@ Session:
 Instructions:
   inherit = false in fresh dropped the files of earlier profiles
   1. prompts/team.md (profile fresh, dir:org, 24 bytes, sha256:3840bf1bf5f2)
-  joined: 24 bytes, sha256:3840bf1bf5f2
+  joined: 71 bytes, sha256:9d0e70ce3831
 Policy:
   on_blocked: warn
-Closure: sha256:8d380093db169fbdbe54b91e828b6d1b3302e26b80e368ccb1af69e497e122b4
+Closure: sha256:22ea1b2d06cd465462f66cec0102ed4ea17a86443abb7c63c01378c246fa83cc
+  instruction 00 header 807b7f060633 risky
   instruction 01 prompts/team.md 3840bf1bf5f2 risky
   profile base 4ce5f376ca74
   profile fresh 169feb323e9f
