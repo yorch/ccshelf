@@ -71,8 +71,8 @@ details:last-of-type{border-bottom:1px solid var(--rule)}
 summary{cursor:pointer;font-weight:600}
 code,pre{font-family:var(--mono);font-size:.84rem}
 pre{background:var(--panel);border:1px solid var(--rule);border-radius:4px;padding:12px 14px;overflow-x:auto;line-height:1.5}
-code{background:var(--chip);padding:1px 5px;border-radius:3px}
-pre code{background:none;padding:0}
+code{background:var(--chip);padding:1px 5px;border-radius:3px;overflow-wrap:anywhere}
+pre code{background:none;padding:0;overflow-wrap:normal}
 .bar{height:10px;background:var(--chip);border-radius:2px;overflow:hidden}
 .bar i{display:block;height:100%;background:var(--accent);transition:width .25s}
 .callout{border-left:3px solid var(--accent);padding:8px 16px;background:var(--panel);margin:16px 0;max-width:72ch}
@@ -128,7 +128,7 @@ li>p{margin:4px 0}
 blockquote{margin:12px 0;padding:2px 14px;border-left:3px solid var(--rule);color:var(--muted)}
 hr{border:0;border-top:1px solid var(--rule);margin:24px 0}
 s{color:var(--muted)}
-td code,th code{white-space:normal}
+td code,th code{white-space:normal;overflow-wrap:normal}
 section>input[type=search]{display:block}
 @media (max-width:860px){.grp{display:none}}
 .nw{white-space:nowrap}
@@ -138,7 +138,7 @@ section>input[type=search]{display:block}
 <body>
 <div class="shell">
 <aside class="rail">
-<div class="brand"><h1>ccshelf</h1><p>Research and design notes. Claude Code 2.1.290. Generated from the Markdown in docs/ (source hash 501edd70).</p></div>
+<div class="brand"><h1>ccshelf</h1><p>Research and design notes. Claude Code 2.1.290. Generated from the Markdown in docs/ (source hash c5318132).</p></div>
 <nav aria-label="Sections"><div id="tabs" role="tablist" aria-orientation="vertical"></div></nav>
 <div class="legend" aria-label="Confidence markers"><b>How sure we are</b><br><span class="lg gv" aria-hidden="true">&#9679;</span>verified in docs, gh or the CLI<br><span class="lg gr" aria-hidden="true">&#9680;</span>reported by a research agent<br><span class="lg gu" aria-hidden="true">&#9675;</span>unverified or inferred</div>
 <button class="themebtn" id="themebtn" type="button">Switch theme</button>
