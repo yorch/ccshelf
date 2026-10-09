@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.7.0](https://github.com/yorch/ccshelf/compare/v0.6.0...v0.7.0) (2026-10-08)
+
+
+### Features
+
+* **config:** let git profile sources track a branch ([#44](https://github.com/yorch/ccshelf/issues/44)) ([4031e44](https://github.com/yorch/ccshelf/commit/4031e44e4c314f6c0f508a7daadf6b642d2da817))
+
+
+### Bug fixes
+
+* **deps:** build with go 1.27.2 for standard library fixes ([#46](https://github.com/yorch/ccshelf/issues/46)) ([1ba9fba](https://github.com/yorch/ccshelf/commit/1ba9fba5a7a14f8fb16db1d3c05ae296b0e601c9))
+
 ## [0.6.0](https://github.com/yorch/ccshelf/compare/v0.5.0...v0.6.0) (2026-10-08)
 
 
