@@ -13,7 +13,7 @@ claude -p --model sonnet --output-format stream-json --verbose --allowedTools Ag
 ```
 
 - The prompt asked the main conversation to list every "secret marker" phrase in its instructions or context, without using tools. It then asked the main conversation to call the Agent tool once with `subagent_type` "general-purpose". The subagent got the same request, also without tools. Each channel had its own marker, so a phrase in the reply showed which channel reached which conversation.
-- `--allowedTools Agent` allowed only the Agent tool. The model could not read a file to find a marker, so a marker in the reply came from the loaded context. The prompt also said not to read files.
+- `--allowedTools Agent` pre-approved the Agent tool. It did not remove the other tools, so the prompt also said not to read files. The stream-json output of every run shows one Agent call by the main conversation and no other tool call by either conversation {V}. A marker in a reply therefore came from the loaded context, not from a file read.
 - Each run used one `-p` session. The `system/init` event and the final reply were read from the stream-json output. Each channel ran once, so the results show presence or absence, not rates.
 - For the `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD` runs, the environment variable was set to `1`. Runs without the variable unset it.
 
