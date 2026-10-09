@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -403,6 +404,27 @@ func TestPruneAndReplaceRemoveReadOnlyTrees(t *testing.T) {
 	if err := os.Chtimes(p, old, old); err != nil {
 		t.Fatal(err)
 	}
+	if runtime.GOOS != "windows" {
+		// A directory that Claude Code changed to a mode that blocks reading.
+		unlock(p)
+		for i, m := range []os.FileMode{0o000, 0o100, 0o200} {
+			sub := filepath.Join(p, ".d"+strconv.Itoa(i))
+			if err := os.Mkdir(sub, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(sub, "f"), []byte("x"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Chmod(sub, m); err != nil {
+				t.Fatal(err)
+			}
+		}
+		_ = os.Chmod(filepath.Join(p, "CLAUDE.md"), 0o400)
+		_ = os.Chmod(p, 0o500)
+		if err := os.Chtimes(p, old, old); err != nil {
+			t.Fatal(err)
+		}
+	}
 	removed, err := PruneDir(dir, 0, nil)
 	if err != nil || len(removed) != 1 {
 		t.Fatalf("removed = %v, %v", removed, err)
@@ -447,7 +469,8 @@ func TestWriteDirFileSystemIgnoresModes(t *testing.T) {
 	if err := checkContent(p, "CLAUDE.md", dirContent); err != nil {
 		t.Fatal(err)
 	}
-	// A second call must settle at once, not loop through the rounds.
+	// A second call must settle at once and must not swap the directory.
+	before, _ := os.Stat(filepath.Join(p, "CLAUDE.md"))
 	start := time.Now()
 	p2, ignored, err := WriteDirChecked(dir, "instructions", "CLAUDE.md", dirContent)
 	if err != nil || !ignored || p2 != p {
@@ -455,6 +478,9 @@ func TestWriteDirFileSystemIgnoresModes(t *testing.T) {
 	}
 	if time.Since(start) > 100*time.Millisecond {
 		t.Errorf("the call took %v", time.Since(start))
+	}
+	if after, _ := os.Stat(filepath.Join(p, "CLAUDE.md")); !os.SameFile(before, after) {
+		t.Error("the directory was replaced on a file system that ignores modes")
 	}
 	// The content check stays mandatory.
 	if err := os.WriteFile(filepath.Join(p, "CLAUDE.md"), []byte("bad\n"), 0o600); err != nil {

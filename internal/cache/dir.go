@@ -56,10 +56,11 @@ func WriteDir(dir, prefix, file string, content []byte) (string, error) {
 }
 
 // WriteDirChecked is [WriteDir]. It also reports modesIgnored: true when the
-// cache file system did not keep the read-only modes (some network and FAT
+// cache file system does not keep the read-only modes (some network and FAT
 // file systems ignore them). The content checks still passed in that case, so
-// the directory is usable but not read-only. The function rebuilds a
-// directory with wrong modes once and then accepts it.
+// the directory is usable but not read-only. The function probes the file
+// system with a temporary file. If the probe shows that modes are ignored, it
+// accepts a directory with the right content and does not rebuild it.
 func WriteDirChecked(dir, prefix, file string, content []byte) (path string, modesIgnored bool, err error) {
 	name, err := DirName(prefix, content)
 	if err != nil {
@@ -77,7 +78,6 @@ func WriteDirChecked(dir, prefix, file string, content []byte) (path string, mod
 	// target. Each round checks the target first and builds it only if the
 	// check fails. A few rounds are enough for the processes to agree.
 	var last error
-	rebuilt := false
 	for round := 0; round < 8; round++ {
 		if round > 0 {
 			time.Sleep(time.Duration(round) * 5 * time.Millisecond)
@@ -87,17 +87,16 @@ func WriteDirChecked(dir, prefix, file string, content []byte) (path string, mod
 				touch(final)
 				return final, false, nil
 			}
-			if rebuilt {
-				// The rebuild did not change the modes: the file system
-				// ignores them.
+			// The content is right and the modes are not. If the file system
+			// ignores modes, a rebuild cannot help, and it would replace the
+			// directory under running sessions. Accept the directory.
+			if !fsHonorsModes(dir) {
 				touch(final)
 				return final, true, nil
 			}
 		}
 		if err := replaceDir(dir, final, file, content); err != nil {
 			last = err
-		} else {
-			rebuilt = true
 		}
 	}
 	return "", false, fmt.Errorf("cache directory %s: %w%s", name, last, deleteHint(final))
@@ -300,4 +299,32 @@ func makeWritable(path string) {
 	for _, e := range entries {
 		makeWritable(filepath.Join(path, e.Name()))
 	}
+}
+
+// fsHonorsModes reports whether a mode set with chmod in dir stays. It
+// creates a temporary file, sets mode 0400 and reads the mode back. When the
+// probe fails for another reason it returns true, so that the caller keeps
+// its strict behavior.
+func fsHonorsModes(dir string) bool {
+	if runtime.GOOS == "windows" {
+		return true
+	}
+	tmp, err := tempName(dir)
+	if err != nil {
+		return true
+	}
+	f, err := openNoFollow(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return true
+	}
+	f.Close()
+	defer os.Remove(tmp)
+	if err := chmodFn(tmp, 0o400); err != nil {
+		return true
+	}
+	fi, err := os.Lstat(tmp)
+	if err != nil {
+		return true
+	}
+	return fi.Mode().Perm() == 0o400
 }

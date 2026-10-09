@@ -3,9 +3,13 @@
 package cache
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"syscall"
+
+	"golang.org/x/sys/unix"
 )
 
 // openNoFollow opens path and fails if the final component is a symlink.
@@ -62,6 +66,13 @@ func secureDir(dir string, fi os.FileInfo) error {
 // path with O_NOFOLLOW (and O_DIRECTORY for a directory) and changes the mode
 // of the handle. A link that replaces the path after the caller looked at it
 // makes the open fail.
+//
+// A directory of mode 0000, 0100 or 0200 cannot be opened for reading. For
+// that case the function opens the parent directory with O_NOFOLLOW, checks
+// the name with fstatat and AT_SYMLINK_NOFOLLOW, and calls fchmodat on the
+// parent handle. The fchmodat call follows a link at the last name. Linux does
+// not support AT_SYMLINK_NOFOLLOW there. The check just before it narrows the
+// window, and only a process of the same user can use it.
 func chmodNoFollow(path string, dir bool, mode os.FileMode) error {
 	flag := os.O_RDONLY | syscall.O_NOFOLLOW
 	if dir {
@@ -69,8 +80,28 @@ func chmodNoFollow(path string, dir bool, mode os.FileMode) error {
 	}
 	f, err := os.OpenFile(path, flag, 0)
 	if err != nil {
+		if dir && errors.Is(err, os.ErrPermission) {
+			return chmodViaParent(path, mode)
+		}
 		return err
 	}
 	defer f.Close()
 	return f.Chmod(mode)
+}
+
+func chmodViaParent(path string, mode os.FileMode) error {
+	parent, err := os.OpenFile(filepath.Dir(path), os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_DIRECTORY, 0)
+	if err != nil {
+		return err
+	}
+	defer parent.Close()
+	name := filepath.Base(path)
+	var st unix.Stat_t
+	if err := unix.Fstatat(int(parent.Fd()), name, &st, unix.AT_SYMLINK_NOFOLLOW); err != nil {
+		return err
+	}
+	if st.Mode&unix.S_IFMT != unix.S_IFDIR {
+		return fmt.Errorf("%s is not a directory", name)
+	}
+	return unix.Fchmodat(int(parent.Fd()), name, uint32(mode.Perm()), 0)
 }
