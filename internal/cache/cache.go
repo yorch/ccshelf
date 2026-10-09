@@ -455,6 +455,7 @@ func PruneDir(dir string, maxAge time.Duration, keep func(path string) bool) ([]
 		if keep != nil && keep(p) {
 			continue
 		}
+		makeWritable(p)
 		if err := os.RemoveAll(p); err != nil {
 			errs = append(errs, fmt.Errorf("remove %s: %w", name, err))
 			continue

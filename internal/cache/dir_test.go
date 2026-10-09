@@ -26,6 +26,10 @@ func readDirNames(t *testing.T, dir string) []string {
 	return out
 }
 
+// unlock gives the owner write permission on the tree, as Claude Code or the
+// user could.
+func unlock(p string) { makeWritable(p) }
+
 func TestWriteDirCreates(t *testing.T) {
 	dir := newDir(t)
 	p, err := WriteDir(dir, "instructions", "CLAUDE.md", dirContent)
@@ -49,7 +53,7 @@ func TestWriteDirCreates(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		fi, _ := os.Stat(p)
 		ff, _ := os.Stat(filepath.Join(p, "CLAUDE.md"))
-		if fi.Mode().Perm() != 0o700 || ff.Mode().Perm() != 0o600 {
+		if fi.Mode().Perm() != 0o500 || ff.Mode().Perm() != 0o400 {
 			t.Errorf("modes = %v %v", fi.Mode().Perm(), ff.Mode().Perm())
 		}
 	}
@@ -175,6 +179,7 @@ func TestWriteDirRebuildsTamperedDirectory(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			unlock(p)
 			tamper(t, p)
 			p2, err := WriteDir(dir, "instructions", "CLAUDE.md", dirContent)
 			if err != nil {
@@ -211,6 +216,7 @@ func TestWriteDirSymlinkTargetUntouched(t *testing.T) {
 	if err := os.WriteFile(marker, []byte("keep"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	unlock(p)
 	if err := os.RemoveAll(p); err != nil {
 		t.Fatal(err)
 	}
@@ -260,6 +266,7 @@ func TestWriteDirConcurrentWithTampering(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	unlock(p)
 	if err := os.WriteFile(filepath.Join(p, "extra.md"), []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -290,6 +297,7 @@ func TestWriteDirConcurrentWithTampering(t *testing.T) {
 func TestCheckDirReportsTamper(t *testing.T) {
 	dir := newDir(t)
 	p, _ := WriteDir(dir, "instructions", "CLAUDE.md", dirContent)
+	unlock(p)
 	if err := os.WriteFile(filepath.Join(p, "x"), nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -331,5 +339,94 @@ func TestPruneDirRemovesOldInstructionDirectories(t *testing.T) {
 		if _, err := os.Lstat(p); (err == nil) != want {
 			t.Errorf("%s exists = %v, want %v", filepath.Base(p), err == nil, want)
 		}
+	}
+}
+
+func TestWriteDirIsReadOnly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("modes are Unix only; Windows sets the read-only attribute on the file")
+	}
+	dir := newDir(t)
+	p, err := WriteDir(dir, "instructions", "CLAUDE.md", dirContent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A write by a process that does not chmod fails.
+	if err := os.WriteFile(filepath.Join(p, "CLAUDE.md"), []byte("x"), 0o600); err == nil {
+		t.Error("the file is writable")
+	}
+	if err := os.WriteFile(filepath.Join(p, "new.md"), []byte("x"), 0o600); err == nil {
+		t.Error("the directory is writable")
+	}
+}
+
+func TestWriteDirRebuildsWhenModesAreWider(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("modes are Unix only")
+	}
+	for name, widen := range map[string]func(p string){
+		"directory writable": func(p string) { _ = os.Chmod(p, 0o700) },
+		"directory 0750":     func(p string) { _ = os.Chmod(p, 0o750) },
+		"file writable":      func(p string) { _ = os.Chmod(filepath.Join(p, "CLAUDE.md"), 0o600) },
+		"file 0440":          func(p string) { _ = os.Chmod(filepath.Join(p, "CLAUDE.md"), 0o440) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			dir := newDir(t)
+			p, err := WriteDir(dir, "instructions", "CLAUDE.md", dirContent)
+			if err != nil {
+				t.Fatal(err)
+			}
+			widen(p)
+			if err := checkDir(p, "CLAUDE.md", dirContent); !errors.Is(err, ErrTampered) {
+				t.Fatalf("checkDir = %v", err)
+			}
+			if _, err := WriteDir(dir, "instructions", "CLAUDE.md", dirContent); err != nil {
+				t.Fatal(err)
+			}
+			if err := checkDir(p, "CLAUDE.md", dirContent); err != nil {
+				t.Errorf("not rebuilt with the right modes: %v", err)
+			}
+			if names := readDirNames(t, dir); len(names) != 1 {
+				t.Errorf("leftovers: %v", names)
+			}
+		})
+	}
+}
+
+func TestPruneAndReplaceRemoveReadOnlyTrees(t *testing.T) {
+	dir := newDir(t)
+	p, err := WriteDir(dir, "instructions", "CLAUDE.md", dirContent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-60 * 24 * time.Hour)
+	if err := os.Chtimes(p, old, old); err != nil {
+		t.Fatal(err)
+	}
+	removed, err := PruneDir(dir, 0, nil)
+	if err != nil || len(removed) != 1 {
+		t.Fatalf("removed = %v, %v", removed, err)
+	}
+	if names := readDirNames(t, dir); len(names) != 0 {
+		t.Errorf("left over: %v", names)
+	}
+	// Replace: a wrong read-only tree is moved aside and removed.
+	p, err = WriteDir(dir, "instructions", "CLAUDE.md", dirContent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unlock(p)
+	if err := os.WriteFile(filepath.Join(p, "CLAUDE.md"), []byte("bad\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if runtime.GOOS != "windows" {
+		_ = os.Chmod(filepath.Join(p, "CLAUDE.md"), 0o400)
+		_ = os.Chmod(p, 0o500)
+	}
+	if _, err := WriteDir(dir, "instructions", "CLAUDE.md", dirContent); err != nil {
+		t.Fatal(err)
+	}
+	if names := readDirNames(t, dir); len(names) != 1 {
+		t.Errorf("leftovers after replace: %v", names)
 	}
 }

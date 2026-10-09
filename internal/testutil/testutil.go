@@ -104,6 +104,9 @@ func IsolatedEnv(t testing.TB) map[string]string {
 			t.Fatal(err)
 		}
 	}
+	// The launcher makes some cache directories read-only. Give the owner
+	// write permission back so that the temporary directory can go away.
+	t.Cleanup(func() { restoreWrite(root) })
 	gitcfg := filepath.Join(root, "gitconfig")
 	if err := os.WriteFile(gitcfg, nil, 0o600); err != nil {
 		t.Fatal(err)
@@ -198,4 +201,21 @@ func Environ(extra map[string]string) []string {
 		env = append(env, k+"="+v)
 	}
 	return env
+}
+
+// restoreWrite gives the owner write permission on every directory and
+// regular file below root. It does not follow links and ignores errors.
+func restoreWrite(root string) {
+	_ = filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		switch {
+		case d.IsDir():
+			_ = os.Chmod(p, 0o700)
+		case d.Type().IsRegular():
+			_ = os.Chmod(p, 0o600)
+		}
+		return nil
+	})
 }

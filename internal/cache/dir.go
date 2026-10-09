@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"time"
 )
 
@@ -31,7 +32,10 @@ func DirName(prefix string, content []byte) (string, error) {
 // WriteDir makes sure that the directory <dir>/<DirName(prefix, content)>
 // exists and holds exactly one entry: the regular file called file with the
 // bytes of content. It returns the path of the directory. The directory has
-// mode 0700 and the file 0600.
+// mode 0500 and the file 0400 (on Windows, the file gets the read-only
+// attribute and the directory stays writable). This stops accidental writes.
+// It does not stop a process of the same user that changes the modes, so the
+// check below still runs at every launch.
 //
 // An existing directory is reused only after a check: it is a real directory
 // (not a link) owned by the current user, its only entry is file, and file is
@@ -85,7 +89,7 @@ func replaceDir(dir, final, file string, content []byte) error {
 	published := false
 	defer func() {
 		if !published {
-			_ = os.RemoveAll(tmp)
+			removeTree(tmp)
 		}
 	}()
 	f, err := openNoFollow(filepath.Join(tmp, file), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
@@ -102,6 +106,19 @@ func replaceDir(dir, final, file string, content []byte) error {
 	if werr != nil {
 		return fmt.Errorf("write cache directory: %w", werr)
 	}
+	// Make the tree read-only: file 0400, directory 0500. This stops an
+	// accidental write by Claude Code, not a deliberate chmod by the same
+	// user. checkDir still verifies the content at every launch. On Windows
+	// the file gets the read-only attribute, and the directory stays
+	// writable.
+	if err := os.Chmod(filepath.Join(tmp, file), 0o400); err != nil {
+		return fmt.Errorf("make the cache file read-only: %w", err)
+	}
+	if runtime.GOOS != "windows" {
+		if err := os.Chmod(tmp, 0o500); err != nil {
+			return fmt.Errorf("make the cache directory read-only: %w", err)
+		}
+	}
 	// Check again just before the move, so that a directory that another
 	// process published meanwhile is not moved away.
 	if checkDir(final, file, content) == nil {
@@ -113,7 +130,7 @@ func replaceDir(dir, final, file string, content []byte) error {
 			return err
 		}
 		if err := os.Rename(final, aside); err == nil {
-			defer func() { _ = os.RemoveAll(aside) }()
+			defer removeTree(aside)
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("move the old cache directory away: %w", err)
 		}
@@ -136,8 +153,12 @@ func checkDir(path, file string, content []byte) error {
 	bad := func(format string, a ...any) error {
 		return fmt.Errorf("%w: %s %s%s", ErrTampered, filepath.Base(path), fmt.Sprintf(format, a...), deleteHint(path))
 	}
-	if fi.Mode()&os.ModeSymlink != 0 || !fi.IsDir() {
+	// ModeIrregular covers a Windows junction or another reparse point.
+	if fi.Mode()&(os.ModeSymlink|os.ModeIrregular) != 0 || !fi.IsDir() {
 		return bad("is not a directory")
+	}
+	if runtime.GOOS != "windows" && fi.Mode().Perm() != 0o500 {
+		return bad("has mode %v, and it must be 0500", fi.Mode().Perm())
 	}
 	if err := checkOwner(fi); err != nil {
 		return bad("%v", err)
@@ -148,6 +169,16 @@ func checkDir(path, file string, content []byte) error {
 	}
 	if len(entries) != 1 || entries[0].Name() != file {
 		return bad("does not hold exactly the file %s", file)
+	}
+	ffi, err := os.Lstat(filepath.Join(path, file))
+	if err != nil {
+		return fmt.Errorf("inspect cache file: %w", err)
+	}
+	if !ffi.Mode().IsRegular() || ffi.Mode()&os.ModeIrregular != 0 {
+		return bad("holds %s, which is not a regular file", file)
+	}
+	if runtime.GOOS != "windows" && ffi.Mode().Perm() != 0o400 {
+		return bad("holds %s with mode %v, and it must be 0400", file, ffi.Mode().Perm())
 	}
 	got, err := readRegular(filepath.Join(path, file), int64(len(content))+1)
 	if err != nil {
@@ -182,5 +213,36 @@ func newTempDir(dir string) (string, error) {
 			return "", fmt.Errorf("create temporary cache directory: %w", err)
 		}
 		return p, nil
+	}
+}
+
+// removeTree removes path and what is below it. It first restores the owner
+// write permission on directories and files, because a directory of mode 0500
+// cannot be emptied, and Windows does not remove a read-only file. It does not
+// follow links. Errors are ignored: the callers treat the removal as best
+// effort and a left-over tree is pruned later.
+func removeTree(path string) {
+	makeWritable(path)
+	_ = os.RemoveAll(path)
+}
+
+func makeWritable(path string) {
+	fi, err := os.Lstat(path)
+	if err != nil || fi.Mode()&(os.ModeSymlink|os.ModeIrregular) != 0 {
+		return
+	}
+	if !fi.IsDir() {
+		if fi.Mode().IsRegular() {
+			_ = os.Chmod(path, 0o600)
+		}
+		return
+	}
+	_ = os.Chmod(path, 0o700)
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		makeWritable(filepath.Join(path, e.Name()))
 	}
 }
