@@ -93,6 +93,9 @@ func check(s node, root node, v any, path string) []string {
 				errs = append(errs, check(it, root, e, fmt.Sprintf("%s[%d]", path, i))...)
 			}
 		}
+		if m, ok := s["maxItems"].(float64); ok && float64(len(x)) > m {
+			add("%d items, more than %v", len(x), m)
+		}
 		if u, _ := s["uniqueItems"].(bool); u {
 			seen := map[string]bool{}
 			for _, e := range x {

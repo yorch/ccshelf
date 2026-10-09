@@ -178,6 +178,7 @@ func validate(m *Manifest, raw []byte, filename string) []Problem {
 			v.add("session.append_system_prompt_file", "%v", err)
 		}
 	}
+	v.instructions(m.Instructions)
 	envNames := make([]string, 0, len(m.Session.Env))
 	for k := range m.Session.Env {
 		envNames = append(envNames, k)
@@ -385,4 +386,27 @@ func lineOf(raw []byte, field string) int {
 		}
 	}
 	return 0
+}
+
+// MaxInstructionFiles is the largest number of files one profile may list in
+// instructions.files.
+const MaxInstructionFiles = 32
+
+// instructions validates the [instructions] table.
+func (v *validator) instructions(in Instructions) {
+	if len(in.Files) > MaxInstructionFiles {
+		v.add("instructions.files", "lists %d files, and the limit is %d", len(in.Files), MaxInstructionFiles)
+	}
+	seen := map[string]bool{}
+	for i, p := range in.Files {
+		f := fmt.Sprintf("instructions.files[%d]", i)
+		if err := CheckPromptPath(p); err != nil {
+			v.add(f, "%v", err)
+			continue
+		}
+		if seen[p] {
+			v.add(f, "duplicate entry %q", p)
+		}
+		seen[p] = true
+	}
 }

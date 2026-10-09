@@ -36,21 +36,38 @@ func OnBlockedModes() []string { return []string{OnBlockedWarn, OnBlockedFail} }
 // Unset scalars are "" (or nil for the pointer fields) so that merging can tell
 // "not set" from a value. WithDefaults fills the documented defaults.
 type Manifest struct {
-	Name         string   `toml:"name"`
-	Description  string   `toml:"description,omitempty"`
-	Owner        string   `toml:"owner,omitempty"`
-	Status       string   `toml:"status,omitempty"`
-	SupersededBy string   `toml:"superseded_by,omitempty"`
-	Account      string   `toml:"account,omitempty"`
-	Extends      []string `toml:"extends,omitempty"`
-	WhenToUse    []string `toml:"when_to_use,omitempty"`
-	AvoidWhen    []string `toml:"avoid_when,omitempty"`
-	Plugins      Plugins  `toml:"plugins"`
-	Skills       Skills   `toml:"skills"`
-	MCP          MCP      `toml:"mcp"`
-	Session      Session  `toml:"session"`
-	Policy       Policy   `toml:"policy"`
+	Name         string       `toml:"name"`
+	Description  string       `toml:"description,omitempty"`
+	Owner        string       `toml:"owner,omitempty"`
+	Status       string       `toml:"status,omitempty"`
+	SupersededBy string       `toml:"superseded_by,omitempty"`
+	Account      string       `toml:"account,omitempty"`
+	Extends      []string     `toml:"extends,omitempty"`
+	WhenToUse    []string     `toml:"when_to_use,omitempty"`
+	AvoidWhen    []string     `toml:"avoid_when,omitempty"`
+	Plugins      Plugins      `toml:"plugins"`
+	Skills       Skills       `toml:"skills"`
+	MCP          MCP          `toml:"mcp"`
+	Session      Session      `toml:"session"`
+	Instructions Instructions `toml:"instructions"`
+	Policy       Policy       `toml:"policy"`
 }
+
+// Instructions is the [instructions] table. Files are prompt paths
+// (prompts/<file> below the declaring source). The launcher joins the
+// effective files into one CLAUDE.md. Inherit unset means true: the files
+// come after the files of the parents. Inherit false drops the files of all
+// earlier profiles in the extends chain.
+type Instructions struct {
+	Files   []string `toml:"files,omitempty"`
+	Inherit *bool    `toml:"inherit,omitempty"`
+}
+
+// Set reports whether the table sets anything.
+func (i Instructions) Set() bool { return len(i.Files) > 0 || i.Inherit != nil }
+
+// Inherits reports the effective inherit value.
+func (i Instructions) Inherits() bool { return i.Inherit == nil || *i.Inherit }
 
 // Plugins is the [plugins] table. Ids are name@marketplace.
 type Plugins struct {

@@ -131,6 +131,20 @@
         }
       }
     },
+    "instructions": {
+      "type": "object",
+      "description": "Files that ccshelf joins into one CLAUDE.md for the session. Each file is a path below prompts/ in the source of the profile.",
+      "additionalProperties": false,
+      "properties": {
+        "files": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 32,
+          "items": { "type": "string", "pattern": "^prompts/([^/\\\\.][^/\\\\]*/)*[^/\\\\.][^/\\\\]*$" }
+        },
+        "inherit": { "type": "boolean", "description": "Default true: the files come after the files of the parent profiles. False drops the files of all parent profiles." }
+      }
+    },
     "policy": {
       "type": "object",
       "additionalProperties": false,
