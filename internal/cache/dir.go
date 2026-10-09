@@ -17,6 +17,11 @@ import (
 // system that ignores modes.
 var chmodFn = os.Chmod
 
+// renameFn renames a path in replaceDir. A test replaces it to imitate a
+// platform (older macOS) where renaming a directory needs write permission on
+// the directory itself, because the rename updates its ".." entry.
+var renameFn = os.Rename
+
 var (
 	dirFilePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 	// dirNamePattern matches the directory names that [WriteDir] creates.
@@ -78,6 +83,7 @@ func WriteDirChecked(dir, prefix, file string, content []byte) (path string, mod
 	// target. Each round checks the target first and builds it only if the
 	// check fails. A few rounds are enough for the processes to agree.
 	var last error
+	windowRetries := 0
 	for round := 0; round < 8; round++ {
 		if round > 0 {
 			time.Sleep(time.Duration(round) * 5 * time.Millisecond)
@@ -93,6 +99,13 @@ func WriteDirChecked(dir, prefix, file string, content []byte) (path string, mod
 			if !fsHonorsModes(dir) {
 				touch(final)
 				return final, true, nil
+			}
+			// Another process may have just published the directory and not
+			// yet made it read-only (mode 0700, file 0400). Wait a few
+			// rounds for it instead of replacing a good directory.
+			if windowRetries < 4 && inPublishWindow(final, file) {
+				windowRetries++
+				continue
 			}
 		}
 		if err := replaceDir(dir, final, file, content); err != nil {
@@ -130,18 +143,14 @@ func replaceDir(dir, final, file string, content []byte) error {
 	if werr != nil {
 		return fmt.Errorf("write cache directory: %w", werr)
 	}
-	// Make the tree read-only: file 0400, directory 0500. This stops an
-	// accidental write by Claude Code, not a deliberate chmod by the same
-	// user. checkDir still verifies the content at every launch. On Windows
-	// the file gets the read-only attribute, and the directory stays
-	// writable.
+	// The file becomes read-only (0400) now. The directory stays writable
+	// (0700) until the rename: some systems need write permission on a
+	// directory to move it. Then the published directory becomes 0500. This
+	// stops an accidental write by Claude Code, not a deliberate chmod by the
+	// same user. checkDir still verifies the content at every launch. On
+	// Windows the directory stays writable.
 	if err := chmodFn(filepath.Join(tmp, file), 0o400); err != nil {
 		return fmt.Errorf("make the cache file read-only: %w", err)
-	}
-	if runtime.GOOS != "windows" {
-		if err := chmodFn(tmp, 0o500); err != nil {
-			return fmt.Errorf("make the cache directory read-only: %w", err)
-		}
 	}
 	// Check again just before the move, so that a directory that another
 	// process published meanwhile is not moved away.
@@ -153,16 +162,23 @@ func replaceDir(dir, final, file string, content []byte) error {
 		if err != nil {
 			return err
 		}
-		if err := os.Rename(final, aside); err == nil {
+		// A directory of mode 0500 may need write permission to be moved.
+		_ = chmodNoFollow(final, true, 0o700)
+		if err := renameFn(final, aside); err == nil {
 			defer removeTree(aside)
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("move the old cache directory away: %w", err)
 		}
 	}
-	if err := os.Rename(tmp, final); err != nil {
+	if err := renameFn(tmp, final); err != nil {
 		return fmt.Errorf("publish cache directory: %w", err)
 	}
 	published = true
+	if runtime.GOOS != "windows" {
+		if err := chmodFn(final, 0o500); err != nil {
+			return fmt.Errorf("make the cache directory read-only: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -174,7 +190,7 @@ func checkDir(path, file string, content []byte) error {
 		return err
 	}
 	if err := checkModes(path, file); err != nil {
-		return fmt.Errorf("%w: %s %v%s", ErrTampered, filepath.Base(path), err, deleteHint(path))
+		return fmt.Errorf("%w: %s %w%s", ErrTampered, filepath.Base(path), err, deleteHint(path))
 	}
 	return nil
 }
@@ -327,4 +343,18 @@ func fsHonorsModes(dir string) bool {
 		return true
 	}
 	return fi.Mode().Perm() == 0o400
+}
+
+// inPublishWindow reports whether the directory has mode 0700 and the file
+// 0400: the state between the rename of a new directory and its chmod to 0500.
+func inPublishWindow(path, file string) bool {
+	if runtime.GOOS == "windows" {
+		return false
+	}
+	fi, err := os.Lstat(path)
+	if err != nil || fi.Mode().Perm() != 0o700 {
+		return false
+	}
+	ffi, err := os.Lstat(filepath.Join(path, file))
+	return err == nil && ffi.Mode().Perm() == 0o400
 }
