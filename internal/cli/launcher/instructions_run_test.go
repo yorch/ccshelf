@@ -184,7 +184,7 @@ func TestRunInstructionsImportRefused(t *testing.T) {
 	if h.started != 0 {
 		t.Error("claude started")
 	}
-	if !strings.Contains(h.errb.String(), "import token") || !strings.Contains(h.errb.String(), "backticks") {
+	if !strings.Contains(h.errb.String(), "import token") || !strings.Contains(h.errb.String(), `\@`) {
 		t.Errorf("stderr: %s", h.errb)
 	}
 }
@@ -276,7 +276,7 @@ func TestDiffInstructionsReorder(t *testing.T) {
 	h.writePrompt("b.md", "B\n")
 	h.mustRun("diff", "one", "two")
 	out := h.out.String()
-	if !strings.Contains(out, "instructions.order: prompts/a.md, prompts/b.md -> prompts/b.md, prompts/a.md") || !strings.Contains(out, "instructions (sha256)") {
+	if !strings.Contains(out, "instructions.order: prompts/a.md [dir:personal], prompts/b.md [dir:personal] -> prompts/b.md [dir:personal], prompts/a.md [dir:personal]") || !strings.Contains(out, "instructions (sha256)") {
 		t.Errorf("diff: %s", out)
 	}
 	if strings.Contains(out, "instructions.files") {
@@ -309,5 +309,20 @@ func TestRunInstructionsEnvOverride(t *testing.T) {
 	h.mustRun("run", "plain")
 	if v, ok := envValue(h.startEnv, name); !ok || v != "0" {
 		t.Errorf("without instructions the user value must stay: %q %v", v, ok)
+	}
+}
+
+func TestDiffInstructionsSameFileOtherSource(t *testing.T) {
+	org := t.TempDir()
+	testutil.WriteFile(t, filepath.Join(org, "profiles", "o.toml"), "name = \"o\"\n[instructions]\nfiles = [\"prompts/a.md\"]\n")
+	testutil.WriteFile(t, filepath.Join(org, "prompts", "a.md"), "A\n")
+	h := newHarness(t)
+	h.writeConfig("[[sources]]\ntype = \"dir\"\npath = " + tomlString(filepath.Join(org, "profiles")) + "\n")
+	h.writeProfile("p", "name = \"p\"\n[instructions]\nfiles = [\"prompts/a.md\"]\n")
+	h.writePrompt("a.md", "A\n")
+	h.mustRun("diff", "o", "p")
+	out := h.out.String()
+	if !strings.Contains(out, "instructions.files") || !strings.Contains(out, "prompts/a.md [dir:org]") || !strings.Contains(out, "prompts/a.md [dir:personal]") {
+		t.Errorf("diff: %s", out)
 	}
 }

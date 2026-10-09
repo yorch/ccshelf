@@ -133,7 +133,7 @@ func diffResolved(a, b *profile.Resolved) diffDoc {
 		{"skills.name_only", ma.Skills.NameOnly, mb.Skills.NameOnly},
 		{"mcp.servers", ma.MCP.Servers, mb.MCP.Servers},
 		{"session.env (names)", envNames(ma.Session.Env), envNames(mb.Session.Env)},
-		{"instructions.files", ma.Instructions.Files, mb.Instructions.Files},
+		{"instructions.files", instructionLabels(a), instructionLabels(b)},
 	}
 	for _, l := range lists {
 		added, removed := setDiff(l.a, l.b)
@@ -149,7 +149,7 @@ func diffResolved(a, b *profile.Resolved) diffDoc {
 		{"session.effort", ma.Session.Effort, mb.Session.Effort},
 		{"session.append_system_prompt_file", ma.Session.AppendSystemPromptFile, mb.Session.AppendSystemPromptFile},
 		{"session.prompt (sha256)", itemDigest(a, profile.ItemPrompt), itemDigest(b, profile.ItemPrompt)},
-		{"instructions.order", orderIfSameSet(ma.Instructions.Files, mb.Instructions.Files), orderIfSameSet(mb.Instructions.Files, ma.Instructions.Files)},
+		{"instructions.order", orderIfSameSet(instructionLabels(a), instructionLabels(b)), orderIfSameSet(instructionLabels(b), instructionLabels(a))},
 		{"instructions.inherit", inheritLabel(a), inheritLabel(b)},
 		{"instructions (sha256)", textDigest(a.InstructionsText), textDigest(b.InstructionsText)},
 		{"session.inherit_user_settings", boolStr(ma.Session.InheritUserSettings), boolStr(mb.Session.InheritUserSettings)},
@@ -163,6 +163,16 @@ func diffResolved(a, b *profile.Resolved) diffDoc {
 	}
 	d.Identical = len(d.Lists) == 0 && len(d.Scalars) == 0
 	return d
+}
+
+// instructionLabels lists the effective instructions files as "path [source]",
+// so that one path from two sources is not shown as the same file.
+func instructionLabels(r *profile.Resolved) []string {
+	out := make([]string, 0, len(r.Instructions))
+	for _, f := range r.Instructions {
+		out = append(out, f.Path+" ["+f.Source+"]")
+	}
+	return out
 }
 
 // orderIfSameSet returns the order of a when a and b hold the same files, so

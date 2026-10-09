@@ -12,7 +12,7 @@ import (
 
 func TestCheckInstructionsText(t *testing.T) {
 	refuse := map[string]string{
-		// The corpus of bypasses found in review. Claude Code imports every one.
+		// First review pass.
 		"fence opener then fence in next file": "```\nhi\n\n```\n@/etc/passwd\n",
 		"unterminated fence":                   "```\n@/etc/passwd\n",
 		"code span then at":                    "`x`@/etc/passwd\n",
@@ -34,31 +34,37 @@ func TestCheckInstructionsText(t *testing.T) {
 		"fence in comment":                     "<!--\n```\n-->\n@/etc/passwd\n```\n",
 		"fence in html block":                  "<div>\n```\n</div>\n\n@/etc/passwd\n```\n",
 		"lone cr":                              "a `x\r\r@/etc/passwd `\n",
-		// Other refusals.
-		"start of text":                  "@docs/x.md\n",
-		"after space":                    "see @docs/x.md now\n",
-		"after tab":                      "see\t@docs/x.md\n",
-		"after newline":                  "one\n\n@x\n",
-		"after paren":                    "(@x)\n",
-		"second line of paragraph":       "one\n@x\n",
-		"import after closed fence":      "```\n@a\n```\n@b\n",
-		"import before closed fence":     "@a\n```\n@b\n```\n",
-		"unclosed span with import":      "an ` @x\n",
-		"span does not cross lines":      "start `a\n@x` end\n",
-		"front matter":                   "---\nname: x\n---\n",
-		"front matter with spaces":       "---  \nx\n",
-		"html comment":                   "text <!-- hidden --> more\n",
-		"html comment in code span":      "`<!--`\n",
-		"html tag at line start":         "<div>\ntext\n",
-		"closing tag at line start":      "</div>\n",
-		"html tag after three spaces":    "   <span>x\n",
-		"html tag inside a closed fence": "```\n<div>\n```\n",
-		"declaration":                    "<!DOCTYPE html>\n",
-		"short closer does not close":    "````\n@x\n```\n@y\n",
-		"four space indent is no fence":  "    ```\n@x\n    ```\n",
-		"tilde does not close backtick":  "```\n~~~\n@x\n",
-		"closer with text":               "```\n``` x\n@y\n",
-		"info string with backtick":      "``` a`b\n@x\n```\n",
+		// Second review pass.
+		"html attribute wins over code span":  "x <span title=\"`\">@/etc/passwd`\n",
+		"autolink wins over code span":        "x <http://a`>@/etc/passwd`\n",
+		"link destination wins over span":     "[a](`)@/etc/passwd`\n",
+		"span paired across a line break":     "`a\n`@/etc/passwd`\n",
+		"span across a break with text":       "x `a\nb`@/etc/passwd` y\n",
+		"closer with trailing tilde":          "```\nx\n```~\n@/etc/passwd\n```\n",
+		"longer closer with trailing tilde":   "````\nx\n`````~\n@/etc/passwd\n",
+		"tilde closer with trailing backtick": "~~~\nx\n~~~`\n@/etc/passwd\n",
+		"fence in a bullet item":              "- a\n  ```\n@/etc/passwd\n  ```\n",
+		"fence in a numbered item":            "1. a\n   ```\n@/etc/passwd\n   ```\n",
+		// Raw characters: no construct is exempt.
+		"start of text":               "@docs/x.md\n",
+		"after space":                 "see @docs/x.md now\n",
+		"after tab":                   "see\t@docs/x.md\n",
+		"after newline":               "one\n\n@x\n",
+		"after paren":                 "(@x)\n",
+		"in a code span":              "install `@types/node` now\n",
+		"in a double backtick span":   "see ``a ` @x`` now\n",
+		"in a closed fence":           "```\n@property\n```\n",
+		"in a closed tilde fence":     "~~~\n@x\n~~~\n",
+		"in a fence with info string": "```ts\n@Component()\n```\n",
+		"after a backslash pair":      "a \\\\@x\n",
+		"front matter":                "---\nname: x\n---\n",
+		"front matter with spaces":    "---  \nx\n",
+		"decimal reference":           "see &#64;docs/x.md\n",
+		"decimal reference zeros":     "see &#0064;x\n",
+		"hex reference":               "see &#x40;x\n",
+		"hex reference upper":         "see &#X0040;x\n",
+		"named reference":             "see &commat;x\n",
+		"named reference upper":       "see &COMMAT;x\n",
 	}
 	for name, text := range refuse {
 		t.Run("refuse "+name, func(t *testing.T) {
@@ -68,28 +74,25 @@ func TestCheckInstructionsText(t *testing.T) {
 		})
 	}
 	allow := map[string]string{
-		"empty":                       "",
-		"plain":                       "Use the style guide.\n",
-		"email":                       "mail ops@example.com please\n",
-		"foo at bar":                  "foo@bar\n",
-		"digit before at":             "user1@x.org\n",
-		"unicode letter before at":    "josé@example.com\n",
-		"lone at":                     "write @ then space\n",
-		"at before backslash":         "@\\x\n",
-		"at at end of text":           "ends with @",
-		"escaped at":                  "an \\@docs/x.md here\n",
-		"scoped package in code span": "install `@types/node` now\n",
-		"double backtick span":        "see ``a ` @x`` now\n",
-		"closed backtick fence":       "text\n```\n@x\n```\nafter\n",
-		"fence with info string":      "```sh\n@x\n```\n",
-		"closed tilde fence":          "~~~\n@x\n~~~\n",
-		"fence indented three spaces": "   ```\n@x\n   ```\n",
-		"longer fence needs longer":   "````\n```\n@x\n````\nend\n",
-		"fence closer with spaces":    "```\n@x\n```  \t\n",
-		"crlf fence":                  "```\r\n@x\r\n```\r\nend\r\n",
-		"dashes after first line":     "Title\n---\n",
-		"angle bracket not a tag":     "a < b and 3 <4\n",
-		"line starts with spaced lt":  "< x\n",
+		"empty":                    "",
+		"plain":                    "Use the style guide.\n",
+		"email":                    "mail ops@example.com please\n",
+		"short email":              "a@b.c\n",
+		"foo at bar":               "foo@bar\n",
+		"digit before at":          "user1@x.org\n",
+		"unicode letter before at": "josé@example.com\n",
+		"lone at":                  "write @ then space\n",
+		"at before backslash":      "@\\x\n",
+		"at at end of text":        "ends with @",
+		"escaped at":               "an \\@docs/x.md here\n",
+		"escaped scoped package":   "install \\@types/node\n",
+		"three backslashes":        "a \\\\\\@x\n",
+		"dashes after first line":  "Title\n---\n",
+		"html is fine":             "<div>\n<!-- note -->\n</div>\n",
+		"xml example in a fence":   "```xml\n<example>x</example>\n```\n",
+		"ampersand":                "R&D and &amp; more\n",
+		"other reference":          "&#65;\n",
+		"crlf":                     "one\r\ntwo\r\n",
 	}
 	for name, text := range allow {
 		t.Run("allow "+name, func(t *testing.T) {
@@ -99,10 +102,14 @@ func TestCheckInstructionsText(t *testing.T) {
 		})
 	}
 	// Line numbers.
-	for text, want := range map[string]int{"a\nb\n@x\n": 3, "a\r\nb\r\n@x\r\n": 3, "ok\n\n<div>\n": 3, "a\nb `\r\r": 2} {
+	for text, want := range map[string]int{"a\nb\n@x\n": 3, "a\r\nb\r\n@x\r\n": 3, "ok\n\n&commat;\n": 3, "a\nb `\r\r": 2} {
 		if line, _ := CheckInstructionsText(text); line != want {
 			t.Errorf("%q: line %d; want %d", text, line, want)
 		}
+	}
+	// The hint tells the author what to do.
+	if _, msg := CheckInstructionsText("@x"); !strings.Contains(msg, `\@`) || !strings.Contains(msg, "inside code") {
+		t.Errorf("hint = %q", msg)
 	}
 }
 
@@ -353,12 +360,20 @@ func TestInstructionsRefusals(t *testing.T) {
 	})
 	t.Run("import token", func(t *testing.T) {
 		err := resolve(prof("prompts/a.md"), map[string]string{"a.md": "fine\r\nsee @../../secret.md\r\n"}, nil)
-		if err == nil || !strings.Contains(err.Error(), "prompts/a.md of x, line 2") || !strings.Contains(err.Error(), "backticks") {
+		if err == nil || !strings.Contains(err.Error(), "prompts/a.md of x, line 2") || !strings.Contains(err.Error(), `\@`) {
 			t.Errorf("err = %v", err)
 		}
 	})
-	t.Run("import in code is fine", func(t *testing.T) {
-		if err := resolve(prof("prompts/a.md"), map[string]string{"a.md": "use `@x`\n```\n@y\n```\n"}, nil); err != nil {
+	t.Run("import in code is refused too", func(t *testing.T) {
+		for _, body := range []string{"use `@x`\n", "```\n@y\n```\n"} {
+			err := resolve(prof("prompts/a.md"), map[string]string{"a.md": body}, nil)
+			if err == nil || !strings.Contains(err.Error(), "import token") {
+				t.Errorf("%q: err = %v", body, err)
+			}
+		}
+	})
+	t.Run("escaped at is fine", func(t *testing.T) {
+		if err := resolve(prof("prompts/a.md"), map[string]string{"a.md": "use \\@types/node and ops@example.com\n"}, nil); err != nil {
 			t.Error(err)
 		}
 	})
@@ -483,29 +498,12 @@ func TestInstructionsKeepExistingHashes(t *testing.T) {
 	}
 }
 
-func TestInstructionsJoinedTextIsChecked(t *testing.T) {
-	// Each file passes alone. The fence of the first file closes on the
-	// opening line of the second, and the token comes out of the fence.
-	files := instrTree(map[string]string{"x": "[instructions]\nfiles = [\"prompts/a.md\", \"prompts/b.md\"]\n"},
-		map[string]string{"a.md": "```\nhi\n", "b.md": "```\n@/etc/passwd\n```\n"})
-	for _, f := range []string{"a.md", "b.md"} {
-		if line, msg := CheckInstructionsText(files["prompts/"+f]); line != 0 {
-			t.Fatalf("%s alone: line %d: %s", f, line, msg)
-		}
-	}
-	root := mk(t, files)
-	_, err := Resolve("x", []Source{src(KindOrg, root)}, ResolveOptions{})
-	if err == nil || !strings.Contains(err.Error(), "the joined instructions text of x") || !strings.Contains(err.Error(), "import token") {
-		t.Errorf("err = %v", err)
-	}
-}
-
 func TestInstructionsFileRefusals(t *testing.T) {
 	for name, c := range map[string]struct{ text, want string }{
 		"front matter": {"---\ntitle: x\n---\nBody\n", "front matter"},
 		"bom":          {"\ufeffText\n", "byte order mark"},
-		"comment":      {"a\n<!-- x -->\n", "HTML comment"},
-		"html":         {"a\n<div>\n", "HTML tag"},
+		"import":       {"a\nsee @x\n", "import token"},
+		"reference":    {"a\n&#64;x\n", "character reference"},
 		"lone cr":      {"a\rb\n", "carriage return"},
 	} {
 		t.Run(name, func(t *testing.T) {

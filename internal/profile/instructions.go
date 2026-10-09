@@ -1,6 +1,7 @@
 package profile
 
 import (
+	"regexp"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -56,23 +57,25 @@ func joinInstructions(parts [][]byte) []byte {
 	return out
 }
 
+// charRefRe matches the character references of "@" that Markdown decodes.
+var charRefRe = regexp.MustCompile(`(?i)^&(#0*64|#x0*40|commat);`)
+
 // CheckInstructionsText checks the text of one instructions file, or the
 // joined text, against what Claude Code does with a CLAUDE.md file. It returns
 // the 1-based line and a message that says what to change, or line 0 when the
 // text is acceptable.
 //
 // Claude Code expands "@path" tokens in memory files into the content of other
-// files. The check does not copy its parser. It is stricter, so that a
-// difference between the two parsers cannot hide a token:
-//   - A text with a leading byte order mark, a first line of "---" (front
-//     matter), a carriage return that is not part of a CRLF line end, an HTML
-//     comment, or a line that starts with an HTML tag is refused.
-//   - An "@" is refused when a character that is not white space or a
-//     backslash follows it, unless a letter or a digit precedes it (an email
-//     address) or an odd number of backslashes precede it.
-//   - The "@" checks skip fenced code blocks and single-line code spans. A
-//     fence is skipped only when a closing line exists. An unterminated fence
-//     is not skipped.
+// files. The check looks at the raw characters and does not follow the Markdown
+// structure. No code span, fenced block or other construct is exempt. A text
+// is refused when it has:
+//   - a leading byte order mark,
+//   - a first line of "---" (front matter),
+//   - a carriage return that is not part of a CRLF line end,
+//   - a character reference of "@" ("&#64;", "&#x40;" or "&commat;"),
+//   - an "@" followed by a character that is not white space or a backslash,
+//     unless a letter or a digit precedes the "@" (an email address) or an odd
+//     number of backslashes precede it.
 func CheckInstructionsText(text string) (int, string) {
 	if strings.HasPrefix(text, "\ufeff") {
 		return 1, "starts with a byte order mark. Remove the mark"
@@ -81,163 +84,70 @@ func CheckInstructionsText(text string) (int, string) {
 	if strings.TrimSpace(first) == "---" {
 		return 1, "starts with a line of \"---\", which Claude Code reads as front matter. Start the file with another line"
 	}
+	line := 1
 	for i := 0; i < len(text); i++ {
-		if text[i] == '\r' && (i+1 >= len(text) || text[i+1] != '\n') {
-			return 1 + strings.Count(text[:i], "\n"), "contains a carriage return that is not part of a line end. Use LF or CRLF line ends"
-		}
-	}
-	lines := strings.Split(text, "\n")
-	for i, ln := range lines {
-		lines[i] = strings.TrimSuffix(ln, "\r")
-	}
-	exempt := fencedLines(lines)
-	for i, ln := range lines {
-		if strings.Contains(ln, "<!--") {
-			return i + 1, "contains an HTML comment (\"<!--\"). Remove the comment"
-		}
-		if startsHTML(ln) {
-			return i + 1, "starts with an HTML tag. Begin the line with other text, or put the tag in a code span (backticks)"
-		}
-		if exempt[i] {
-			continue
-		}
-		if tok := importToken(ln); tok != "" {
-			if len(tok) > 40 {
-				tok = tok[:40] + "..."
+		switch text[i] {
+		case '\n':
+			line++
+		case '\r':
+			if i+1 >= len(text) || text[i+1] != '\n' {
+				return line, "contains a carriage return that is not part of a line end. Use LF or CRLF line ends"
 			}
-			return i + 1, "contains the import token " + quote(tok) + ". Claude Code reads it as a file import. Put the token in a code span (backticks) or in a closed fenced code block, or write a backslash before the @"
+		case '&':
+			if m := charRefRe.FindString(text[i:]); m != "" {
+				return line, "contains the character reference " + quote(m) + ", which Claude Code reads as an \"@\". Remove it"
+			}
+		case '@':
+			if isImportAt(text, i) {
+				return line, "contains the import token " + quote(tokenAt(text, i)) + ". " + importHint
+			}
 		}
 	}
 	return 0, ""
 }
 
-func quote(s string) string { return "\"" + strings.ReplaceAll(s, "\"", "'") + "\"" }
+const importHint = "Claude Code reads it as a file import, also inside code. Write \\@ to keep the character (inside code the backslash stays visible), or remove it"
 
-// startsHTML reports whether ln starts, after up to three spaces, with "<"
-// and a letter, "/", "!" or "?".
-func startsHTML(ln string) bool {
-	t := strings.TrimLeft(ln, " ")
-	if len(ln)-len(t) > 3 || len(t) < 2 || t[0] != '<' {
+func quote(s string) string {
+	if len(s) > 40 {
+		s = s[:40] + "..."
+	}
+	return "\"" + strings.ReplaceAll(s, "\"", "'") + "\""
+}
+
+// tokenAt returns the "@" at text[i] and the characters after it up to white
+// space or a backslash, or the end of the line.
+func tokenAt(text string, i int) string {
+	j := i + 1
+	for j < len(text) {
+		r, _ := utf8.DecodeRuneInString(text[j:])
+		if jsSpace(r) || r == '\\' {
+			break
+		}
+		j += utf8.RuneLen(r)
+	}
+	return text[i:j]
+}
+
+// isImportAt reports whether the "@" at text[i] must be refused.
+func isImportAt(text string, i int) bool {
+	if i+1 >= len(text) {
 		return false
 	}
-	c := t[1]
-	return c == '/' || c == '!' || c == '?' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
-}
-
-// fencedLines marks the lines of every closed fenced code block, the opening
-// and closing lines included.
-func fencedLines(lines []string) []bool {
-	out := make([]bool, len(lines))
-	for i := 0; i < len(lines); i++ {
-		ch, n := fenceOpen(lines[i])
-		if ch == 0 {
-			continue
-		}
-		for j := i + 1; j < len(lines); j++ {
-			if isFenceClose(lines[j], ch, n) {
-				for k := i; k <= j; k++ {
-					out[k] = true
-				}
-				i = j
-				break
-			}
-		}
-	}
-	return out
-}
-
-// fenceOpen reports the fence character and length when ln opens a fenced
-// code block: up to three spaces, then three or more backticks or tildes, then
-// an optional info string. The info string of a backtick fence may not contain
-// a backtick.
-func fenceOpen(ln string) (byte, int) {
-	s := strings.TrimLeft(ln, " ")
-	if len(ln)-len(s) > 3 || len(s) < 3 || (s[0] != '`' && s[0] != '~') {
-		return 0, 0
-	}
-	n := 0
-	for n < len(s) && s[n] == s[0] {
-		n++
-	}
-	if n < 3 || (s[0] == '`' && strings.Contains(s[n:], "`")) {
-		return 0, 0
-	}
-	return s[0], n
-}
-
-// isFenceClose reports whether ln closes a fence of character ch and length
-// n: up to three spaces, then only ch, at least n times, then only spaces and
-// tabs.
-func isFenceClose(ln string, ch byte, n int) bool {
-	s := strings.TrimLeft(ln, " ")
-	if len(ln)-len(s) > 3 {
-		return false
-	}
-	k := 0
-	for k < len(s) && s[k] == ch {
-		k++
-	}
-	return k >= n && strings.Trim(s[k:], " \t") == ""
-}
-
-// importToken returns the first import token in ln outside code spans, or "".
-func importToken(ln string) string {
-	for i := 0; i < len(ln); {
-		switch ln[i] {
-		case '`':
-			if oddBackslashes(ln, i) {
-				i++
-				continue
-			}
-			n := 0
-			for i+n < len(ln) && ln[i+n] == '`' {
-				n++
-			}
-			if end := closingRun(ln, i+n, n); end >= 0 {
-				i = end
-			} else {
-				i += n
-			}
-		case '@':
-			if isImportAt(ln, i) {
-				j := i + 1
-				for j < len(ln) && !isSpaceByte(ln, j) {
-					j++
-				}
-				return ln[i:j]
-			}
-			i++
-		default:
-			i++
-		}
-	}
-	return ""
-}
-
-// isImportAt reports whether the "@" at ln[i] must be refused.
-func isImportAt(ln string, i int) bool {
-	if i+1 >= len(ln) {
-		return false
-	}
-	next, _ := utf8.DecodeRuneInString(ln[i+1:])
+	next, _ := utf8.DecodeRuneInString(text[i+1:])
 	if jsSpace(next) || next == '\\' {
 		return false
 	}
-	if oddBackslashes(ln, i) {
+	if oddBackslashes(text, i) {
 		return false
 	}
 	if i > 0 {
-		prev, _ := utf8.DecodeLastRuneInString(ln[:i])
+		prev, _ := utf8.DecodeLastRuneInString(text[:i])
 		if unicode.IsLetter(prev) || unicode.IsNumber(prev) {
 			return false
 		}
 	}
 	return true
-}
-
-func isSpaceByte(ln string, j int) bool {
-	r, _ := utf8.DecodeRuneInString(ln[j:])
-	return jsSpace(r) || r == '\\'
 }
 
 // jsSpace reports whether r matches "\s" of a JavaScript regular expression.
@@ -249,31 +159,11 @@ func jsSpace(r rune) bool {
 	return r >= 0x2000 && r <= 0x200a
 }
 
-// oddBackslashes reports whether an odd number of backslashes precede ln[i].
-func oddBackslashes(ln string, i int) bool {
+// oddBackslashes reports whether an odd number of backslashes precede text[i].
+func oddBackslashes(text string, i int) bool {
 	n := 0
-	for j := i - 1; j >= 0 && ln[j] == '\\'; j-- {
+	for j := i - 1; j >= 0 && text[j] == '\\'; j-- {
 		n++
 	}
 	return n%2 == 1
-}
-
-// closingRun returns the index just after the first run of exactly n
-// backticks at or after from, or -1.
-func closingRun(p string, from, n int) int {
-	for i := from; i < len(p); {
-		if p[i] != '`' {
-			i++
-			continue
-		}
-		k := 0
-		for i+k < len(p) && p[i+k] == '`' {
-			k++
-		}
-		if k == n {
-			return i + k
-		}
-		i += k
-	}
-	return -1
 }
