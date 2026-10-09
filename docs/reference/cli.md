@@ -93,7 +93,7 @@ ccshelf diff [profile-a] [profile-b] [flags]
 
 ## ccshelf dry-run
 
-Run the whole pipeline of "run" (including the trust check) and print the exact claude command instead of starting it. The command writes the generated settings, MCP config and prompt files to the private cache, so the printed command is valid. It never prints environment values from profiles.
+Run the whole pipeline of "run" (including the trust check) and print the exact claude command instead of starting it. The command writes the generated settings, MCP config, prompt and instructions files to the private cache, so the printed command is valid. It never prints environment values from profiles.
 
 **Usage**
 
