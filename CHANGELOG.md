@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.8.0](https://github.com/yorch/ccshelf/compare/v0.7.0...v0.8.0) (2026-10-09)
+
+
+### Features
+
+* **catalog:** ask in the init wizard if the repo holds only profiles ([#51](https://github.com/yorch/ccshelf/issues/51)) ([eb7cb30](https://github.com/yorch/ccshelf/commit/eb7cb309aa5fa0bc3a8426e2cacdafd33ecc63ab))
+* **launcher:** offer a branch commit another profile accepted ([#52](https://github.com/yorch/ccshelf/issues/52)) ([d22e8a8](https://github.com/yorch/ccshelf/commit/d22e8a8545b8a443d2495d50742e415097c28adb))
+* **profile:** add per-profile instructions for main and subagents ([#54](https://github.com/yorch/ccshelf/issues/54)) ([9c9c403](https://github.com/yorch/ccshelf/commit/9c9c403315795aa3f936c78a7002198a6108cbf6))
+
+
+### Bug fixes
+
+* **site:** wrap long inline code in the report at phone width ([#50](https://github.com/yorch/ccshelf/issues/50)) ([b860bda](https://github.com/yorch/ccshelf/commit/b860bda8e2054485a01aa16999915e716ba3cd2d))
+
 ## [0.7.0](https://github.com/yorch/ccshelf/compare/v0.6.0...v0.7.0) (2026-10-08)
 
 
