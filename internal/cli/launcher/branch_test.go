@@ -9,10 +9,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yorch/ccshelf/internal/cache"
 	"github.com/yorch/ccshelf/internal/config"
 	"github.com/yorch/ccshelf/internal/orgconfig"
 	"github.com/yorch/ccshelf/internal/profile"
 	"github.com/yorch/ccshelf/internal/profile/gitsource"
+	"github.com/yorch/ccshelf/internal/trust"
 	"github.com/yorch/ccshelf/internal/ui"
 )
 
@@ -34,6 +36,8 @@ type branchRemote struct {
 	afterResolve func()
 	used         []string // commits the sources were prepared at, in order
 	atFetched    []string // commits fetched by id (PrepareAt)
+	// noAncestry makes IsAncestor answer false (history that is not proven).
+	noAncestry bool
 	// counters
 	resolves int
 	prepares []string // commits prepared from the network
@@ -109,6 +113,12 @@ func (g *fakeBranchGit) PrepareAt(_ context.Context, commit string) error {
 	g.rem.cached[commit] = true
 	g.use(commit)
 	return nil
+}
+
+// IsAncestor mimics a linear history in which a smaller id is older, proven
+// only when the newer checkout is cached.
+func (g *fakeBranchGit) IsAncestor(_ context.Context, older, newer string) bool {
+	return !g.rem.noAncestry && g.rem.cached[newer] && older < newer
 }
 
 func (g *fakeBranchGit) ResolveHead(context.Context) (string, error) {
@@ -643,5 +653,327 @@ func TestBranchPromptWordingForDryRun(t *testing.T) {
 		if strings.Contains(q, "Trust profile") && strings.Contains(q, " run ") {
 			t.Errorf("the dry-run question says run: %q", q)
 		}
+	}
+}
+
+// acceptedElsewhereSetup trusts seo and sre at the first commit, then accepts
+// the second commit for sre in a terminal. The profile seo sets the model that
+// shows in the settings, so it is the profile that is still at the first
+// commit. The clock ends one hour after that run, inside the check interval,
+// with the remote head at the second commit.
+func acceptedElsewhereSetup(t *testing.T, extraConfig string) (*harness, *branchRemote) {
+	t.Helper()
+	h, rem := newBranchHarness(t, "")
+	h.trustBranchSeo(t)
+	h.mustRun("trust", "sre", "--accept", orgHash(t, h, "sre"))
+	rem.head = branchSHA2
+	h.prompt = ui.NewScripted("yes", true)
+	h.now = h.now.Add(25 * time.Hour)
+	h.mustRun("run", "sre")
+	if rem.used[len(rem.used)-1] != branchSHA2 {
+		t.Fatalf("sre ran %v; want %s", rem.used, branchSHA2)
+	}
+	if extraConfig != "" {
+		h.writeConfig(extraConfig + branchConf)
+	}
+	h.prompt = nil
+	h.started = 0
+	h.now = h.now.Add(time.Hour)
+	rem.reset()
+	return h, rem
+}
+
+func TestBranchAcceptedElsewhereOffersPromptInsideInterval(t *testing.T) {
+	h, rem := acceptedElsewhereSetup(t, "")
+	sc := ui.NewScripted("yes", true)
+	h.prompt = sc
+	if code := h.run("run", "seo"); code != 0 || h.started != 1 {
+		t.Fatalf("code %d started %d\n%s", code, h.started, h.errb)
+	}
+	if err := sc.Done(); err != nil {
+		t.Error(err)
+	}
+	for _, want := range []string{"profile \"sre\" trusted commit 222222222222", "1111111", "needs trust"} {
+		if !strings.Contains(h.errb.String(), want) {
+			t.Errorf("output lacks %q:\n%s", want, h.errb)
+		}
+	}
+	if strings.Contains(h.errb.String(), "now points to") {
+		t.Errorf("the text says that the branch moved, but no head was read:\n%s", h.errb)
+	}
+	if got := h.ranModel(); got != "model-two" {
+		t.Errorf("the invocation that accepted ran model %q; want model-two", got)
+	}
+	// Inside the interval no check is due: no network call at all.
+	if rem.resolves != 0 || len(rem.prepares) != 0 {
+		t.Errorf("network use: resolves %d prepares %v", rem.resolves, rem.prepares)
+	}
+	// Trust was recorded for seo: a later run needs no question.
+	h.prompt = nil
+	h.started = 0
+	h.mustRun("run", "seo")
+	if got := h.ranModel(); got != "model-two" || h.started != 1 {
+		t.Errorf("later run: model %q started %d", got, h.started)
+	}
+}
+
+func TestBranchAcceptedElsewhereDeclineIsRemembered(t *testing.T) {
+	h, rem := acceptedElsewhereSetup(t, "")
+	sc := ui.NewScripted("no", true)
+	h.prompt = sc
+	if code := h.run("run", "seo"); code != 0 || h.started != 1 {
+		t.Fatalf("code %d started %d\n%s", code, h.started, h.errb)
+	}
+	if err := sc.Done(); err != nil {
+		t.Error(err)
+	}
+	if got := h.ranModel(); got != "" {
+		t.Errorf("declining ran model %q; want the trusted commit", got)
+	}
+	if rem.resolves != 0 || len(rem.prepares) != 0 {
+		t.Errorf("network use: resolves %d prepares %v", rem.resolves, rem.prepares)
+	}
+	// The next run, still inside the interval, only prints the notice.
+	h.errb.Reset()
+	h.started = 0
+	h.now = h.now.Add(time.Hour)
+	sc = ui.NewScripted(true) // only the plugin question
+	h.prompt = sc
+	if code := h.run("run", "seo"); code != 0 || h.started != 1 {
+		t.Fatalf("second run: code %d started %d\n%s", code, h.started, h.errb)
+	}
+	for _, q := range sc.Asked {
+		if strings.Contains(q, "Trust profile") {
+			t.Errorf("the declined commit was offered again: %q", q)
+		}
+	}
+	if !strings.Contains(h.errb.String(), "profile sre trusted commit 222222222222") {
+		t.Errorf("no notice for the declined commit:\n%s", h.errb)
+	}
+	if got := h.ranModel(); got != "" {
+		t.Errorf("second run ran model %q", got)
+	}
+	// After one interval the question comes back (the head check is due too, and
+	// the head is the same commit, so the ordinary question is asked).
+	h.errb.Reset()
+	h.started = 0
+	h.now = h.now.Add(25 * time.Hour)
+	sc = ui.NewScripted("no", true)
+	h.prompt = sc
+	if code := h.run("run", "seo"); code != 0 {
+		t.Fatalf("third run: code %d\n%s", code, h.errb)
+	}
+	if err := sc.Done(); err != nil {
+		t.Errorf("the question did not come back after the interval: %v", err)
+	}
+}
+
+func TestBranchAcceptedElsewhereDeclineDoesNotHideAnotherCommit(t *testing.T) {
+	h, rem := acceptedElsewhereSetup(t, "")
+	h.prompt = ui.NewScripted("no", true)
+	h.mustRun("run", "seo")
+	// The branch moves and sre accepts the third commit: a different
+	// candidate, so the decline of the second one does not apply.
+	rem.head = branchSHA3
+	h.now = h.now.Add(25 * time.Hour)
+	h.prompt = ui.NewScripted("yes", true)
+	h.mustRun("run", "sre")
+	if rem.used[len(rem.used)-1] != branchSHA3 {
+		t.Fatalf("sre ran %v; want %s", rem.used, branchSHA3)
+	}
+	h.started = 0
+	h.now = h.now.Add(time.Hour)
+	sc := ui.NewScripted("no", true)
+	h.prompt = sc
+	if code := h.run("run", "seo"); code != 0 {
+		t.Fatalf("code %d\n%s", code, h.errb)
+	}
+	if err := sc.Done(); err != nil {
+		t.Errorf("a new candidate was not offered: %v", err)
+	}
+	if !strings.Contains(h.errb.String(), "333333333333") {
+		t.Errorf("output lacks the third commit:\n%s", h.errb)
+	}
+}
+
+func TestBranchAcceptedElsewhereNoticeWithoutOffer(t *testing.T) {
+	cases := []struct {
+		name   string
+		config string
+		args   []string
+		prompt bool
+	}{
+		{"no terminal", "", []string{"run", "seo"}, false},
+		{"yes", "", []string{"run", "--yes", "seo"}, true},
+		{"on_change fail", "[trust]\non_change = \"fail\"\n", []string{"run", "seo"}, true},
+		{"dry-run", "", []string{"dry-run", "seo"}, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			h, rem := acceptedElsewhereSetup(t, c.config)
+			if c.prompt {
+				h.prompt = ui.NewScripted(true)
+			}
+			if code := h.run(c.args...); code != 0 {
+				t.Fatalf("code %d\n%s", code, h.errb)
+			}
+			out := h.errb.String()
+			if !strings.Contains(out, "profile sre trusted commit 222222222222") || !strings.Contains(out, "ccshelf run seo") || strings.Contains(out, "needs trust") {
+				t.Errorf("wrong notice:\n%s", out)
+			}
+			if strings.Contains(out, "ccshelf trust seo") {
+				t.Errorf("the hint names ccshelf trust, which reads the head:\n%s", out)
+			}
+			if rem.resolves != 0 || len(rem.prepares) != 0 || len(rem.atFetched) != 0 {
+				t.Errorf("network use: resolves %d prepares %v fetched %v", rem.resolves, rem.prepares, rem.atFetched)
+			}
+			if c.args[0] == "run" && h.ranModel() != "" {
+				t.Errorf("ran model %q; want the trusted commit", h.ranModel())
+			}
+		})
+	}
+}
+
+func TestBranchAcceptedElsewhereJSONCarriesTheNotice(t *testing.T) {
+	h, _ := acceptedElsewhereSetup(t, "")
+	h.mustRun("--json", "dry-run", "seo")
+	if !strings.Contains(h.out.String(), "profile sre trusted commit 222222222222") {
+		t.Errorf("warnings lack the notice:\n%s", h.out)
+	}
+}
+
+func TestBranchAcceptedElsewhereNeedsProofOfDescent(t *testing.T) {
+	// A rollback or a force-push: the newest record is not a descendant.
+	h, rem := acceptedElsewhereSetup(t, "")
+	rem.noAncestry = true
+	sc := ui.NewScripted(true) // only the plugin question may be asked
+	h.prompt = sc
+	if code := h.run("run", "seo"); code != 0 {
+		t.Fatalf("code %d\n%s", code, h.errb)
+	}
+	for _, q := range sc.Asked {
+		if strings.Contains(q, "Trust profile") {
+			t.Errorf("an unproven commit was offered: %q", q)
+		}
+	}
+	if strings.Contains(h.errb.String(), "trusted commit 2222") {
+		t.Errorf("an unproven commit was announced:\n%s", h.errb)
+	}
+}
+
+func TestBranchAcceptedElsewhereOlderCommitIsNotOffered(t *testing.T) {
+	// seo and sre are trusted at the first commit and sre accepts the second.
+	// Then sre is accepted at the first commit again (its closure changed): the
+	// newest record is the first commit, and seo, at the first commit, has
+	// nothing to be offered.
+	h, rem := acceptedElsewhereSetup(t, "")
+	h.mustRun("trust", "seo", "--accept", orgHash(t, h, "seo")) // seo's own record is the newest, at the first commit
+	h.prompt = ui.NewScripted(true)
+	h.started = 0
+	rem.reset()
+	if code := h.run("run", "seo"); code != 0 {
+		t.Fatalf("code %d\n%s", code, h.errb)
+	}
+	if strings.Contains(h.errb.String(), "trusted commit") {
+		t.Errorf("unexpected offer:\n%s", h.errb)
+	}
+}
+
+func TestBranchAcceptedElsewhereHeadCheckStillRuns(t *testing.T) {
+	// 48 hours later the head moved to a third commit: the ordinary check is due,
+	// it runs, and profile seo learns about the third commit.
+	h, rem := acceptedElsewhereSetup(t, "")
+	rem.head = branchSHA3
+	rem.cached[branchSHA3] = true
+	h.now = h.now.Add(48 * time.Hour)
+	if code := h.run("run", "seo"); code != 0 || h.started != 1 {
+		t.Fatalf("code %d started %d\n%s", code, h.started, h.errb)
+	}
+	if rem.resolves != 1 {
+		t.Errorf("resolves = %d; the head check must run when it is due", rem.resolves)
+	}
+	out := h.errb.String()
+	if !strings.Contains(out, "has a new commit (333333333333)") {
+		t.Errorf("no notice for the head:\n%s", out)
+	}
+	if strings.Contains(out, "profile sre trusted commit") {
+		t.Errorf("the elsewhere offer was not dropped for the head:\n%s", out)
+	}
+	// The check does not repeat inside the interval, and the elsewhere offer does
+	// not return for a head it replaced... but it may, as a notice, for sre's commit.
+	rem.reset()
+	h.errb.Reset()
+	h.now = h.now.Add(time.Hour)
+	h.run("run", "seo")
+	if rem.resolves != 0 {
+		t.Errorf("the head was checked again inside the interval")
+	}
+}
+
+func TestBranchAcceptedElsewhereOtherRecordsAreIgnored(t *testing.T) {
+	h, rem := newBranchHarness(t, "")
+	src := &fakeBranchGit{rem: rem, commit: branchSHA1}
+	src.use(branchSHA1)
+	r := &profile.Resolved{Name: "seo", Chain: []*profile.File{{Source: src}}}
+	s := &session{lockLoaded: true}
+	const url = "git:" + fakeURL
+	at := h.now.Add(time.Hour)
+	for name, rec := range map[string]trust.SourceRecord{
+		"another branch": {Source: url, Ref: "branch:other", Commit: branchSHA2},
+		"a tag":          {Source: url, Ref: "v2", Commit: branchSHA2},
+		"another url":    {Source: "git:https://example.com/other.git", Ref: "branch:main", Commit: branchSHA2},
+	} {
+		s.lock = append(s.lock, trust.Entry{Profile: "sre", Source: rec.Source, Ref: rec.Ref, Commit: rec.Commit, Sources: []trust.SourceRecord{rec}, AcceptedAt: at})
+		if got := s.acceptedElsewhere(context.Background(), r, nil); len(got) != 0 {
+			t.Errorf("%s: offered %v", name, got[0].head)
+		}
+	}
+	// The same source and branch is offered.
+	rec := trust.SourceRecord{Source: url, Ref: "branch:main", Commit: branchSHA2}
+	s.lock = append(s.lock, trust.Entry{Profile: "sre", Source: rec.Source, Ref: rec.Ref, Commit: rec.Commit, Sources: []trust.SourceRecord{rec}, AcceptedAt: at})
+	rem.cached[branchSHA2] = true
+	if got := s.acceptedElsewhere(context.Background(), r, nil); len(got) != 1 || got[0].head != branchSHA2 || got[0].by != "sre" {
+		t.Errorf("same branch: %+v", got)
+	}
+}
+
+func TestBranchStateDeclinesAreBoundedAndStrict(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+	dir, err := cache.Dir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)
+	st := loadBranchState(dir, now)
+	for i := 0; i < maxDeclinedEntries+20; i++ {
+		st.Declined[declineKey("p", string(rune('a'+i%26))+strings.Repeat("x", i))] = declinedOffer{Commit: branchSHA2, At: now.Add(-time.Duration(i) * time.Minute)}
+	}
+	if err := saveBranchState(dir, st); err != nil {
+		t.Fatal(err)
+	}
+	if got := loadBranchState(dir, now); len(got.Declined) != maxDeclinedEntries {
+		t.Errorf("declines = %d; want %d", len(got.Declined), maxDeclinedEntries)
+	}
+	// A bad commit, a bad key or a future time is dropped.
+	bad := `{"checks":{},"declined":{"` + declineKey("p", "k") + `":{"commit":"zz","at":"2026-10-06T12:00:00Z"}}}`
+	if err := cache.WriteState(dir, branchStateName, []byte(bad)); err != nil {
+		t.Fatal(err)
+	}
+	if got := loadBranchState(dir, now); len(got.Declined) != 0 {
+		t.Errorf("kept a bad decline: %v", got.Declined)
+	}
+	// An unknown field makes the whole file count as absent.
+	if err := cache.WriteState(dir, branchStateName, []byte(`{"checks":{},"other":1}`)); err != nil {
+		t.Fatal(err)
+	}
+	if got := loadBranchState(dir, now); len(got.Checks) != 0 || len(got.Declined) != 0 {
+		t.Errorf("read a file with an unknown field: %+v", got)
+	}
+	if !wasDeclined(branchState{Declined: map[string]declinedOffer{declineKey("p", "k"): {Commit: branchSHA2, At: now.Add(-time.Hour)}}}, "p", "k", branchSHA2, now, 24*time.Hour) {
+		t.Error("a recent decline was not found")
+	}
+	if wasDeclined(branchState{Declined: map[string]declinedOffer{declineKey("p", "k"): {Commit: branchSHA2, At: now.Add(-25 * time.Hour)}}}, "p", "k", branchSHA2, now, 24*time.Hour) {
+		t.Error("an old decline still counts")
 	}
 }

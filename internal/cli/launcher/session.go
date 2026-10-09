@@ -659,7 +659,12 @@ func (s *session) lockedCommit(sc config.SourceConfig) string {
 // --refresh say: it answers "which commits did the user accept", not "which
 // commit does a run use".
 func (s *session) lockedCommits(sc config.SourceConfig) []string {
-	locator := "git:" + sc.URL
+	return s.lockedCommitsAt("git:"+sc.URL, sc.TrustRef())
+}
+
+// lockedCommitsAt is lockedCommits for a source known by its locator and
+// trust ref.
+func (s *session) lockedCommitsAt(locator, ref string) []string {
 	type rec struct {
 		commit string
 		at     time.Time
@@ -671,7 +676,7 @@ func (s *session) lockedCommits(sc config.SourceConfig) []string {
 			recs = []trust.SourceRecord{{Source: e.Source, Ref: e.Ref, Commit: e.Commit}}
 		}
 		for _, r := range recs {
-			if r.Source == locator && r.Ref == sc.TrustRef() && fullSHA.MatchString(r.Commit) {
+			if r.Source == locator && r.Ref == ref && fullSHA.MatchString(r.Commit) {
 				found = append(found, rec{r.Commit, e.AcceptedAt})
 			}
 		}

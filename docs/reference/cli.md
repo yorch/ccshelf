@@ -188,7 +188,7 @@ ccshelf passes the arguments after the profile name (and after -- when no profil
 
 Without a profile name, a terminal gets a picker. Anything else exits with code 2. You must trust a profile from a shared source first (exit code 4 otherwise). --yes never accepts trust. Only an interactive confirmation of the printed closure or "ccshelf trust <profile> --accept <closure-hash>" accepts it.
 
-A git source that tracks a branch runs the commit you trusted, with no network. At most once per trust.branch_check_interval (default 24h), ccshelf asks the remote for the head of the branch. If the head moved, a terminal shows what changed and asks. Without a terminal, or with --yes, ccshelf keeps the trusted commit and prints the command that reviews the update. --refresh checks now.
+A git source that tracks a branch runs the commit you trusted, with no network. At most once per trust.branch_check_interval (default 24h), ccshelf asks the remote for the head of the branch. If the head moved, a terminal shows what changed and asks. Without a terminal, or with --yes, ccshelf keeps the trusted commit and prints the command that reviews the update. --refresh checks now. If another profile of the same source trusted a later commit of the branch, ccshelf offers that commit to this profile at once, with no network call and whatever the interval says. It offers only a commit that it can prove is later, and it runs only a commit that this profile trusts.
 
 **Usage**
 

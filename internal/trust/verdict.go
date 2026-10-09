@@ -102,6 +102,10 @@ type Verdict struct {
 	// Ref, OldCommit and NewCommit are set for TagMoved. MovedSource names
 	// the source whose ref moved.
 	Ref, OldCommit, NewCommit, MovedSource string
+	// AcceptedFor is set by a caller that offers NewCommit because the
+	// lockfile holds it for this other profile. No head was read then, so
+	// Describe does not say that the branch moved.
+	AcceptedFor string
 	// Problem explains an inconsistent closure (never trusted).
 	Problem string
 }
@@ -678,7 +682,9 @@ func (v Verdict) Describe(w io.Writer) {
 	case Changed:
 		p("Profile %q changed since you last trusted it.", name)
 	case TagMoved:
-		if b, ok := strings.CutPrefix(v.Ref, config.BranchRefPrefix); ok {
+		if b, ok := strings.CutPrefix(v.Ref, config.BranchRefPrefix); ok && v.AcceptedFor != "" {
+			p("Profile %q: profile %q trusted commit %s of the branch %q of %s (you trusted %s). Treat this as an untrusted update.", name, clean(v.AcceptedFor), clean(short(v.NewCommit)), clean(b), clean(v.MovedSource), clean(short(v.OldCommit)))
+		} else if ok {
 			p("Profile %q: the branch %q of %s now points to commit %s (you trusted %s). Treat this as an untrusted update.", name, clean(b), clean(v.MovedSource), clean(short(v.NewCommit)), clean(short(v.OldCommit)))
 		} else {
 			p("Profile %q: the ref %q of %s now points to commit %s (you trusted %s). Treat this as an untrusted update.", name, clean(v.Ref), clean(v.MovedSource), clean(short(v.NewCommit)), clean(short(v.OldCommit)))
