@@ -448,12 +448,41 @@ func TestProfilesOnlyConflicts(t *testing.T) {
 	if !errors.As(err, &fe) || fe.Flag != "--profiles-only" {
 		t.Errorf("existing marketplace: %v", err)
 	}
-	// An existing profiles-only config without the flag would grow a marketplace.
+	// An existing profiles-only config without the flag means profiles-only,
+	// with a note, whatever the terminal is.
 	q := baseParams()
+	q.MarketplaceName = ""
 	fsys = newMem(map[string]string{"ccshelf.toml": "[catalog]\nenabled = false\n"})
-	_, err = Build(fsys, q)
-	if !errors.As(err, &fe) || fe.Flag != "--profiles-only" {
-		t.Errorf("disabled catalog without the flag: %v", err)
+	plan, err := Build(fsys, q)
+	if err != nil || !plan.ProfilesOnly {
+		t.Fatalf("disabled catalog without the flag: %v", err)
+	}
+	if !strings.Contains(strings.Join(plan.Notes, "\n"), "ccshelf.toml has [catalog] enabled = false, so ccshelf uses --profiles-only") {
+		t.Errorf("no note: %v", plan.Notes)
+	}
+	for _, e := range plan.Entries {
+		if strings.Contains(e.Path, "marketplace.json") || strings.Contains(e.Path, "catalog.yml") {
+			t.Errorf("a profiles-only plan writes %s", e.Path)
+		}
+	}
+	// A flag or a file that needs a marketplace stops the plan, and the text
+	// does not say that the user passed --profiles-only.
+	for name, c := range map[string]struct {
+		files map[string]string
+		edit  func(*Params)
+		flag  string
+	}{
+		"marketplace name": {map[string]string{"ccshelf.toml": "[catalog]\nenabled = false\n"}, func(p *Params) { p.MarketplaceName = "acme" }, "--marketplace-name"},
+		"owner":            {map[string]string{"ccshelf.toml": "[catalog]\nenabled = false\n"}, func(p *Params) { p.Owner = "@acme/x" }, "--owner"},
+		"marketplace file": {map[string]string{"ccshelf.toml": "[catalog]\nenabled = false\n", ".claude-plugin/marketplace.json": `{"name":"x","plugins":[]}`}, func(*Params) {}, "ccshelf.toml"},
+	} {
+		pp := baseParams()
+		pp.MarketplaceName = ""
+		c.edit(&pp)
+		_, err := Build(newMem(c.files), pp)
+		if !errors.As(err, &fe) || fe.Flag != c.flag || strings.Contains(fe.Msg, "pass --profiles-only") {
+			t.Errorf("%s: %v", name, err)
+		}
 	}
 }
 

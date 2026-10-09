@@ -6,7 +6,7 @@ Profiles and a plugin catalog for Claude Code. Unofficial: not affiliated with A
 
 ## Install
 
-Install the latest release with the platform-specific script below, or build from source (Go 1.27 or newer):
+Install the latest release with the platform-specific script below, or build from source (the Go version in `go.mod` or newer):
 
 ```sh
 go install github.com/yorch/ccshelf/cmd/ccshelf@latest

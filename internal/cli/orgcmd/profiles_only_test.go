@@ -126,10 +126,19 @@ func TestCatalogInitProfilesOnlyAdopt(t *testing.T) {
 	if read(t, dir2, "README.md") != "# Mine\n" {
 		t.Error("the README was replaced")
 	}
-	// Re-running without --profiles-only must not add a marketplace.
+	// Re-running without --profiles-only must not add a marketplace: the config
+	// says profiles-only, with or without a terminal.
+	r = h.run("catalog", "init", dir2, "--platform-owners", "@acme/platform", "--ccshelf-ref", testSHA, "--ccshelf-version", "v0.1.0", "--dry-run")
+	if r.code != 0 || !strings.Contains(r.out, "so ccshelf uses --profiles-only") || strings.Contains(r.out, "marketplace.json") {
+		t.Errorf("code %d\n%s\n%s", r.code, r.out, r.err)
+	}
 	r = h.run("catalog", "init", dir2, "--platform-owners", "@acme/platform", "--marketplace-name", "acme", "--dry-run")
-	if r.code != 2 || !strings.Contains(r.err, "--profiles-only") {
+	if r.code != 2 || strings.Contains(r.err, "pass --profiles-only") || !strings.Contains(r.err, "--marketplace-name") {
 		t.Errorf("code %d\n%s", r.code, r.err)
+	}
+	r = h.run("catalog", "init", dir2, "--platform-owners", "@acme/platform", "--sidecars", "stub", "--dry-run")
+	if r.code != 2 || strings.Contains(r.err, "pass --profiles-only") || !strings.Contains(r.err, "--sidecars stub") {
+		t.Errorf("--sidecars stub: code %d\n%s", r.code, r.err)
 	}
 }
 
@@ -200,4 +209,153 @@ func TestDoctorJSONExplainsSkippedCatalog(t *testing.T) {
 	if r.code != 0 || !strings.Contains(r.out, "DOC000") || !strings.Contains(r.out, "[catalog] enabled = false") {
 		t.Errorf("code %d\n%s\n%s", r.code, r.out, r.err)
 	}
+}
+
+func TestCatalogInitProfilesOnlyQuestion(t *testing.T) {
+	// Yes: the marketplace name, owner and sidecar questions are skipped, and the
+	// equivalent command keeps --profiles-only.
+	t.Run("yes", func(t *testing.T) {
+		h := newHarness(t, "")
+		dir := filepath.Join(h.cwd, "acme-profiles")
+		sp := ui.NewScripted(true, "@acme/platform", testSHA, "v0.1.0", true)
+		h.env.Prompter = sp
+		r := h.run("catalog", "init", dir)
+		if r.code != 0 {
+			t.Fatalf("code %d\n%s\n%s", r.code, r.out, r.err)
+		}
+		if err := sp.Done(); err != nil {
+			t.Error(err)
+		}
+		if !strings.Contains(r.err, "--profiles-only") || strings.Contains(r.err, "--marketplace-name") {
+			t.Errorf("the equivalent command is wrong:\n%s", r.err)
+		}
+		for _, bad := range []string{"catalog build", "ccshelf compile", "v* tag", "pages"} {
+			if strings.Contains(r.out, bad) {
+				t.Errorf("the next steps of a profiles-only repo mention %q:\n%s", bad, r.out)
+			}
+		}
+		if got := read(t, dir, "ccshelf.toml"); !strings.Contains(got, "enabled = false") {
+			t.Errorf("ccshelf.toml does not switch the catalog off:\n%s", got)
+		}
+		if _, err := os.Stat(filepath.Join(dir, ".claude-plugin", "marketplace.json")); !os.IsNotExist(err) {
+			t.Error("a profiles-only run wrote a marketplace")
+		}
+	})
+	// No: the full repo, as before.
+	t.Run("no", func(t *testing.T) {
+		h := newHarness(t, "")
+		dir := filepath.Join(h.cwd, "acme-claude")
+		sp := ui.NewScripted(false, "acme", "@acme/platform", testSHA, "v0.1.0", true)
+		h.env.Prompter = sp
+		if r := h.run("catalog", "init", dir); r.code != 0 {
+			t.Fatalf("code %d\n%s\n%s", r.code, r.out, r.err)
+		}
+		if err := sp.Done(); err != nil {
+			t.Error(err)
+		}
+		if _, err := os.Stat(filepath.Join(dir, ".claude-plugin", "marketplace.json")); err != nil {
+			t.Error(err)
+		}
+	})
+	// Adopt mode with a marketplace: no question (profiles-only would conflict).
+	t.Run("adopt with a marketplace", func(t *testing.T) {
+		h := newHarness(t, "")
+		dir := legacy(t)
+		sp := ui.NewScripted(true)
+		h.env.Prompter = sp
+		r := h.run("catalog", "init", dir, "--platform-owners", "@legacy/platform", "--ccshelf-ref", testSHA, "--ccshelf-version", "v0.1.0")
+		if r.code != 0 {
+			t.Fatalf("code %d\n%s\n%s", r.code, r.out, r.err)
+		}
+		if err := sp.Done(); err != nil {
+			t.Error(err)
+		}
+		if strings.Contains(r.err, "--profiles-only") {
+			t.Errorf("a repo with a marketplace became profiles-only:\n%s", r.err)
+		}
+	})
+	// Adopt mode with no marketplace: the question is asked.
+	t.Run("adopt without a marketplace", func(t *testing.T) {
+		h := newHarness(t, "")
+		dir := filepath.Join(h.cwd, "existing")
+		write(t, dir, "profiles/dev.toml", "name = \"dev\"\n")
+		sp := ui.NewScripted(true, "@acme/platform", testSHA, "v0.1.0", true)
+		h.env.Prompter = sp
+		if r := h.run("catalog", "init", dir); r.code != 0 {
+			t.Fatalf("code %d\n%s\n%s", r.code, r.out, r.err)
+		}
+		if err := sp.Done(); err != nil {
+			t.Error(err)
+		}
+	})
+	// An existing config with enabled = false: no question, profiles-only.
+	t.Run("existing disabled config", func(t *testing.T) {
+		h := newHarness(t, "")
+		dir := filepath.Join(h.cwd, "org")
+		if r := h.run(poArgs(dir, "--yes")...); r.code != 0 {
+			t.Fatalf("code %d\n%s\n%s", r.code, r.out, r.err)
+		}
+		sp := ui.NewScripted()
+		h.env.Prompter = sp
+		r := h.run("catalog", "init", dir, "--dry-run", "--platform-owners", "@acme/platform", "--ccshelf-ref", testSHA, "--ccshelf-version", "v0.1.0")
+		if r.code != 0 {
+			t.Fatalf("code %d\n%s\n%s", r.code, r.out, r.err)
+		}
+		if err := sp.Done(); err != nil {
+			t.Error(err)
+		}
+		if strings.Contains(r.out, "marketplace.json") || strings.Contains(r.out, "catalog.yml") {
+			t.Errorf("the plan has catalog files for a profiles-only repo:\n%s", r.out)
+		}
+		if !strings.Contains(r.out, "so ccshelf uses --profiles-only") {
+			t.Errorf("no note about the inference:\n%s", r.out)
+		}
+	})
+	// The same command without a terminal gives the same plan (R6).
+	t.Run("existing disabled config, no terminal", func(t *testing.T) {
+		h := newHarness(t, "")
+		dir := filepath.Join(h.cwd, "org")
+		if r := h.run(poArgs(dir, "--yes")...); r.code != 0 {
+			t.Fatalf("code %d\n%s\n%s", r.code, r.out, r.err)
+		}
+		r := h.run("catalog", "init", dir, "--dry-run", "--platform-owners", "@acme/platform", "--ccshelf-ref", testSHA, "--ccshelf-version", "v0.1.0")
+		if r.code != 0 || !strings.Contains(r.out, "so ccshelf uses --profiles-only") || strings.Contains(r.out, "catalog.yml") {
+			t.Errorf("code %d\n%s\n%s", r.code, r.out, r.err)
+		}
+	})
+	// An explicit --sidecars stub is a reason not to ask.
+	t.Run("sidecars stub", func(t *testing.T) {
+		h := newHarness(t, "")
+		dir := filepath.Join(h.cwd, "acme-claude")
+		sp := ui.NewScripted("acme", "@acme/platform", testSHA, "v0.1.0", true)
+		h.env.Prompter = sp
+		if r := h.run("catalog", "init", dir, "--sidecars", "stub"); r.code != 0 {
+			t.Fatalf("code %d\n%s\n%s", r.code, r.out, r.err)
+		}
+		if err := sp.Done(); err != nil {
+			t.Error(err)
+		}
+	})
+	// The flag given: no question.
+	t.Run("flag given", func(t *testing.T) {
+		h := newHarness(t, "")
+		dir := filepath.Join(h.cwd, "org")
+		sp := ui.NewScripted(true)
+		h.env.Prompter = sp
+		if r := h.run(poArgs(dir)...); r.code != 0 {
+			t.Fatalf("code %d\n%s\n%s", r.code, r.out, r.err)
+		}
+		if err := sp.Done(); err != nil {
+			t.Error(err)
+		}
+	})
+	// Without a terminal nothing changes: no question, flags decide.
+	t.Run("no terminal", func(t *testing.T) {
+		h := newHarness(t, "")
+		dir := filepath.Join(h.cwd, "org")
+		r := h.run("catalog", "init", dir, "--yes", "--platform-owners", "@acme/platform", "--ccshelf-ref", testSHA, "--ccshelf-version", "v0.1.0")
+		if r.code != 2 || !strings.Contains(r.err, "--marketplace-name") {
+			t.Errorf("code %d\n%s", r.code, r.err)
+		}
+	})
 }

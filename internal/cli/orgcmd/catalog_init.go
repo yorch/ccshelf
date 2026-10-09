@@ -297,6 +297,17 @@ func runCatalogInit(ctx context.Context, c *clicore.Context, cmd *cobra.Command,
 
 	interactive := canPromptInit(c)
 	asked := false
+	stubGiven := cmd.Flags().Changed("sidecars") && f.sidecars == "stub"
+	if interactive && !cmd.Flags().Changed("profiles-only") && !stubGiven {
+		if scaffold.ChooseProfilesOnly(fsys, p) == scaffold.ProfilesOnlyAsk {
+			yes, err := c.Prompt.Confirm(ctx, "Does this repo hold only profiles (no plugin marketplace or catalog)?", false)
+			if err != nil {
+				return err
+			}
+			p.ProfilesOnly = yes
+			asked = true
+		}
+	}
 	var plan *scaffold.Plan
 	for {
 		plan, err = scaffold.Build(fsys, p)
@@ -317,6 +328,13 @@ func runCatalogInit(ctx context.Context, c *clicore.Context, cmd *cobra.Command,
 		}
 		if err != nil {
 			return asFailure(err)
+		}
+		if plan.ProfilesOnly && !p.ProfilesOnly {
+			// Build chose profiles-only because ccshelf.toml has enabled = false.
+			if stubGiven {
+				return ui.Usage(errors.New("--sidecars stub cannot be used: ccshelf.toml has [catalog] enabled = false, so this repo has no sidecars"))
+			}
+			p.ProfilesOnly = true
 		}
 		if interactive && plan.NeedsPin && !cmd.Flags().Changed("ccshelf-ref") && !cmd.Flags().Changed("ccshelf-version") && p.CcshelfRef == "" && p.CcshelfVersion == "" {
 			if err := askPin(ctx, c, &p); err != nil {
@@ -587,7 +605,7 @@ func finishInit(c *clicore.Context, tgt *scaffold.Target, plan *scaffold.Plan, f
 	}
 	if changed {
 		fmt.Fprintln(w, "next steps:")
-		for i, s := range nextSteps(tgt, plan, gitDone, f.profilesOnly) {
+		for i, s := range nextSteps(tgt, plan, gitDone, p.ProfilesOnly) {
 			fmt.Fprintf(w, "  %d. %s\n", i+1, s)
 		}
 	}
