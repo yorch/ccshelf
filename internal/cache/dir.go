@@ -88,31 +88,52 @@ func WriteDirChecked(dir, prefix, file string, content []byte) (path string, mod
 		if round > 0 {
 			time.Sleep(time.Duration(round) * 5 * time.Millisecond)
 		}
-		if last = checkContent(final, file, content); last == nil {
-			if checkModes(final, file) == nil {
-				touch(final)
-				return final, false, nil
-			}
-			// The content is right and the modes are not. If the file system
-			// ignores modes, a rebuild cannot help, and it would replace the
-			// directory under running sessions. Accept the directory.
-			if !fsHonorsModes(dir) {
-				touch(final)
-				return final, true, nil
-			}
-			// Another process may have just published the directory and not
-			// yet made it read-only (mode 0700, file 0400). Wait a few
-			// rounds for it instead of replacing a good directory.
-			if windowRetries < 4 && inPublishWindow(final, file) {
-				windowRetries++
-				continue
-			}
+		ok, ignored, why := settleDir(dir, final, file, content)
+		if ok {
+			touch(final)
+			return final, ignored, nil
+		}
+		last = why
+		// Another process may have just published the directory and not
+		// yet made it read-only (mode 0700, file 0400). Wait a few rounds
+		// for it instead of replacing a good directory.
+		if errors.Is(why, errModes) && windowRetries < 4 && inPublishWindow(final, file) {
+			windowRetries++
+			continue
 		}
 		if err := replaceDir(dir, final, file, content); err != nil {
 			last = err
 		}
 	}
+	// The last replace has not been checked yet.
+	if ok, ignored, why := settleDir(dir, final, file, content); ok {
+		touch(final)
+		return final, ignored, nil
+	} else if last == nil {
+		last = why
+	}
 	return "", false, fmt.Errorf("cache directory %s: %w%s", name, last, deleteHint(final))
+}
+
+// errModes is wrapped by the reason that settleDir gives when the content is
+// right and the modes are not.
+var errModes = fmt.Errorf("%w: the file modes of the directory are not 0500 and 0400", ErrTampered)
+
+// settleDir checks the directory. ok is true when it can be used. ignored is
+// true when the content is right and the cache file system ignores modes, so
+// that a rebuild cannot help and would replace the directory under running
+// sessions. When ok is false, why says what is wrong and is never nil.
+func settleDir(dir, final, file string, content []byte) (ok, ignored bool, why error) {
+	if err := checkContent(final, file, content); err != nil {
+		return false, false, err
+	}
+	if checkModes(final, file) == nil {
+		return true, false, nil
+	}
+	if !fsHonorsModes(dir) {
+		return true, true, nil
+	}
+	return false, false, errModes
 }
 
 // replaceDir builds the directory in a temporary directory next to final and

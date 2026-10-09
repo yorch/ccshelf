@@ -595,3 +595,31 @@ func TestWriteDirWaitsForPublisherToFinish(t *testing.T) {
 		t.Error(err)
 	}
 }
+
+func TestWriteDirExhaustionHasAReason(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("modes are Unix only")
+	}
+	dir := newDir(t)
+	old := chmodFn
+	// Every chmod the code applies is undone at once: the modes stay wide, but
+	// the file system still honors chmod (the probe, a 0400 request on a
+	// scratch file, is the only call that keeps its result).
+	chmodFn = func(path string, mode os.FileMode) error {
+		if strings.HasPrefix(filepath.Base(path), ".ccshelf-tmp-") {
+			return os.Chmod(path, mode)
+		}
+		return os.Chmod(path, 0o700)
+	}
+	defer func() { chmodFn = old }()
+	_, _, err := WriteDirChecked(dir, "instructions", "CLAUDE.md", dirContent)
+	if err == nil {
+		t.Fatal("no error although the modes never settle")
+	}
+	if strings.Contains(err.Error(), "%!") {
+		t.Errorf("broken error text: %v", err)
+	}
+	if !errors.Is(err, ErrTampered) {
+		t.Errorf("error does not wrap ErrTampered: %v", err)
+	}
+}
