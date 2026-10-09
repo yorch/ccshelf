@@ -508,7 +508,7 @@ func TestCatalogInitDoesNotWriteThroughLinks(t *testing.T) {
 func TestCatalogInitInteractive(t *testing.T) {
 	h := newHarness(t, "")
 	dir := filepath.Join(h.cwd, "acme-claude")
-	sp := ui.NewScripted("acme", "@acme/platform", testSHA, "v0.1.0", true)
+	sp := ui.NewScripted(false, "acme", "@acme/platform", testSHA, "v0.1.0", true)
 	h.env.Prompter = sp
 	r := h.run("catalog", "init", dir)
 	if r.code != 0 {
@@ -516,6 +516,9 @@ func TestCatalogInitInteractive(t *testing.T) {
 	}
 	if err := sp.Done(); err != nil {
 		t.Error(err)
+	}
+	if strings.Contains(r.err, "--profiles-only") {
+		t.Errorf("the answer no still printed --profiles-only:\n%s", r.err)
 	}
 	if !strings.Contains(r.err, "Equivalent: ccshelf catalog init") || !strings.Contains(r.err, "--marketplace-name acme") || !strings.Contains(r.err, "--platform-owners @acme/platform") || !strings.Contains(r.err, "--yes") {
 		t.Errorf("no replayable equivalent command:\n%s", r.err)
