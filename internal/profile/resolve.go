@@ -26,14 +26,22 @@ type ResolveOptions struct {
 // Resolved is a profile with its parents merged. See the package comment for
 // the merge rules.
 type Resolved struct {
-	Name     string
-	Kind     Kind
-	Chain    []*File // root parent first, the requested profile last
-	Merged   Manifest
-	MCP      map[string]MCPServer
-	Prompt   []byte // CRLF normalized to LF
-	Warnings []string
-	Closure  Closure
+	Name   string
+	Kind   Kind
+	Chain  []*File // root parent first, the requested profile last
+	Merged Manifest
+	MCP    map[string]MCPServer
+	Prompt []byte // CRLF normalized to LF
+	// Instructions lists the effective instructions files in the order the
+	// launcher joins them. InstructionsText is the joined text (LF line ends),
+	// or nil when there is none.
+	Instructions     []InstructionFile
+	InstructionsText []byte
+	// InstructionsCutBy names the last profile whose inherit = false dropped
+	// instructions files of its ancestors. It is "" when nothing was dropped.
+	InstructionsCutBy string
+	Warnings          []string
+	Closure           Closure
 }
 
 type resolver struct {
@@ -216,6 +224,9 @@ func (r *resolver) checkOrigins(req *File) error {
 			if m.Session.AppendSystemPromptFile != "" {
 				bad = append(bad, "session.append_system_prompt_file")
 			}
+			if m.Instructions.Set() {
+				bad = append(bad, "instructions")
+			}
 			if m.Account != "" {
 				bad = append(bad, "account")
 			}
@@ -258,8 +269,8 @@ func (r *resolver) checkProjectParents(f *File, seen map[string]bool) error {
 		}
 		if pf.Source.Kind() != KindProject {
 			m := pf.Manifest
-			if len(m.MCP.Servers) > 0 || len(m.Session.Env) > 0 || m.Session.AppendSystemPromptFile != "" || m.Account != "" {
-				return fmt.Errorf("%w: project profile %q extends %q (%s), which sets MCP servers, env, a prompt or an account (SR2)", ErrProjectForbidden, f.Name, p, pf.Source.Kind())
+			if len(m.MCP.Servers) > 0 || len(m.Session.Env) > 0 || m.Session.AppendSystemPromptFile != "" || m.Instructions.Set() || m.Account != "" {
+				return fmt.Errorf("%w: project profile %q extends %q (%s), which sets MCP servers, env, a prompt, instructions or an account (SR2)", ErrProjectForbidden, f.Name, p, pf.Source.Kind())
 			}
 		}
 		if err := r.checkProjectParents(pf, seen); err != nil {
@@ -316,6 +327,8 @@ func (r *resolver) merge(res *Resolved, req *File) error {
 	listers := map[string][]*File{}
 	env := map[string]string{}
 	var promptFrom *File
+	var instr []instrRef
+	cutBy := ""
 
 	for _, f := range res.Chain {
 		c := f.Manifest
@@ -369,6 +382,27 @@ func (r *resolver) merge(res *Resolved, req *File) error {
 		if c.Session.AppendSystemPromptFile != "" {
 			m.Session.AppendSystemPromptFile = c.Session.AppendSystemPromptFile
 			promptFrom = f
+		}
+		if !c.Instructions.Inherits() {
+			// inherit = false drops only the files of the ancestors of this
+			// profile. The files of a sibling parent stay.
+			anc := r.ancestors(f)
+			kept := instr[:0]
+			dropped := false
+			for _, x := range instr {
+				if anc[x.from.Name] {
+					dropped = true
+					continue
+				}
+				kept = append(kept, x)
+			}
+			instr = kept
+			if dropped {
+				cutBy = f.Name
+			}
+		}
+		for _, p := range c.Instructions.Files {
+			instr = append(instr, instrRef{f, p})
 		}
 		if c.Session.InheritUserSettings != nil {
 			v := *c.Session.InheritUserSettings
@@ -450,6 +484,107 @@ func (r *resolver) merge(res *Resolved, req *File) error {
 			return fmt.Errorf("session.append_system_prompt_file of %s: %w", promptFrom.Name, err)
 		}
 		res.Prompt = normalizeNewlines(b)
+	}
+	res.InstructionsCutBy = cutBy
+	return r.readInstructions(res, dedupeInstr(instr))
+}
+
+// instrRef is one instructions file chosen by the merge, before it is read.
+type instrRef struct {
+	from *File
+	path string
+}
+
+// dedupeInstr keeps the first entry of each source and path. It runs after
+// the drops, so that a drop of one declaration does not remove a later
+// declaration of the same file.
+func dedupeInstr(list []instrRef) []instrRef {
+	seen := map[string]bool{}
+	var out []instrRef
+	for _, x := range list {
+		k := x.from.Source.ID() + "\x00" + x.path
+		if !seen[k] {
+			seen[k] = true
+			out = append(out, x)
+		}
+	}
+	return out
+}
+
+// ancestors returns the names of all profiles that f extends, directly or
+// not.
+func (r *resolver) ancestors(f *File) map[string]bool {
+	out := map[string]bool{}
+	var walk func(*File)
+	walk = func(g *File) {
+		for _, p := range g.Manifest.Extends {
+			if out[p] {
+				continue
+			}
+			out[p] = true
+			if pf := r.cache[p]; pf != nil {
+				walk(pf)
+			}
+		}
+	}
+	walk(f)
+	return out
+}
+
+// readInstructions reads each chosen file from the source root of the
+// profile that declares it, refuses import tokens and applies the size caps.
+func (r *resolver) readInstructions(res *Resolved, refs []instrRef) error {
+	var parts [][]byte
+	for _, ref := range refs {
+		f, p := ref.from, ref.path
+		if err := CheckPromptPath(p); err != nil {
+			return fmt.Errorf("instructions.files of %s: %w: %w", f.Name, ErrPath, err)
+		}
+		root := f.Source.Root()
+		if root == "" {
+			return fmt.Errorf("%w: source %s has no root for %s", ErrPath, f.Source.ID(), p)
+		}
+		if !auxAllowed(f.Source) {
+			return fmt.Errorf("%w: source %s keeps its profiles directly in its root (the folder is not named \"profiles\"), so it has no %s/ folder for %s", ErrPath, f.Source.ID(), PromptDir, p)
+		}
+		if err := checkRootDir(root); err != nil {
+			return fmt.Errorf("instructions.files of %s: %w", f.Name, err)
+		}
+		b, _, err := readConfined(root, p, MaxPromptSize)
+		if err != nil {
+			return fmt.Errorf("instructions.files of %s: %w", f.Name, err)
+		}
+		b = normalizeNewlines(b)
+		if line, msg := CheckInstructionsText(string(b)); line != 0 {
+			return fmt.Errorf("instructions file %s of %s, line %d: %s", p, f.Name, line, msg)
+		}
+		res.Instructions = append(res.Instructions, InstructionFile{
+			Profile: f.Name, Source: PortableSourceID(f.Source), Path: p,
+			Bytes: len(b), Digest: digest(b), content: b,
+		})
+		parts = append(parts, b)
+	}
+	body := joinInstructions(parts)
+	if len(body) > MaxInstructionsSize {
+		return fmt.Errorf("the instructions files add up to %d bytes, and the limit is %d bytes", len(body), MaxInstructionsSize)
+	}
+	if len(body) > 0 {
+		res.InstructionsText = append([]byte(InstructionsHeader(res.Name)), body...)
+		// The joined text is checked again: a fence or a code span can
+		// start in one file and end in the next.
+		if line, msg := CheckInstructionsText(string(res.InstructionsText)); line != 0 {
+			return fmt.Errorf("the joined instructions text of %s, line %d: %s", res.Name, line, msg)
+		}
+	}
+	// Merged shows the effective result: the paths in join order, and
+	// inherit = false when it dropped files.
+	res.Merged.Instructions = Instructions{}
+	for _, f := range res.Instructions {
+		res.Merged.Instructions.Files = append(res.Merged.Instructions.Files, f.Path)
+	}
+	if res.InstructionsCutBy != "" {
+		no := false
+		res.Merged.Instructions.Inherit = &no
 	}
 	return nil
 }

@@ -19,8 +19,12 @@ const (
 	ItemProfileControls = "profile-controls"
 	ItemRegistry        = "registry"
 	ItemPrompt          = "prompt"
-	ItemPlugin          = "plugin"
-	ItemSource          = "source"
+	// ItemInstruction is one effective instructions file. Its Name is the
+	// 1-based position and the path (for example "01 prompts/base.md"), so
+	// that a change of the join order changes the closure hash.
+	ItemInstruction = "instruction"
+	ItemPlugin      = "plugin"
+	ItemSource      = "source"
 )
 
 // ClosureItem is one thing the trust decision covers.
@@ -92,6 +96,11 @@ type profileControls struct {
 	Env                    map[string]string `json:"session.env"`
 	AppendSystemPromptFile string            `json:"session.append_system_prompt_file"`
 	OnBlocked              string            `json:"policy.on_blocked"`
+	// The instructions members use omitempty so that the digest of a profile
+	// without [instructions] stays what it was before the table existed.
+	// Files keep their order: it decides the join order.
+	InstructionsFiles   []string `json:"instructions.files,omitempty"`
+	InstructionsInherit *bool    `json:"instructions.inherit,omitempty"`
 }
 
 func sortedCopy(s []string) []string {
@@ -121,6 +130,7 @@ func profileDigests(m *Manifest) (identity, controls string, err error) {
 		MCPServers: sortedCopy(m.MCP.Servers), MCPStrict: m.MCP.Strict, MCPClaudeAIConnectors: m.MCP.ClaudeAIConnectors,
 		InheritUserSettings: m.Session.InheritUserSettings, Env: env,
 		AppendSystemPromptFile: m.Session.AppendSystemPromptFile, OnBlocked: m.Policy.OnBlocked,
+		InstructionsFiles: append([]string(nil), m.Instructions.Files...), InstructionsInherit: m.Instructions.Inherit,
 	})
 	if err != nil {
 		return "", "", fmt.Errorf("encoding profile %q: %w", m.Name, err)
@@ -154,6 +164,16 @@ func buildClosure(res *Resolved) (Closure, error) {
 	}
 	if res.Merged.Session.AppendSystemPromptFile != "" {
 		items = append(items, ClosureItem{Kind: ItemPrompt, Name: res.Merged.Session.AppendSystemPromptFile, Digest: digest(res.Prompt), Risky: true})
+	}
+	if len(res.InstructionsText) > 0 {
+		// The generated header is part of what Claude Code reads. It comes
+		// from the profile name (already in the closure) and a fixed
+		// template, so the template is pinned here: a new template needs
+		// trust again.
+		items = append(items, ClosureItem{Kind: ItemInstruction, Name: "00 header", Digest: digest([]byte(InstructionsHeader(res.Name))), Risky: true})
+	}
+	for i, f := range res.Instructions {
+		items = append(items, ClosureItem{Kind: ItemInstruction, Name: fmt.Sprintf("%02d %s", i+1, f.Path), Digest: f.Digest, Risky: true})
 	}
 	for _, id := range res.Merged.Plugins.Include {
 		items = append(items, ClosureItem{Kind: ItemPlugin, Name: id, Digest: digest([]byte(id)), Risky: true})

@@ -19,6 +19,8 @@ func newDir(t *testing.T) string {
 	if err := Ensure(dir); err != nil {
 		t.Fatal(err)
 	}
+	// Read-only trees from WriteDir must not block the removal of the temp dir.
+	t.Cleanup(func() { makeWritable(dir) })
 	return dir
 }
 

@@ -21,6 +21,15 @@ import (
 	"github.com/yorch/ccshelf/internal/ui"
 )
 
+// Names used for the instructions directory of a launch.
+const (
+	instructionsPrefix = "instructions"
+	instructionsFile   = "CLAUDE.md"
+	// additionalDirsClaudeMDEnv makes Claude Code load CLAUDE.md files from
+	// the directories given with --add-dir.
+	additionalDirsClaudeMDEnv = "CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD"
+)
+
 // launch is everything needed to start claude, produced by the run pipeline.
 type launch struct {
 	Bin  string
@@ -35,9 +44,12 @@ type launch struct {
 	PassFrom int
 
 	Settings, MCPConfig, PromptFile string
-	Account                         string
-	Warnings                        []string
-	Resolved                        *profile.Resolved
+	// InstructionsDir is the cache directory that holds the CLAUDE.md built
+	// from the profile's instructions, or "" when the profile has none.
+	InstructionsDir string
+	Account         string
+	Warnings        []string
+	Resolved        *profile.Resolved
 }
 
 func (l *launcher) runCmd() *cobra.Command {
@@ -91,7 +103,7 @@ func (l *launcher) dryRunCmd() *cobra.Command {
 		Short: "Print the exact claude command a run would execute",
 		Long: `Run the whole pipeline of "run" (including the trust check) and print the exact
 claude command instead of starting it. The command writes the generated
-settings, MCP config and prompt files to the private cache, so the printed
+settings, MCP config, prompt and instructions files to the private cache, so the printed
 command is valid. It never prints environment values from profiles.`,
 		DisableFlagsInUseLine: true,
 	}
@@ -437,6 +449,26 @@ func (s *session) buildLaunch(ctx context.Context, name string, pass []string, y
 		ln.PromptFile = p
 		ln.Args = append(ln.Args, "--append-system-prompt-file", p)
 	}
+	if len(r.InstructionsText) > 0 {
+		// --add-dir is not a sideload flag, so no policy check applies. Claude
+		// Code can write to the directory, so WriteDir checks it on every
+		// launch and rebuilds it when it differs from the expected content.
+		d, modesIgnored, err := cache.WriteDirChecked(cdir, instructionsPrefix, instructionsFile, r.InstructionsText)
+		if err != nil {
+			return nil, ui.Failure(fmt.Errorf("writing instructions: %w", err))
+		}
+		if modesIgnored {
+			warn("the cache file system ignores file modes, so the instructions directory is not read-only. ccshelf still checks its content at every start")
+		}
+		ln.InstructionsDir = d
+		ln.Args = append(ln.Args, "--add-dir", d)
+		envAdd := map[string]string{}
+		for k, v := range ln.EnvAdd {
+			envAdd[k] = v
+		}
+		envAdd[additionalDirsClaudeMDEnv] = "1"
+		ln.EnvAdd = envAdd
+	}
 	if m.Session.Effort != "" {
 		ln.Args = append(ln.Args, "--effort", m.Session.Effort)
 	}
@@ -448,6 +480,10 @@ func (s *session) buildLaunch(ctx context.Context, name string, pass []string, y
 			// Whether the later flag wins or is merged has not been verified
 			// against a real claude here {U}, so only the risk is stated.
 			warn("the argument %s after the profile name can override what the profile generated", name)
+		case "--add-dir":
+			if len(r.InstructionsText) > 0 {
+				warn("the argument --add-dir after the profile name adds a directory whose CLAUDE.md files Claude Code also loads, because the profile sets instructions")
+			}
 		case "--resume", "-r", "--continue", "-c":
 			warn("%s resumes a session that another profile may have started. The session reuses its recorded prompt and skill list", name)
 		}
@@ -455,6 +491,9 @@ func (s *session) buildLaunch(ctx context.Context, name string, pass []string, y
 	ln.PassFrom = len(ln.Args)
 	ln.Args = append(ln.Args, pass...)
 	ln.Env = s.env
+	if v, ok := ln.EnvAdd[additionalDirsClaudeMDEnv]; ok {
+		ln.Env = claude.Env(s.env, map[string]string{additionalDirsClaudeMDEnv: v})
+	}
 	ln.Warnings = warnings
 	return ln, nil
 }
@@ -527,7 +566,9 @@ func printDryRun(cc *clicore.Context, ln *launch) error {
 			Settings   string            `json:"settings"`
 			MCPConfig  string            `json:"mcp_config,omitempty"`
 			PromptFile string            `json:"prompt_file,omitempty"`
-			Warnings   []string          `json:"warnings"`
+			// InstructionsDir is the --add-dir directory of the instructions.
+			InstructionsDir string   `json:"instructions_dir,omitempty"`
+			Warnings        []string `json:"warnings"`
 		}
 		w := ln.Warnings
 		if w == nil {
@@ -537,7 +578,7 @@ func printDryRun(cc *clicore.Context, ln *launch) error {
 			Profile: ln.Resolved.Name, Account: ln.Account,
 			Command:  append([]string{ln.Bin}, ln.redactedArgs()...),
 			Env:      emptyToNil(env),
-			Settings: ln.Settings, MCPConfig: ln.MCPConfig, PromptFile: ln.PromptFile, Warnings: w,
+			Settings: ln.Settings, MCPConfig: ln.MCPConfig, PromptFile: ln.PromptFile, InstructionsDir: ln.InstructionsDir, Warnings: w,
 		})
 	}
 	sh := shell(cc)

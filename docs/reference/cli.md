@@ -77,7 +77,7 @@ Scripts can rely on these; they never change meaning.
 
 ## ccshelf diff
 
-Compare two profiles after their parents are merged: plugins, skills, MCP servers, environment variable names and session defaults. "+" marks what b adds to a and "-" what b lacks. Environment values and prompt text are never printed. The exit code is 0 whether or not they differ. --json has an "identical" field.
+Compare two profiles after their parents are merged: plugins, skills, MCP servers, environment variable names and session defaults. "+" marks what b adds to a and "-" what b lacks. Environment values, prompt text and instructions text are never printed. The exit code is 0 whether or not they differ. --json has an "identical" field.
 
 **Usage**
 
@@ -93,7 +93,7 @@ ccshelf diff [profile-a] [profile-b] [flags]
 
 ## ccshelf dry-run
 
-Run the whole pipeline of "run" (including the trust check) and print the exact claude command instead of starting it. The command writes the generated settings, MCP config and prompt files to the private cache, so the printed command is valid. It never prints environment values from profiles.
+Run the whole pipeline of "run" (including the trust check) and print the exact claude command instead of starting it. The command writes the generated settings, MCP config, prompt and instructions files to the private cache, so the printed command is valid. It never prints environment values from profiles.
 
 **Usage**
 

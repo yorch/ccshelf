@@ -30,6 +30,7 @@ func ControlsJSON(m *Manifest) ([]byte, error) {
 		MCPServers: sortedCopy(m.MCP.Servers), MCPStrict: m.MCP.Strict, MCPClaudeAIConnectors: m.MCP.ClaudeAIConnectors,
 		InheritUserSettings: m.Session.InheritUserSettings, Env: env,
 		AppendSystemPromptFile: m.Session.AppendSystemPromptFile, OnBlocked: m.Policy.OnBlocked,
+		InstructionsFiles: append([]string(nil), m.Instructions.Files...), InstructionsInherit: m.Instructions.Inherit,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("encoding the controls of profile %q: %w", m.Name, err)

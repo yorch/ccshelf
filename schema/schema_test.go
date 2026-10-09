@@ -399,3 +399,39 @@ func TestSchemasAreValidJSONWithMeta(t *testing.T) {
 		t.Error("accessor must return a copy")
 	}
 }
+
+func TestSchemaAndGoAgreeOnInstructions(t *testing.T) {
+	s := parseSchema(Profile())
+	many := make([]any, 33)
+	for i := range many {
+		many[i] = "prompts/f" + strconv.Itoa(i) + ".md"
+	}
+	files := func(v ...any) map[string]any {
+		return map[string]any{"name": "a", "instructions": map[string]any{"files": v}}
+	}
+	for _, p := range []string{"prompts/a.md", "prompts/sub/a.md", ".ssh/id_ed25519", "../x", "prompts/.hidden", "other/a.md", "prompts", `prompts\a.md`, "prompts//a.md"} {
+		schemaOK := len(check(s, s, files(p), "$")) == 0
+		_, err := profile.Parse([]byte("name = \"a\"\n[instructions]\nfiles = ["+strconv.Quote(p)+"]\n"), "")
+		if schemaOK != (err == nil) {
+			t.Errorf("%q: schema accepts = %v, Go accepts = %v (%v)", p, schemaOK, err == nil, err)
+		}
+	}
+	if errs := check(s, s, map[string]any{"name": "a", "instructions": map[string]any{"files": []any{"prompts/a.md"}, "inherit": false}}, "$"); len(errs) > 0 {
+		t.Errorf("valid table rejected: %v", errs)
+	}
+	if errs := check(s, s, map[string]any{"name": "a", "instructions": map[string]any{"inherit": "no"}}, "$"); len(errs) == 0 {
+		t.Error("a string inherit must be rejected")
+	}
+	if errs := check(s, s, map[string]any{"name": "a", "instructions": map[string]any{"other": 1}}, "$"); len(errs) == 0 {
+		t.Error("an unknown key must be rejected")
+	}
+	if errs := check(s, s, files("prompts/a.md", "prompts/a.md"), "$"); len(errs) == 0 {
+		t.Error("duplicates must be rejected")
+	}
+	if errs := check(s, s, files(many...), "$"); len(errs) == 0 {
+		t.Error("33 files must be rejected")
+	}
+	if errs := check(s, s, files(many[:32]...), "$"); len(errs) > 0 {
+		t.Errorf("32 files must pass: %v", errs)
+	}
+}

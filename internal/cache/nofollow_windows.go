@@ -208,3 +208,11 @@ func secureDir(dir string, _ os.FileInfo) error {
 	}
 	return nil
 }
+
+// chmodNoFollow clears or sets the read-only attribute with os.Chmod. Windows
+// has no mode bits. Callers inspect the path with Lstat and skip links before
+// they call it. What os.Chmod does with a link on Windows is {U}, so this
+// function does not claim to refuse links.
+func chmodNoFollow(path string, dir bool, mode os.FileMode) error {
+	return os.Chmod(path, mode)
+}

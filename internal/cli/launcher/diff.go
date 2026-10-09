@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -40,7 +41,7 @@ func (l *launcher) diffCmd() *cobra.Command {
 		Short: "Compare two resolved profiles",
 		Long: `Compare two profiles after their parents are merged: plugins, skills, MCP
 servers, environment variable names and session defaults. "+" marks what b adds
-to a and "-" what b lacks. Environment values and prompt text are never printed.
+to a and "-" what b lacks. Environment values, prompt text and instructions text are never printed.
 The exit code is 0 whether or not they differ. --json has an "identical" field.`,
 		Args: cobra.MaximumNArgs(2),
 	}
@@ -132,6 +133,7 @@ func diffResolved(a, b *profile.Resolved) diffDoc {
 		{"skills.name_only", ma.Skills.NameOnly, mb.Skills.NameOnly},
 		{"mcp.servers", ma.MCP.Servers, mb.MCP.Servers},
 		{"session.env (names)", envNames(ma.Session.Env), envNames(mb.Session.Env)},
+		{"instructions.files", instructionLabels(a), instructionLabels(b)},
 	}
 	for _, l := range lists {
 		added, removed := setDiff(l.a, l.b)
@@ -147,6 +149,9 @@ func diffResolved(a, b *profile.Resolved) diffDoc {
 		{"session.effort", ma.Session.Effort, mb.Session.Effort},
 		{"session.append_system_prompt_file", ma.Session.AppendSystemPromptFile, mb.Session.AppendSystemPromptFile},
 		{"session.prompt (sha256)", itemDigest(a, profile.ItemPrompt), itemDigest(b, profile.ItemPrompt)},
+		{"instructions.order", orderIfSameSet(instructionLabels(a), instructionLabels(b)), orderIfSameSet(instructionLabels(b), instructionLabels(a))},
+		{"instructions.inherit", inheritLabel(a), inheritLabel(b)},
+		{"instructions (sha256)", textDigest(a.InstructionsText), textDigest(b.InstructionsText)},
 		{"session.inherit_user_settings", boolStr(ma.Session.InheritUserSettings), boolStr(mb.Session.InheritUserSettings)},
 		{"policy.on_blocked", ma.Policy.OnBlocked, mb.Policy.OnBlocked},
 		{"account", ma.Account, mb.Account},
@@ -158,6 +163,45 @@ func diffResolved(a, b *profile.Resolved) diffDoc {
 	}
 	d.Identical = len(d.Lists) == 0 && len(d.Scalars) == 0
 	return d
+}
+
+// instructionLabels lists the effective instructions files as "path [source]",
+// so that one path from two sources is not shown as the same file.
+func instructionLabels(r *profile.Resolved) []string {
+	out := make([]string, 0, len(r.Instructions))
+	for _, f := range r.Instructions {
+		out = append(out, f.Path+" ["+f.Source+"]")
+	}
+	return out
+}
+
+// orderIfSameSet returns the order of a when a and b hold the same files, so
+// that a pure reorder shows up and an added or removed file shows only once,
+// in the list.
+func orderIfSameSet(a, b []string) string {
+	if len(a) != len(b) || len(a) < 2 {
+		return ""
+	}
+	added, removed := setDiff(a, b)
+	if len(added) > 0 || len(removed) > 0 {
+		return ""
+	}
+	return strings.Join(a, ", ")
+}
+
+// inheritLabel describes whether inherit = false dropped instructions files.
+func inheritLabel(r *profile.Resolved) string {
+	if r.InstructionsCutBy == "" {
+		return ""
+	}
+	return "false (set in " + r.InstructionsCutBy + ")"
+}
+
+func textDigest(b []byte) string {
+	if len(b) == 0 {
+		return ""
+	}
+	return profile.DigestBytes(b)[:12]
 }
 
 func itemDigest(r *profile.Resolved, kind string) string {

@@ -181,6 +181,18 @@ func Describe(r *Resolved) string {
 		fmt.Fprintf(&b, "  prompt: %s (%d bytes, sha256:%s)\n", m.Session.AppendSystemPromptFile, len(r.Prompt), digest(r.Prompt)[:12])
 	}
 	fmt.Fprintf(&b, "  inherit_user_settings: %t\n", m.InheritsUserSettings())
+	if len(r.Instructions) > 0 || r.InstructionsCutBy != "" {
+		b.WriteString("Instructions:\n")
+		if r.InstructionsCutBy != "" {
+			fmt.Fprintf(&b, "  inherit = false in %s dropped the files of its parent profiles\n", r.InstructionsCutBy)
+		}
+		for i, f := range r.Instructions {
+			fmt.Fprintf(&b, "  %d. %s (profile %s, %s, %d bytes, sha256:%s)\n", i+1, f.Path, f.Profile, f.Source, f.Bytes, f.Digest[:12])
+		}
+		if len(r.Instructions) > 0 {
+			fmt.Fprintf(&b, "  joined: %d bytes, sha256:%s\n", len(r.InstructionsText), digest(r.InstructionsText)[:12])
+		}
+	}
 	envNames := sortedKeys(m.Session.Env)
 	for _, k := range envNames {
 		fmt.Fprintf(&b, "  env %s = <redacted>\n", k)

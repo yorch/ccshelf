@@ -643,6 +643,15 @@ func (c Change) describe() string {
 		default:
 			return fmt.Sprintf("system prompt file %s removed", name)
 		}
+	case profile.ItemInstruction:
+		switch c.Kind {
+		case Added:
+			return fmt.Sprintf("instructions file %s added", name)
+		case Altered:
+			return fmt.Sprintf("instructions file %s changed", name)
+		default:
+			return fmt.Sprintf("instructions file %s removed", name)
+		}
 	case profile.ItemPlugin:
 		return fmt.Sprintf("plugin %s %s", name, c.Kind)
 	case profile.ItemProfile:

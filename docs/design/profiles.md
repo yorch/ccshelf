@@ -171,9 +171,37 @@ FIGMA_TOKEN_REF = "op://dev/figma/token"   # Allowlist: only CCSHELF_VAR_<NAME> 
                               # ANTHROPIC_*, *_PROXY, NODE_*, PYTHON*, ...). Values are references passed to tools at spawn;
                               # the launcher never resolves secrets to disk or argv. Never commit secrets.
 
+# ---- Instructions (optional) ----
+[instructions]
+files = ["prompts/company.md", "prompts/frontend.md"]   # Paths below prompts/ in the source of this profile. The same path
+                              # rules as append_system_prompt_file. At most 32 files, no duplicates. The launcher joins the
+                              # files into one CLAUDE.md (see "Instructions" below).
+inherit = true                # true (default): the files come after the files of the parent profiles.
+                              # false: drop the files of the parent profiles (the profiles it extends, directly or not).
+
 # ---- Policy behavior ----
 [policy]
 on_blocked = "warn"           # warn | fail. What to do when org policy blocks something the profile
                               # needs (e.g. disableSideloadFlags). The launcher never bypasses policy.
 ```
+### Instructions
+`[instructions]` gives a profile CLAUDE.md-style text. The launcher joins the effective files into one generated `CLAUDE.md` and passes it with `--add-dir` (see [launcher.md](launcher.md)). Claude Code loads it for the main conversation and for general-purpose subagents {V} ([stage 0 note](../research/instructions-stage0.md)).
+
+Merge rules:
+- The resolver walks the `extends` chain in its normal order, root parent first. It collects the files of each profile and reads each file from the source root of the profile that lists it.
+- A profile with `inherit = false` drops the files declared by its ancestors: the profiles it extends, directly or not. Files of a profile that is not its ancestor stay. Thus the order of `extends` does not change which files stay. It only changes the join order. In a diamond (`base` is extended by `l` and by `r`, and `r` sets `inherit = false`), the files of `base` are dropped and the files of `l` stay. Its own files, and the files of its children, still apply. `show` prints the profile whose `inherit = false` dropped files.
+- The same path from the same source appears once. The resolver removes duplicates after the drops, and the first one stays.
+- One file is at most 64 KiB. The joined text is at most 64 KiB. Over the limit, the profile does not resolve.
+- The launcher joins the files in order. It changes CRLF to LF, trims the trailing newlines of each file and puts one blank line between files.
+- The resolver refuses every `@` that is followed by a character that is not white space or a backslash. Claude Code expands such a token into the content of another file. The extractor of Claude Code 2.1.295 lexes the file with a Markdown lexer, skips code and code span tokens, and runs the pattern `(?:^|\s)@(...)` on each text token {V} ([stage 0 note](../research/instructions-stage0.md#extractor-in-the-claude-code-2-1-295-binary-2026-10-09)). The check does not copy the lexer. It looks at the raw characters and has no exemption for code spans, fenced blocks or other Markdown structure. Thus the tokenization does not matter. Two cases stay allowed: an `@` after a letter or a digit (an email address) and an `@` after an odd number of backslashes. The one remaining assumption is that no Markdown construct makes a text token start directly after a letter or a digit that precedes the `@` in the raw text {R}. A differential run against the extractor supports it.
+- The check refuses the character references `&#64;`, `&#x40;` and `&commat;` too, as defense in depth.
+- Limitation: the rule refuses `@` inside code too. Write `\@types/node` or `\@property` to keep the character. Inside code the backslash stays visible. A later change may relax the rule when evidence supports it.
+- The resolver also refuses a file with a leading byte order mark, with a first line of `---` (front matter, which Claude Code reads in memory files), or with a carriage return that is not part of a CRLF line end. Each message names the line and what to change.
+- The resolver runs the check on each file and again on the joined text, because a fence can start in one file and end in the next.
+- The generated `CLAUDE.md` starts with the line `# Instructions from the ccshelf profile <name>` and a blank line. The header keeps the file from starting with front matter. The closure holds the header as the item `00 header`, so a new header text needs trust again. The size limit does not count the header.
+- A project profile may not set `[instructions]`, and it may not extend a profile of another kind that sets it (SR2).
+- The closure pins every effective file with its content hash. The order is part of the closure, so a reorder needs trust again.
+
+Compare with `session.append_system_prompt_file`. That key is one file at system-prompt level. It reaches the main conversation only, and a child profile replaces the file of its parent. Instructions arrive as CLAUDE.md content (a user message), reach subagents (not the built-in Explore and Plan agents) and add up along the chain {V}. A profile may set both. The two channels do not depend on each other.
+
 Rule for `extends`: lists union in order. Exclusion is sticky in both directions: a `plugins.exclude` beats a plugin include and a `skills.off` beats `skills.name_only`, at any level of the chain. Concretely, a `plugins.exclude` or `skills.off` entry at any level of the chain (a parent or the profile itself) removes the id from the merged include and `name_only` lists. This also applies to an include in a later (child) profile, which is dropped with a warning. Ids are compared ignoring case. A child therefore cannot re-include something a parent excluded. Personal profiles in `~/.config/ccshelf/profiles/` may extend org profiles. `compile` also writes a bundle plugin `profile-<name>` (dependencies only) into the marketplace so the profile's plugins can be installed natively.
