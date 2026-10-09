@@ -1,0 +1,5 @@
+name = "base"
+description = "Shared base"
+
+[instructions]
+files = ["prompts/company.md"]

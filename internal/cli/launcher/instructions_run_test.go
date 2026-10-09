@@ -215,3 +215,64 @@ func TestDryRunInstructions(t *testing.T) {
 		t.Errorf("CLAUDE.md = %q, %v", b, err)
 	}
 }
+
+func TestShowDiffInstructions(t *testing.T) {
+	h := newHarness(t)
+	h.useOrg(h.copyTree("testdata/org-instructions"))
+
+	h.mustRun("show", "guided")
+	golden(t, "show-guided.golden.txt", h.out.String())
+	if strings.Contains(h.out.String(), "company style guide") {
+		t.Error("show must not print instructions text")
+	}
+	h.out.Reset()
+	h.mustRun("show", "fresh")
+	golden(t, "show-fresh.golden.txt", h.out.String())
+
+	h.out.Reset()
+	h.mustRun("--json", "show", "fresh")
+	var env struct {
+		Data struct {
+			Instructions struct {
+				Files []struct {
+					Profile, Source, Path, Digest string
+					Bytes                         int
+				} `json:"files"`
+				CutBy        string `json:"cut_by"`
+				JoinedBytes  int    `json:"joined_bytes"`
+				JoinedDigest string `json:"joined_digest"`
+			} `json:"instructions"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(h.out.Bytes(), &env); err != nil {
+		t.Fatal(err)
+	}
+	in := env.Data.Instructions
+	if len(in.Files) != 1 || in.Files[0].Path != "prompts/team.md" || in.Files[0].Profile != "fresh" || in.Files[0].Source != "dir:org" ||
+		in.CutBy != "fresh" || in.JoinedBytes != len("Use the team checklist.\n") || len(in.JoinedDigest) != 64 {
+		t.Errorf("json: %+v", in)
+	}
+	if strings.Contains(h.out.String(), "team checklist") {
+		t.Error("JSON must not contain the text")
+	}
+
+	h.out.Reset()
+	h.mustRun("diff", "guided", "fresh")
+	golden(t, "diff-guided-fresh.golden.txt", h.out.String())
+}
+
+func TestDiffInstructionsReorder(t *testing.T) {
+	h := newHarness(t)
+	h.writeProfile("one", "name = \"one\"\n[instructions]\nfiles = [\"prompts/a.md\", \"prompts/b.md\"]\n")
+	h.writeProfile("two", "name = \"two\"\n[instructions]\nfiles = [\"prompts/b.md\", \"prompts/a.md\"]\n")
+	h.writePrompt("a.md", "A\n")
+	h.writePrompt("b.md", "B\n")
+	h.mustRun("diff", "one", "two")
+	out := h.out.String()
+	if !strings.Contains(out, "instructions.order: prompts/a.md, prompts/b.md -> prompts/b.md, prompts/a.md") || !strings.Contains(out, "instructions (sha256)") {
+		t.Errorf("diff: %s", out)
+	}
+	if strings.Contains(out, "instructions.files") {
+		t.Errorf("a reorder is not a set change: %s", out)
+	}
+}

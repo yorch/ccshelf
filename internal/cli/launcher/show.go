@@ -91,6 +91,24 @@ type showSession struct {
 	EnvNames []string `json:"env_names"`
 }
 
+// showInstructionFile is one effective instructions file. The text is never
+// exported.
+type showInstructionFile struct {
+	Profile string `json:"profile"`
+	Source  string `json:"source"`
+	Path    string `json:"path"`
+	Bytes   int    `json:"bytes"`
+	Digest  string `json:"digest"`
+}
+
+type showInstructions struct {
+	Files []showInstructionFile `json:"files"`
+	// CutBy names the profile whose inherit = false dropped earlier files.
+	CutBy        string `json:"cut_by,omitempty"`
+	JoinedBytes  int    `json:"joined_bytes"`
+	JoinedDigest string `json:"joined_digest,omitempty"`
+}
+
 type showMCP struct {
 	Servers            []string `json:"servers"`
 	ClaudeAIConnectors string   `json:"claudeai_connectors,omitempty"`
@@ -114,23 +132,24 @@ type showDoc struct {
 	Chain        []string `json:"chain"`
 	// Tracks lists, for sources that follow a branch, "branch main @ 1a2b3c4".
 	// Sources keeps its format.
-	Tracks      []string    `json:"tracks,omitempty"`
-	Sources     []string    `json:"sources"`
-	Account     string      `json:"account,omitempty"`
-	PluginMode  string      `json:"plugin_mode"`
-	Include     []string    `json:"plugins_include"`
-	Exclude     []string    `json:"plugins_exclude"`
-	SkillsOff   []string    `json:"skills_off"`
-	SkillsName  []string    `json:"skills_name_only"`
-	MCP         showMCP     `json:"mcp"`
-	Session     showSession `json:"session"`
-	OnBlocked   string      `json:"on_blocked"`
-	WhenToUse   []string    `json:"when_to_use"`
-	AvoidWhen   []string    `json:"avoid_when"`
-	Warnings    []string    `json:"warnings"`
-	ClosureHash string      `json:"closure_hash"`
-	Closure     []showItem  `json:"closure"`
-	Trust       string      `json:"trust"`
+	Tracks       []string         `json:"tracks,omitempty"`
+	Sources      []string         `json:"sources"`
+	Account      string           `json:"account,omitempty"`
+	PluginMode   string           `json:"plugin_mode"`
+	Include      []string         `json:"plugins_include"`
+	Exclude      []string         `json:"plugins_exclude"`
+	SkillsOff    []string         `json:"skills_off"`
+	SkillsName   []string         `json:"skills_name_only"`
+	MCP          showMCP          `json:"mcp"`
+	Session      showSession      `json:"session"`
+	Instructions showInstructions `json:"instructions"`
+	OnBlocked    string           `json:"on_blocked"`
+	WhenToUse    []string         `json:"when_to_use"`
+	AvoidWhen    []string         `json:"avoid_when"`
+	Warnings     []string         `json:"warnings"`
+	ClosureHash  string           `json:"closure_hash"`
+	Closure      []showItem       `json:"closure"`
+	Trust        string           `json:"trust"`
 }
 
 func nz(s []string) []string {
@@ -159,6 +178,15 @@ func showData(r *profile.Resolved, state string, labels map[string]string) showD
 		},
 		OnBlocked: m.Policy.OnBlocked, WhenToUse: nz(m.WhenToUse), AvoidWhen: nz(m.AvoidWhen),
 		Warnings: make([]string, 0, len(r.Warnings)), ClosureHash: r.Closure.Hash, Trust: state,
+	}
+	d.Instructions = showInstructions{Files: []showInstructionFile{}, CutBy: ui.Sanitize(r.InstructionsCutBy), JoinedBytes: len(r.InstructionsText)}
+	if len(r.InstructionsText) > 0 {
+		d.Instructions.JoinedDigest = profile.DigestBytes(r.InstructionsText)
+	}
+	for _, f := range r.Instructions {
+		d.Instructions.Files = append(d.Instructions.Files, showInstructionFile{
+			Profile: ui.Sanitize(f.Profile), Source: ui.Sanitize(f.Source), Path: ui.Sanitize(f.Path), Bytes: f.Bytes, Digest: f.Digest,
+		})
 	}
 	for _, f := range r.Chain {
 		d.Chain = append(d.Chain, f.Name)

@@ -37,8 +37,11 @@ type Resolved struct {
 	// or nil when there is none.
 	Instructions     []InstructionFile
 	InstructionsText []byte
-	Warnings         []string
-	Closure          Closure
+	// InstructionsCutBy names the last profile whose inherit = false dropped
+	// instructions files of earlier profiles. It is "" when nothing was dropped.
+	InstructionsCutBy string
+	Warnings          []string
+	Closure           Closure
 }
 
 type resolver struct {
@@ -325,6 +328,7 @@ func (r *resolver) merge(res *Resolved, req *File) error {
 	env := map[string]string{}
 	var promptFrom *File
 	var instr []instrRef
+	cutBy := ""
 
 	for _, f := range res.Chain {
 		c := f.Manifest
@@ -380,6 +384,9 @@ func (r *resolver) merge(res *Resolved, req *File) error {
 			promptFrom = f
 		}
 		if !c.Instructions.Inherits() {
+			if len(instr) > 0 {
+				cutBy = f.Name
+			}
 			instr = instr[:0]
 		}
 		for _, p := range c.Instructions.Files {
@@ -468,6 +475,7 @@ func (r *resolver) merge(res *Resolved, req *File) error {
 		}
 		res.Prompt = normalizeNewlines(b)
 	}
+	res.InstructionsCutBy = cutBy
 	return r.readInstructions(res, instr)
 }
 
@@ -520,6 +528,16 @@ func (r *resolver) readInstructions(res *Resolved, refs []instrRef) error {
 		parts = append(parts, b)
 	}
 	res.InstructionsText = joinInstructions(parts)
+	// Merged shows the effective result: the paths in join order, and
+	// inherit = false when it dropped files.
+	res.Merged.Instructions = Instructions{}
+	for _, f := range res.Instructions {
+		res.Merged.Instructions.Files = append(res.Merged.Instructions.Files, f.Path)
+	}
+	if res.InstructionsCutBy != "" {
+		no := false
+		res.Merged.Instructions.Inherit = &no
+	}
 	if len(res.InstructionsText) > MaxInstructionsSize {
 		return fmt.Errorf("the instructions files add up to %d bytes, and the limit is %d bytes", len(res.InstructionsText), MaxInstructionsSize)
 	}

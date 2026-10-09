@@ -1,0 +1,7 @@
+name = "fresh"
+description = "Starts its own instructions"
+extends = ["base"]
+
+[instructions]
+inherit = false
+files = ["prompts/team.md"]

@@ -1,0 +1,25 @@
+Profile: fresh (org)
+Description: Starts its own instructions
+Status: active
+Chain: base [dir:org] -> fresh [dir:org]
+Plugins:
+  mode: allow-only
+MCP:
+  claudeai_connectors: keep (default)
+  strict: false (default)
+Session:
+  inherit_user_settings: true
+Instructions:
+  inherit = false in fresh dropped the files of earlier profiles
+  1. prompts/team.md (profile fresh, dir:org, 24 bytes, sha256:3840bf1bf5f2)
+  joined: 24 bytes, sha256:3840bf1bf5f2
+Policy:
+  on_blocked: warn
+Closure: sha256:8d380093db169fbdbe54b91e828b6d1b3302e26b80e368ccb1af69e497e122b4
+  instruction 01 prompts/team.md 3840bf1bf5f2 risky
+  profile base 4ce5f376ca74
+  profile fresh 169feb323e9f
+  profile-controls base 27022ce16a19 risky
+  profile-controls fresh 4a2a90ca74c2 risky
+  source dir:org 932392424fb6
+Trust: new

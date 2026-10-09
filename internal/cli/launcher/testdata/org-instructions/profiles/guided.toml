@@ -1,0 +1,6 @@
+name = "guided"
+description = "Appends to the base instructions"
+extends = ["base"]
+
+[instructions]
+files = ["prompts/team.md", "prompts/company.md"]

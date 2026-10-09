@@ -1,0 +1,26 @@
+Profile: guided (org)
+Description: Appends to the base instructions
+Status: active
+Chain: base [dir:org] -> guided [dir:org]
+Plugins:
+  mode: allow-only
+MCP:
+  claudeai_connectors: keep (default)
+  strict: false (default)
+Session:
+  inherit_user_settings: true
+Instructions:
+  1. prompts/company.md (profile base, dir:org, 32 bytes, sha256:6c57cda4ef1f)
+  2. prompts/team.md (profile guided, dir:org, 24 bytes, sha256:3840bf1bf5f2)
+  joined: 57 bytes, sha256:bb6c2b363730
+Policy:
+  on_blocked: warn
+Closure: sha256:d03e1bbaa1bb42c03dcbfec96271990edd044432a3ab494b33a1cf983aa9f1ed
+  instruction 01 prompts/company.md 6c57cda4ef1f risky
+  instruction 02 prompts/team.md 3840bf1bf5f2 risky
+  profile base 4ce5f376ca74
+  profile guided 33cd461a1a4c
+  profile-controls base 27022ce16a19 risky
+  profile-controls guided 287bc410ca6b risky
+  source dir:org 932392424fb6
+Trust: new
