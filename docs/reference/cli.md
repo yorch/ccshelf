@@ -77,7 +77,7 @@ Scripts can rely on these; they never change meaning.
 
 ## ccshelf diff
 
-Compare two profiles after their parents are merged: plugins, skills, MCP servers, environment variable names and session defaults. "+" marks what b adds to a and "-" what b lacks. Environment values and prompt text are never printed. The exit code is 0 whether or not they differ. --json has an "identical" field.
+Compare two profiles after their parents are merged: plugins, skills, MCP servers, environment variable names and session defaults. "+" marks what b adds to a and "-" what b lacks. Environment values, prompt text and instructions text are never printed. The exit code is 0 whether or not they differ. --json has an "identical" field.
 
 **Usage**
 

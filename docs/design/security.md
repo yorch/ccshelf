@@ -13,13 +13,14 @@ Added 2026-10-06 after the security review. The verdict of the review was that t
 As defense in depth, the env policy first applies a denylist of known-dangerous prefixes such as `ANTHROPIC_`, `NODE_`, `PYTHON`, `JAVA_`, `LD_`, suffixes such as `_OPTIONS`, and exact names. The launcher passes `effort` as a command-line flag, not as a settings key. A profile can never write `permissions`, `hooks`, `apiKeyHelper`, `*McpServers` allow lists or `disableAllHooks`. Otherwise a profile's env alone could redirect every prompt and file to another endpoint or run code at process start. MCP server definitions are not part of a profile: a profile names servers, and the definitions live in a reviewed registry in the org data repo. A golden test proves that no profile, however crafted, produces a key outside the allowlist.
 
 **SR2: trust the resolved closure, pinned by commit SHA.** A shared profile cannot carry permissions, hooks, auth or endpoint settings (SR1). But it still selects plugins and MCP servers that run code, so loading one is effectively running code from that source.
-- Every non-personal source needs explicit trust. The launcher loads org profiles only from sources already trusted by the org (a pinned git ref, an explicit git branch, later an allowlisted marketplace). Project sources (a `.ccshelf/` folder in a cloned repo) are **off by default**, and the user trusts them per repo (path plus hash, like direnv `allow`). A project source can never define MCP commands, env or prompt text. Otherwise a malicious repository could run code through the launcher while skipping Claude Code's own workspace trust and per-server MCP approval.
+- Every non-personal source needs explicit trust. The launcher loads org profiles only from sources already trusted by the org (a pinned git ref, an explicit git branch, later an allowlisted marketplace). Project sources (a `.ccshelf/` folder in a cloned repo) are **off by default**, and the user trusts them per repo (path plus hash, like direnv `allow`). A project source can never define MCP commands, env, prompt text or instructions. Otherwise a malicious repository could run code through the launcher while skipping Claude Code's own workspace trust and per-server MCP approval.
 - The lockfile (`~/.config/ccshelf/lock.json`) hashes the **fully resolved closure**: the profile, its `extends` parents, the MCP registry entries it references, the prompt file bytes and the source commit SHA. A change to `mcp/registry.toml` that alters what `figma` runs changes the hash.
 - For a closure that includes a non-personal (org or project) source, every change needs trust again: `ccshelf trust <profile>` shows a diff and asks. This includes identity-only edits such as `description`, `when_to_use`, `model` or `effort`. A personal-only closure is always trusted. A closure never trusted before still prompts on a terminal.
 - The diff lists risky items first and marks them:
   - every profile's controls (plugins, skills, MCP servers and controls, `extends`, account, `inherit_user_settings`, `session.env`, prompt file name, `on_blocked`)
   - registry entries
   - prompt text
+  - every effective instructions file, with its content hash and its position in the join order
   - plugin includes (plugins carry hooks and MCP).
 
   Only the identity item (name, description, owner, status, `when_to_use`, `avoid_when`, `model`, `effort`) is not risky. With `[trust] on_change = "fail"` a changed or moved closure exits 4 even on a terminal.
@@ -44,7 +45,14 @@ As defense in depth, the env policy first applies a denylist of known-dangerous 
 - Refuse a cache directory owned by another user or reached through a symlink.
 - Never write resolved secrets to disk or argv. Prefer `--append-system-prompt-file`, which keeps prompt text off the process list.
 - Redact values (key names only) in `dry-run`, `show` and `doctor` output. People paste this output into issues.
+- Treat the instructions directory as untrusted at every launch. Claude Code can edit a directory given with `--add-dir` {V}. Before each launch the launcher checks that `<cache>/instructions-<hash>` is a real directory that the user owns, holds exactly one regular file `CLAUDE.md` (no link) and that the file hashes to the name. Otherwise it rebuilds the directory atomically. The check runs at launch. It cannot stop an edit during a session, and the next launch repairs it. See [launcher.md](launcher.md), step 4.
 - Confine every path a profile names (prompt files, parents) to its source root, with no `..` and no symlinks.
+
+**Instructions (extends SR2 and SR4).**
+- A shared profile can send text into the context of the model through `[instructions]`, so the text is part of the trusted closure. A change to a file, the file list or the order needs trust again.
+- An `@` import token outside code in an instructions file is refused when the profile resolves. Claude Code would expand the token into the content of another file, for example a file outside the profile. The refusal keeps the context to the reviewed text.
+- `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD` is global. When it is set, Claude Code also loads CLAUDE.md files from directories that the user adds with their own `--add-dir` {V}. The launcher warns when the passthrough arguments contain `--add-dir`.
+- The launcher prunes cache entries that were not used for 30 days, including instructions directories. A session that runs longer than that may lose the directory. A new launch rebuilds it.
 
 **SR5: hardened CI and releases.** The reusable Action is pinned by **full commit SHA**, and the Action embeds the expected SHA-256 of the binary it downloads. Releases carry keyless signatures (cosign) and SLSA provenance on github.com, with offline-verifiable bundles for GHE Server mirrors. The project also has:
 - An SBOM, `-trimpath` builds, `govulncheck` and Dependabot.

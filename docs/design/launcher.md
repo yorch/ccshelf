@@ -34,14 +34,19 @@ The launcher is a compiler plus a process starter. It is never in the data path:
    claude --settings <cache>/settings-<hash>.json
           --mcp-config <cache>/mcp-<hash>.json                       # only if the profile adds MCP servers
           --append-system-prompt-file <path>                          # if the profile sets one
+          --add-dir <cache>/instructions-<hash>                       # if the profile has instructions
           --model opus --effort high                                  # if the profile sets them
           --resume                                                    # passthrough args
    ```
+   With instructions, the launcher also sets `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1` in the environment of `claude`. The directory `<cache>/instructions-<hash>` holds one file, `CLAUDE.md`, with the joined instructions of the profile (mode 0700 for the directory and 0600 for the file). The name carries the SHA-256 of the content. Without the variable, `--add-dir` does not load CLAUDE.md {V} ([stage 0 note](../research/instructions-stage0.md)). Claude Code can edit an added directory {V}. Before every launch the launcher therefore checks that the directory holds exactly one regular file named `CLAUDE.md` (no link) with the expected bytes. If the check fails, the launcher rebuilds the directory in a temporary directory and renames it into place. A `--add-dir` in the passthrough arguments gets a warning, because the variable also loads CLAUDE.md files from the directories that the user adds.
+
    The generated settings file hides plugins, skills, connectors and other MCP servers (`enabledPlugins`, `skillOverrides`, `disableClaudeAiConnectors`, `deniedMcpServers` with full server names). So the core path uses no sideload flags. The launcher **validates the generated JSON before every launch**, because Claude Code ignores an invalid settings file silently (exit 0, no message). With `inherit_user_settings = false` it adds `--setting-sources project,local` (this drops the user layer, and the launcher re-adds only what the profile sets). If policy blocks a flag or key, behavior follows `[policy] on_blocked` (`warn` drops that part, `fail` refuses).
 5. **Start `claude` and step aside**: `exec` on Unix, spawn and wait on Windows (see [platform.md](platform.md), "Starting `claude`"). Passthrough works for non-interactive use: `ccshelf run sre -- -p "summarize this repo"`.
 6. **Write nothing shared**: it never touches `~/.claude/settings.json`, `~/.claude.json` or the plugin cache (Claude Code rewrites its own state as usual).
 
 Concurrency: two terminals produce two command lines pointing at two immutable files, so neither reads anything the other wrote (tested on macOS with three parallel sessions).
+
+What breaks if Claude Code changes the instructions route: the route depends on `--add-dir`, on the variable `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD` and on the rule that an added directory loads `CLAUDE.md`. If Claude Code removes or renames the variable, the instructions are silently absent from the session. The stage 0 runs used `-p` mode only {V}. For interactive mode the docs say the same CLAUDE.md hierarchy loads, but no interactive run was made {U}. The built-in Explore and Plan subagents skip CLAUDE.md, so they do not see the instructions {V}. A real-`claude` check of the init event cannot show the instructions, so the opt-in integration test must ask the model for a marker phrase.
 
 What breaks if Claude Code changes: the design depends on `--settings` honoring `enabledPlugins`, `skillOverrides`, `disableClaudeAiConnectors` and `deniedMcpServers`, and on `claude plugin list --json`. Gate on `claude --version`, and run the real-`claude` init-event test in CI against new releases.
 
@@ -53,7 +58,7 @@ The launcher never sets `CLAUDE_CONFIG_DIR`, so all profiles use the same `~/.cl
 | Auth (login) | Yes | Tested: OAuth works with the flags used. Log in once. |
 | Projects and folder trust | Yes | Common per-project state in `~/.claude.json`. |
 | Session history | Yes, mixed | Transcripts are per project, not tagged by profile. `/resume` lists sessions from all profiles. Resuming under a different profile loads that session with different plugins (untested). |
-| Auto memory and CLAUDE.md | Yes | Per project, not per profile. Per-profile memory is not possible without a separate config dir (#91770 asks for it natively). **Decision: shared is fine.** |
+| Auto memory and CLAUDE.md | Yes | Per project, not per profile. Per-profile memory is not possible without a separate config dir (#91770 asks for it natively). **Decision: shared is fine.** A profile can add its own CLAUDE.md-style text with `[instructions]`. That text is generated per launch and does not change your files. |
 | User settings | Yes by default | Permissions, hooks, model, statusline stay in effect because masking merges per key. With `inherit_user_settings = false` they are dropped. Auth still works (tested). |
 | Plugin install cache | Yes | One copy of each plugin. Profiles only change what's enabled. Avoids the duplication and "corrupted" warnings of config-dir-per-profile. |
 | claude.ai connector auth | Yes | Connected once. `strict` hides connectors for a session without affecting their auth. |

@@ -49,6 +49,7 @@ Every document and the report use these terms the same way.
 | Term | Meaning |
 |---|---|
 | **Profile** | A named recipe (`profiles/<name>.toml`) saying which plugins, standalone skills and MCP servers are active for one Claude Code session, plus session defaults. Started with `ccshelf run <name>`. It filters what is already installed. It is not an identity or security boundary. Part of the **launcher** (use case 1). |
+| **Instructions** | CLAUDE.md-style text of a profile, from the files in its `[instructions]` table. The launcher joins the files into one generated `CLAUDE.md` in an added directory. Claude Code loads it for the main conversation and for subagents that load CLAUDE.md files. It is not the system prompt. See [profiles.md](design/profiles.md) and [instructions-stage0.md](research/instructions-stage0.md). |
 | **Profile bundle** | A generated, dependency-only plugin named `profile-<name>`, kept in `bundles/`, so a profile's plugins can be installed natively with one `/plugin install`. It is not itself a profile. |
 | **Catalog** | A generated, browsable index of an org's plugins and profiles: a static site plus `catalog.json`, built in CI from `marketplace.json`, the sidecars and git data. Also queried locally with `ccshelf search` and `ccshelf doctor`. Not committed. Answers "what exists, which should I use, who owns it". Part of use case 2 (discoverability). |
 | **Sidecar** | The per-plugin catalog metadata file `catalog/plugins/<name>.toml` (owner, status, when_to_use, overlaps, review date). |
