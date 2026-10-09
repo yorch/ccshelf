@@ -430,3 +430,69 @@ func TestPruneAndReplaceRemoveReadOnlyTrees(t *testing.T) {
 		t.Errorf("leftovers after replace: %v", names)
 	}
 }
+
+func TestWriteDirFileSystemIgnoresModes(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows has no mode bits to ignore")
+	}
+	dir := newDir(t)
+	old := chmodFn
+	chmodFn = func(string, os.FileMode) error { return nil } // a file system that ignores chmod
+	defer func() { chmodFn = old }()
+
+	p, ignored, err := WriteDirChecked(dir, "instructions", "CLAUDE.md", dirContent)
+	if err != nil || !ignored {
+		t.Fatalf("first call: ignored = %v, err = %v", ignored, err)
+	}
+	if err := checkContent(p, "CLAUDE.md", dirContent); err != nil {
+		t.Fatal(err)
+	}
+	// A second call must settle at once, not loop through the rounds.
+	start := time.Now()
+	p2, ignored, err := WriteDirChecked(dir, "instructions", "CLAUDE.md", dirContent)
+	if err != nil || !ignored || p2 != p {
+		t.Fatalf("second call: %s ignored = %v, err = %v", p2, ignored, err)
+	}
+	if time.Since(start) > 100*time.Millisecond {
+		t.Errorf("the call took %v", time.Since(start))
+	}
+	// The content check stays mandatory.
+	if err := os.WriteFile(filepath.Join(p, "CLAUDE.md"), []byte("bad\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := WriteDirChecked(dir, "instructions", "CLAUDE.md", dirContent); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkContent(p, "CLAUDE.md", dirContent); err != nil {
+		t.Errorf("content not repaired: %v", err)
+	}
+	// With working modes the flag is false.
+	chmodFn = old
+	dir2 := newDir(t)
+	if _, ignored, err := WriteDirChecked(dir2, "instructions", "CLAUDE.md", dirContent); err != nil || ignored {
+		t.Errorf("normal file system: ignored = %v, err = %v", ignored, err)
+	}
+}
+
+func TestMakeWritableDoesNotFollowLinks(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("needs symlinks")
+	}
+	target := t.TempDir()
+	if err := os.Chmod(target, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(target, 0o700)
+	link := filepath.Join(t.TempDir(), "l")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skip("symlinks are not available")
+	}
+	makeWritable(link)
+	if fi, _ := os.Stat(target); fi.Mode().Perm() != 0o500 {
+		t.Errorf("the target of a link changed to %v", fi.Mode().Perm())
+	}
+	// The handle-based change fails for a link.
+	if err := chmodNoFollow(link, true, 0o700); err == nil {
+		t.Error("chmodNoFollow followed a link")
+	}
+}

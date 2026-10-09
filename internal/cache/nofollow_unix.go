@@ -57,3 +57,20 @@ func secureDir(dir string, fi os.FileInfo) error {
 	}
 	return nil
 }
+
+// chmodNoFollow sets the mode of path without following a link: it opens the
+// path with O_NOFOLLOW (and O_DIRECTORY for a directory) and changes the mode
+// of the handle. A link that replaces the path after the caller looked at it
+// makes the open fail.
+func chmodNoFollow(path string, dir bool, mode os.FileMode) error {
+	flag := os.O_RDONLY | syscall.O_NOFOLLOW
+	if dir {
+		flag |= syscall.O_DIRECTORY
+	}
+	f, err := os.OpenFile(path, flag, 0)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return f.Chmod(mode)
+}

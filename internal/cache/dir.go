@@ -13,6 +13,10 @@ import (
 	"time"
 )
 
+// chmodFn changes a mode in replaceDir. A test replaces it to imitate a file
+// system that ignores modes.
+var chmodFn = os.Chmod
+
 var (
 	dirFilePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 	// dirNamePattern matches the directory names that [WriteDir] creates.
@@ -47,15 +51,25 @@ func DirName(prefix string, content []byte) (string, error) {
 // empty. Processes that race to build the same directory all succeed: each
 // one checks the target again after a failed step and retries a few times.
 func WriteDir(dir, prefix, file string, content []byte) (string, error) {
+	p, _, err := WriteDirChecked(dir, prefix, file, content)
+	return p, err
+}
+
+// WriteDirChecked is [WriteDir]. It also reports modesIgnored: true when the
+// cache file system did not keep the read-only modes (some network and FAT
+// file systems ignore them). The content checks still passed in that case, so
+// the directory is usable but not read-only. The function rebuilds a
+// directory with wrong modes once and then accepts it.
+func WriteDirChecked(dir, prefix, file string, content []byte) (path string, modesIgnored bool, err error) {
 	name, err := DirName(prefix, content)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	if !dirFilePattern.MatchString(file) {
-		return "", fmt.Errorf("invalid cache file name %q", file)
+		return "", false, fmt.Errorf("invalid cache file name %q", file)
 	}
 	if len(content) > MaxFileSize {
-		return "", fmt.Errorf("cache directory %q: content is too large", name)
+		return "", false, fmt.Errorf("cache directory %q: content is too large", name)
 	}
 	final := filepath.Join(dir, name)
 	// Other launches may build or repair the same directory at the same
@@ -63,19 +77,30 @@ func WriteDir(dir, prefix, file string, content []byte) (string, error) {
 	// target. Each round checks the target first and builds it only if the
 	// check fails. A few rounds are enough for the processes to agree.
 	var last error
+	rebuilt := false
 	for round := 0; round < 8; round++ {
 		if round > 0 {
 			time.Sleep(time.Duration(round) * 5 * time.Millisecond)
 		}
-		if last = checkDir(final, file, content); last == nil {
-			touch(final)
-			return final, nil
+		if last = checkContent(final, file, content); last == nil {
+			if checkModes(final, file) == nil {
+				touch(final)
+				return final, false, nil
+			}
+			if rebuilt {
+				// The rebuild did not change the modes: the file system
+				// ignores them.
+				touch(final)
+				return final, true, nil
+			}
 		}
 		if err := replaceDir(dir, final, file, content); err != nil {
 			last = err
+		} else {
+			rebuilt = true
 		}
 	}
-	return "", fmt.Errorf("cache directory %s: %w%s", name, last, deleteHint(final))
+	return "", false, fmt.Errorf("cache directory %s: %w%s", name, last, deleteHint(final))
 }
 
 // replaceDir builds the directory in a temporary directory next to final and
@@ -111,11 +136,11 @@ func replaceDir(dir, final, file string, content []byte) error {
 	// user. checkDir still verifies the content at every launch. On Windows
 	// the file gets the read-only attribute, and the directory stays
 	// writable.
-	if err := os.Chmod(filepath.Join(tmp, file), 0o400); err != nil {
+	if err := chmodFn(filepath.Join(tmp, file), 0o400); err != nil {
 		return fmt.Errorf("make the cache file read-only: %w", err)
 	}
 	if runtime.GOOS != "windows" {
-		if err := os.Chmod(tmp, 0o500); err != nil {
+		if err := chmodFn(tmp, 0o500); err != nil {
 			return fmt.Errorf("make the cache directory read-only: %w", err)
 		}
 	}
@@ -142,10 +167,23 @@ func replaceDir(dir, final, file string, content []byte) error {
 	return nil
 }
 
-// checkDir verifies the directory path as [WriteDir] describes. It returns an
-// error wrapping [os.ErrNotExist] when the directory is absent and
-// [ErrTampered] for any other difference.
+// checkDir verifies the directory path as [WriteDir] describes, modes
+// included. It returns an error wrapping [os.ErrNotExist] when the directory is
+// absent and [ErrTampered] for any other difference.
 func checkDir(path, file string, content []byte) error {
+	if err := checkContent(path, file, content); err != nil {
+		return err
+	}
+	if err := checkModes(path, file); err != nil {
+		return fmt.Errorf("%w: %s %v%s", ErrTampered, filepath.Base(path), err, deleteHint(path))
+	}
+	return nil
+}
+
+// checkContent verifies everything but the modes: a real directory (no link,
+// no junction) owned by the user, with exactly one regular file with the
+// expected bytes.
+func checkContent(path, file string, content []byte) error {
 	fi, err := os.Lstat(path)
 	if err != nil {
 		return err
@@ -156,9 +194,6 @@ func checkDir(path, file string, content []byte) error {
 	// ModeIrregular covers a Windows junction or another reparse point.
 	if fi.Mode()&(os.ModeSymlink|os.ModeIrregular) != 0 || !fi.IsDir() {
 		return bad("is not a directory")
-	}
-	if runtime.GOOS != "windows" && fi.Mode().Perm() != 0o500 {
-		return bad("has mode %v, and it must be 0500", fi.Mode().Perm())
 	}
 	if err := checkOwner(fi); err != nil {
 		return bad("%v", err)
@@ -177,15 +212,35 @@ func checkDir(path, file string, content []byte) error {
 	if !ffi.Mode().IsRegular() || ffi.Mode()&os.ModeIrregular != 0 {
 		return bad("holds %s, which is not a regular file", file)
 	}
-	if runtime.GOOS != "windows" && ffi.Mode().Perm() != 0o400 {
-		return bad("holds %s with mode %v, and it must be 0400", file, ffi.Mode().Perm())
-	}
 	got, err := readRegular(filepath.Join(path, file), int64(len(content))+1)
 	if err != nil {
 		return err
 	}
 	if !bytes.Equal(got, content) {
 		return bad("does not hold what its name says")
+	}
+	return nil
+}
+
+// checkModes verifies directory mode 0500 and file mode 0400. It checks
+// nothing on Windows, which has no mode bits.
+func checkModes(path, file string) error {
+	if runtime.GOOS == "windows" {
+		return nil
+	}
+	fi, err := os.Lstat(path)
+	if err != nil {
+		return err
+	}
+	if fi.Mode().Perm() != 0o500 {
+		return fmt.Errorf("has mode %v, and it must be 0500", fi.Mode().Perm())
+	}
+	ffi, err := os.Lstat(filepath.Join(path, file))
+	if err != nil {
+		return err
+	}
+	if ffi.Mode().Perm() != 0o400 {
+		return fmt.Errorf("holds %s with mode %v, and it must be 0400", file, ffi.Mode().Perm())
 	}
 	return nil
 }
@@ -233,11 +288,11 @@ func makeWritable(path string) {
 	}
 	if !fi.IsDir() {
 		if fi.Mode().IsRegular() {
-			_ = os.Chmod(path, 0o600)
+			_ = chmodNoFollow(path, false, 0o600)
 		}
 		return
 	}
-	_ = os.Chmod(path, 0o700)
+	_ = chmodNoFollow(path, true, 0o700)
 	entries, err := os.ReadDir(path)
 	if err != nil {
 		return

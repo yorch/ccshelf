@@ -212,9 +212,9 @@ func restoreWrite(root string) {
 		}
 		switch {
 		case d.IsDir():
-			_ = os.Chmod(p, 0o700)
+			chmodNoFollow(p, true, 0o700)
 		case d.Type().IsRegular():
-			_ = os.Chmod(p, 0o600)
+			chmodNoFollow(p, false, 0o600)
 		}
 		return nil
 	})

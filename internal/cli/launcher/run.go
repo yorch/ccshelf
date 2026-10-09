@@ -449,9 +449,12 @@ func (s *session) buildLaunch(ctx context.Context, name string, pass []string, y
 		// --add-dir is not a sideload flag, so no policy check applies. Claude
 		// Code can write to the directory, so WriteDir checks it on every
 		// launch and rebuilds it when it differs from the expected content.
-		d, err := cache.WriteDir(cdir, instructionsPrefix, instructionsFile, r.InstructionsText)
+		d, modesIgnored, err := cache.WriteDirChecked(cdir, instructionsPrefix, instructionsFile, r.InstructionsText)
 		if err != nil {
 			return nil, ui.Failure(fmt.Errorf("writing instructions: %w", err))
+		}
+		if modesIgnored {
+			warn("the cache file system ignores file modes, so the instructions directory is not read-only. ccshelf still checks its content at every start")
 		}
 		ln.InstructionsDir = d
 		ln.Args = append(ln.Args, "--add-dir", d)
