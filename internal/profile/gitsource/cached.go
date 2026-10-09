@@ -1,6 +1,7 @@
 package gitsource
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -55,4 +56,49 @@ func (s *Source) CachedCommits() ([]string, error) {
 		out[i] = f.sha
 	}
 	return out, nil
+}
+
+// IsAncestor reports whether the commit older is a strict ancestor of the
+// commit newer. It works offline, on the verified cached checkout of newer
+// only: it never contacts the remote and never resolves a ref. The answer is
+// true only when it is proven. A missing checkout, a checkout that fails the
+// verification, a history that the shallow checkout does not hold, and any
+// error all give false, so a caller must treat false as "not known".
+func (s *Source) IsAncestor(ctx context.Context, older, newer string) bool {
+	older, newer = strings.ToLower(older), strings.ToLower(newer)
+	if older == newer || !fullSHA.MatchString(older) || !fullSHA.MatchString(newer) {
+		return false
+	}
+	base, err := s.cacheBase()
+	if err != nil {
+		return false
+	}
+	dir := CheckoutDir(base, s.opts.URL, newer)
+	if fi, err := os.Lstat(dir); err != nil || !fi.IsDir() {
+		return false
+	}
+	timeout := s.opts.Timeout
+	if timeout == 0 {
+		timeout = DefaultTimeout
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	if err := s.verifyRepo(ctx, dir, newer); err != nil {
+		return false
+	}
+	// The commit object was verified against its id, so its parent lines are
+	// authentic. A shallow checkout holds the parent id even when it does not
+	// hold the parent object.
+	raw, err := s.git(ctx, dir, dir, "cat-file", "commit", newer)
+	if err != nil {
+		return false
+	}
+	head, _, _ := strings.Cut(raw, "\n\n")
+	for _, line := range strings.Split(head, "\n") {
+		if p, ok := strings.CutPrefix(line, "parent "); ok && strings.TrimSpace(p) == older {
+			return true
+		}
+	}
+	_, err = s.git(ctx, dir, dir, "merge-base", "--is-ancestor", older, newer)
+	return err == nil
 }

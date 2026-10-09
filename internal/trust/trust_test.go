@@ -730,3 +730,18 @@ func TestRekeyNeverTouchesAnotherURLCommitOrContent(t *testing.T) {
 		t.Error("created an entry")
 	}
 }
+
+func TestDescribeCommitAcceptedForAnotherProfile(t *testing.T) {
+	v := Verdict{State: TagMoved, Profile: "seo", Ref: "branch:main", MovedSource: "git:https://h/r", OldCommit: strings.Repeat("1", 40), NewCommit: strings.Repeat("2", 40)}
+	var b strings.Builder
+	v.Describe(&b)
+	if !strings.Contains(b.String(), "now points to") {
+		t.Errorf("the head text changed:\n%s", b.String())
+	}
+	v.AcceptedFor = "sre"
+	b.Reset()
+	v.Describe(&b)
+	if strings.Contains(b.String(), "now points to") || !strings.Contains(b.String(), `profile "sre" trusted commit`) {
+		t.Errorf("wrong text:\n%s", b.String())
+	}
+}
