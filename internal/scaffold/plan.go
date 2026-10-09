@@ -72,6 +72,9 @@ type Plan struct {
 	NeedsPin bool
 	// PinFiles are those workflows, sorted.
 	PinFiles []string
+	// ProfilesOnly is true for a profiles-only plan, also when ccshelf chose it
+	// because the existing ccshelf.toml has [catalog] enabled = false.
+	ProfilesOnly bool
 }
 
 // MarkerFiles returns the files this plan creates or replaces that contain
@@ -128,6 +131,9 @@ type builder struct {
 	// listed is true when targets come from an existing marketplace file.
 	listed bool
 	name   string
+	// inferred is true when the existing ccshelf.toml switched profiles-only
+	// on, without the flag.
+	inferred bool
 }
 
 // Build reads the target through fsys and plans the files. It writes nothing.
@@ -142,6 +148,7 @@ func Build(fsys FS, p Params) (*Plan, error) {
 	if err := b.run(); err != nil {
 		return nil, err
 	}
+	b.plan.ProfilesOnly = b.p.ProfilesOnly
 	if len(b.order) > 0 {
 		me := &MissingError{}
 		for _, f := range b.order {
@@ -320,7 +327,9 @@ func (b *builder) load() error {
 			} else {
 				b.cfg = c
 				if !c.Catalog.Enabled && !b.p.ProfilesOnly {
-					return &FieldError{"--profiles-only", pathConfig + " has [catalog] enabled = false, so this is a profiles-only repo: pass --profiles-only (without it, ccshelf would add the marketplace, sidecars and catalog workflows)"}
+					if err := b.inferProfilesOnly(); err != nil {
+						return err
+					}
 				}
 			}
 		}
@@ -347,6 +356,27 @@ func (b *builder) load() error {
 	return nil
 }
 
+// inferProfilesOnly turns profiles-only on because the existing config says
+// that the repo has no catalog. This only removes files from the plan, so it
+// is the safe direction, with or without a terminal. A flag or a file that
+// needs a marketplace stops the plan, with a text that does not tell the user
+// they passed --profiles-only.
+func (b *builder) inferProfilesOnly() error {
+	why := pathConfig + " has [catalog] enabled = false, so this is a profiles-only repo"
+	switch {
+	case b.p.MarketplaceName != "":
+		return &FieldError{"--marketplace-name", why + " with no marketplace: leave the flag out, or set enabled = true in " + pathConfig}
+	case b.p.Owner != "":
+		return &FieldError{"--owner", why + " with no sidecars: leave the flag out, or set enabled = true in " + pathConfig}
+	case b.mktSeen:
+		return &FieldError{pathConfig, why + ", but " + pathMarketplace + " exists: remove the file, or set enabled = true in " + pathConfig}
+	}
+	b.p.ProfilesOnly = true
+	b.inferred = true
+	b.note("%s has [catalog] enabled = false, so ccshelf uses --profiles-only", pathConfig)
+	return nil
+}
+
 // checkProfilesOnly stops --profiles-only where the result would not be a
 // working profiles-only repo: a marketplace the existing config lists, a config
 // that does not switch the catalog off (and will not be replaced), or no config
@@ -354,6 +384,9 @@ func (b *builder) load() error {
 func (b *builder) checkProfilesOnly() error {
 	for _, m := range b.cfg.Catalog.Marketplaces {
 		if _, err := b.fs.Lstat(m); err == nil {
+			if b.inferred {
+				return &FieldError{pathConfig, "has [catalog] enabled = false, but " + m + " exists: remove the file, or set enabled = true in " + pathConfig}
+			}
 			return &FieldError{"--profiles-only", m + " already exists, so this repo has a plugin marketplace: use catalog init without --profiles-only, or remove the file"}
 		}
 	}
@@ -723,3 +756,57 @@ func (b *builder) addExampleProfile() {
 // Placeholder is the text written into values a person must fill in. The
 // lint reports it as CAT048.
 const Placeholder = lint.PlaceholderMarker
+
+// ProfilesOnlyChoice says what the wizard does about --profiles-only.
+type ProfilesOnlyChoice int
+
+// Choices.
+const (
+	// ProfilesOnlyNo means: do not ask. Profiles-only would be a conflict (a
+	// marketplace exists, or a flag or the config already needs one), or Build
+	// already infers it from an existing ccshelf.toml with enabled = false.
+	ProfilesOnlyNo ProfilesOnlyChoice = iota
+	// ProfilesOnlyAsk means: the user may choose, so a terminal asks.
+	ProfilesOnlyAsk
+)
+
+// ChooseProfilesOnly reads the target (read only) and says whether the
+// wizard asks if the repo holds only profiles. It never returns an error:
+// when the target cannot be read, it returns ProfilesOnlyNo and Build reports
+// the real problem. p.ProfilesOnly must be false.
+func ChooseProfilesOnly(fsys FS, p Params) ProfilesOnlyChoice {
+	p.ProfilesOnly = false
+	b := &builder{fs: fsys, p: &p, plan: &Plan{}, missing: map[string]string{}}
+	if b.detectMode() != nil {
+		return ProfilesOnlyNo
+	}
+	cfg := orgconfig.Default()
+	var cfgSeen bool
+	if data, seen := b.readExisting(pathConfig); seen {
+		cfgSeen = true
+		if data != nil {
+			if c, err := orgconfig.Parse(data); err == nil {
+				cfg = c
+			}
+		}
+		if !cfg.Catalog.Enabled {
+			return ProfilesOnlyNo
+		}
+	}
+	if _, seen := b.readExisting(pathMarketplace); seen {
+		return ProfilesOnlyNo
+	}
+	for _, m := range cfg.Catalog.Marketplaces {
+		if _, err := fsys.Lstat(m); err == nil {
+			return ProfilesOnlyNo
+		}
+	}
+	if p.MarketplaceName != "" || p.Owner != "" {
+		return ProfilesOnlyNo
+	}
+	// The answer yes must work: it needs a config that is written.
+	if !p.Enabled(GroupConfig) || (cfgSeen && !p.Force) {
+		return ProfilesOnlyNo
+	}
+	return ProfilesOnlyAsk
+}

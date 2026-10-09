@@ -243,7 +243,7 @@ Every group has a `--no-<group>` flag. **`--profiles-only`** (D-52) writes only 
 - `.gitattributes`, `.gitignore`
 - `.github/workflows/validate.yml` with the lint step only (no `compile --check`, no catalog preview, no `catalog.yml`, no `release.yml`).
 
-With `--profiles-only`, `--marketplace-name` is not needed and is a usage error. So are `--owner` and `--sidecars stub`, and so is a directory that already has a marketplace file. An existing `ccshelf.toml` must already have `[catalog] enabled = false` (add it yourself, or `--force` replaces the file after saving `.bak`). Unless it has, the command refuses `--no-config`. The command ignores a `plugins/` directory, with a note. There are **no built-in default profiles** (R5). The one sample is commented out and carries a `.sample` suffix so that `ccshelf` never loads it. No organization name, host or data is in the templates.
+With `--profiles-only`, `--marketplace-name` is not needed and is a usage error. So are `--owner` and `--sidecars stub`, and so is a directory that already has a marketplace file. An existing `ccshelf.toml` must already have `[catalog] enabled = false` (add it yourself, or `--force` replaces the file after saving `.bak`). Unless it has, the command refuses `--no-config`. When the existing `ccshelf.toml` has `enabled = false` and the flag is missing, the command uses profiles-only and prints a note (D-57), with or without a terminal. The command ignores a `plugins/` directory, with a note. There are **no built-in default profiles** (R5). The one sample is commented out and carries a `.sample` suffix so that `ccshelf` never loads it. No organization name, host or data is in the templates.
 
 ### Placeholders and the lint result
 A sidecar stub has:

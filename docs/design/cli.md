@@ -173,7 +173,7 @@ Not in scope for the first release: a full-screen dashboard or persistent TUI ma
   - `--marketplace-name`, `--org`, `--owner`, `--platform-owners` (repeatable or comma separated)
   - `--ccshelf-ref`, `--ccshelf-version`, `--runner-label`, `--default-branch`
   - `--mode new|adopt`, `--sidecars stub|none`
-  - `--profiles-only`: a repo of profiles with no marketplace or catalog. `--marketplace-name`, `--owner` and `--sidecars stub` are then usage errors. The printed `Equivalent:` command keeps it. The wizard does not ask for it.
+  - `--profiles-only`: a repo of profiles with no marketplace or catalog. `--marketplace-name`, `--owner` and `--sidecars stub` are then usage errors. The printed `Equivalent:` command keeps it. In a terminal, when the flag is not given, the wizard asks "Does this repo hold only profiles (no plugin marketplace or catalog)?" before the marketplace-name question. The default is no. It does not ask when a marketplace exists (the default file or one in `catalog.marketplaces`), when `--marketplace-name`, `--owner`, `--sidecars stub` or `--no-config` is given, or when an existing `ccshelf.toml` would make the answer yes impossible. An existing `ccshelf.toml` with `enabled = false` means profiles-only, with or without a terminal: ccshelf prints a note and does not ask. Without a terminal there is no question.
   - `--example-profile`
   - the `--no-<group>` flags (`--no-config`, `--no-marketplace`, `--no-sidecars`, `--no-codeowners`, `--no-workflows`, `--no-readme`, `--no-gitattributes`, `--no-gitignore`)
   - `--dry-run`, `--yes`, `--force`, `--write-suggestions`
