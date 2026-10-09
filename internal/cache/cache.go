@@ -388,6 +388,8 @@ func Prune(maxAge time.Duration, keep func(path string) bool) ([]string, error) 
 // PruneDir is Prune for the cache directory dir. It removes
 //
 //   - the files this package created in dir (see [GC]),
+//   - the content-addressed directories of [WriteDir] and left-over temporary
+//     directories,
 //   - the git checkouts dir/git/<url key>/<commit>, and left-over temporary
 //     checkouts, whose modification time (refreshed by every use) is older
 //     than maxAge.
@@ -438,6 +440,26 @@ func PruneDir(dir string, maxAge time.Duration, keep func(path string) bool) ([]
 			removed = append(removed, p)
 		}
 		_ = os.Remove(urlDir) // only succeeds when it is empty
+	}
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		name := e.Name()
+		if !dirNamePattern.MatchString(name) && !tmpPattern.MatchString(name) {
+			continue
+		}
+		p := filepath.Join(dir, name)
+		fi, lerr := os.Lstat(p)
+		if lerr != nil || !fi.IsDir() || !fi.ModTime().Before(cutoff) {
+			continue
+		}
+		if keep != nil && keep(p) {
+			continue
+		}
+		if err := os.RemoveAll(p); err != nil {
+			errs = append(errs, fmt.Errorf("remove %s: %w", name, err))
+			continue
+		}
+		removed = append(removed, p)
 	}
 	sort.Strings(removed)
 	return removed, errors.Join(errs...)
