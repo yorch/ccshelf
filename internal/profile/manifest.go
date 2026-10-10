@@ -136,3 +136,30 @@ func (m Manifest) WithDefaults() Manifest {
 func (m Manifest) InheritsUserSettings() bool {
 	return m.Session.InheritUserSettings == nil || *m.Session.InheritUserSettings
 }
+
+// EffectiveConnectors reports the effective mcp.claudeai_connectors value:
+// ConnectorsKeep when the profile does not set it.
+func (m Manifest) EffectiveConnectors() string {
+	if m.MCP.ClaudeAIConnectors == "" {
+		return ConnectorsKeep
+	}
+	return m.MCP.ClaudeAIConnectors
+}
+
+// IsStrict reports the effective mcp.strict value: false when the profile does
+// not set it.
+func (m Manifest) IsStrict() bool { return m.MCP.Strict != nil && *m.MCP.Strict }
+
+// UnsetDefaults lists the MCP fields that the profile does not set, so that
+// their effective value is the default. The order is claudeai_connectors, then
+// strict. The list is never nil.
+func (m Manifest) UnsetDefaults() []string {
+	out := []string{}
+	if m.MCP.ClaudeAIConnectors == "" {
+		out = append(out, "claudeai_connectors")
+	}
+	if m.MCP.Strict == nil {
+		out = append(out, "strict")
+	}
+	return out
+}

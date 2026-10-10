@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -143,8 +144,8 @@ func diffResolved(a, b *profile.Resolved) diffDoc {
 	}
 	scalars := []struct{ name, a, b string }{
 		{"plugins.mode", ma.Plugins.Mode, mb.Plugins.Mode},
-		{"mcp.claudeai_connectors", ma.MCP.ClaudeAIConnectors, mb.MCP.ClaudeAIConnectors},
-		{"mcp.strict", boolStr(ma.MCP.Strict), boolStr(mb.MCP.Strict)},
+		{"mcp.claudeai_connectors", ma.EffectiveConnectors(), mb.EffectiveConnectors()},
+		{"mcp.strict", strconv.FormatBool(ma.IsStrict()), strconv.FormatBool(mb.IsStrict())},
 		{"session.model", ma.Session.Model, mb.Session.Model},
 		{"session.effort", ma.Session.Effort, mb.Session.Effort},
 		{"session.output_style", ma.Session.OutputStyle, mb.Session.OutputStyle},

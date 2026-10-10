@@ -112,8 +112,11 @@ type showInstructions struct {
 
 type showMCP struct {
 	Servers            []string `json:"servers"`
-	ClaudeAIConnectors string   `json:"claudeai_connectors,omitempty"`
+	ClaudeAIConnectors string   `json:"claudeai_connectors"`
 	Strict             bool     `json:"strict"`
+	// Defaults lists the fields above that the profile does not set, so that
+	// their value is the default. It is [] when the profile sets all of them.
+	Defaults []string `json:"defaults"`
 }
 
 type showItem struct {
@@ -172,7 +175,7 @@ func showData(r *profile.Resolved, state string, labels map[string]string) showD
 		Kind: r.Kind.String(), Account: m.Account, PluginMode: m.Plugins.Mode,
 		Include: nz(m.Plugins.Include), Exclude: nz(m.Plugins.Exclude),
 		SkillsOff: nz(m.Skills.Off), SkillsName: nz(m.Skills.NameOnly),
-		MCP: showMCP{Servers: nz(m.MCP.Servers), ClaudeAIConnectors: m.MCP.ClaudeAIConnectors, Strict: m.MCP.Strict != nil && *m.MCP.Strict},
+		MCP: showMCP{Servers: nz(m.MCP.Servers), ClaudeAIConnectors: m.EffectiveConnectors(), Strict: m.IsStrict(), Defaults: m.UnsetDefaults()},
 		Session: showSession{
 			Model: m.Session.Model, Effort: m.Session.Effort, OutputStyle: m.Session.OutputStyle, AppendSystemPromptFile: m.Session.AppendSystemPromptFile,
 			InheritUserSettings: m.InheritsUserSettings(), EnvNames: env,
