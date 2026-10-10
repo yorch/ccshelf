@@ -5,7 +5,7 @@ Security requirements SR1 to SR5 (added after the security review) and the manag
 ## Security requirements (SR1 to SR5)
 Added 2026-10-06 after the security review. The verdict of the review was that the trust model was "not acceptable as written". SR1 to SR3 are required before a first release. SR4 and SR5 are required before anyone runs the tool in corporate CI. A written threat model and a `SECURITY.md` are also required before the repo goes public. I verified the settings-file claim underneath SR1 (see [stage0.md](../research/stage0.md)): a `--settings` file can switch a session to `bypassPermissions`.
 
-**SR1: closed profile schema.** The generator writes only an allowlist of settings keys: `enabledPlugins`, `skillOverrides`, `disableClaudeAiConnectors`, `deniedMcpServers`, `model` and env names that pass the env allowlist (`internal/envpolicy`). The env allowlist accepts **only** these names:
+**SR1: closed profile schema.** The generator writes only an allowlist of settings keys: `enabledPlugins`, `skillOverrides`, `disableClaudeAiConnectors`, `deniedMcpServers`, `model`, `outputStyle` and env names that pass the env allowlist (`internal/envpolicy`). The env allowlist accepts **only** these names:
 - Names in the `CCSHELF_VAR_<NAME>` namespace.
 - Names ending in `_REF`.
 - `CCSHELF_PROFILE`.
