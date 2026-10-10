@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.9.0](https://github.com/yorch/ccshelf/compare/v0.8.0...v0.9.0) (2026-10-10)
+
+
+### Features
+
+* **profile:** add output_style to set the Claude Code output style ([#57](https://github.com/yorch/ccshelf/issues/57)) ([80e77dd](https://github.com/yorch/ccshelf/commit/80e77dd73de155f54114acc5892fab52914ab418))
+
+
+### Bug fixes
+
+* **launcher:** keep instructions on when settings env turns them off ([#56](https://github.com/yorch/ccshelf/issues/56)) ([cc97b01](https://github.com/yorch/ccshelf/commit/cc97b01bdbd3e01d35204117fe83472d40660c25))
+* show effective mcp defaults and save account changes safely ([#58](https://github.com/yorch/ccshelf/issues/58)) ([b65c69f](https://github.com/yorch/ccshelf/commit/b65c69f234e6be4a796e2bcba7a65d1147150de0))
+
 ## [0.8.0](https://github.com/yorch/ccshelf/compare/v0.7.0...v0.8.0) (2026-10-09)
 
 
