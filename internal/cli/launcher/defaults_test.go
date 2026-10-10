@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/yorch/ccshelf/internal/config"
 )
 
 type showMCPDoc struct {
@@ -136,8 +138,15 @@ func TestAccountKeepsVariablesAndWritesBackup(t *testing.T) {
 		}
 	}
 
-	// Adding the same account again changes nothing in the account entry.
-	h.mustRun("account", "add", "work", "--dir", dir)
+	// Adding the same account again changes nothing: no write, no new backup.
+	before, bakBefore := h.readConfig(), mustRead(t, h.configFile()+".bak")
+	h.mustRun("account", "add", "work", "--dir", dir, "--default")
+	if h.readConfig() != before || mustRead(t, h.configFile()+".bak") != bakBefore {
+		t.Error("a no-op add wrote the file or rotated the backup")
+	}
+	if h.loadConfig().Accounts["work"].ConfigDir != dir {
+		t.Error("account entry changed")
+	}
 	h.mustRun("account", "rm", "work")
 	got = h.readConfig()
 	if strings.Contains(got, "work") || !strings.Contains(got, "$HOME/profiles") {
@@ -160,6 +169,7 @@ func TestAccountKeepsVariableInAccountDir(t *testing.T) {
 	if code := h.run("account", "add", "other", "--dir", filepath.Join(h.dirs["HOME"], ".claude-old")); code == 0 {
 		t.Error("duplicate directory accepted")
 	}
+	h.wantErr("already the directory of account")
 	h.mustRun("account", "rm", "new")
 	if got := h.readConfig(); !strings.Contains(got, "$HOME/.claude-old") {
 		t.Errorf("account dir was expanded:\n%s", got)
@@ -183,5 +193,72 @@ func TestAccountSaveRefusesChangedFile(t *testing.T) {
 	}
 	if h.readConfig() != other {
 		t.Error("the other change was overwritten")
+	}
+}
+
+func mustRead(t *testing.T, p string) string {
+	t.Helper()
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+func TestAccountAddStoresExplicitDirAsWritten(t *testing.T) {
+	h := newHarness(t)
+	h.writeConfig(baseConfig)
+	h.mustRun("account", "add", "x", "--dir", "$HOME/x")
+	if got := h.loadConfigRaw().Accounts["x"].ConfigDir; got != "$HOME/x" {
+		t.Errorf("stored %q", got)
+	}
+	if fi, err := os.Stat(filepath.Join(h.dirs["HOME"], "x")); err != nil || !fi.IsDir() {
+		t.Error("directory not created at the expanded path")
+	}
+	h.mustRun("account", "add", "y")
+	want := filepath.Join(h.dirs["HOME"], ".claude-y")
+	if got := h.loadConfigRaw().Accounts["y"].ConfigDir; got != want {
+		t.Errorf("default dir stored %q, want %q", got, want)
+	}
+}
+
+func (h *harness) loadConfigRaw() *config.Config {
+	h.t.Helper()
+	cfg, err := config.ParseUnexpanded([]byte(h.readConfig()), "test")
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	return cfg
+}
+
+func TestAccountAddRefusesFileChangedBeforeWrite(t *testing.T) {
+	for _, existing := range []bool{true, false} {
+		h := newHarness(t)
+		other := baseConfig + "\n[ui]\ncolor = \"always\"\n"
+		if existing {
+			h.writeConfig(baseConfig)
+		}
+		beforeConfigSave = func() { h.writeConfig(other) }
+		t.Cleanup(func() { beforeConfigSave = nil })
+		dir := filepath.Join(t.TempDir(), "claude-w")
+		h.wantCode(1, "account", "add", "w", "--dir", dir)
+		h.wantErr("changed while editing, nothing written", "run the command again")
+		if h.readConfig() != other {
+			t.Errorf("existing=%v: the other change was overwritten", existing)
+		}
+		if _, err := os.Stat(dir); err == nil {
+			t.Errorf("existing=%v: directory not rolled back", existing)
+		}
+		beforeConfigSave = nil
+	}
+}
+
+func TestShowJSONInheritedMCPValues(t *testing.T) {
+	h := newHarness(t)
+	h.writeProfile("parent", "name = \"parent\"\n[mcp]\nclaudeai_connectors = \"none\"\nstrict = true\n")
+	h.writeProfile("child", "name = \"child\"\nextends = [\"parent\"]\n")
+	mcp := h.showMCP("child")
+	if string(mcp["claudeai_connectors"]) != `"none"` || string(mcp["strict"]) != "true" || string(mcp["defaults"]) != "[]" {
+		t.Errorf("child: %s", mcp)
 	}
 }

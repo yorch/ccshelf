@@ -22,6 +22,10 @@ type Options struct {
 	// When false, cfg and the file are untouched. The write goes through Save
 	// when it is set, and through config.Save when it is not.
 	Persist bool
+	// StoredDir, when set, is the text to write for a new account directory,
+	// for example "$HOME/x". It must expand to the directory that Add checks.
+	// When it is empty, Add writes the absolute path.
+	StoredDir string
 	// Save, when set, replaces config.Save as the writer of the new
 	// configuration. The caller can use it to write with a changed-file check.
 	// Save can also change the configuration it receives, for example to set
@@ -103,6 +107,9 @@ func Add(ctx context.Context, cfg *config.Config, name, dir string, opts Options
 	// Validate the resulting configuration before touching the disk.
 	// An entry for the same directory keeps the text that the person wrote.
 	stored := abs
+	if opts.StoredDir != "" {
+		stored = opts.StoredDir
+	}
 	if existing, ok := cfg.Accounts[name]; ok {
 		stored = existing.ConfigDir
 	}

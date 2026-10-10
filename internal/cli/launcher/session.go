@@ -1,6 +1,7 @@
 package launcher
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -168,7 +169,13 @@ type writableConfig struct {
 	path string
 	// raw is nil when the file does not exist yet.
 	raw []byte
+	// baseline is cfg encoded as it was read, to find a save that changes
+	// nothing.
+	baseline []byte
 }
+
+// beforeConfigSave is a test seam. It runs just before a save writes.
+var beforeConfigSave func()
 
 // loadConfigForWrite reads the configuration for "account add" and "account
 // rm". A missing file gives the defaults, and save then creates the file.
@@ -192,24 +199,47 @@ func readConfigForWrite(p string) (*writableConfig, error) {
 	if err != nil {
 		return nil, fmt.Errorf("configuration %s: %w", p, err)
 	}
-	return &writableConfig{cfg: cfg, path: p, raw: raw}, nil
+	base, err := config.EncodeUnexpanded(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("configuration %s: %w", p, err)
+	}
+	return &writableConfig{cfg: cfg, path: p, raw: raw, baseline: base}, nil
 }
 
 // save writes cfg without expanding paths. For an existing file it refuses to
 // write when the file changed since it was read, and it keeps the previous
-// file as a .bak.
+// file as a .bak. It writes nothing when cfg encodes to what was read. For a
+// missing file it creates the file and refuses if the file appeared since.
 func (w *writableConfig) save(cfg *config.Config) error {
-	if w.raw == nil {
-		return config.Save(w.path, cfg)
-	}
 	data, err := config.EncodeUnexpanded(cfg)
 	if err != nil {
 		return err
 	}
+	changed := func() error {
+		return withHint(fmt.Errorf("%s changed while editing, nothing written", ui.SanitizeLine(w.path)),
+			"run the command again to start from the current file")
+	}
+	if w.raw == nil {
+		if beforeConfigSave != nil {
+			beforeConfigSave()
+		}
+		if err := config.CreateNew(w.path, data); err != nil {
+			if errors.Is(err, fs.ErrExist) {
+				return changed()
+			}
+			return err
+		}
+		return nil
+	}
+	if bytes.Equal(data, w.baseline) {
+		return nil
+	}
+	if beforeConfigSave != nil {
+		beforeConfigSave()
+	}
 	if _, err := config.SaveRawChecked(w.path, data, w.raw); err != nil {
 		if errors.Is(err, config.ErrChangedWhileEditing) {
-			return withHint(fmt.Errorf("%s changed while editing, nothing written", ui.SanitizeLine(w.path)),
-				"run the command again to start from the current file")
+			return changed()
 		}
 		return err
 	}

@@ -65,6 +65,9 @@ The directory defaults to ~/.claude-<name>.`,
 		if !config.ValidAccountName(name) {
 			return ui.Usage(fmt.Errorf("invalid account name %q: use lower-case letters, digits and hyphens, at most 32 characters", ui.Sanitize(name)))
 		}
+		// An explicit directory is stored as the user wrote it. The default
+		// directory is stored as an absolute path.
+		keepText := dir != ""
 		if dir == "" {
 			dir = "~/.claude-" + name
 			if canPrompt(cc) && asked {
@@ -72,6 +75,7 @@ The directory defaults to ~/.claude-<name>.`,
 				if err != nil {
 					return err
 				}
+				keepText = d != dir
 				dir = d
 			}
 		}
@@ -84,8 +88,12 @@ The directory defaults to ~/.claude-<name>.`,
 		if err != nil {
 			return ui.Usage(fmt.Errorf("--dir: %w", err))
 		}
+		stored := ""
+		if keepText {
+			stored = dir
+		}
 		plan, err := account.Add(ctx, cfg, name, expanded, account.Options{
-			Persist: true, ConfigPath: path, Marketplaces: marketplaces, Plugins: plugins,
+			StoredDir: stored, Persist: true, ConfigPath: path, Marketplaces: marketplaces, Plugins: plugins,
 			Save: func(updated *config.Config) error {
 				if makeDefault {
 					updated.DefaultAccount = name
