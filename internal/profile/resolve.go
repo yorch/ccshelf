@@ -437,8 +437,8 @@ func (r *resolver) merge(res *Resolved, req *File) error {
 	}
 	if s := m.Session.OutputStyle; s != "" {
 		for _, b := range OutputStyleBuiltins() {
-			if strings.EqualFold(s, b) && s != b && s != "default" {
-				r.warn("profile %s sets output_style %q. Claude Code compares the name with case and uses the Default style. Use %q", req.Name, s, b)
+			if b != "Default" && strings.EqualFold(s, b) && s != b {
+				r.warn("profile %s sets output_style %q. Claude Code matches the style name with case. It uses the Default style for %q. Use %q", req.Name, s, s, b)
 			}
 		}
 	}
