@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.1](https://github.com/yorch/ccshelf/compare/v0.9.0...v0.9.1) (2026-10-10)
+
+
+### Bug fixes
+
+* **account:** warn on dropped comments, add rm --json, create atomically ([#61](https://github.com/yorch/ccshelf/issues/61)) ([05c114c](https://github.com/yorch/ccshelf/commit/05c114c9a8bba9735d72aee6529d437812ba7cac))
+
 ## [0.9.0](https://github.com/yorch/ccshelf/compare/v0.8.0...v0.9.0) (2026-10-10)
 
 
