@@ -101,6 +101,7 @@ The directory defaults to ~/.claude-<name>.`,
 				return wc.save(updated)
 			},
 		})
+		wc.warnCommentsDropped(cc)
 		if err != nil {
 			return ui.Failure(fmt.Errorf("adding account %s: %w", name, err))
 		}
@@ -124,16 +125,17 @@ The directory defaults to ~/.claude-<name>.`,
 		}
 		if cc.Mode.JSON {
 			type out struct {
-				Name      string   `json:"name"`
-				Dir       string   `json:"dir"`
-				Created   bool     `json:"created"`
-				Persisted bool     `json:"persisted"`
-				Default   bool     `json:"default"`
-				Steps     []string `json:"steps"`
+				Name         string   `json:"name"`
+				Dir          string   `json:"dir"`
+				Created      bool     `json:"created"`
+				Persisted    bool     `json:"persisted"`
+				Default      bool     `json:"default"`
+				CommentsLost bool     `json:"comments_dropped"`
+				Steps        []string `json:"steps"`
 			}
 			return ui.WriteJSON(cc.Streams.Out, "account-add", out{
 				Name: plan.Name, Dir: plan.Dir, Created: plan.Created,
-				Persisted: plan.Persisted, Default: makeDefault, Steps: lines,
+				Persisted: plan.Persisted, Default: makeDefault, CommentsLost: wc.commentsDropped(), Steps: lines,
 			})
 		}
 		okf(cc, "account %s uses %s", name, plan.Dir)
@@ -218,6 +220,19 @@ func (l *launcher) accountRmCmd() *cobra.Command {
 		}
 		if err := wc.save(wc.cfg); err != nil {
 			return ui.Failure(fmt.Errorf("saving the configuration: %w", err))
+		}
+		wc.warnCommentsDropped(cc)
+		if cc.Mode.JSON {
+			return ui.WriteJSON(cc.Streams.Out, "account-rm", struct {
+				Name             string `json:"name"`
+				ConfigDir        string `json:"config_dir"`
+				WasDefault       bool   `json:"was_default"`
+				DirectoryDeleted bool   `json:"directory_deleted"`
+				CommentsLost     bool   `json:"comments_dropped"`
+			}{
+				Name: rem.Name, ConfigDir: rem.ConfigDir, WasDefault: rem.ClearedDefault,
+				DirectoryDeleted: false, CommentsLost: wc.commentsDropped(),
+			})
 		}
 		okf(cc, "%s", rem.Message())
 		return nil
