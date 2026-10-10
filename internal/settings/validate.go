@@ -194,6 +194,14 @@ func validEnv(raw json.RawMessage) error {
 	}
 	var errs []error
 	for _, k := range sortedKeys(m) {
+		if k == envpolicy.AdditionalDirsClaudeMD {
+			// Set by the launcher for profile instructions. Only "1" is valid.
+			var s string
+			if strict(m[k], &s, "a string") != nil || s != "1" {
+				errs = append(errs, fmt.Errorf("variable %q: value must be the string \"1\"", k))
+			}
+			continue
+		}
 		if r := envpolicy.DeniedReason(k); r != "" {
 			errs = append(errs, fmt.Errorf("variable %q is not allowed: %s", k, r))
 			continue

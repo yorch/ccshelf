@@ -59,6 +59,12 @@ func (d *detector) interpret(doc map[string]any) {
 		p.WSLInheritsWindowsSettings = boolKey("wslInheritsWindowsSettings", false)
 	}
 
+	if env, ok := doc["env"].(map[string]any); ok {
+		if v, ok := env["CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD"]; ok {
+			p.AdditionalDirsClaudeMDOff = !truthyEnv(v)
+		}
+	}
+
 	if v, ok := doc["permissions"]; ok && v != nil {
 		if m, ok := v.(map[string]any); ok {
 			if dv, ok := m["disableBypassPermissionsMode"]; ok && dv != nil {
@@ -269,4 +275,22 @@ func serverRule(e any) (ServerRule, bool) {
 		return ServerRule{Kind: "serverCommand", Value: exe}, true
 	}
 	return ServerRule{}, false
+}
+
+// truthyEnv reports whether a managed env value turns a Claude Code switch
+// on. Stage 0 showed that "0", "false" and "" turn the switch off {V}. Other
+// values count as on only when they are the usual truthy words.
+func truthyEnv(v any) bool {
+	switch x := v.(type) {
+	case string:
+		switch strings.ToLower(strings.TrimSpace(x)) {
+		case "1", "true", "yes", "on":
+			return true
+		}
+	case bool:
+		return x
+	case float64:
+		return x == 1
+	}
+	return false
 }

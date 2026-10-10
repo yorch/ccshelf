@@ -211,7 +211,7 @@ Compare the three channels that change what the model is told:
 | `[instructions]` | CLAUDE.md-style text in a user message. | Main conversation and subagents that load CLAUDE.md files | Files add up |
 
 ### Instructions
-`[instructions]` gives a profile CLAUDE.md-style text. The launcher joins the effective files into one generated `CLAUDE.md` and passes it with `--add-dir` (see [launcher.md](launcher.md)). Claude Code loads it for the main conversation and for general-purpose subagents {V} ([stage 0 note](../research/instructions-stage0.md)).
+`[instructions]` gives a profile CLAUDE.md-style text. The launcher joins the effective files into one generated `CLAUDE.md` and passes it with `--add-dir` (see [launcher.md](launcher.md)). Claude Code loads it for the main conversation and for general-purpose subagents {V} ([stage 0 note](../research/instructions-stage0.md)). In `-p` mode without compaction, Claude Code did not read the file again during the session {V}. After compaction it may read the file from disk again, so an edit during a session could reach that session {U}. The launcher writes the loading variable into the process environment and into the generated settings `env`, so a project settings file cannot turn it off. Managed settings can, and the launcher then warns (see [launcher.md](launcher.md)).
 
 Merge rules:
 - The resolver walks the `extends` chain in its normal order, root parent first. It collects the files of each profile and reads each file from the source root of the profile that lists it.

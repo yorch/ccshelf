@@ -14,6 +14,7 @@ import (
 	"github.com/yorch/ccshelf/internal/claude"
 	"github.com/yorch/ccshelf/internal/cli/clicore"
 	"github.com/yorch/ccshelf/internal/config"
+	"github.com/yorch/ccshelf/internal/envpolicy"
 	"github.com/yorch/ccshelf/internal/policy"
 	"github.com/yorch/ccshelf/internal/profile"
 	"github.com/yorch/ccshelf/internal/settings"
@@ -27,7 +28,7 @@ const (
 	instructionsFile   = "CLAUDE.md"
 	// additionalDirsClaudeMDEnv makes Claude Code load CLAUDE.md files from
 	// the directories given with --add-dir.
-	additionalDirsClaudeMDEnv = "CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD"
+	additionalDirsClaudeMDEnv = envpolicy.AdditionalDirsClaudeMD
 )
 
 // launch is everything needed to start claude, produced by the run pipeline.
@@ -354,6 +355,7 @@ func (s *session) buildLaunch(ctx context.Context, name string, pass []string, y
 		Env:            m.Session.Env,
 		Profile:        r.Name,
 
+		InstructionsEnv:  len(r.InstructionsText) > 0,
 		UserLayerDropped: applied.DropUserSettingSources,
 	}
 	if denyRoute && applied.DenyMCPServers {
@@ -469,6 +471,9 @@ func (s *session) buildLaunch(ctx context.Context, name string, pass []string, y
 		}
 		envAdd[additionalDirsClaudeMDEnv] = "1"
 		ln.EnvAdd = envAdd
+		if pol.AdditionalDirsClaudeMDOff {
+			warn("managed policy sets %s to an off value. ccshelf cannot override managed settings, so the profile instructions do not load", additionalDirsClaudeMDEnv)
+		}
 	}
 	if m.Session.Effort != "" {
 		ln.Args = append(ln.Args, "--effort", m.Session.Effort)

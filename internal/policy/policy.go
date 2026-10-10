@@ -100,6 +100,13 @@ type Policy struct {
 	AllowAllClaudeAiMcps       *bool    `json:"allowAllClaudeAiMcps,omitempty"`
 	WSLInheritsWindowsSettings *bool    `json:"wslInheritsWindowsSettings,omitempty"`
 
+	// AdditionalDirsClaudeMDOff is true when managed settings set env
+	// CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD to a value that is not
+	// truthy. Managed settings beat every other layer, so a profile with
+	// instructions then loads no instructions. Only this flag is kept, never
+	// the env value or any other env entry.
+	AdditionalDirsClaudeMDOff bool `json:"additionalDirsClaudeMdOff,omitempty"`
+
 	// Other lists the names of keys this version does not interpret (the
 	// policy schema evolves). Values are not kept.
 	Other []string `json:"other,omitempty"`

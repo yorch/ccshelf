@@ -78,3 +78,32 @@ What the code does {V} (read from the binary, not run end to end):
 What is not known {R}: the token boundaries. A differential run compared inputs with `marked` 16.4.2 and the extractor logic above. The version of `marked` inside the binary is unknown, so the boundaries are reported, not verified. The run found inputs that import a file although a code-span or fence rule would hide them. Examples: inline HTML or a link destination that wins over a code span, a code span that pairs across a line break, a fence closer with a trailing `~` or backtick, and a fence inside a list item.
 
 Consequence for ccshelf: the import check looks at raw characters and has no Markdown exemption. See [profiles.md](../design/profiles.md), "Instructions".
+
+## Addendum: settings precedence and session reads (2026-10-09)
+
+**Question:** Does a settings file that sets `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD` override the process variable of the launcher? Does Claude Code read the added `CLAUDE.md` again during a session?
+
+**Environment:** Claude Code 2.1.296 {V}, macOS, `-p` mode, `--model haiku`. The method is the one above: a marker phrase in the added `CLAUDE.md`, one Agent call to a general-purpose subagent, no file reads by the conversations. Each run happened once. The runs show presence or absence.
+
+| Run | Setup | Main saw marker | Subagent saw marker | Verdict |
+|---|---|---|---|---|
+| E1 | Process env `=1` and `--add-dir` | yes {V} | yes {V} | Baseline works |
+| E2 | E1 and the working directory has `.claude/settings.json` with `{"env":{"VAR":"0"}}` | no {V} | no {V} | Project settings env beats the process env |
+| E3 | E2 and `--settings` file with `{"env":{"VAR":"1"}}` | yes {V} | yes {V} | The `--settings` layer beats project settings |
+| E4 | No process env, only `--settings` with `{"env":{"VAR":"1"}}` | yes {V} | yes {V} | Settings env applies before CLAUDE.md loads |
+| E5 | E2 with the value `"false"` (E5e) or `""` (E5f) | no {V} | no {V} | Both values turn the loading off |
+| E6 | Writable added directory. A Bash command overwrote `CLAUDE.md` in the session. Two runs | no change {V} | no change {V} | Main and a later subagent saw the old text |
+
+The user settings layer was not run. By the precedence below, a user `settings.json` env value of `0` would also turn the loading off {U}.
+
+Docs quotes ([settings docs](https://code.claude.com/docs/en/settings) {V}):
+
+- The precedence is: managed, then command line (`--settings`), then local project, then shared project, then user.
+- "Nothing in your own settings files or `--settings` overrides a managed key."
+- "A key you set there overrides the same key in your project and user settings files."
+
+Consequences for ccshelf:
+
+- The process variable alone is not enough. The launcher also writes the variable with the value `1` into the `env` of the generated settings file. That file is passed with `--settings`, so it beats project and user settings.
+- Managed settings beat `--settings`. If managed settings turn the variable off, the launcher cannot override that, and it must not try (R3). It reads the managed `env` entry of this one variable and warns.
+- In `-p` mode without compaction, Claude Code did not re-read the added `CLAUDE.md` during the session {V}. An edit during the session did not reach the main conversation or a later subagent. Two short runs showed this. The runs did not compact the session. The [context window docs](https://code.claude.com/docs/en/context-window) {V} list under "What survives compaction": "Project-root CLAUDE.md and unscoped rules | Re-injected from disk" and "Files Claude read or edited | Claude Code re-reads up to five, most recently modified first". An added-directory `CLAUDE.md` may therefore be read from disk again after compaction, so an edit during a session could reach that session after compaction {U}. The read-only directory and the check before each launch repair the file for the next launch.

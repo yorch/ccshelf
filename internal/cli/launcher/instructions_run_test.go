@@ -326,3 +326,58 @@ func TestDiffInstructionsSameFileOtherSource(t *testing.T) {
 		t.Errorf("diff: %s", out)
 	}
 }
+
+// settingsEnv returns the env map of the generated settings file.
+func settingsEnv(t *testing.T, h *harness) map[string]any {
+	t.Helper()
+	env, _ := h.settingsOf(h.startArgs)["env"].(map[string]any)
+	return env
+}
+
+func TestRunInstructionsPutsVariableInSettingsEnv(t *testing.T) {
+	const name = "CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD"
+	h := newHarness(t)
+	h.writeProfile("mine", instrProfile)
+	h.writeProfile("plain", strings.Replace(personalMine, "mine", "plain", 1))
+	h.writePrompt("a.md", "A\n")
+	h.writePrompt("b.md", "B\n")
+	h.mustRun("run", "mine")
+	if settingsEnv(t, h)[name] != "1" {
+		t.Errorf("settings env: %v", settingsEnv(t, h))
+	}
+	if v, ok := envValue(h.startEnv, name); !ok || v != "1" {
+		t.Errorf("process env must keep the variable: %q %v", v, ok)
+	}
+	h.mustRun("run", "plain")
+	if _, ok := settingsEnv(t, h)[name]; ok {
+		t.Errorf("a profile without instructions must not get the key: %v", settingsEnv(t, h))
+	}
+}
+
+func TestRunInstructionsManagedOffWarns(t *testing.T) {
+	const name = "CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD"
+	h := newHarness(t)
+	h.writeProfile("mine", instrProfile)
+	h.writeProfile("plain", strings.Replace(personalMine, "mine", "plain", 1))
+	h.writePrompt("a.md", "A\n")
+	h.writePrompt("b.md", "B\n")
+	h.writeManaged(`{"env":{"` + name + `":"0"}}`)
+	h.mustRun("run", "mine")
+	if !strings.Contains(h.errb.String(), "managed policy sets "+name) {
+		t.Errorf("no warning: %s", h.errb)
+	}
+	if h.started != 1 {
+		t.Error("the launcher must still start claude")
+	}
+	h.errb.Reset()
+	h.mustRun("run", "plain")
+	if strings.Contains(h.errb.String(), name) {
+		t.Errorf("a profile without instructions must not warn: %s", h.errb)
+	}
+	h.errb.Reset()
+	h.writeManaged(`{"env":{"` + name + `":"1"}}`)
+	h.mustRun("run", "mine")
+	if strings.Contains(h.errb.String(), name) {
+		t.Errorf("a managed value of 1 must not warn: %s", h.errb)
+	}
+}
