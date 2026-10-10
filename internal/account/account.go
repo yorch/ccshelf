@@ -18,9 +18,19 @@ import (
 
 // Options controls Add.
 type Options struct {
-	// Persist writes the account to the configuration file (through
-	// config.Save) and updates cfg. When false, cfg and the file are untouched.
+	// Persist writes the account to the configuration file and updates cfg.
+	// When false, cfg and the file are untouched. The write goes through Save
+	// when it is set, and through config.Save when it is not.
 	Persist bool
+	// StoredDir, when set, is the text to write for a new account directory,
+	// for example "$HOME/x". It must expand to the directory that Add checks.
+	// When it is empty, Add writes the absolute path.
+	StoredDir string
+	// Save, when set, replaces config.Save as the writer of the new
+	// configuration. The caller can use it to write with a changed-file check.
+	// Save can also change the configuration it receives, for example to set
+	// default_account in the same write.
+	Save func(updated *config.Config) error
 	// ConfigPath is the configuration file to write when Persist is set. Empty
 	// means config.Path().
 	ConfigPath string
@@ -91,17 +101,25 @@ func Add(ctx context.Context, cfg *config.Config, name, dir string, opts Options
 		return nil, err
 	}
 
-	if existing, ok := cfg.Accounts[name]; ok && !samePath(existing.ConfigDir, abs) {
-		return nil, fmt.Errorf("account %q already exists with directory %s. Remove it first or pick another name", name, existing.ConfigDir)
+	if existing, ok := cfg.Accounts[name]; ok && !samePath(expandedDir(existing.ConfigDir), abs) {
+		return nil, fmt.Errorf("account %q already exists with directory %s. Remove it first or pick another name", name, expandedDir(existing.ConfigDir))
 	}
 	// Validate the resulting configuration before touching the disk.
-	updated := withAccount(cfg, name, abs)
-	if err := updated.Validate(); err != nil {
+	// An entry for the same directory keeps the text that the person wrote.
+	stored := abs
+	if opts.StoredDir != "" {
+		stored = opts.StoredDir
+	}
+	if existing, ok := cfg.Accounts[name]; ok {
+		stored = existing.ConfigDir
+	}
+	updated := withAccount(cfg, name, stored)
+	if err := updated.ValidateUnexpanded(); err != nil {
 		return nil, fmt.Errorf("adding account %q: %w", name, err)
 	}
 
 	own := false
-	if existing, ok := cfg.Accounts[name]; ok && samePath(existing.ConfigDir, abs) {
+	if existing, ok := cfg.Accounts[name]; ok && samePath(expandedDir(existing.ConfigDir), abs) {
 		own = true
 	}
 	top, err := ensureDir(abs, own)
@@ -117,10 +135,15 @@ func Add(ctx context.Context, cfg *config.Config, name, dir string, opts Options
 				return nil, rollback(abs, top, fmt.Errorf("locating the config file: %w", err))
 			}
 		}
-		if err := config.Save(path, updated); err != nil {
+		save := opts.Save
+		if save == nil {
+			save = func(c *config.Config) error { return config.Save(path, c) }
+		}
+		if err := save(updated); err != nil {
 			return nil, rollback(abs, top, fmt.Errorf("saving account %q: %w", name, err))
 		}
 		cfg.Accounts = updated.Accounts
+		cfg.DefaultAccount = updated.DefaultAccount
 		plan.Persisted = true
 	}
 	return plan, nil
@@ -133,6 +156,16 @@ func rollback(dir, top string, err error) error {
 		_ = removeCreated(dir, top)
 	}
 	return err
+}
+
+// expandedDir returns dir with ~ and variables expanded. A configuration that
+// was read without expansion holds the text as written. When dir does not
+// expand, expandedDir returns it unchanged.
+func expandedDir(dir string) string {
+	if e, err := config.ExpandPath(dir); err == nil {
+		return e
+	}
+	return dir
 }
 
 func withAccount(cfg *config.Config, name, dir string) *config.Config {
@@ -270,7 +303,7 @@ func checkDir(cfg *config.Config, name, dir string) (string, error) {
 		return "", err
 	}
 	for n, a := range cfg.Accounts {
-		if n != name && samePath(a.ConfigDir, abs) {
+		if n != name && samePath(expandedDir(a.ConfigDir), abs) {
 			return "", fmt.Errorf("%w: %s is already the directory of account %q", ErrDirInUse, abs, n)
 		}
 	}
@@ -545,15 +578,14 @@ func (r Removal) Message() string {
 	return msg
 }
 
-// Remove deletes the account's entry from cfg in memory. The caller saves cfg
-// with config.Save. Remove never deletes the directory.
+// Remove deletes the account's entry from cfg in memory. The caller saves cfg. Remove never deletes the directory.
 func Remove(cfg *config.Config, name string) (Removal, error) {
 	a, err := find(cfg, name)
 	if err != nil {
 		return Removal{}, err
 	}
 	delete(cfg.Accounts, name)
-	r := Removal{Name: name, ConfigDir: a.ConfigDir}
+	r := Removal{Name: name, ConfigDir: expandedDir(a.ConfigDir)}
 	if cfg.DefaultAccount == name {
 		cfg.DefaultAccount = ""
 		r.ClearedDefault = true

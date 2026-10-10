@@ -65,6 +65,9 @@ The directory defaults to ~/.claude-<name>.`,
 		if !config.ValidAccountName(name) {
 			return ui.Usage(fmt.Errorf("invalid account name %q: use lower-case letters, digits and hyphens, at most 32 characters", ui.Sanitize(name)))
 		}
+		// An explicit directory is stored as the user wrote it. The default
+		// directory is stored as an absolute path.
+		keepText := dir != ""
 		if dir == "" {
 			dir = "~/.claude-" + name
 			if canPrompt(cc) && asked {
@@ -72,26 +75,34 @@ The directory defaults to ~/.claude-<name>.`,
 				if err != nil {
 					return err
 				}
+				keepText = d != dir
 				dir = d
 			}
 		}
-		cfg, path, err := loadConfig(cc)
+		wc, err := loadConfigForWrite(cc)
 		if err != nil {
 			return err
 		}
+		cfg, path := wc.cfg, wc.path
 		expanded, err := config.ExpandPath(dir)
 		if err != nil {
 			return ui.Usage(fmt.Errorf("--dir: %w", err))
 		}
-		plan, err := account.Add(ctx, cfg, name, expanded, account.Options{Persist: true, ConfigPath: path, Marketplaces: marketplaces, Plugins: plugins})
+		stored := ""
+		if keepText {
+			stored = dir
+		}
+		plan, err := account.Add(ctx, cfg, name, expanded, account.Options{
+			StoredDir: stored, Persist: true, ConfigPath: path, Marketplaces: marketplaces, Plugins: plugins,
+			Save: func(updated *config.Config) error {
+				if makeDefault {
+					updated.DefaultAccount = name
+				}
+				return wc.save(updated)
+			},
+		})
 		if err != nil {
 			return ui.Failure(fmt.Errorf("adding account %s: %w", name, err))
-		}
-		if makeDefault {
-			cfg.DefaultAccount = name
-			if err := config.Save(path, cfg); err != nil {
-				return ui.Failure(fmt.Errorf("saving the default account: %w", err))
-			}
 		}
 		lines, err := plan.Lines(shell(cc))
 		if err != nil {
@@ -197,15 +208,15 @@ func (l *launcher) accountRmCmd() *cobra.Command {
 		if len(args) == 0 {
 			return ui.Usage(withHint(errors.New("missing argument <name>"), "run: ccshelf account rm <name>  (ccshelf account ls lists them)"))
 		}
-		cfg, path, err := loadConfig(cc)
+		wc, err := loadConfigForWrite(cc)
 		if err != nil {
 			return err
 		}
-		rem, err := account.Remove(cfg, args[0])
+		rem, err := account.Remove(wc.cfg, args[0])
 		if err != nil {
 			return ui.Usage(fmt.Errorf("removing account: %w", err))
 		}
-		if err := config.Save(path, cfg); err != nil {
+		if err := wc.save(wc.cfg); err != nil {
 			return ui.Failure(fmt.Errorf("saving the configuration: %w", err))
 		}
 		okf(cc, "%s", rem.Message())

@@ -512,6 +512,29 @@ func CreateExclusive(path string, data []byte) (string, error) {
 	return name, nil
 }
 
+// CreateNew creates the file at path holding data (mode 0600, directory 0700).
+// The create is exclusive: when the file exists, even as a symlink, CreateNew
+// returns an error that wraps fs.ErrExist and writes nothing.
+func CreateNew(path string, data []byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("creating %s: %w", filepath.Dir(path), err)
+	}
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return fmt.Errorf("creating %s: %w", path, err)
+	}
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		_ = os.Remove(path)
+		return fmt.Errorf("writing %s: %w", path, err)
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(path)
+		return fmt.Errorf("closing %s: %w", path, err)
+	}
+	return nil
+}
+
 // ValidateSourceFolder reports why p is not an acceptable folder inside a
 // repository (the path of a git or plugin source), or nil.
 func ValidateSourceFolder(p string) error { return relInside(p) }

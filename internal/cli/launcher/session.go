@@ -1,9 +1,11 @@
 package launcher
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -157,6 +159,91 @@ func loadConfig(cc *clicore.Context) (*config.Config, string, error) {
 		return nil, "", fmt.Errorf("configuration %s: %w", p, err)
 	}
 	return cfg, p, nil
+}
+
+// writableConfig is the configuration as a command that changes it read it:
+// paths keep the text that the user wrote, and raw holds the exact bytes, so
+// the write is refused if the file changes in between.
+type writableConfig struct {
+	cfg  *config.Config
+	path string
+	// raw is nil when the file does not exist yet.
+	raw []byte
+	// baseline is cfg encoded as it was read, to find a save that changes
+	// nothing.
+	baseline []byte
+}
+
+// beforeConfigSave is a test seam. It runs just before a save writes.
+var beforeConfigSave func()
+
+// loadConfigForWrite reads the configuration for "account add" and "account
+// rm". A missing file gives the defaults, and save then creates the file.
+func loadConfigForWrite(cc *clicore.Context) (*writableConfig, error) {
+	p, err := configPath(cc)
+	if err != nil {
+		return nil, err
+	}
+	return readConfigForWrite(p)
+}
+
+func readConfigForWrite(p string) (*writableConfig, error) {
+	raw, err := config.ReadFile(p)
+	if errors.Is(err, fs.ErrNotExist) {
+		return &writableConfig{cfg: config.Default(), path: p}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("configuration %s: %w", p, err)
+	}
+	cfg, err := config.ParseUnexpanded(raw, p)
+	if err != nil {
+		return nil, fmt.Errorf("configuration %s: %w", p, err)
+	}
+	base, err := config.EncodeUnexpanded(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("configuration %s: %w", p, err)
+	}
+	return &writableConfig{cfg: cfg, path: p, raw: raw, baseline: base}, nil
+}
+
+// save writes cfg without expanding paths. For an existing file it refuses to
+// write when the file changed since it was read, and it keeps the previous
+// file as a .bak. It writes nothing when cfg encodes to what was read. For a
+// missing file it creates the file and refuses if the file appeared since.
+func (w *writableConfig) save(cfg *config.Config) error {
+	data, err := config.EncodeUnexpanded(cfg)
+	if err != nil {
+		return err
+	}
+	changed := func() error {
+		return withHint(fmt.Errorf("%s changed while editing, nothing written", ui.SanitizeLine(w.path)),
+			"run the command again to start from the current file")
+	}
+	if w.raw == nil {
+		if beforeConfigSave != nil {
+			beforeConfigSave()
+		}
+		if err := config.CreateNew(w.path, data); err != nil {
+			if errors.Is(err, fs.ErrExist) {
+				return changed()
+			}
+			return err
+		}
+		return nil
+	}
+	if bytes.Equal(data, w.baseline) {
+		return nil
+	}
+	if beforeConfigSave != nil {
+		beforeConfigSave()
+	}
+	if _, err := config.SaveRawChecked(w.path, data, w.raw); err != nil {
+		if errors.Is(err, config.ErrChangedWhileEditing) {
+			return changed()
+		}
+		return err
+	}
+	return nil
 }
 
 // envMap turns NAME=value entries into a map.

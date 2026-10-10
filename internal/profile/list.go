@@ -160,16 +160,8 @@ func Describe(r *Resolved) string {
 	// Unset values print their effective behavior so a reader can tell
 	// "not set" from a value: unset connectors keep claude.ai connectors,
 	// and unset strict is not strict.
-	if m.MCP.ClaudeAIConnectors != "" {
-		fmt.Fprintf(&b, "  claudeai_connectors: %s\n", m.MCP.ClaudeAIConnectors)
-	} else {
-		b.WriteString("  claudeai_connectors: keep (default)\n")
-	}
-	if m.MCP.Strict != nil {
-		fmt.Fprintf(&b, "  strict: %t\n", *m.MCP.Strict)
-	} else {
-		b.WriteString("  strict: false (default)\n")
-	}
+	fmt.Fprintf(&b, "  claudeai_connectors: %s%s\n", m.EffectiveConnectors(), defaultNote(m.MCP.ClaudeAIConnectors == ""))
+	fmt.Fprintf(&b, "  strict: %t%s\n", m.IsStrict(), defaultNote(m.MCP.Strict == nil))
 	b.WriteString("Session:\n")
 	if m.Session.Model != "" {
 		fmt.Fprintf(&b, "  model: %s\n", m.Session.Model)
@@ -221,4 +213,11 @@ func Describe(r *Resolved) string {
 		fmt.Fprintf(&b, "  %s %s %s%s\n", it.Kind, it.Name, it.Digest[:12], risk)
 	}
 	return b.String()
+}
+
+func defaultNote(unset bool) string {
+	if unset {
+		return " (default)"
+	}
+	return ""
 }
