@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -157,6 +158,62 @@ func loadConfig(cc *clicore.Context) (*config.Config, string, error) {
 		return nil, "", fmt.Errorf("configuration %s: %w", p, err)
 	}
 	return cfg, p, nil
+}
+
+// writableConfig is the configuration as a command that changes it read it:
+// paths keep the text that the user wrote, and raw holds the exact bytes, so
+// the write is refused if the file changes in between.
+type writableConfig struct {
+	cfg  *config.Config
+	path string
+	// raw is nil when the file does not exist yet.
+	raw []byte
+}
+
+// loadConfigForWrite reads the configuration for "account add" and "account
+// rm". A missing file gives the defaults, and save then creates the file.
+func loadConfigForWrite(cc *clicore.Context) (*writableConfig, error) {
+	p, err := configPath(cc)
+	if err != nil {
+		return nil, err
+	}
+	return readConfigForWrite(p)
+}
+
+func readConfigForWrite(p string) (*writableConfig, error) {
+	raw, err := config.ReadFile(p)
+	if errors.Is(err, fs.ErrNotExist) {
+		return &writableConfig{cfg: config.Default(), path: p}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("configuration %s: %w", p, err)
+	}
+	cfg, err := config.ParseUnexpanded(raw, p)
+	if err != nil {
+		return nil, fmt.Errorf("configuration %s: %w", p, err)
+	}
+	return &writableConfig{cfg: cfg, path: p, raw: raw}, nil
+}
+
+// save writes cfg without expanding paths. For an existing file it refuses to
+// write when the file changed since it was read, and it keeps the previous
+// file as a .bak.
+func (w *writableConfig) save(cfg *config.Config) error {
+	if w.raw == nil {
+		return config.Save(w.path, cfg)
+	}
+	data, err := config.EncodeUnexpanded(cfg)
+	if err != nil {
+		return err
+	}
+	if _, err := config.SaveRawChecked(w.path, data, w.raw); err != nil {
+		if errors.Is(err, config.ErrChangedWhileEditing) {
+			return withHint(fmt.Errorf("%s changed while editing, nothing written", ui.SanitizeLine(w.path)),
+				"run the command again to start from the current file")
+		}
+		return err
+	}
+	return nil
 }
 
 // envMap turns NAME=value entries into a map.
