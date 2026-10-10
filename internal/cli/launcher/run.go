@@ -472,7 +472,7 @@ func (s *session) buildLaunch(ctx context.Context, name string, pass []string, y
 		envAdd[additionalDirsClaudeMDEnv] = "1"
 		ln.EnvAdd = envAdd
 		if pol.AdditionalDirsClaudeMDOff {
-			warn("managed policy sets %s to a value that turns it off, and ccshelf cannot override managed settings. The instructions of the profile will not load", additionalDirsClaudeMDEnv)
+			warn("managed policy sets %s to an off value. ccshelf cannot override managed settings, so the profile instructions do not load", additionalDirsClaudeMDEnv)
 		}
 	}
 	if m.Session.Effort != "" {
