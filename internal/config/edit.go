@@ -513,12 +513,34 @@ func CreateExclusive(path string, data []byte) (string, error) {
 }
 
 // CreateNew creates the file at path holding data (mode 0600, directory 0700).
-// The create is exclusive: when the file exists, even as a symlink, CreateNew
-// returns an error that wraps fs.ErrExist and writes nothing.
+// It writes data to a temporary file next to path first. It then hard-links
+// that file to path, so a reader never sees a partial file. The link fails
+// when path exists, even as a symlink, and CreateNew returns an error that
+// wraps fs.ErrExist. Where hard links are not supported, CreateNew writes
+// path in place with an exclusive create.
 func CreateNew(path string, data []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("creating %s: %w", filepath.Dir(path), err)
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("creating %s: %w", dir, err)
 	}
+	tmpName, err := writeTempFile(dir, data)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.Remove(tmpName) }()
+	err = os.Link(tmpName, path)
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, fs.ErrExist):
+		return fmt.Errorf("creating %s: %w", path, err)
+	}
+	return createInPlace(path, data)
+}
+
+// createInPlace is the fallback for filesystems without hard links. It creates
+// path with an exclusive create and writes data to it.
+func createInPlace(path string, data []byte) error {
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return fmt.Errorf("creating %s: %w", path, err)
