@@ -83,8 +83,14 @@ func TestOutputStyleCaseWarning(t *testing.T) {
 		style string
 		warn  bool
 	}{
-		{"explanatory", true}, {"CONCISE", true}, {"Explanatory", false}, {"Default", false},
-		{"default", false}, {"DEFAULT", false}, {"my-style", false}, {"Concise2", false},
+		{"explanatory", true},
+		{"CONCISE", true},
+		{"Explanatory", false},
+		{"Default", false},
+		{"default", false},
+		{"DEFAULT", false},
+		{"my-style", false},
+		{"Concise2", false},
 	} {
 		r := closureFor(t, styleFiles("", c.style), KindOrg, "child")
 		got := false
