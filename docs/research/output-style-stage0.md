@@ -36,7 +36,7 @@ Result: the init event showed `Explanatory` and the reply was `SHADOWED` {V}. Th
 
 ## Plugin style names (2026-10-09)
 
-Method: the plugin `acme-kit` had `output-styles/Terse.md` with `name: Terse` and a body that told the model to reply with the word PLUGINSTYLE. Each run used `--plugin-dir` for the plugin, an empty working directory, a `--settings` file with the `outputStyle` below and the prompt "What is 2+2?". The raw output is in the scratchpad of the session (`os-plugin/`).
+Method: the plugin `acme-kit` had `output-styles/Terse.md` with `name: Terse` and a body that told the model to reply with the word PLUGINSTYLE. Each run used `--plugin-dir` for the plugin, an empty working directory, a `--settings` file with the `outputStyle` below and the prompt "What is 2+2?".
 
 | `outputStyle` | Reply | Verdict |
 |---|---|---|
@@ -70,5 +70,5 @@ These facts come from the [output styles page](https://code.claude.com/docs/en/o
 - A profile can set the style through `outputStyle` in the generated settings file. No flag and no environment variable is needed.
 - A wrong name fails without a message. The launcher warns about a built-in name with the wrong case. It cannot check custom names without a scan of style files, and it does not scan.
 - The profile value wins over the project `outputStyle` setting {V}. The docs rank it above the user setting too, but no run checked that. Managed policy still wins {R}, and the launcher does not try to change that.
-- The profile pins a name, not the content of the style. See "Shadowing" below.
-- A plugin style needs the name `<plugin>:<Name>`. See "Plugin style names" below.
+- The profile pins a name, not the content of the style. See "Shadowing" above.
+- A plugin style needs the name `<plugin>:<Name>`. See "Plugin style names" above.

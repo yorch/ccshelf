@@ -138,7 +138,7 @@ section>input[type=search]{display:block}
 <body>
 <div class="shell">
 <aside class="rail">
-<div class="brand"><h1>ccshelf</h1><p>Research and design notes. Claude Code 2.1.290. Generated from the Markdown in docs/ (source hash c87828d9).</p></div>
+<div class="brand"><h1>ccshelf</h1><p>Research and design notes. Claude Code 2.1.290. Generated from the Markdown in docs/ (source hash b43f149c).</p></div>
 <nav aria-label="Sections"><div id="tabs" role="tablist" aria-orientation="vertical"></div></nav>
 <div class="legend" aria-label="Confidence markers"><b>How sure we are</b><br><span class="lg gv" aria-hidden="true">&#9679;</span>verified in docs, gh or the CLI<br><span class="lg gr" aria-hidden="true">&#9680;</span>reported by a research agent<br><span class="lg gu" aria-hidden="true">&#9675;</span>unverified or inferred</div>
 <button class="themebtn" id="themebtn" type="button">Switch theme</button>
@@ -807,7 +807,7 @@ on_blocked = "warn"           # warn | fail. What to do when org policy blocks s
 <li>The profile pins a name, not content. A style file with the same name in the project shadows the built-in style: a project file <code>.claude/output-styles/Explanatory.md</code> with <code>name: Explanatory</code> decided the reply, although the profile selected <code>Explanatory</code> <span class="V">V</span>. Custom styles drop the coding instructions unless <code>keep-coding-instructions: true</code> is set <span class="V">V</span>. User and plugin style files may shadow a name too <span class="U">U</span>.</li>
 <li>A project profile may set <code>output_style</code>, as it may set <code>model</code>. This gives a repository no new power. The repository can already set <code>outputStyle</code> in its own <code>.claude/settings.json</code>, because the launcher keeps the <code>project</code> and <code>local</code> setting sources. It can also shadow any style name with a file. <code>[instructions]</code> and <code>append_system_prompt_file</code> are different: they carry content through the own channel of ccshelf, so SR2 limits them.</li>
 <li>Claude Code applies an output style to the main conversation and to forks. Other subagents run their own system prompt and do not get the style <span class="V">V</span>.</li>
-<li>A plugin style with <code>force-for-plugin: true</code> applies whenever its plugin is enabled and overrides the <code>outputStyle</code> setting <span class="V">V</span>. A profile that enables such a plugin cannot choose another style. No run checked this.</li>
+<li>The docs say that a plugin style with <code>force-for-plugin: true</code> applies whenever its plugin is enabled and overrides the <code>outputStyle</code> setting <span class="R">R</span>. A profile that enables such a plugin then cannot choose another style <span class="U">U</span>. No run checked this.</li>
 <li>Claude Code reads the style files when it starts. There is no command-line flag for an output style <span class="V">V</span>, so the launcher uses the settings file.</li>
 <li><code>show</code> prints the value, <code>show --json</code> has it as <code>session.output_style</code>, and <code>diff</code> compares it.</li>
 </ul>
@@ -2739,7 +2739,7 @@ document.getElementById("nmsg").textContent=m}r.oninput=draw;draw()})();
 <p>Method: the project directory held <code>.claude/output-styles/Explanatory.md</code> with the frontmatter <code>name: Explanatory</code> and a body that told the model to reply with the word SHADOWED. The run passed <code>--settings '{"outputStyle":"Explanatory"}'</code>.</p>
 <p>Result: the init event showed <code>Explanatory</code> and the reply was <code>SHADOWED</code> <span class="V">V</span>. The project file replaced the built-in style of the same name. Thus a profile that selects a name does not pin the content. The docs say that custom styles drop the coding instructions of the system prompt unless <code>keep-coding-instructions: true</code> is set <span class="V">V</span>. A project file can therefore change more than the tone. The same may hold for a user file or a plugin file <span class="U">U</span>.</p>
 <h3 id="style0-plugin-style-names-2026-10-09">Plugin style names (2026-10-09)</h3>
-<p>Method: the plugin <code>acme-kit</code> had <code>output-styles/Terse.md</code> with <code>name: Terse</code> and a body that told the model to reply with the word PLUGINSTYLE. Each run used <code>--plugin-dir</code> for the plugin, an empty working directory, a <code>--settings</code> file with the <code>outputStyle</code> below and the prompt "What is 2+2?". The raw output is in the scratchpad of the session (<code>os-plugin/</code>).</p>
+<p>Method: the plugin <code>acme-kit</code> had <code>output-styles/Terse.md</code> with <code>name: Terse</code> and a body that told the model to reply with the word PLUGINSTYLE. Each run used <code>--plugin-dir</code> for the plugin, an empty working directory, a <code>--settings</code> file with the <code>outputStyle</code> below and the prompt "What is 2+2?".</p>
 <table><thead><tr><th><code>outputStyle</code></th><th>Reply</th><th>Verdict</th></tr></thead><tbody>
 <tr><td><code>acme-kit:Terse</code></td><td><code>PLUGINSTYLE</code> <span class="V">V</span></td><td>The plugin style applied</td></tr>
 <tr><td><code>Terse</code></td><td><code>2 + 2 = 4</code> <span class="V">V</span></td><td>Not applied</td></tr>
@@ -2769,8 +2769,8 @@ document.getElementById("nmsg").textContent=m}r.oninput=draw;draw()})();
 <li>A profile can set the style through <code>outputStyle</code> in the generated settings file. No flag and no environment variable is needed.</li>
 <li>A wrong name fails without a message. The launcher warns about a built-in name with the wrong case. It cannot check custom names without a scan of style files, and it does not scan.</li>
 <li>The profile value wins over the project <code>outputStyle</code> setting <span class="V">V</span>. The docs rank it above the user setting too, but no run checked that. Managed policy still wins <span class="R">R</span>, and the launcher does not try to change that.</li>
-<li>The profile pins a name, not the content of the style. See "Shadowing" below.</li>
-<li>A plugin style needs the name <code>&lt;plugin&gt;:&lt;Name&gt;</code>. See "Plugin style names" below.</li>
+<li>The profile pins a name, not the content of the style. See "Shadowing" above.</li>
+<li>A plugin style needs the name <code>&lt;plugin&gt;:&lt;Name&gt;</code>. See "Plugin style names" above.</li>
 </ul>
 </section>
 

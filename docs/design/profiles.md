@@ -198,7 +198,7 @@ Rules:
 - The profile pins a name, not content. A style file with the same name in the project shadows the built-in style: a project file `.claude/output-styles/Explanatory.md` with `name: Explanatory` decided the reply, although the profile selected `Explanatory` {V}. Custom styles drop the coding instructions unless `keep-coding-instructions: true` is set {V}. User and plugin style files may shadow a name too {U}.
 - A project profile may set `output_style`, as it may set `model`. This gives a repository no new power. The repository can already set `outputStyle` in its own `.claude/settings.json`, because the launcher keeps the `project` and `local` setting sources. It can also shadow any style name with a file. `[instructions]` and `append_system_prompt_file` are different: they carry content through the own channel of ccshelf, so SR2 limits them.
 - Claude Code applies an output style to the main conversation and to forks. Other subagents run their own system prompt and do not get the style {V}.
-- A plugin style with `force-for-plugin: true` applies whenever its plugin is enabled and overrides the `outputStyle` setting {V}. A profile that enables such a plugin cannot choose another style. No run checked this.
+- The docs say that a plugin style with `force-for-plugin: true` applies whenever its plugin is enabled and overrides the `outputStyle` setting {R}. A profile that enables such a plugin then cannot choose another style {U}. No run checked this.
 - Claude Code reads the style files when it starts. There is no command-line flag for an output style {V}, so the launcher uses the settings file.
 - `show` prints the value, `show --json` has it as `session.output_style`, and `diff` compares it.
 
