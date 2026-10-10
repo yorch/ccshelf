@@ -14,9 +14,15 @@ const commentWarning = " without its comments (the previous file, with the comme
 
 func (h *harness) warnCount() int { return strings.Count(h.errb.String(), commentWarning) }
 
+// tomlDir returns an absolute directory under a temp dir as a TOML literal
+// string. A path such as "/x" is not absolute on Windows.
+func tomlDir(t *testing.T, name string) string {
+	return "'" + filepath.Join(t.TempDir(), "x", name) + "'"
+}
+
 func TestAccountAddWarnsWhenCommentsDropped(t *testing.T) {
 	h := newHarness(t)
-	start := "# my notes\n[accounts.old]\nconfig_dir = \"/x/old\"\n"
+	start := "# my notes\n[accounts.old]\nconfig_dir = " + tomlDir(t, "old") + "\n"
 	h.writeConfig(start)
 	dir := filepath.Join(t.TempDir(), "claude-work")
 
@@ -72,7 +78,7 @@ func TestAccountAddNoWarningWithoutCommentsOrFile(t *testing.T) {
 
 func TestAccountRmWarnsWhenCommentsDropped(t *testing.T) {
 	h := newHarness(t)
-	start := "# my notes\ndefault_account = \"work\"\n[accounts.work]\nconfig_dir = \"/x/work\"\n"
+	start := "# my notes\ndefault_account = \"work\"\n[accounts.work]\nconfig_dir = " + tomlDir(t, "work") + "\n"
 	h.writeConfig(start)
 	h.mustRun("account", "rm", "work")
 	if n := h.warnCount(); n != 1 {
@@ -104,7 +110,7 @@ type accountRmDoc struct {
 
 func TestAccountRmJSON(t *testing.T) {
 	h := newHarness(t)
-	h.writeConfig("# notes\ndefault_account = \"work\"\n[accounts.work]\nconfig_dir = \"/x/work\"\n[accounts.other]\nconfig_dir = \"/x/other\"\n")
+	h.writeConfig("# notes\ndefault_account = \"work\"\n[accounts.work]\nconfig_dir = " + tomlDir(t, "work") + "\n[accounts.other]\nconfig_dir = " + tomlDir(t, "other") + "\n")
 	h.mustRun("--json", "account", "rm", "work")
 	var doc accountRmDoc
 	if err := json.Unmarshal(h.out.Bytes(), &doc); err != nil {
