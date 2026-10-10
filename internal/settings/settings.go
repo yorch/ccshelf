@@ -94,6 +94,12 @@ type Spec struct {
 	// Profile, when non-empty, adds CCSHELF_PROFILE to env. It is the only
 	// way to set that variable: Env must not contain it.
 	Profile string
+	// InstructionsEnv, when true, adds CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1
+	// to env. The launcher sets it when a profile has instructions. A settings
+	// env value beats the process environment, so the process variable alone
+	// is not enough when a project settings file sets the variable to 0. It is
+	// the only CLAUDE_CODE_ name that Build writes. Env must not contain it.
+	InstructionsEnv bool
 	// UserLayerDropped says the session runs without the user settings layer
 	// (--setting-sources project,local). That layer is where the installed
 	// plugins are normally enabled. Build then writes every installed protected
@@ -258,15 +264,20 @@ func Build(spec Spec) (*Result, error) {
 		}
 		env[envpolicy.Profile] = spec.Profile
 	}
+	// Profile input is checked first. The launcher-owned name is added after
+	// the check, because the profile allowlist refuses CLAUDE_CODE_ names.
+	if err := checkProfileEnv(env); err != nil {
+		return nil, err
+	}
+	if spec.InstructionsEnv {
+		env[envpolicy.AdditionalDirsClaudeMD] = "1"
+	}
 	if len(env) > 0 {
 		keys := make([]string, 0, len(env))
 		for k := range env {
 			keys = append(keys, k)
 		}
 		sort.Strings(keys)
-		if err := envpolicy.Check(keys); err != nil {
-			return nil, err
-		}
 		for _, k := range keys {
 			if err := checkEnvValue(k, env[k]); err != nil {
 				return nil, err
@@ -275,6 +286,16 @@ func Build(spec Spec) (*Result, error) {
 		doc.Env = env
 	}
 	return res, nil
+}
+
+// checkProfileEnv applies the profile env allowlist to env.
+func checkProfileEnv(env map[string]string) error {
+	keys := make([]string, 0, len(env))
+	for k := range env {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return envpolicy.Check(keys)
 }
 
 // checkModel applies the model-name rule shared by Build and Validate.

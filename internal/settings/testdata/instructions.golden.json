@@ -1,0 +1,13 @@
+{
+  "enabledPlugins": {
+    "design-kit@acme": false,
+    "frontend-design@claude-plugins-official": false,
+    "secret-scan@acme": false,
+    "seo-tools@acme": false,
+    "sre-kit@acme": true
+  },
+  "env": {
+    "CCSHELF_PROFILE": "sre",
+    "CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD": "1"
+  }
+}

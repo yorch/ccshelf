@@ -736,3 +736,28 @@ func TestOptionsDefaults(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+func TestAdditionalDirsClaudeMDOff(t *testing.T) {
+	const name = "CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD"
+	cases := []struct {
+		doc string
+		off bool
+	}{
+		{`{}`, false},
+		{`{"env":{"OTHER":"0"}}`, false},
+		{`{"env":{"` + name + `":"1"}}`, false},
+		{`{"env":{"` + name + `":"true"}}`, false},
+		{`{"env":{"` + name + `":"0"}}`, true},
+		{`{"env":{"` + name + `":"false"}}`, true},
+		{`{"env":{"` + name + `":""}}`, true},
+		{`{"env":{"` + name + `":0}}`, true},
+	}
+	for _, c := range cases {
+		dir := t.TempDir()
+		write(t, filepath.Join(dir, "managed-settings.json"), c.doc)
+		p := detect(t, linuxOpt(dir))
+		if p.AdditionalDirsClaudeMDOff != c.off {
+			t.Errorf("%s: off = %v, want %v", c.doc, p.AdditionalDirsClaudeMDOff, c.off)
+		}
+	}
+}

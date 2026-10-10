@@ -63,6 +63,7 @@ func TestBuildGolden(t *testing.T) {
 			Model: "opus", Env: map[string]string{"FIGMA_TOKEN_REF": "env:FIGMA", "CCSHELF_VAR_TEAM": "sre"}, Profile: "sre",
 		}},
 		{"empty", Spec{Mode: ModeAdditive}},
+		{"instructions", Spec{Installed: installed, Include: []string{"sre-kit@acme"}, Profile: "sre", InstructionsEnv: true}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -714,5 +715,70 @@ func TestOutputStyle(t *testing.T) {
 	}
 	if !slices.Contains(AllowedKeys, "outputStyle") || !slices.IsSorted(AllowedKeys) {
 		t.Errorf("AllowedKeys: %v", AllowedKeys)
+	}
+}
+
+func TestInstructionsEnv(t *testing.T) {
+	const name = "CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD"
+	base := Spec{Installed: installed, Include: []string{"sre-kit@acme", "seo-tools@acme"}, Profile: "sre"}
+
+	// Without the flag the output is byte-identical to the output before the
+	// feature: no new key.
+	before, err := Build(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := before.JSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), name) {
+		t.Errorf("key present without InstructionsEnv:\n%s", b)
+	}
+	want, err := os.ReadFile(filepath.Join("testdata", "allow_only.golden.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(want) != string(b) {
+		t.Errorf("settings changed for a spec without instructions:\n%s", b)
+	}
+
+	// With the flag the key appears, next to profile env, and it validates.
+	spec := base
+	spec.InstructionsEnv = true
+	spec.Env = map[string]string{"CCSHELF_VAR_TEAM": "sre"}
+	res, err := Build(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Doc.Env[name] != "1" || res.Doc.Env["CCSHELF_VAR_TEAM"] != "sre" || res.Doc.Env["CCSHELF_PROFILE"] != "sre" {
+		t.Errorf("env: %v", res.Doc.Env)
+	}
+	if _, err := res.JSON(); err != nil {
+		t.Errorf("validate: %v", err)
+	}
+
+	// A profile cannot set the variable, with or without the flag.
+	for _, flag := range []bool{false, true} {
+		bad := base
+		bad.InstructionsEnv = flag
+		bad.Env = map[string]string{name: "1"}
+		if _, err := Build(bad); err == nil {
+			t.Errorf("profile env %s accepted (InstructionsEnv=%v)", name, flag)
+		}
+	}
+
+	// Validate accepts only the value "1", and no other CLAUDE_CODE_ name.
+	if err := Validate([]byte(`{"env":{"` + name + `":"1"}}`)); err != nil {
+		t.Errorf("value 1: %v", err)
+	}
+	for _, doc := range []string{
+		`{"env":{"` + name + `":"0"}}`,
+		`{"env":{"` + name + `":1}}`,
+		`{"env":{"CLAUDE_CODE_OTHER":"1"}}`,
+	} {
+		if err := Validate([]byte(doc)); err == nil {
+			t.Errorf("accepted %s", doc)
+		}
 	}
 }

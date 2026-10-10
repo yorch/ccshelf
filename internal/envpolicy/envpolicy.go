@@ -32,6 +32,12 @@ import (
 // profile a session was started with.
 const Profile = "CCSHELF_PROFILE"
 
+// AdditionalDirsClaudeMD is the variable that makes Claude Code load CLAUDE.md
+// files from added directories. Only the launcher sets it, and only when a
+// profile has instructions. A profile may not set it: the CLAUDE_CODE_ prefix
+// is denied. The settings validator accepts it with the value "1" only.
+const AdditionalDirsClaudeMD = "CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD"
+
 var namePattern = regexp.MustCompile(`^[A-Z][A-Z0-9_]{0,63}$`)
 
 // allowPattern is the allowlist: the CCSHELF_VAR_ namespace or a _REF name.
