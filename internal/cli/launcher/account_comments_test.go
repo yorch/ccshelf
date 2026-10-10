@@ -10,7 +10,7 @@ import (
 	"github.com/yorch/ccshelf/internal/ui"
 )
 
-const commentWarning = "has comments, and they are dropped when the file is written again (the previous file is kept as "
+const commentWarning = " without its comments (the previous file, with the comments, is kept as "
 
 func (h *harness) warnCount() int { return strings.Count(h.errb.String(), commentWarning) }
 

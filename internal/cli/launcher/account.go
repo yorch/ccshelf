@@ -130,12 +130,12 @@ The directory defaults to ~/.claude-<name>.`,
 				Created      bool     `json:"created"`
 				Persisted    bool     `json:"persisted"`
 				Default      bool     `json:"default"`
-				CommentsLost bool     `json:"comments_dropped"`
 				Steps        []string `json:"steps"`
+				CommentsLost bool     `json:"comments_dropped"`
 			}
 			return ui.WriteJSON(cc.Streams.Out, "account-add", out{
 				Name: plan.Name, Dir: plan.Dir, Created: plan.Created,
-				Persisted: plan.Persisted, Default: makeDefault, CommentsLost: wc.commentsDropped(), Steps: lines,
+				Persisted: plan.Persisted, Default: makeDefault, Steps: lines, CommentsLost: wc.commentsDropped(),
 			})
 		}
 		okf(cc, "account %s uses %s", name, plan.Dir)

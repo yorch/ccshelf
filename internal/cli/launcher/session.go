@@ -182,11 +182,12 @@ func (w *writableConfig) commentsDropped() bool {
 	return w.wrote && config.HasComment(w.raw)
 }
 
-// warnCommentsDropped prints the warning of the "config" commands when a save
-// replaced a file that had comments. It prints nothing otherwise.
+// warnCommentsDropped warns after a save that replaced a file with comments.
+// It prints nothing otherwise.
 func (w *writableConfig) warnCommentsDropped(cc *clicore.Context) {
 	if w.commentsDropped() {
-		warnCommentsDropped(cc, w.path)
+		warnf(cc, "wrote %s without its comments (the previous file, with the comments, is kept as %s)",
+			ui.SanitizeLine(w.path), ui.SanitizeLine(config.BackupPath(w.path)))
 	}
 }
 
