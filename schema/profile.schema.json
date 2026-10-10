@@ -121,6 +121,7 @@
       "additionalProperties": false,
       "properties": {
         "model": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:\\[\\]-]{0,127}$" },
+        "output_style": { "type": "string", "description": "Name of the Claude Code output style. The name is case-sensitive. Claude Code uses the Default style for a name that it does not know. The launcher does not check custom names.", "pattern": "^[A-Za-z0-9]([A-Za-z0-9 ._:-]{0,62}[A-Za-z0-9._-])?$" },
         "effort": { "enum": ["low", "medium", "high", "xhigh", "max"] },
         "append_system_prompt_file": { "type": "string", "pattern": "^prompts/([^/\\\\.][^/\\\\]*/)*[^/\\\\.][^/\\\\]*$" },
         "inherit_user_settings": { "type": "boolean" },

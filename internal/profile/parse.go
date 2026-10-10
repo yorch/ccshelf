@@ -28,6 +28,9 @@ var (
 	accountRe   = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
 	serverRe    = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 	modelRe     = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:\[\]-]{0,127}$`)
+	// outputStyleRe is the same pattern as the output style rule in
+	// internal/settings and in schema/profile.schema.json.
+	outputStyleRe = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9 ._:-]{0,62}[A-Za-z0-9._-])?$`)
 )
 
 // ValidName reports whether s is a legal profile name.
@@ -169,6 +172,9 @@ func validate(m *Manifest, raw []byte, filename string) []Problem {
 
 	if m.Session.Model != "" && !modelRe.MatchString(m.Session.Model) {
 		v.add("session.model", "%q must match %s", m.Session.Model, modelRe)
+	}
+	if m.Session.OutputStyle != "" && !outputStyleRe.MatchString(m.Session.OutputStyle) {
+		v.add("session.output_style", "%q must match %s", m.Session.OutputStyle, outputStyleRe)
 	}
 	if m.Session.Effort != "" && !contains(Efforts(), m.Session.Effort) {
 		v.add("session.effort", "%q is not one of %v", m.Session.Effort, Efforts())

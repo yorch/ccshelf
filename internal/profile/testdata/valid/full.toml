@@ -24,6 +24,7 @@ strict = true
 [session]
 model = "opus"
 effort = "high"
+output_style = "Explanatory"
 append_system_prompt_file = "prompts/frontend.md"
 inherit_user_settings = false
 

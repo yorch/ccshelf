@@ -191,6 +191,11 @@ func TestBuildErrors(t *testing.T) {
 		{"deny whitespace", Spec{DenyMCP: []string{" x"}}, "deny MCP"},
 		{"deny control", Spec{DenyMCP: []string{"a\nb"}}, "deny MCP"},
 		{"model space", Spec{Model: "a b"}, "model"},
+		{"style control", Spec{OutputStyle: "a\nb"}, "outputStyle"},
+		{"style long", Spec{OutputStyle: strings.Repeat("s", 65)}, "outputStyle"},
+		{"style odd chars", Spec{OutputStyle: "x;y"}, "outputStyle"},
+		{"style leading space", Spec{OutputStyle: " x"}, "outputStyle"},
+		{"style trailing space", Spec{OutputStyle: "x "}, "outputStyle"},
 		{"env denied", Spec{Env: map[string]string{"ANTHROPIC_BASE_URL": "x"}}, "ANTHROPIC_BASE_URL"},
 		{"env not allowlisted", Spec{Env: map[string]string{"FOO": "x"}}, "FOO"},
 		{"env path", Spec{Env: map[string]string{"PATH": "x"}}, "PATH"},
@@ -266,6 +271,10 @@ func TestValidate(t *testing.T) {
 		{`{"skillOverrides":5}`, "object"},
 		{`{"disableClaudeAiConnectors":"true"}`, "boolean"},
 		{`{"model":5}`, "string"},
+		{`{"outputStyle":5}`, "string"},
+		{`{"outputStyle":""}`, "non-empty"},
+		{`{"outputStyle":"a\nb"}`, "outputStyle"},
+		{`{"outputStyle":"a;b"}`, "outputStyle"},
 		{`{"model":""}`, "non-empty"},
 		{`{"deniedMcpServers":{}}`, "array"},
 		{`{"deniedMcpServers":["x"]}`, "exactly one key"},
@@ -673,5 +682,37 @@ func TestProtectedMCPOwnerAmbiguityAndExclude(t *testing.T) {
 		if !strings.Contains(all, want) {
 			t.Errorf("missing warning %q in:\n%s", want, all)
 		}
+	}
+}
+
+func TestOutputStyle(t *testing.T) {
+	for _, name := range []string{"Explanatory", "Diagrams first", "my_style-2", "plugin:style", strings.Repeat("s", 64)} {
+		res, err := Build(Spec{OutputStyle: name})
+		if err != nil {
+			t.Errorf("%q: %v", name, err)
+			continue
+		}
+		b, err := json.Marshal(res.Doc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := Validate(b); err != nil {
+			t.Errorf("%q: Build output fails Validate: %v", name, err)
+		}
+		if !strings.Contains(string(b), `"outputStyle":`) {
+			t.Errorf("%q: no outputStyle in %s", name, b)
+		}
+	}
+	// Without a style, the document has no outputStyle key.
+	res, err := Build(Spec{Model: "opus"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := json.Marshal(res.Doc)
+	if strings.Contains(string(b), "outputStyle") {
+		t.Errorf("unexpected key: %s", b)
+	}
+	if !slices.Contains(AllowedKeys, "outputStyle") || !slices.IsSorted(AllowedKeys) {
+		t.Errorf("AllowedKeys: %v", AllowedKeys)
 	}
 }

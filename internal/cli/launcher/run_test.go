@@ -562,3 +562,32 @@ func TestConfigRelativeDirSourceRejected(t *testing.T) {
 		t.Fatalf("code %d", code)
 	}
 }
+
+func TestRunOutputStyle(t *testing.T) {
+	h := newHarness(t)
+	h.writeProfile("styled", "name = \"styled\"\n[plugins]\ninclude = [\"design-kit@acme\"]\n[session]\noutput_style = \"explanatory\"\n")
+	h.writeProfile("mine", personalMine)
+	h.mustRun("run", "styled")
+	if got := h.settingsOf(h.startArgs)["outputStyle"]; got != "explanatory" {
+		t.Errorf("outputStyle = %v", got)
+	}
+	if !strings.Contains(h.errb.String(), `Use "Explanatory"`) {
+		t.Errorf("no case warning: %s", h.errb)
+	}
+	h.mustRun("run", "mine")
+	if _, ok := h.settingsOf(h.startArgs)["outputStyle"]; ok {
+		t.Error("a profile without output_style must not write outputStyle")
+	}
+	h.mustRun("show", "styled")
+	if !strings.Contains(h.out.String(), "output_style: explanatory") {
+		t.Errorf("show: %s", h.out)
+	}
+	h.mustRun("--json", "show", "styled")
+	if !strings.Contains(h.out.String(), `"output_style":"explanatory"`) && !strings.Contains(h.out.String(), `"output_style": "explanatory"`) {
+		t.Errorf("show --json: %s", h.out)
+	}
+	h.mustRun("diff", "mine", "styled")
+	if !strings.Contains(h.out.String(), "session.output_style: (unset) -> explanatory") {
+		t.Errorf("diff: %s", h.out)
+	}
+}

@@ -12,7 +12,7 @@ import (
 // Closure item kinds.
 const (
 	// ItemProfile covers a profile's identity: name, description, owner,
-	// status, when_to_use, avoid_when, model and effort.
+	// status, when_to_use, avoid_when, model, effort and output_style.
 	ItemProfile = "profile"
 	// ItemProfileControls covers everything in a profile that changes what a
 	// session can do. It is always Risky.
@@ -75,6 +75,9 @@ type profileIdentity struct {
 	AvoidWhen    []string `json:"avoid_when"`
 	Model        string   `json:"session.model"`
 	Effort       string   `json:"session.effort"`
+	// OutputStyle uses omitempty so that the digest of a profile without
+	// output_style stays what it was before the key existed.
+	OutputStyle string `json:"session.output_style,omitempty"`
 }
 
 // profileControls is the canonical form of everything in a manifest that
@@ -114,7 +117,7 @@ func profileDigests(m *Manifest) (identity, controls string, err error) {
 	id, err := json.Marshal(profileIdentity{
 		Name: m.Name, Description: m.Description, Owner: m.Owner, Status: m.Status, SupersededBy: m.SupersededBy,
 		WhenToUse: append([]string{}, m.WhenToUse...), AvoidWhen: append([]string{}, m.AvoidWhen...),
-		Model: m.Session.Model, Effort: m.Session.Effort,
+		Model: m.Session.Model, Effort: m.Session.Effort, OutputStyle: m.Session.OutputStyle,
 	})
 	if err != nil {
 		return "", "", fmt.Errorf("encoding profile %q: %w", m.Name, err)

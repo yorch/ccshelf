@@ -22,6 +22,12 @@ func Statuses() []string { return []string{StatusActive, StatusExperimental, Sta
 // PluginModes returns the accepted values of plugins.mode.
 func PluginModes() []string { return []string{ModeAllowOnly, ModeAdditive} }
 
+// OutputStyleBuiltins returns the names of the built-in Claude Code output
+// styles. Claude Code compares an output style name with case.
+func OutputStyleBuiltins() []string {
+	return []string{"Default", "Proactive", "Concise", "Explanatory", "Learning"}
+}
+
 // Efforts returns the accepted values of session.effort.
 func Efforts() []string { return []string{"low", "medium", "high", "xhigh", "max"} }
 
@@ -94,6 +100,7 @@ type MCP struct {
 type Session struct {
 	Model                  string            `toml:"model,omitempty"`
 	Effort                 string            `toml:"effort,omitempty"`
+	OutputStyle            string            `toml:"output_style,omitempty"`
 	AppendSystemPromptFile string            `toml:"append_system_prompt_file,omitempty"`
 	InheritUserSettings    *bool             `toml:"inherit_user_settings,omitempty"`
 	Env                    map[string]string `toml:"env,omitempty"`

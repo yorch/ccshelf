@@ -379,6 +379,9 @@ func (r *resolver) merge(res *Resolved, req *File) error {
 		if c.Session.Effort != "" {
 			m.Session.Effort = c.Session.Effort
 		}
+		if c.Session.OutputStyle != "" {
+			m.Session.OutputStyle = c.Session.OutputStyle
+		}
 		if c.Session.AppendSystemPromptFile != "" {
 			m.Session.AppendSystemPromptFile = c.Session.AppendSystemPromptFile
 			promptFrom = f
@@ -431,6 +434,13 @@ func (r *resolver) merge(res *Resolved, req *File) error {
 
 	if req.Source.Kind() != KindPersonal && !m.InheritsUserSettings() {
 		return fmt.Errorf("%w: profile %q", ErrSharedDropsUserLayer, req.Name)
+	}
+	if s := m.Session.OutputStyle; s != "" {
+		for _, b := range OutputStyleBuiltins() {
+			if strings.EqualFold(s, b) && s != b && s != "default" {
+				r.warn("profile %s sets output_style %q. Claude Code compares the name with case and uses the Default style. Use %q", req.Name, s, b)
+			}
+		}
 	}
 	if !m.InheritsUserSettings() {
 		r.warn("profile %s sets inherit_user_settings = false: user settings, user plugins, user skills, user MCP, hooks and model are not loaded", req.Name)

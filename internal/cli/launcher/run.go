@@ -350,6 +350,7 @@ func (s *session) buildLaunch(ctx context.Context, name string, pass []string, y
 		NameOnlySkills: m.Skills.NameOnly,
 		HideConnectors: hide && applied.HideConnectors,
 		Model:          m.Session.Model,
+		OutputStyle:    m.Session.OutputStyle,
 		Env:            m.Session.Env,
 		Profile:        r.Name,
 

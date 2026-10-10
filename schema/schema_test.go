@@ -212,7 +212,7 @@ func TestProfileExamples(t *testing.T) {
 	for _, n := range []string{
 		"top-permissions", "top-hooks", "top-apikeyhelper", "top-allowedmcp", "top-deniedmcp", "top-disablehooks",
 		"top-statusline", "top-env", "mcp-command", "mcp-definition", "unknown-key", "unknown-nested", "no-name", "bad-name", "bad-status",
-		"bad-plugin-id", "dup-plugin", "bad-mode", "bad-skill", "bad-effort", "bad-model", "env-denied", "env-anthropic",
+		"bad-plugin-id", "dup-plugin", "bad-mode", "bad-skill", "bad-effort", "bad-model", "bad-output-style", "env-denied", "env-anthropic",
 		"bad-connectors", "bad-server-name", "bad-onblocked", "empty-hint", "extends-bad", "wrong-type", "account-path", "account-tilde",
 		"prompt-abs", "prompt-backslash", "prompt-drive", "prompt-dotdot",
 	} {

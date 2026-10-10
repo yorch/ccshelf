@@ -53,7 +53,7 @@
 //     include and exclude, or the same skill in off and name_only, is a
 //     validation error.
 //   - Scalars (plugins.mode, mcp.claudeai_connectors, mcp.strict, session
-//     model, effort, append_system_prompt_file, inherit_user_settings,
+//     model, effort, output_style, append_system_prompt_file, inherit_user_settings,
 //     policy.on_blocked, account): the latest profile that sets the value wins.
 //   - session.env maps merge, and the later value wins.
 //   - name, description, owner, status, superseded_by, extends, when_to_use and

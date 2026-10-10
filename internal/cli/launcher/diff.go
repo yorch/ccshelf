@@ -147,6 +147,7 @@ func diffResolved(a, b *profile.Resolved) diffDoc {
 		{"mcp.strict", boolStr(ma.MCP.Strict), boolStr(mb.MCP.Strict)},
 		{"session.model", ma.Session.Model, mb.Session.Model},
 		{"session.effort", ma.Session.Effort, mb.Session.Effort},
+		{"session.output_style", ma.Session.OutputStyle, mb.Session.OutputStyle},
 		{"session.append_system_prompt_file", ma.Session.AppendSystemPromptFile, mb.Session.AppendSystemPromptFile},
 		{"session.prompt (sha256)", itemDigest(a, profile.ItemPrompt), itemDigest(b, profile.ItemPrompt)},
 		{"instructions.order", orderIfSameSet(instructionLabels(a), instructionLabels(b)), orderIfSameSet(instructionLabels(b), instructionLabels(a))},
