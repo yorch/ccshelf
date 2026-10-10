@@ -21,7 +21,7 @@ const (
 )
 
 // AllowedKeys is the closed set of top-level keys, sorted.
-var AllowedKeys = []string{"deniedMcpServers", "disableClaudeAiConnectors", "enabledPlugins", "env", "model", "skillOverrides"}
+var AllowedKeys = []string{"deniedMcpServers", "disableClaudeAiConnectors", "enabledPlugins", "env", "model", "outputStyle", "skillOverrides"}
 
 // Skill override values Build produces.
 const (
@@ -42,16 +42,20 @@ var ErrProtectedConnector = errors.New("hiding claude.ai connectors would remove
 const connectorPrefix = "claude.ai "
 
 var (
-	modelPattern    = regexp.MustCompile(`^[A-Za-z0-9._:/\[\]-]+$`)
-	pluginIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9._-]*$`)
-	skillPattern    = regexp.MustCompile(`^[A-Za-z0-9._:-]+$`)
-	skillValues     = map[string]bool{"on": true, "name-only": true, "user-invocable-only": true, "off": true}
+	modelPattern = regexp.MustCompile(`^[A-Za-z0-9._:/\[\]-]+$`)
+	// outputStylePattern is the same pattern as in internal/profile and in
+	// schema/profile.schema.json.
+	outputStylePattern = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9 ._:-]{0,62}[A-Za-z0-9._-])?$`)
+	pluginIDPattern    = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9._-]*$`)
+	skillPattern       = regexp.MustCompile(`^[A-Za-z0-9._:-]+$`)
+	skillValues        = map[string]bool{"on": true, "name-only": true, "user-invocable-only": true, "off": true}
 )
 
 const (
-	maxNameLen  = 256
-	maxEnvValue = 4096
-	maxModelLen = 128
+	maxNameLen        = 256
+	maxEnvValue       = 4096
+	maxModelLen       = 128
+	maxOutputStyleLen = 64
 )
 
 // Spec is everything Build needs.
@@ -83,6 +87,8 @@ type Spec struct {
 	DenyMCP []string
 	// Build writes Model as "model" when Model is non-empty.
 	Model string
+	// Build writes OutputStyle as "outputStyle" when OutputStyle is non-empty.
+	OutputStyle string
 	// Build writes Env as "env". Its names must pass envpolicy.
 	Env map[string]string
 	// Profile, when non-empty, adds CCSHELF_PROFILE to env. It is the only
@@ -111,6 +117,7 @@ type Doc struct {
 	EnabledPlugins            map[string]bool   `json:"enabledPlugins,omitempty"`
 	Env                       map[string]string `json:"env,omitempty"`
 	Model                     string            `json:"model,omitempty"`
+	OutputStyle               string            `json:"outputStyle,omitempty"`
 	SkillOverrides            map[string]string `json:"skillOverrides,omitempty"`
 }
 
@@ -232,6 +239,12 @@ func Build(spec Spec) (*Result, error) {
 		}
 		doc.Model = spec.Model
 	}
+	if spec.OutputStyle != "" {
+		if err := checkOutputStyle(spec.OutputStyle); err != nil {
+			return nil, err
+		}
+		doc.OutputStyle = spec.OutputStyle
+	}
 	env := map[string]string{}
 	for k, v := range spec.Env {
 		env[k] = v
@@ -268,6 +281,15 @@ func Build(spec Spec) (*Result, error) {
 func checkModel(m string) error {
 	if len(m) > maxModelLen || !modelPattern.MatchString(m) {
 		return fmt.Errorf("model %q is not a valid model name (at most %d characters matching %s)", m, maxModelLen, modelPattern)
+	}
+	return nil
+}
+
+// checkOutputStyle applies the output-style-name rule shared by Build and
+// Validate.
+func checkOutputStyle(s string) error {
+	if len(s) > maxOutputStyleLen || !outputStylePattern.MatchString(s) {
+		return fmt.Errorf("outputStyle %q is not a valid output style name (at most %d characters matching %s)", s, maxOutputStyleLen, outputStylePattern)
 	}
 	return nil
 }

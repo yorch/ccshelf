@@ -42,6 +42,7 @@ TABS = [
     ("options", "Research", "Options and reviews", "research/options-and-reviews.md", {}),
     ("stage0", "Research", "Stage 0", "research/stage0.md", {}),
     ("instr0", "Research", "Stage 0: instructions", "research/instructions-stage0.md", {}),
+    ("style0", "Research", "Stage 0: output style", "research/output-style-stage0.md", {}),
     ("adopt", "Research", "Adopt or build", "research/adopt-or-build.md", {}),
     ("routing", "Research", "Routing eval protocol", "research/routing-eval-protocol.md", {}),
 ]

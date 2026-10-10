@@ -5,7 +5,7 @@
 //
 // The only top-level keys that this package can ever produce or accept are
 // enabledPlugins, skillOverrides, disableClaudeAiConnectors,
-// deniedMcpServers, model and env. [Validate] rejects permissions, hooks,
+// deniedMcpServers, model, outputStyle and env. [Validate] rejects permissions, hooks,
 // apiKeyHelper, allowedMcpServers, disableAllHooks, statusLine and every other
 // key, and [Spec] cannot express them. internal/envpolicy decides the
 // environment variable names. This package never duplicates those rules.
@@ -41,7 +41,10 @@
 //   - HideConnectors never writes false. Spec.ProtectedMCP (SR3) makes Build
 //     fail rather than hide a protected server or connector.
 //   - Env values must be free of control characters. model must be at most
-//     128 characters matching [A-Za-z0-9._:/\[\]-]+.
+//     128 characters matching [A-Za-z0-9._:/\[\]-]+. outputStyle must be at most
+//     64 characters, start and end with a letter, digit, dot, underscore or
+//     hyphen, and contain only letters, digits, space, dot, underscore, colon
+//     and hyphen.
 //
 // # Validate
 //

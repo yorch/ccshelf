@@ -68,6 +68,15 @@ func Validate(raw []byte) error {
 			if err == nil {
 				err = checkModel(s)
 			}
+		case "outputStyle":
+			var s string
+			err = strict(top[k], &s, "a string")
+			if err == nil && s == "" {
+				err = errors.New("must be a non-empty string")
+			}
+			if err == nil {
+				err = checkOutputStyle(s)
+			}
 		case "env":
 			err = validEnv(top[k])
 		default:

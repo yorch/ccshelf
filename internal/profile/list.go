@@ -177,6 +177,9 @@ func Describe(r *Resolved) string {
 	if m.Session.Effort != "" {
 		fmt.Fprintf(&b, "  effort: %s\n", m.Session.Effort)
 	}
+	if m.Session.OutputStyle != "" {
+		fmt.Fprintf(&b, "  output_style: %s\n", m.Session.OutputStyle)
+	}
 	if m.Session.AppendSystemPromptFile != "" {
 		fmt.Fprintf(&b, "  prompt: %s (%d bytes, sha256:%s)\n", m.Session.AppendSystemPromptFile, len(r.Prompt), digest(r.Prompt)[:12])
 	}

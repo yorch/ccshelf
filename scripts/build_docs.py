@@ -97,6 +97,8 @@ PAGES: list[tuple[str, str, str, str, str]] = [
      "The Stage 0 macOS experiments with Claude Code settings masking and the corrections made after review."),
     ("Research", "Stage 0: instructions", "research/instructions-stage0.md", "research/instructions-stage0.html",
      "The Stage 0 experiment on which channels carry per-profile instructions to the main conversation and to subagents."),
+    ("Research", "Stage 0: output style", "research/output-style-stage0.md", "research/output-style-stage0.html",
+     "The Stage 0 experiment on how the outputStyle setting behaves with a command-line settings file, an unknown name and a project setting."),
     ("Research", "Adopt or build", "research/adopt-or-build.md", "research/adopt-or-build.html",
      "Evaluation of two existing tools against the gaps ccshelf targets, and the recommendation to build."),
     ("Research", "Routing eval protocol", "research/routing-eval-protocol.md", "research/routing-eval-protocol.html",

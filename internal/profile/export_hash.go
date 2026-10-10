@@ -31,6 +31,7 @@ func ControlsJSON(m *Manifest) ([]byte, error) {
 		InheritUserSettings: m.Session.InheritUserSettings, Env: env,
 		AppendSystemPromptFile: m.Session.AppendSystemPromptFile, OnBlocked: m.Policy.OnBlocked,
 		InstructionsFiles: append([]string(nil), m.Instructions.Files...), InstructionsInherit: m.Instructions.Inherit,
+		OutputStyle: m.Session.OutputStyle,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("encoding the controls of profile %q: %w", m.Name, err)

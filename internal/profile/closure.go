@@ -101,6 +101,11 @@ type profileControls struct {
 	// Files keep their order: it decides the join order.
 	InstructionsFiles   []string `json:"instructions.files,omitempty"`
 	InstructionsInherit *bool    `json:"instructions.inherit,omitempty"`
+	// OutputStyle uses omitempty so that the digest of a profile without
+	// output_style stays what it was before the key existed. It is a control
+	// because a custom style can replace the coding instructions of the
+	// system prompt.
+	OutputStyle string `json:"session.output_style,omitempty"`
 }
 
 func sortedCopy(s []string) []string {
@@ -131,6 +136,7 @@ func profileDigests(m *Manifest) (identity, controls string, err error) {
 		InheritUserSettings: m.Session.InheritUserSettings, Env: env,
 		AppendSystemPromptFile: m.Session.AppendSystemPromptFile, OnBlocked: m.Policy.OnBlocked,
 		InstructionsFiles: append([]string(nil), m.Instructions.Files...), InstructionsInherit: m.Instructions.Inherit,
+		OutputStyle: m.Session.OutputStyle,
 	})
 	if err != nil {
 		return "", "", fmt.Errorf("encoding profile %q: %w", m.Name, err)

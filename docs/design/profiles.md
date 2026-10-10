@@ -159,6 +159,8 @@ strict = true                 # Only the servers above load: every other known M
 [session]
 model = "opus"                # Passed to claude as the model for this profile (optional).
 effort = "high"               # low | medium | high | xhigh | max (optional).
+output_style = "Explanatory"  # Claude Code output style (optional). Written as outputStyle in the generated settings.
+                              # Case-sensitive. A name that Claude Code does not know gives the Default style, without an error.
 append_system_prompt_file = "prompts/frontend.md"   # Appended via --append-system-prompt-file. The path must stay inside the
                               # profile's source root (no .., no symlinks).
 inherit_user_settings = true  # true: keep your ~/.claude/settings.json and mask plugins per key.
@@ -184,6 +186,30 @@ inherit = true                # true (default): the files come after the files o
 on_blocked = "warn"           # warn | fail. What to do when org policy blocks something the profile
                               # needs (e.g. disableSideloadFlags). The launcher never bypasses policy.
 ```
+### Output style
+`session.output_style` sets the Claude Code output style of the session. The launcher writes it as `outputStyle` in the generated settings file, next to `model`. A command-line settings file wins over the `outputStyle` of a project {V} ([stage 0 note](../research/output-style-stage0.md)). The docs rank it above the user settings too {R}, but no run checked that. Managed policy settings win over the command-line settings file {R}, and the launcher does not try to change that (R3).
+
+Rules:
+- The value is one name. The pattern is `^[A-Za-z0-9]([A-Za-z0-9 ._:-]{0,62}[A-Za-z0-9._-])?$`, so a name has at most 64 characters, and it does not start or end with a space. Letters, digits, space, dot, underscore, colon and hyphen are allowed. Control characters and all other characters are refused. A style whose name has a non-ASCII letter or a parenthesis cannot be selected by a profile. The settings validator applies the same rule before every launch.
+- The built-in names are `Default`, `Proactive`, `Concise` (Claude Code 2.1.237 or later), `Explanatory` and `Learning` {V}. A custom style is a Markdown file in `~/.claude/output-styles`, in `.claude/output-styles` of a project or in the managed settings directory {V}. A plugin can ship styles in `output-styles/` {V}. A plugin style is selected as `<plugin>:<Name>`, for example `acme-kit:Terse`. The bare name `Terse` and the name `acme-kit:terse` did not select it {V}. The 64-character limit includes the plugin prefix.
+- The value is case-sensitive {V}. A name that matches no style gives the Default style and no error {V}. The launcher therefore warns when the value matches a built-in name other than `Default` only without case (for example `explanatory`) and names the correct spelling. The launcher does not look for custom style files. A misspelled custom name is not found, and Claude Code uses the Default style.
+- Inheritance is the same as for `model`. A child that sets `output_style` replaces the value of its parents. A child that does not set it inherits the value. There is no way to unset an inherited value. Setting `Default` is not the same as unset: it overrides the choice of the user or of the project, and an unset value leaves that choice in effect.
+- The value is part of the controls item of the closure, which is always risky. A change needs trust again and shows in the trust diff. A custom style can replace the coding instructions of the system prompt. A profile without `output_style` has the same closure hash and the same generated settings as before the key existed.
+- The profile pins a name, not content. A style file with the same name in the project shadows the built-in style: a project file `.claude/output-styles/Explanatory.md` with `name: Explanatory` decided the reply, although the profile selected `Explanatory` {V}. Custom styles drop the coding instructions unless `keep-coding-instructions: true` is set {V}. User and plugin style files may shadow a name too {U}.
+- A project profile may set `output_style`, as it may set `model`. This gives a repository no new power. The repository can already set `outputStyle` in its own `.claude/settings.json`, because the launcher keeps the `project` and `local` setting sources. It can also shadow any style name with a file. `[instructions]` and `append_system_prompt_file` are different: they carry content through the own channel of ccshelf, so SR2 limits them.
+- Claude Code applies an output style to the main conversation and to forks. Other subagents run their own system prompt and do not get the style {V}.
+- The docs say that a plugin style with `force-for-plugin: true` applies whenever its plugin is enabled and overrides the `outputStyle` setting {R}. A profile that enables such a plugin then cannot choose another style {U}. No run checked this.
+- Claude Code reads the style files when it starts. There is no command-line flag for an output style {V}, so the launcher uses the settings file.
+- `show` prints the value, `show --json` has it as `session.output_style`, and `diff` compares it.
+
+Compare the three channels that change what the model is told:
+
+| Key | What it changes | Reaches | Merge along `extends` |
+|---|---|---|---|
+| `session.output_style` | Role, tone and format. A custom style can drop the coding instructions of the system prompt. | Main conversation and forks | Child replaces parent |
+| `session.append_system_prompt_file` | Appends one file to the system prompt. | Main conversation only | Child replaces parent |
+| `[instructions]` | CLAUDE.md-style text in a user message. | Main conversation and subagents that load CLAUDE.md files | Files add up |
+
 ### Instructions
 `[instructions]` gives a profile CLAUDE.md-style text. The launcher joins the effective files into one generated `CLAUDE.md` and passes it with `--add-dir` (see [launcher.md](launcher.md)). Claude Code loads it for the main conversation and for general-purpose subagents {V} ([stage 0 note](../research/instructions-stage0.md)).
 

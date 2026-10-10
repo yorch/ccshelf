@@ -474,7 +474,7 @@ func parseLayer(data []byte, bare bool) (layer, bool) {
 	known := false
 	for k := range l {
 		switch k {
-		case "enabledPlugins", "skillOverrides", "disableClaudeAiConnectors", "deniedMcpServers", "model", "env", "permissions", "hooks", "disableSideloadFlags":
+		case "enabledPlugins", "skillOverrides", "disableClaudeAiConnectors", "deniedMcpServers", "model", "outputStyle", "env", "permissions", "hooks", "disableSideloadFlags":
 			known = true
 		}
 	}
@@ -525,7 +525,7 @@ func validate(l layer) bool {
 			if json.Unmarshal(v, &a) != nil {
 				return false
 			}
-		case "model":
+		case "model", "outputStyle":
 			var s string
 			if json.Unmarshal(v, &s) != nil {
 				return false
@@ -542,12 +542,13 @@ func validate(l layer) bool {
 
 // state is the merged result of all layers.
 type state struct {
-	plugins    map[string]bool
-	skills     map[string]string
-	connectors bool // disableClaudeAiConnectors
-	denied     map[string]bool
-	model      string
-	permission string
+	plugins     map[string]bool
+	skills      map[string]string
+	connectors  bool // disableClaudeAiConnectors
+	denied      map[string]bool
+	model       string
+	outputStyle string
+	permission  string
 }
 
 func newState() *state {
@@ -584,6 +585,10 @@ func (s *state) apply(l layer) {
 	var m string
 	if json.Unmarshal(l["model"], &m) == nil && m != "" {
 		s.model = m
+	}
+	var style string
+	if json.Unmarshal(l["outputStyle"], &style) == nil && style != "" {
+		s.outputStyle = style
 	}
 	var perm struct {
 		DefaultMode string `json:"defaultMode"`
@@ -710,6 +715,9 @@ func generic(args []string, getenv func(string) string, stdout, stderr io.Writer
 	if st.model == "" {
 		st.model = "fake-model"
 	}
+	if st.outputStyle == "" {
+		st.outputStyle = "default"
+	}
 	if o.print && o.outputFormat == "stream-json" {
 		emitInit(o, st, plugins, getenv, stdout)
 	} else {
@@ -828,7 +836,7 @@ func emitInit(o options, st *state, plugins []map[string]json.RawMessage, getenv
 	sort.Strings(slash)
 	init := map[string]any{
 		"type": "system", "subtype": "init", "session_id": "fake-session",
-		"cwd": cwd(), "model": st.model, "permissionMode": st.permission,
+		"cwd": cwd(), "model": st.model, "output_style": st.outputStyle, "permissionMode": st.permission,
 		"plugins": nonNil(pluginsOut), "skills": nonNil(skills), "slash_commands": nonNil(slash),
 		"agents": []string{"general-purpose"}, "tools": tools, "mcp_servers": mcp,
 	}

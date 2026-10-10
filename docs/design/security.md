@@ -5,7 +5,7 @@ Security requirements SR1 to SR5 (added after the security review) and the manag
 ## Security requirements (SR1 to SR5)
 Added 2026-10-06 after the security review. The verdict of the review was that the trust model was "not acceptable as written". SR1 to SR3 are required before a first release. SR4 and SR5 are required before anyone runs the tool in corporate CI. A written threat model and a `SECURITY.md` are also required before the repo goes public. I verified the settings-file claim underneath SR1 (see [stage0.md](../research/stage0.md)): a `--settings` file can switch a session to `bypassPermissions`.
 
-**SR1: closed profile schema.** The generator writes only an allowlist of settings keys: `enabledPlugins`, `skillOverrides`, `disableClaudeAiConnectors`, `deniedMcpServers`, `model` and env names that pass the env allowlist (`internal/envpolicy`). The env allowlist accepts **only** these names:
+**SR1: closed profile schema.** The generator writes only an allowlist of settings keys: `enabledPlugins`, `skillOverrides`, `disableClaudeAiConnectors`, `deniedMcpServers`, `model`, `outputStyle` and env names that pass the env allowlist (`internal/envpolicy`). The env allowlist accepts **only** these names:
 - Names in the `CCSHELF_VAR_<NAME>` namespace.
 - Names ending in `_REF`.
 - `CCSHELF_PROFILE`.
@@ -48,6 +48,11 @@ As defense in depth, the env policy first applies a denylist of known-dangerous 
 - Redact values (key names only) in `dry-run`, `show` and `doctor` output. People paste this output into issues.
 - Treat the instructions directory as untrusted at every launch. Claude Code can edit a directory given with `--add-dir` {V}. Before each launch the launcher checks that `<cache>/instructions-<hash>` is a real directory that the user owns, holds exactly one regular file `CLAUDE.md` (no link) and that the file hashes to the name. Otherwise it rebuilds the directory atomically. The directory has mode 0500 and the file mode 0400 on Unix, and the check requires both. This stops accidental writes only, because a process of the same user can change the modes. The check runs at launch. It cannot stop an edit during a session, and the next launch repairs it. See [launcher.md](launcher.md), step 4.
 - Confine every path a profile names (prompt files, parents) to its source root, with no `..` and no symlinks.
+
+**Output style (extends SR1 and SR2).**
+- `session.output_style` writes the allowlisted key `outputStyle`. The value is a name that matches a closed pattern. It is part of the controls item of the closure, which is always risky, because a custom style can replace the coding instructions of the system prompt.
+- The profile pins a name, not content. A style file with the same name in a project, in the user directory or in a plugin can shadow the built-in style {V for a project file}. See [profiles.md](profiles.md), "Output style".
+- A project profile may set the key. A repository can already set `outputStyle` in its own `.claude/settings.json` and add style files, so the key gives it no new power.
 
 **Instructions (extends SR2 and SR4).**
 - A shared profile can send text into the context of the model through `[instructions]`, so the text is part of the trusted closure. A change to a file, the file list or the order needs trust again.

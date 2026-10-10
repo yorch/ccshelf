@@ -71,6 +71,7 @@ var invalidWant = map[string]string{
 	"bad-skill":            "skills.off[0]",
 	"bad-effort":           "session.effort",
 	"bad-model":            "session.model",
+	"bad-output-style":     "session.output_style",
 	"prompt-abs":           "relative",
 	"prompt-dotdot":        "..",
 	"prompt-backslash":     "forward slashes",
