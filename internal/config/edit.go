@@ -513,11 +513,12 @@ func CreateExclusive(path string, data []byte) (string, error) {
 }
 
 // CreateNew creates the file at path holding data (mode 0600, directory 0700).
-// It writes data to a temporary file next to path first. It then hard-links
-// that file to path, so a reader never sees a partial file. The link fails
-// when path exists, even as a symlink, and CreateNew returns an error that
-// wraps fs.ErrExist. Where hard links are not supported, CreateNew writes
-// path in place with an exclusive create.
+// It writes data to a temporary file next to path first, then hard-links that
+// file to path. A reader never sees a partial file on this path. The link
+// fails when path exists, even as a symlink, and CreateNew returns an error
+// that wraps fs.ErrExist. When the filesystem has no hard links, CreateNew
+// falls back to an exclusive create in place. A reader can see that file
+// part-written.
 func CreateNew(path string, data []byte) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -528,7 +529,7 @@ func CreateNew(path string, data []byte) error {
 		return err
 	}
 	defer func() { _ = os.Remove(tmpName) }()
-	err = os.Link(tmpName, path)
+	err = linkFile(tmpName, path)
 	switch {
 	case err == nil:
 		return nil
@@ -537,6 +538,10 @@ func CreateNew(path string, data []byte) error {
 	}
 	return createInPlace(path, data)
 }
+
+// linkFile publishes a file under a new name without replacing an existing one.
+// It is a variable so tests can run the fallback path.
+var linkFile = os.Link
 
 // createInPlace is the fallback for filesystems without hard links. It creates
 // path with an exclusive create and writes data to it.

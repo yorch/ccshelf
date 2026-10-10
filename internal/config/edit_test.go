@@ -371,6 +371,69 @@ func TestCreateNewExistingSymlink(t *testing.T) {
 	}
 }
 
+// errNoHardLinks stands for a filesystem without hard links.
+var errNoHardLinks = errors.New("not supported")
+
+// useNoHardLinks makes linkFile fail as on a filesystem without hard links
+// and counts the calls. It restores linkFile when the test ends.
+func useNoHardLinks(t *testing.T) *int {
+	t.Helper()
+	orig := linkFile
+	calls := 0
+	linkFile = func(oldname, newname string) error {
+		calls++
+		return &os.LinkError{Op: "link", Old: oldname, New: newname, Err: errNoHardLinks}
+	}
+	t.Cleanup(func() { linkFile = orig })
+	return &calls
+}
+
+func TestCreateNewFallbackWithoutHardLinks(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "config.toml")
+	calls := useNoHardLinks(t)
+	if err := CreateNew(p, []byte("x = 1\n")); err != nil {
+		t.Fatal(err)
+	}
+	if *calls != 1 {
+		t.Fatalf("linkFile calls = %d, want 1", *calls)
+	}
+	got, err := os.ReadFile(p)
+	if err != nil || string(got) != "x = 1\n" {
+		t.Fatalf("content = %q, %v", got, err)
+	}
+	if runtime.GOOS != "windows" {
+		if fi, _ := os.Stat(p); fi.Mode().Perm() != 0o600 {
+			t.Errorf("mode %v", fi.Mode().Perm())
+		}
+	}
+	if names := dirNames(t, dir); !slices.Equal(names, []string{"config.toml"}) {
+		t.Errorf("files left in %s: %v", dir, names)
+	}
+}
+
+func TestCreateNewFallbackExistingFile(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(p, []byte("old"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	calls := useNoHardLinks(t)
+	err := CreateNew(p, []byte("new"))
+	if *calls != 1 {
+		t.Fatalf("linkFile calls = %d, want 1", *calls)
+	}
+	if !errors.Is(err, fs.ErrExist) {
+		t.Fatalf("err = %v, want fs.ErrExist", err)
+	}
+	if got, _ := os.ReadFile(p); string(got) != "old" {
+		t.Errorf("existing file changed: %q", got)
+	}
+	if names := dirNames(t, dir); !slices.Equal(names, []string{"config.toml"}) {
+		t.Errorf("files left in %s: %v", dir, names)
+	}
+}
+
 func TestWeakeningTrustWidening(t *testing.T) {
 	base := Default()
 	base.Sources = []SourceConfig{
