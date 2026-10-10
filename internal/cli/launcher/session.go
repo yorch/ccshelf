@@ -172,6 +172,23 @@ type writableConfig struct {
 	// baseline is cfg encoded as it was read, to find a save that changes
 	// nothing.
 	baseline []byte
+	// wrote is true after a save replaced an existing file.
+	wrote bool
+}
+
+// commentsDropped reports whether a save replaced a file that had comments.
+// The new file has none.
+func (w *writableConfig) commentsDropped() bool {
+	return w.wrote && config.HasComment(w.raw)
+}
+
+// warnCommentsDropped warns after a save that replaced a file with comments.
+// It prints nothing otherwise.
+func (w *writableConfig) warnCommentsDropped(cc *clicore.Context) {
+	if w.commentsDropped() {
+		warnf(cc, "wrote %s without its comments (the previous file, with the comments, is kept as %s)",
+			ui.SanitizeLine(w.path), ui.SanitizeLine(config.BackupPath(w.path)))
+	}
 }
 
 // beforeConfigSave is a test seam. It runs just before a save writes.
@@ -243,6 +260,7 @@ func (w *writableConfig) save(cfg *config.Config) error {
 		}
 		return err
 	}
+	w.wrote = true
 	return nil
 }
 

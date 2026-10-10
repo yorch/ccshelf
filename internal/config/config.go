@@ -896,34 +896,42 @@ func writeAtomic(path string, data []byte) error {
 	if fi, err := os.Lstat(path); err == nil && fi.Mode()&fs.ModeSymlink != 0 {
 		return fmt.Errorf("refusing to replace symlink %s", path)
 	}
-	tmp, err := os.CreateTemp(dir, ".config-*.tmp")
+	tmpName, err := writeTempFile(dir, data)
 	if err != nil {
-		return fmt.Errorf("creating temporary file in %s: %w", dir, err)
-	}
-	tmpName := tmp.Name()
-	cleanup := func() { _ = os.Remove(tmpName) }
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		cleanup()
-		return fmt.Errorf("writing %s: %w", tmpName, err)
-	}
-	if err := tmp.Chmod(0o600); err != nil && runtime.GOOS != "windows" {
-		tmp.Close()
-		cleanup()
-		return fmt.Errorf("setting permissions on %s: %w", tmpName, err)
-	}
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		cleanup()
-		return fmt.Errorf("syncing %s: %w", tmpName, err)
-	}
-	if err := tmp.Close(); err != nil {
-		cleanup()
-		return fmt.Errorf("closing %s: %w", tmpName, err)
+		return err
 	}
 	if err := os.Rename(tmpName, path); err != nil {
-		cleanup()
+		_ = os.Remove(tmpName)
 		return fmt.Errorf("replacing %s: %w", path, err)
 	}
 	return nil
+}
+
+// writeTempFile writes data to a new, synced file in dir (mode 0600) and
+// returns its name. The caller removes the file, or renames it into place.
+func writeTempFile(dir string, data []byte) (string, error) {
+	tmp, err := os.CreateTemp(dir, ".config-*.tmp")
+	if err != nil {
+		return "", fmt.Errorf("creating temporary file in %s: %w", dir, err)
+	}
+	name := tmp.Name()
+	fail := func(err error) (string, error) {
+		tmp.Close()
+		_ = os.Remove(name)
+		return "", err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		return fail(fmt.Errorf("writing %s: %w", name, err))
+	}
+	if err := tmp.Chmod(0o600); err != nil && runtime.GOOS != "windows" {
+		return fail(fmt.Errorf("setting permissions on %s: %w", name, err))
+	}
+	if err := tmp.Sync(); err != nil {
+		return fail(fmt.Errorf("syncing %s: %w", name, err))
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(name)
+		return "", fmt.Errorf("closing %s: %w", name, err)
+	}
+	return name, nil
 }

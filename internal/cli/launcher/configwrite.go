@@ -157,8 +157,7 @@ func (l *launcher) commitConfig(ctx context.Context, cc *clicore.Context, w *wri
 		warnf(cc, "this weakens a security setting: %s", ui.SanitizeLine(reason))
 	}
 	if res.CommentsLost {
-		warnf(cc, "%s has comments, and they are dropped when the file is written again (the previous file is kept as %s)",
-			ui.SanitizeLine(f.path), ui.SanitizeLine(config.BackupPath(f.path)))
+		warnCommentsDropped(cc, f.path)
 	}
 	if interactive && !w.yes {
 		write, err := cc.Prompt.Confirm(ctx, "Write this configuration?", false)
@@ -199,6 +198,13 @@ func (l *launcher) commitConfig(ctx context.Context, cc *clicore.Context, w *wri
 		printEquivalent(cc, w.rec)
 	}
 	return nil
+}
+
+// warnCommentsDropped warns that writing the configuration dropped its
+// comments. The previous file is kept as the backup.
+func warnCommentsDropped(cc *clicore.Context, path string) {
+	warnf(cc, "%s has comments, and they are dropped when the file is written again (the previous file is kept as %s)",
+		ui.SanitizeLine(path), ui.SanitizeLine(config.BackupPath(path)))
 }
 
 var sourceIndexRe = regexp.MustCompile(`sources\[(\d+)\]`)
