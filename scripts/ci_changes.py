@@ -99,6 +99,7 @@ RULES = [
     ("exact", "scripts/test_check_site.py", _DOCS),
     ("exact", "scripts/gen-cli-reference.sh", _DOCS),
     ("exact", "scripts/gen_cli_reference.py", _DOCS),
+    ("exact", "scripts/gen_icons.py", _DOCS),
     ("exact", "scripts/test_gen_cli_reference.py", _DOCS),
     ("exact", "scripts/regen-site-demo.sh", _DOCS),
     ("exact", "scripts/check-links.sh", _DOCS),

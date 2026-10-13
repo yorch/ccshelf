@@ -61,5 +61,21 @@ while IFS= read -r f; do
   else
     mv "$tmp" "$f"
   fi
-done < <(find "$out" -name '*.html' | sort)
+done < <(find "$out" \( -name '*.html' -o -name llms.txt \) | sort)
+
+# sitemap.xml lists every page except the 404 page, and robots.txt points to it
+{
+  echo '<?xml version="1.0" encoding="UTF-8"?>'
+  echo '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+  (cd "$out" && find . -name '*.html' ! -name 404.html | sed 's|^\./||' | LC_ALL=C sort) | while IFS= read -r page; do
+    case "$page" in
+      index.html) loc="$site_url/" ;;
+      */index.html) loc="$site_url/${page%index.html}" ;;
+      *) loc="$site_url/$page" ;;
+    esac
+    echo "  <url><loc>$loc</loc></url>"
+  done
+  echo '</urlset>'
+} >"$out/sitemap.xml"
+printf '\nSitemap: %s/sitemap.xml\n' "$site_url" >>"$out/robots.txt"
 python3 -I scripts/check_site.py --built "$out"
