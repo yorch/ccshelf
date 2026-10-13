@@ -545,6 +545,8 @@ def check_site(root: str, built: bool = False) -> list[str]:
             return repo_ok(u)
         return False
 
+    seen_titles: dict[str, str] = {}
+    seen_descs: dict[str, str] = {}
     for pg in pages:
         rel = os.path.relpath(pg, root)
         p = parsed[os.path.realpath(pg)]
@@ -556,6 +558,14 @@ def check_site(root: str, built: bool = False) -> list[str]:
             errs.append(f"{rel}: missing <title>")
         if not p.meta.get("description", "").strip():
             errs.append(f"{rel}: missing meta description")
+        desc = p.meta.get("description", "").strip()
+        if len(desc) > 160:
+            errs.append(f"{rel}: meta description has {len(desc)} characters, the limit is 160")
+        if os.path.basename(pg) != "404.html":
+            for what, val, seen in (("title", p.title.strip(), seen_titles), ("meta description", desc, seen_descs)):
+                if val and val in seen:
+                    errs.append(f"{rel}: {what} is the same as in {seen[val]}")
+                seen.setdefault(val, rel)
         if not p.has_viewport:
             errs.append(f"{rel}: missing meta viewport")
         check_csp(p.csp, rel, errs)

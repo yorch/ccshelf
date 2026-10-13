@@ -61,7 +61,7 @@ while IFS= read -r f; do
   else
     mv "$tmp" "$f"
   fi
-done < <(find "$out" -name '*.html' | sort)
+done < <(find "$out" \( -name '*.html' -o -name llms.txt \) | sort)
 
 # sitemap.xml lists every page except the 404 page, and robots.txt points to it
 {

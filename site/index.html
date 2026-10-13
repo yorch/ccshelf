@@ -8,27 +8,30 @@
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#eef0ec" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#111513" media="(prefers-color-scheme: dark)">
-<title>ccshelf: Profiles for Claude Code</title>
+<title>ccshelf: Claude Code profiles for plugins and MCP servers</title>
 <meta name="google-site-verification" content="NAUnZsV59olv1fQ1_8z-zoGCUZyZnHVcsLghQUljbEA" />
-<meta name="description" content="ccshelf starts Claude Code with a named profile of plugins, skills and MCP servers, one set per terminal, and lints and publishes your organization's plugin catalog. Open source, unofficial; stable releases are available.">
+<meta name="description" content="Start Claude Code with a named profile of plugins, skills and MCP servers, one set per terminal. Plus a plugin catalog lint. Open source and unofficial.">
 <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
 <link rel="canonical" href="__SITE_URL__/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="ccshelf">
 <meta property="og:locale" content="en_US">
 <meta property="og:url" content="__SITE_URL__/">
-<meta property="og:title" content="ccshelf: Profiles for Claude Code">
+<meta property="og:title" content="ccshelf: Claude Code profiles for plugins and MCP servers">
 <meta property="og:description" content="Start Claude Code with only the plugins, skills and MCP servers a named profile asks for. Plus a lint and a generated catalog for an organization's plugin marketplace.">
 <meta property="og:image" content="__SITE_URL__/assets/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="A shelf of labelled plugin items with two of them lifted into a loadout.">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="ccshelf: Profiles for Claude Code">
+<meta name="twitter:title" content="ccshelf: Claude Code profiles for plugins and MCP servers">
 <meta name="twitter:description" content="One shelf of plugins, a different loadout for every terminal. Unofficial, open source; stable releases are available.">
 <meta name="twitter:image" content="__SITE_URL__/assets/og.png">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"ccshelf","url":"__SITE_URL__/","description":"Starts Claude Code with a named profile of plugins, skills and MCP servers, and lints and publishes an organization's plugin catalog. Unofficial and open source.","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"image":"__SITE_URL__/assets/og.png"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is this an Anthropic product?","acceptedAnswer":{"@type":"Answer","text":"No. ccshelf is an independent open-source project, unofficial and not affiliated with Anthropic. It starts the claude you already have installed. It does not proxy or intercept the conversation, and it has no telemetry."}},{"@type":"Question","name":"Is a profile a security boundary?","acceptedAnswer":{"@type":"Answer","text":"No. A profile filters what loads. Profiles share your login, history and memory, and a repository's own settings still apply. Real enforcement of permissions and hooks comes only from Claude Code's managed settings. See the Claude Code documentation."}},{"@type":"Question","name":"What happens under managed policy?","acceptedAnswer":{"@type":"Answer","text":"ccshelf works within it and never bypasses it. If policy blocks a flag or a settings key, ccshelf skips the affected feature with a warning, or stops the launch. The profile's on_blocked setting decides which. Policy-enabled plugins stay on and are reported as such. Exit code 3 means a launch was blocked by policy."}},{"@type":"Question","name":"How do accounts fit in?","acceptedAnswer":{"@type":"Answer","text":"An account is a separate Claude Code identity and data directory, a different axis from profiles. The account says who you are. The profile says what is active. ccshelf honors an existing CLAUDE_CONFIG_DIR and never unsets it, or you can name accounts and use --account. Each account has its own installed plugins and login. ccshelf never reads or copies credentials."}},{"@type":"Question","name":"How do I update ccshelf?","acceptedAnswer":{"@type":"Answer","text":"Run ccshelf update. It downloads the latest release over HTTPS. It checks the archive against the release's checksums.txt (and, when cosign is installed, the signature of that file). It runs the new binary once to confirm its version."}},{"@type":"Question","name":"Does it change my Claude Code config?","acceptedAnswer":{"@type":"Answer","text":"No. It writes generated, content-addressed files to its own cache and never touches your settings.json, ~/.claude.json or the plugin cache."}},{"@type":"Question","name":"Does a smaller set make Claude pick better skills?","acceptedAnswer":{"@type":"Answer","text":"Not shown yet. The routing evaluation that would show it is still open, and the one measurement so far covers token savings from hiding MCP servers and connectors only. The project's own kill criteria say what happens if the evidence does not support the launcher."}},{"@type":"Question","name":"Where can I get the latest release?","acceptedAnswer":{"@type":"Answer","text":"Install with the platform-specific commands above, or choose an archive from the latest GitHub release. Releases include signed checksums and build provenance for macOS, Linux and Windows on amd64 and arm64."}}]}</script>
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="assets/favicon.ico" sizes="32x32">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
 <link rel="stylesheet" href="assets/site.css">
 <script src="assets/demo-data.js"></script>
 <script src="assets/site.js"></script>

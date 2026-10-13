@@ -38,6 +38,7 @@ GOOD = """<!doctype html>
 OTHER = (
     GOOD.replace('id="top"', 'id="o"')
     .replace("<title>Test site", "<title>Other page")
+    .replace('content="A test."', 'content="Another test."')
     .replace('<link rel="canonical" href="__SITE_URL__/">', "")
     .replace('<a id="repo" href="https://example.test/org/repo">repo</a>', "")
 )
@@ -226,6 +227,16 @@ class Metadata(Base):
         self.mutate("<title>Test site</title>", "")
         self.assertFails("missing <title>")
 
+    def test_description_too_long(self):
+        self.mutate('content="A test."', 'content="%s"' % ("x" * 161))
+        self.assertFails("meta description has 161 characters")
+
+    def test_duplicate_title_and_description(self):
+        self.mutate("<title>Other page</title>", "<title>Test site</title>", "other.html")
+        self.assertFails("title is the same as in index.html")
+        self.mutate('content="Another test."', 'content="A test."', "other.html")
+        self.assertFails("meta description is the same as in index.html")
+
     def test_missing_description(self):
         self.mutate('<meta name="description" content="A test.">', "")
         self.assertFails("missing meta description")
@@ -405,7 +416,7 @@ DOC_PAGE = """<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="{csp}">
 <meta name="referrer" content="no-referrer">
-<title>{name}</title><meta name="description" content="A docs page.">
+<title>{name}</title><meta name="description" content="Docs page {name}.">
 <link rel="canonical" href="__SITE_URL__/docs/{name}.html">
 <link rel="stylesheet" href="../assets/site.css"><script src="../assets/site.js"></script></head>
 <body><a class="skip" href="#main">Skip</a>

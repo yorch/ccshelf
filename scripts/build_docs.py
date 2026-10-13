@@ -453,6 +453,15 @@ class Builder:
         out.append("</nav>")
         return "\n".join(out)
 
+    def breadcrumb_ld(self, p: Page) -> str:
+        """BreadcrumbList JSON-LD (a data block, which the CSP does not run): Home, Docs and, below the overview, the page."""
+        trail = [("ccshelf", "%s/" % SITE_URL_PLACEHOLDER), ("Docs", "%s/docs/" % SITE_URL_PLACEHOLDER)]
+        if p.out != "index.html":
+            trail.append((p.label, "%s/%s" % (SITE_URL_PLACEHOLDER, p.site_path)))
+        data = {"@context": "https://schema.org", "@type": "BreadcrumbList",
+                "itemListElement": [{"@type": "ListItem", "position": i, "name": n, "item": u} for i, (n, u) in enumerate(trail, 1)]}
+        return '<script type="application/ld+json">%s</script>\n' % json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
+
     def toc_html(self, p: Page) -> str:
         if len(p.toc) < 2:
             return ""
@@ -527,7 +536,9 @@ class Builder:
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="A shelf of labelled plugin items with two of them lifted into a loadout.">
-<link rel="icon" href="{r("assets/favicon.svg")}" type="image/svg+xml">
+{self.breadcrumb_ld(p)}<link rel="icon" href="{r("assets/favicon.svg")}" type="image/svg+xml">
+<link rel="icon" href="{r("assets/favicon.ico")}" sizes="32x32">
+<link rel="apple-touch-icon" href="{r("assets/apple-touch-icon.png")}">
 <link rel="stylesheet" href="{r("assets/site.css")}">
 <link rel="stylesheet" href="{r("assets/docs.css")}">
 <script src="{r("assets/site.js")}"></script>
@@ -636,6 +647,22 @@ class Builder:
         return written
 
 
+def write_llms_txt(out: str) -> None:
+    """Write <out>/llms.txt: a plain index of the home page and the docs pages (addresses use the deploy placeholder)."""
+    lines = ["# ccshelf", "",
+             "> ccshelf starts Claude Code with a named profile of plugins, skills and MCP servers, and lints and publishes an organization's plugin catalog. Open source (MIT) and unofficial.",
+             "", "## Pages", "", "- [Home](%s/): what ccshelf does, install steps, command reference and FAQ" % SITE_URL_PLACEHOLDER]
+    section = ""
+    for sec, label, _md, out_name, desc in PAGES:
+        if sec != section:
+            section = sec
+            lines += ["", "## Docs: %s" % sec, ""]
+        path = "docs/" + out_name
+        lines.append("- [%s](%s/%s): %s" % (label, SITE_URL_PLACEHOLDER, "docs/" if out_name == "index.html" else path, desc))
+    with open(os.path.join(out, "llms.txt"), "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+
+
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     ap.add_argument("--out", required=True, help="the site output directory (docs/ is created inside it)")
@@ -646,6 +673,7 @@ def main(argv: list[str]) -> int:
     except BuildError as e:
         print("build-docs: %s" % e, file=sys.stderr)
         return 1
+    write_llms_txt(args.out)
     print("build-docs: wrote %d files under %s" % (len(written), os.path.join(args.out, "docs")))
     return 0
 
