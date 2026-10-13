@@ -516,6 +516,7 @@ class Builder:
 <meta name="theme-color" content="#111513" media="(prefers-color-scheme: dark)">
 <title>{esc(title)}</title>
 <meta name="description" content="{attr(p.desc)}">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
 <link rel="canonical" href="{canonical}">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="ccshelf">

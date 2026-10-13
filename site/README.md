@@ -30,6 +30,8 @@ bash scripts/check-site.sh   # build dist/site and validate it (no unit tests)
 bash scripts/check-site.sh --built <dir>   # validate an existing directory
 ```
 
+- **Search engines.** `scripts/build-site.sh` writes `sitemap.xml` (every page except `404.html`) and adds a `Sitemap:` line to `robots.txt`. The home page has a `SoftwareApplication` JSON-LD block. It is the only inline `<script>` the checker allows, because the CSP does not run data blocks.
+
 `scripts/check_site.py` fails on external URLs, broken links and fragments, missing alt text or image sizes, duplicate ids, a missing or weak CSP, inline handlers and more. For the generated docs pages it also checks a skip link, one `<h1>`, a navigation that lists every page, a search index that matches the pages, and orphan pages. CI runs it on every pull request, on the built output.
 
 ## The loadout demo is captured output

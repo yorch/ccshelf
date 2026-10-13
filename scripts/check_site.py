@@ -178,7 +178,7 @@ class Page(HTMLParser):
             self.canonical = a.get("href", "").strip()
         if tag in LOADER_TAGS and not self.csp:
             self.loaded_before_csp = True
-        if tag == "script" and "src" not in a:
+        if tag == "script" and "src" not in a and a.get("type", "").lower() != "application/ld+json":
             self.inline_script += 1
         if tag == "style":
             self.inline_style_tag += 1
