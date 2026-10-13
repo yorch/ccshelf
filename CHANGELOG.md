@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.10.0](https://github.com/yorch/ccshelf/compare/v0.9.0...v0.10.0) (2026-10-13)
+
+
+### Features
+
+* **site:** add google site verification meta tag ([#65](https://github.com/yorch/ccshelf/issues/65)) ([0a5f553](https://github.com/yorch/ccshelf/commit/0a5f553197060edcd11293e1252e0459e461e44d))
+* **site:** add sitemap, JSON-LD and robots meta ([#66](https://github.com/yorch/ccshelf/issues/66)) ([6261a9b](https://github.com/yorch/ccshelf/commit/6261a9b86bfe54c5232088e52e35895a231d47a9))
+
+
+### Bug fixes
+
+* **account:** warn on dropped comments, add rm --json, create atomically ([#61](https://github.com/yorch/ccshelf/issues/61)) ([05c114c](https://github.com/yorch/ccshelf/commit/05c114c9a8bba9735d72aee6529d437812ba7cac))
+
 ## [0.9.0](https://github.com/yorch/ccshelf/compare/v0.8.0...v0.9.0) (2026-10-10)
 
 
