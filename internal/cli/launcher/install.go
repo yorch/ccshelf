@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -11,6 +12,58 @@ import (
 	"github.com/yorch/ccshelf/internal/claude"
 	"github.com/yorch/ccshelf/internal/ui"
 )
+
+// installAll is the value of a bare --install-missing. A plugin id always has
+// an "@", so the value cannot be an id.
+const installAll = "*"
+
+// installRequest is the --install-missing flag of "run".
+type installRequest struct {
+	// On is true when the flag is present.
+	On bool
+	// All is a bare flag: every missing plugin of the profile.
+	All bool
+	// IDs are the plugins that the user named.
+	IDs []string
+}
+
+// newInstallRequest checks the flag values. A bare flag together with --yes is
+// an error, so that --yes cannot widen the set of plugins to install.
+func newInstallRequest(present bool, values []string, yes bool) (installRequest, error) {
+	if !present {
+		return installRequest{}, nil
+	}
+	req := installRequest{On: true}
+	for _, v := range values {
+		if v == installAll {
+			req.All = true
+			continue
+		}
+		if !validPluginID(v) {
+			return installRequest{}, ui.Usage(withHint(fmt.Errorf("--install-missing: %q is not a plugin id", ui.SanitizeLine(v)),
+				"write name@marketplace, for example --install-missing=sre-kit@acme"))
+		}
+		if !slices.Contains(req.IDs, v) {
+			req.IDs = append(req.IDs, v)
+		}
+	}
+	switch {
+	case req.All && len(req.IDs) > 0:
+		return installRequest{}, ui.Usage(errors.New("--install-missing: give plugin ids or no value, not both"))
+	case req.All && yes:
+		return installRequest{}, ui.Usage(withHint(errors.New("--install-missing with --yes needs the plugins by name, so that --yes cannot add plugins that you did not read"),
+			"write --install-missing=name@marketplace,name@marketplace"))
+	}
+	return req, nil
+}
+
+// flag returns the form of the flag for the equivalent command.
+func (r installRequest) flag() string {
+	if r.All {
+		return "--install-missing"
+	}
+	return "--install-missing=" + strings.Join(r.IDs, ",")
+}
 
 // installTimeout bounds one "claude plugin install" call. A plugin install
 // clones a repository, so it can take longer than a listing call.
