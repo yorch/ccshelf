@@ -54,7 +54,7 @@ type launch struct {
 }
 
 func (l *launcher) runCmd() *cobra.Command {
-	var yes, refresh bool
+	var yes, refresh, installMissing bool
 	c := &cobra.Command{
 		Use:   "run [profile] [-- claude args]",
 		Short: "Start claude with a profile",
@@ -87,12 +87,13 @@ later, and it runs only a commit that this profile trusts.`,
 	c.Flags().SetInterspersed(false)
 	c.Flags().BoolVar(&yes, "yes", false, "answer yes to confirmations other than trust (trust is never auto-accepted)")
 	c.Flags().BoolVar(&refresh, "refresh", false, "check tracked branches for a new commit now, not only once per trust.branch_check_interval")
+	c.Flags().BoolVar(&installMissing, "install-missing", false, "install the plugins of the profile that claude does not list, after you confirm (--yes confirms in advance)")
 	c.RunE = l.do(func(ctx context.Context, cc *clicore.Context, cmd *cobra.Command, args []string) error {
 		name, pass, err := splitRunArgs(cmd, args)
 		if err != nil {
 			return err
 		}
-		return l.runProfile(ctx, cc, name, pass, yes, false, refresh)
+		return l.runProfile(ctx, cc, name, pass, yes, false, refresh, installMissing)
 	})
 	return c
 }
@@ -115,13 +116,13 @@ command is valid. It never prints environment values from profiles.`,
 		if err != nil {
 			return err
 		}
-		return l.runProfile(ctx, cc, name, pass, false, true, refresh)
+		return l.runProfile(ctx, cc, name, pass, false, true, refresh, false)
 	})
 	return c
 }
 
 // runProfile is the run and dry-run command body.
-func (l *launcher) runProfile(ctx context.Context, cc *clicore.Context, name string, pass []string, yes, dry, refresh bool) error {
+func (l *launcher) runProfile(ctx context.Context, cc *clicore.Context, name string, pass []string, yes, dry, refresh, installMissing bool) error {
 	command := "run"
 	if dry {
 		command = "dry-run"
@@ -140,6 +141,7 @@ func (l *launcher) runProfile(ctx context.Context, cc *clicore.Context, name str
 		s = l.alignBranchCommits(ctx, cc, s, name)
 		s = l.checkBranches(ctx, cc, s, name, yes)
 	}
+	s.installMissingOK = installMissing
 	ln, err := s.buildLaunch(ctx, name, pass, yes)
 	if err != nil {
 		return err
@@ -285,6 +287,27 @@ func (s *session) buildLaunch(ctx context.Context, name string, pass []string, y
 		}
 		return nil, ui.Failure(withHint(fmt.Errorf("listing installed plugins: %w", err),
 			"claude plugin list --json must work in this directory (and under the chosen account)"))
+	}
+	if s.installMissingOK {
+		have := map[string]bool{}
+		for _, p := range installed {
+			have[p.ID] = true
+		}
+		var missing []string
+		for _, id := range m.Plugins.Include {
+			if !have[id] {
+				missing = append(missing, id)
+			}
+		}
+		if len(missing) > 0 {
+			fresh, err := s.installMissing(ctx, bin, missing, yes)
+			if err != nil {
+				return nil, err
+			}
+			if fresh != nil {
+				installed = fresh
+			}
+		}
 	}
 
 	// Policy capability matrix.

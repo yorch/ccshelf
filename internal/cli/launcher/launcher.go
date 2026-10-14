@@ -222,7 +222,7 @@ func splitRunArgs(cmd *cobra.Command, args []string) (name string, pass []string
 // ownFlags are the flags of ccshelf itself. After the profile name they would
 // go to claude, which does not know them.
 var ownFlags = map[string]bool{
-	"--account": true, "--yes": true, "--claude": true, "--config": true, "--root": true,
+	"--account": true, "--yes": true, "--install-missing": true, "--claude": true, "--config": true, "--root": true,
 	"--no-interactive": true, "--no-color": true, "--plain": true, "--json": true,
 }
 
