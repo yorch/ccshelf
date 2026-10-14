@@ -32,6 +32,7 @@ The interactive report, [report.html](report.html), is **generated from these fi
 | [design/update.md](design/update.md) | `ccshelf update`: verification (SHA-256, cosign), install-method detection, replacing the binary, rollback and the opt-in automatic update |
 | [design/workflows.md](design/workflows.md) | Example workflows (mockups) |
 | [../site/](../site/index.html) | The project website: a static page with a loadout demo from captured output, plus these notes published as a `/docs` section (D-35, built by `scripts/build_docs.py`). `scripts/check-site.sh` validates it. A workflow deploys it to GitHub Pages automatically on every change to `main` (D-45), see `site/README.md` |
+| [getting-started.md](getting-started.md) | Install, first profile, `run --install-missing`, org profiles and updates: a short guide for new users |
 | [reference/cli.md](reference/cli.md) | The command reference, **generated from the real binary** (`scripts/gen-cli-reference.sh`). CI fails when it is stale {V} |
 | [design/roadmap.md](design/roadmap.md) | Phase 0 evidence, the MVP, deferred work and non-goals |
 | [research/context.md](research/context.md) | The two use cases and how the research was run |

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -55,6 +56,7 @@ type launch struct {
 
 func (l *launcher) runCmd() *cobra.Command {
 	var yes, refresh bool
+	var installNames []string
 	c := &cobra.Command{
 		Use:   "run [profile] [-- claude args]",
 		Short: "Start claude with a profile",
@@ -78,7 +80,19 @@ commit and prints the command that reviews the update. --refresh checks now.
 If another profile of the same source trusted a later commit of the branch,
 ccshelf offers that commit to this profile at once, with no network call and
 whatever the interval says. It offers only a commit that it can prove is
-later, and it runs only a commit that this profile trusts.`,
+later, and it runs only a commit that this profile trusts.
+
+--install-missing installs the plugins of the profile that claude does not
+list. It runs "claude plugin install --scope user <id>" for each one, in the
+cache directory and not in the project, after it prints the commands. Without
+a value, it installs all missing plugins. With --install-missing=id,id, it
+installs only the plugins that you name. Each one must be in plugins.include of
+the profile. In a terminal, ccshelf asks you to confirm. --yes skips the question
+and is the only way to confirm without a terminal.
+It installs only from a marketplace that you already added, and it never adds
+one. It does not work with a profile from a project source. Managed policy
+applies, because claude does the install. When claude refuses a plugin, ccshelf
+reports it and goes on as it does without the flag.`,
 		Example: `  ccshelf run sre
   ccshelf run sre -- -p "summarize this repo"
   ccshelf run --account personal sre --resume`,
@@ -87,12 +101,18 @@ later, and it runs only a commit that this profile trusts.`,
 	c.Flags().SetInterspersed(false)
 	c.Flags().BoolVar(&yes, "yes", false, "answer yes to confirmations other than trust (trust is never auto-accepted)")
 	c.Flags().BoolVar(&refresh, "refresh", false, "check tracked branches for a new commit now, not only once per trust.branch_check_interval")
+	c.Flags().StringSliceVar(&installNames, "install-missing", nil, "install plugins of the profile that claude does not list. Without a value: all of them. With =id,id: only these. --yes skips the confirmation")
+	c.Flags().Lookup("install-missing").NoOptDefVal = installAll
 	c.RunE = l.do(func(ctx context.Context, cc *clicore.Context, cmd *cobra.Command, args []string) error {
 		name, pass, err := splitRunArgs(cmd, args)
 		if err != nil {
 			return err
 		}
-		return l.runProfile(ctx, cc, name, pass, yes, false, refresh)
+		req, err := newInstallRequest(cmd.Flags().Changed("install-missing"), installNames)
+		if err != nil {
+			return err
+		}
+		return l.runProfile(ctx, cc, name, pass, yes, false, refresh, req)
 	})
 	return c
 }
@@ -115,13 +135,13 @@ command is valid. It never prints environment values from profiles.`,
 		if err != nil {
 			return err
 		}
-		return l.runProfile(ctx, cc, name, pass, false, true, refresh)
+		return l.runProfile(ctx, cc, name, pass, false, true, refresh, installRequest{})
 	})
 	return c
 }
 
 // runProfile is the run and dry-run command body.
-func (l *launcher) runProfile(ctx context.Context, cc *clicore.Context, name string, pass []string, yes, dry, refresh bool) error {
+func (l *launcher) runProfile(ctx context.Context, cc *clicore.Context, name string, pass []string, yes, dry, refresh bool, install installRequest) error {
 	command := "run"
 	if dry {
 		command = "dry-run"
@@ -140,6 +160,7 @@ func (l *launcher) runProfile(ctx context.Context, cc *clicore.Context, name str
 		s = l.alignBranchCommits(ctx, cc, s, name)
 		s = l.checkBranches(ctx, cc, s, name, yes)
 	}
+	s.install = install
 	ln, err := s.buildLaunch(ctx, name, pass, yes)
 	if err != nil {
 		return err
@@ -159,6 +180,9 @@ func (l *launcher) runProfile(ctx context.Context, cc *clicore.Context, name str
 		}
 		if refresh {
 			eq = append(eq, "--refresh")
+		}
+		if install.On {
+			eq = append(eq, install.flag())
 		}
 		eq = append(eq, name)
 		if len(pass) > 0 {
@@ -285,6 +309,43 @@ func (s *session) buildLaunch(ctx context.Context, name string, pass []string, y
 		}
 		return nil, ui.Failure(withHint(fmt.Errorf("listing installed plugins: %w", err),
 			"claude plugin list --json must work in this directory (and under the chosen account)"))
+	}
+	if s.install.On {
+		include := map[string]bool{}
+		for _, id := range m.Plugins.Include {
+			include[id] = true
+		}
+		for _, id := range s.install.IDs {
+			if !include[id] {
+				return nil, ui.Usage(withHint(fmt.Errorf("--install-missing names %s, which profile %s does not list", id, r.Name),
+					"name only plugins of plugins.include of the profile"))
+			}
+		}
+		have := map[string]bool{}
+		for _, p := range installed {
+			have[p.ID] = true
+		}
+		var missing []string
+		for _, id := range m.Plugins.Include {
+			if have[id] || (!s.install.All && !slices.Contains(s.install.IDs, id)) {
+				continue
+			}
+			missing = append(missing, id)
+		}
+		if len(missing) > 0 {
+			for _, f := range r.Chain {
+				if f.Source.Kind() == profile.KindProject {
+					return nil, ui.Usage(errors.New("--install-missing does not work with a profile from a project source, because a project can name plugins that run code"))
+				}
+			}
+			fresh, err := s.installMissing(ctx, bin, missing, yes)
+			if err != nil {
+				return nil, err
+			}
+			if fresh != nil {
+				installed = fresh
+			}
+		}
 	}
 
 	// Policy capability matrix.

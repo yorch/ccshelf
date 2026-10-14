@@ -59,6 +59,8 @@ cs = _load("ccshelf_check_site", os.path.join(HERE, "check_site.py"))
 PAGES: list[tuple[str, str, str, str, str]] = [
     ("Start", "Overview", "README.md", "index.html",
      "Design notes, decision records and research for ccshelf, published from the Markdown in the repository. Not a user manual."),
+    ("Guide", "Getting started", "getting-started.md", "getting-started.html",
+     "Install ccshelf, create and run a first profile, install missing plugins with --install-missing, and use the profiles of an organization."),
     ("Reference", "Command reference", "reference/cli.md", "reference/cli.html",
      "Every ccshelf command, flag and exit code, generated from the help output of the real binary."),
     ("Design", "Architecture", "design/architecture.md", "design/architecture.html",
@@ -107,11 +109,12 @@ PAGES: list[tuple[str, str, str, str, str]] = [
 
 # Markdown placed under the home page's title: what the sections are, and an honest status.
 INTRO_MD = """\
-These pages are the project's **design notes, decision records and research**, published from the Markdown files in the repository. They are **not a user manual**. ccshelf is implemented and under review but **not released**: there are no packages to install yet, nothing here promises behavior, and where the notes and the code disagree, the code and its tests win. For the build steps and a short command overview, see the [website home page](../site/index.html).
+These pages are the project's **guide, design notes, decision records and research**, published from the Markdown files in the repository. New here? Start with [Getting started](getting-started.md). The design notes and research are not a user manual: they record why ccshelf works as it does, and where they disagree with the code, the code and its tests win. For a short command overview, see the [website home page](../site/index.html).
 
 What each section is:
 
 - **Start** is this page: the overview, the glossary and the requirements.
+- **Guide** is [Getting started](getting-started.md): install, a first profile, installing missing plugins, and the profiles of an organization.
 - **Reference** is the [command reference](reference/cli.md), generated from the real binary's `--help` output and checked in CI, so it cannot drift from the code.
 - **Design** is the current design, one file per topic: how the launcher works, the profile format, the security model, platform support and the roadmap. It is kept up to date.
 - **Decisions** is the [decision log](DECISIONS.md): every decision, supersession and open question, with date, evidence, confidence and a trigger to revisit. Rows are never deleted.

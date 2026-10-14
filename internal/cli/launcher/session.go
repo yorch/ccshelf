@@ -122,6 +122,9 @@ type session struct {
 	// refreshBranches is refresh for the git sources that track a branch only
 	// (run --refresh): tags and commits keep using the pinned commit.
 	refreshBranches bool
+	// install is run --install-missing: the pipeline may install the plugins
+	// of the profile that claude does not list.
+	install installRequest
 	// branchFresh holds the locators of the branch sources whose head was
 	// resolved on the remote while the sources were prepared, so the periodic
 	// check does not ask the remote a second time.

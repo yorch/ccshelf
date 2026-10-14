@@ -41,6 +41,12 @@ func Spawn(ctx context.Context, bin string, args, env []string, stdin io.Reader,
 	return spawnDir(ctx, "", bin, args, env, stdin, stdout, stderr)
 }
 
+// SpawnIn is Spawn with a working directory. An empty dir means the current
+// directory.
+func SpawnIn(ctx context.Context, dir, bin string, args, env []string, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
+	return spawnDir(ctx, dir, bin, args, env, stdin, stdout, stderr)
+}
+
 func spawnDir(ctx context.Context, dir, bin string, args, env []string, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
 	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Dir = dir

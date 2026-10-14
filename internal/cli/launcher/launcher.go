@@ -29,6 +29,9 @@ type Options struct {
 	// Spawn runs a child to completion (default claude.Spawn). The edit
 	// command uses it for $EDITOR.
 	Spawn func(ctx context.Context, bin string, args, env []string, stdin io.Reader, stdout, stderr io.Writer) (int, error)
+	// SpawnIn is Spawn with a working directory (default claude.SpawnIn). The
+	// plugin install of "run --install-missing" uses it.
+	SpawnIn func(ctx context.Context, dir, bin string, args, env []string, stdin io.Reader, stdout, stderr io.Writer) (int, error)
 	// Executable returns the absolute path of the ccshelf binary (default
 	// os.Executable). shell-init embeds it.
 	Executable func() (string, error)
@@ -66,6 +69,9 @@ func CommandsWith(get clicore.Provider, opt Options) []*cobra.Command {
 	}
 	if opt.Spawn == nil {
 		opt.Spawn = claude.Spawn
+	}
+	if opt.SpawnIn == nil {
+		opt.SpawnIn = claude.SpawnIn
 	}
 	if opt.Executable == nil {
 		opt.Executable = os.Executable
@@ -222,7 +228,7 @@ func splitRunArgs(cmd *cobra.Command, args []string) (name string, pass []string
 // ownFlags are the flags of ccshelf itself. After the profile name they would
 // go to claude, which does not know them.
 var ownFlags = map[string]bool{
-	"--account": true, "--yes": true, "--claude": true, "--config": true, "--root": true,
+	"--account": true, "--yes": true, "--install-missing": true, "--claude": true, "--config": true, "--root": true,
 	"--no-interactive": true, "--no-color": true, "--plain": true, "--json": true,
 }
 
