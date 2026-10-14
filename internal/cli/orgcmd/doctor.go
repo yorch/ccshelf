@@ -73,7 +73,8 @@ that need platform review.
 
 The command skips the checks that need more input and lists them as skipped.
 It never passes them silently. These flags give the input:
-  - --installed reads 'claude plugin list' (read only).
+  - --installed reads 'claude plugin list' (read only). It uses the account
+    from --account, CLAUDE_CONFIG_DIR or default_account, in that order.
   - --usage-file reads an OpenTelemetry JSONL export.
   - --usage-api asks the Enterprise Analytics API. It needs the admin key in
     CCSHELF_ANALYTICS_KEY. This is the only network call.
@@ -192,17 +193,8 @@ func runDoctor(ctx context.Context, c *clicore.Context, r *repo, o doctorOptions
 		in.Policy = append(in.Policy, doctor.Finding{Severity: doctor.Severity(f.Severity), Code: f.Code, Check: "profile", Message: f.File + ": " + f.Message})
 	}
 	if o.installed {
-		bin, err := claude.Locate(c.G.ClaudePath)
-		if err != nil {
-			return fmt.Errorf("--installed: %w", err)
-		}
-		wd, _ := c.Getwd()
-		in.Installed, err = claude.ListInstalled(ctx, bin, wd, claude.Env(c.Environ(), nil))
-		if err != nil {
-			return fmt.Errorf("--installed: %w", err)
-		}
-		if in.Installed == nil {
-			in.Installed = []claude.Plugin{}
+		if in.Installed, err = listInstalled(ctx, c); err != nil {
+			return err
 		}
 	}
 	if o.skillsDir != "" {
@@ -241,17 +233,9 @@ func runDoctor(ctx context.Context, c *clicore.Context, r *repo, o doctorOptions
 func runPolicyOnly(ctx context.Context, c *clicore.Context, o doctorOptions) error {
 	in := doctor.Input{Now: c.Now()}
 	if o.installed {
-		bin, err := claude.Locate(c.G.ClaudePath)
-		if err != nil {
-			return fmt.Errorf("--installed: %w", err)
-		}
-		wd, _ := c.Getwd()
-		in.Installed, err = claude.ListInstalled(ctx, bin, wd, claude.Env(c.Environ(), nil))
-		if err != nil {
-			return fmt.Errorf("--installed: %w", err)
-		}
-		if in.Installed == nil {
-			in.Installed = []claude.Plugin{}
+		var err error
+		if in.Installed, err = listInstalled(ctx, c); err != nil {
+			return err
 		}
 	}
 	pol, err := detectPolicy(ctx, policy.Options{GOOS: c.GOOS})
@@ -268,6 +252,39 @@ func runPolicyOnly(ctx context.Context, c *clicore.Context, o doctorOptions) err
 		fmt.Fprintln(errw(c), "note: this directory is not an org data repo (pass --root to check one), so doctor shows only the managed policy")
 	}
 	return finishDoctor(c, doctor.Run(in), matrix, blocked)
+}
+
+// listInstalled is doctor --installed: it runs 'claude plugin list' under
+// the account the launcher would use (--account, then CLAUDE_CONFIG_DIR, then
+// default_account). No profile applies here. The result is never nil, so
+// "none installed" differs from "not read".
+func listInstalled(ctx context.Context, c *clicore.Context) ([]claude.Plugin, error) {
+	cfg, _, err := c.LoadConfig()
+	if err != nil {
+		return nil, fmt.Errorf("--installed: %w", err)
+	}
+	choice, extra, err := c.AccountEnv(cfg, "")
+	if err != nil {
+		return nil, err
+	}
+	c.PrintAccountNotes(choice)
+	override := c.G.ClaudePath
+	if override == "" {
+		override = cfg.Claude.Path
+	}
+	bin, err := claude.Locate(override)
+	if err != nil {
+		return nil, fmt.Errorf("--installed: %w", err)
+	}
+	wd, _ := c.Getwd()
+	got, err := claude.ListInstalled(ctx, bin, wd, claude.Env(c.Environ(), extra))
+	if err != nil {
+		return nil, fmt.Errorf("--installed: %w", err)
+	}
+	if got == nil {
+		got = []claude.Plugin{}
+	}
+	return got, nil
 }
 
 // finishDoctor prints the report (and the capability matrix when there is one)
