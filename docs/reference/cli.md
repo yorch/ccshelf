@@ -190,7 +190,7 @@ Without a profile name, a terminal gets a picker. Anything else exits with code 
 
 A git source that tracks a branch runs the commit you trusted, with no network. At most once per trust.branch_check_interval (default 24h), ccshelf asks the remote for the head of the branch. If the head moved, a terminal shows what changed and asks. Without a terminal, or with --yes, ccshelf keeps the trusted commit and prints the command that reviews the update. --refresh checks now. If another profile of the same source trusted a later commit of the branch, ccshelf offers that commit to this profile at once, with no network call and whatever the interval says. It offers only a commit that it can prove is later, and it runs only a commit that this profile trusts.
 
---install-missing installs the plugins of the profile that claude does not list. It runs "claude plugin install --scope user <id>" for each one, in the cache directory and not in the project, after it prints the commands. Without a value, it installs all missing plugins and asks you to confirm in a terminal. With --install-missing=id,id, it installs only the plugins that you name. Each one must be in plugins.include of the profile, and --yes confirms in advance. It installs only from a marketplace that you already added, and it never adds one. It does not work with a profile from a project source. Managed policy applies, because claude does the install. When claude refuses a plugin, ccshelf reports it and goes on as it does without the flag.
+--install-missing installs the plugins of the profile that claude does not list. It runs "claude plugin install --scope user <id>" for each one, in the cache directory and not in the project, after it prints the commands. Without a value, it installs all missing plugins. With --install-missing=id,id, it installs only the plugins that you name. Each one must be in plugins.include of the profile. In a terminal, ccshelf asks you to confirm. --yes skips the question and is the only way to confirm without a terminal. It installs only from a marketplace that you already added, and it never adds one. It does not work with a profile from a project source. Managed policy applies, because claude does the install. When claude refuses a plugin, ccshelf reports it and goes on as it does without the flag.
 
 **Usage**
 
@@ -211,7 +211,7 @@ ccshelf run --account personal sre --resume
 | Flag | Value | Description |
 |---|---|---|
 | `-h`, `--help` |  | help for run |
-| `--install-missing` | `strings` | install plugins of the profile that claude does not list. Without a value: all of them, after you confirm. With =id,id: only these, and --yes confirms |
+| `--install-missing` | `strings` | install plugins of the profile that claude does not list. Without a value: all of them. With =id,id: only these. --yes skips the confirmation |
 | `--refresh` |  | check tracked branches for a new commit now, not only once per trust.branch_check_interval |
 | `--yes` |  | answer yes to confirmations other than trust (trust is never auto-accepted) |
 

@@ -27,9 +27,8 @@ type installRequest struct {
 	IDs []string
 }
 
-// newInstallRequest checks the flag values. A bare flag together with --yes is
-// an error, so that --yes cannot widen the set of plugins to install.
-func newInstallRequest(present bool, values []string, yes bool) (installRequest, error) {
+// newInstallRequest checks the flag values.
+func newInstallRequest(present bool, values []string) (installRequest, error) {
 	if !present {
 		return installRequest{}, nil
 	}
@@ -47,12 +46,8 @@ func newInstallRequest(present bool, values []string, yes bool) (installRequest,
 			req.IDs = append(req.IDs, v)
 		}
 	}
-	switch {
-	case req.All && len(req.IDs) > 0:
+	if req.All && len(req.IDs) > 0 {
 		return installRequest{}, ui.Usage(errors.New("--install-missing: give plugin ids or no value, not both"))
-	case req.All && yes:
-		return installRequest{}, ui.Usage(withHint(errors.New("--install-missing with --yes needs the plugins by name, so that --yes cannot add plugins that you did not read"),
-			"write --install-missing=name@marketplace,name@marketplace"))
 	}
 	return req, nil
 }

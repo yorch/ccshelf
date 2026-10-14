@@ -85,9 +85,10 @@ later, and it runs only a commit that this profile trusts.
 --install-missing installs the plugins of the profile that claude does not
 list. It runs "claude plugin install --scope user <id>" for each one, in the
 cache directory and not in the project, after it prints the commands. Without
-a value, it installs all missing plugins and asks you to confirm in a terminal.
-With --install-missing=id,id, it installs only the plugins that you name. Each
-one must be in plugins.include of the profile, and --yes confirms in advance.
+a value, it installs all missing plugins. With --install-missing=id,id, it
+installs only the plugins that you name. Each one must be in plugins.include of
+the profile. In a terminal, ccshelf asks you to confirm. --yes skips the question
+and is the only way to confirm without a terminal.
 It installs only from a marketplace that you already added, and it never adds
 one. It does not work with a profile from a project source. Managed policy
 applies, because claude does the install. When claude refuses a plugin, ccshelf
@@ -100,14 +101,14 @@ reports it and goes on as it does without the flag.`,
 	c.Flags().SetInterspersed(false)
 	c.Flags().BoolVar(&yes, "yes", false, "answer yes to confirmations other than trust (trust is never auto-accepted)")
 	c.Flags().BoolVar(&refresh, "refresh", false, "check tracked branches for a new commit now, not only once per trust.branch_check_interval")
-	c.Flags().StringSliceVar(&installNames, "install-missing", nil, "install plugins of the profile that claude does not list. Without a value: all of them, after you confirm. With =id,id: only these, and --yes confirms")
+	c.Flags().StringSliceVar(&installNames, "install-missing", nil, "install plugins of the profile that claude does not list. Without a value: all of them. With =id,id: only these. --yes skips the confirmation")
 	c.Flags().Lookup("install-missing").NoOptDefVal = installAll
 	c.RunE = l.do(func(ctx context.Context, cc *clicore.Context, cmd *cobra.Command, args []string) error {
 		name, pass, err := splitRunArgs(cmd, args)
 		if err != nil {
 			return err
 		}
-		req, err := newInstallRequest(cmd.Flags().Changed("install-missing"), installNames, yes)
+		req, err := newInstallRequest(cmd.Flags().Changed("install-missing"), installNames)
 		if err != nil {
 			return err
 		}

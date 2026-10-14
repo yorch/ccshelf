@@ -234,15 +234,25 @@ func TestInstallMissingAfterProfileNameIsRejected(t *testing.T) {
 	}
 }
 
-func TestInstallMissingBareWithYesIsRefused(t *testing.T) {
+func TestInstallMissingBareWithYesInstallsAllWithoutAsking(t *testing.T) {
 	h := newHarness(t)
-	h.writeProfile("mine", ghostProfile)
-	installedWith(t, "design-kit@acme")
-	if code := h.run("run", "--install-missing", "--yes", "mine"); code != ui.ExitUsage {
+	h.writeProfile("mine", `name = "mine"
+description = "d"
+
+[plugins]
+include = ["ghost@acme", "phantom@acme"]
+`)
+	add := installedWith(t, "design-kit@acme")
+	h.spawnHook = func(args []string) { add(args[len(args)-1]) }
+	h.prompt = ui.NewScripted() // any question would fail the test
+	if code := h.run("--no-interactive", "run", "--install-missing", "--yes", "mine"); code != 0 {
 		t.Fatalf("code %d\n%s", code, h.errb)
 	}
-	if len(h.spawned) != 0 || h.started != 0 {
-		t.Errorf("--yes must not widen the set: spawned %v started %d", h.spawned, h.started)
+	if len(h.spawned) != 2 || h.started != 1 {
+		t.Errorf("--yes installs every missing plugin: spawned %v started %d", h.spawned, h.started)
+	}
+	if !strings.Contains(h.errb.String(), "claude plugin install --scope user ghost@acme") {
+		t.Errorf("the plan must be printed before the install: %s", h.errb)
 	}
 }
 
