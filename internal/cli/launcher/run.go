@@ -181,6 +181,9 @@ func (l *launcher) runProfile(ctx context.Context, cc *clicore.Context, name str
 		if refresh {
 			eq = append(eq, "--refresh")
 		}
+		if install.On {
+			eq = append(eq, install.flag())
+		}
 		eq = append(eq, name)
 		if len(pass) > 0 {
 			eq = append(eq, "--")
