@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.11.0](https://github.com/yorch/ccshelf/compare/v0.10.0...v0.11.0) (2026-10-14)
+
+
+### Features
+
+* **launcher:** add run --install-missing for profile plugins ([#70](https://github.com/yorch/ccshelf/issues/70)) ([20a901c](https://github.com/yorch/ccshelf/commit/20a901ce92e01c5fca92d24454a27a88f2a42e04))
+
+
+### Bug fixes
+
+* **doctor:** run --installed under the resolved account ([#69](https://github.com/yorch/ccshelf/issues/69)) ([ad46a27](https://github.com/yorch/ccshelf/commit/ad46a270026a12a6d5e6270cfe2b9d3b343e6f7f))
+
 ## [0.10.0](https://github.com/yorch/ccshelf/compare/v0.9.0...v0.10.0) (2026-10-13)
 
 
