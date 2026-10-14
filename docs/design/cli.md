@@ -12,7 +12,7 @@ Command set and the interactive and flag-based interaction model (R6).
 - `new <p> [--scope user|project] [--from <p2>]`
 - `edit <p>`
 - `trust <p>`
-- `account add <name>`
+- `account add <name> [--dir] [--default] [--marketplace] [--plugin]`, `account ls`, `account rm <name>` (named accounts, see [launcher.md](launcher.md), section 3). The global `--account <name>` picks one for any command.
 - `config [show|path|source ls|add|pin|rm|set|unset|edit]` (change the configuration after `init`, see below)
 - `shell-init <bash|zsh|fish|pwsh>`
 - `compile [--check]`

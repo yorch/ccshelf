@@ -77,6 +77,28 @@ ccshelf run --account personal sre-night --resume         # ccshelf flags first,
 
 Every command works with flags alone. On a terminal, ccshelf asks for missing values and prints the equivalent command. You must trust profiles from a shared source (a git repo of your organization) first. `ccshelf trust <profile>` shows what the profile does. Nothing is ever accepted automatically (`--yes` does not accept trust). Exit codes: 0 ok, 1 failure, 2 usage, 3 policy, 4 trust required, 130 interrupted.
 
+### Accounts
+
+An **account** is a separate Claude Code configuration directory (`CLAUDE_CONFIG_DIR`) with its own login, plugins and history. A profile says what is active. An account says who you are.
+
+```sh
+CLAUDE_CONFIG_DIR=~/.claude-work ccshelf run sre      # ccshelf keeps a variable you set
+ccshelf account add work                              # create ~/.claude-work and print the login steps
+ccshelf account add personal --dir ~/.claude-personal --default
+ccshelf account ls
+ccshelf run --account personal sre                    # pick an account for one command
+ccshelf account rm personal                           # forget it, keep its directory
+```
+
+ccshelf uses the first of these that is set:
+1. `--account`. It replaces a `CLAUDE_CONFIG_DIR` that is already set, and ccshelf prints a warning.
+2. An existing `CLAUDE_CONFIG_DIR`.
+3. The profile's `account` field.
+4. `default_account` in `config.toml`.
+5. Claude Code's default `~/.claude`.
+
+Install the plugins in each account. ccshelf never reads, copies or moves credentials and never deletes an account directory. Details: [docs/design/launcher.md](docs/design/launcher.md#3-combining-profiles-with-accounts-decided-document-it).
+
 ### Update
 
 ```sh
