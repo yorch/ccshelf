@@ -75,6 +75,20 @@ ccshelf run sre-night                                     # start claude with th
 ccshelf run --account personal sre-night --resume         # ccshelf flags first, then claude's
 ```
 
+A new user can follow the [getting started guide](docs/getting-started.md).
+
+### Missing plugins
+
+A profile chooses plugins. It does not install them. When a plugin of the profile is not installed, `ccshelf run` warns and prints the `/plugin install` command. To let ccshelf install the plugins, add `--install-missing`:
+
+```sh
+ccshelf run --install-missing sre-night                          # print the commands, ask, install all missing plugins
+ccshelf run --install-missing --yes sre-night                    # the same, without the question
+ccshelf run --install-missing=sre-kit@acme --yes sre-night       # only the plugins that you name (each must be in the profile)
+```
+
+ccshelf runs `claude plugin install --scope user <id>` for each plugin. It installs only from a marketplace that you already added. It runs after the trust check, and not for a profile from a project source. Managed policy applies, because Claude Code does the install. A plugin that Claude Code refuses stays missing, and ccshelf starts as it does without the flag. `dry-run` never installs. The decision is D-65 in [docs/DECISIONS.md](docs/DECISIONS.md).
+
 Every command works with flags alone. On a terminal, ccshelf asks for missing values and prints the equivalent command. You must trust profiles from a shared source (a git repo of your organization) first. `ccshelf trust <profile>` shows what the profile does. Nothing is ever accepted automatically (`--yes` does not accept trust). Exit codes: 0 ok, 1 failure, 2 usage, 3 policy, 4 trust required, 130 interrupted.
 
 ### Accounts

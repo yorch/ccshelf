@@ -50,6 +50,7 @@
         <li class="opt2"><a href="#how">How it works</a></li>
         <li class="opt2"><a href="#catalog">Catalog</a></li>
         <li class="opt"><a href="#trust">Security</a></li>
+        <li class="opt3"><a href="docs/getting-started.html">Get started</a></li>
         <li class="opt3"><a href="#install">Install</a></li>
         <li class="opt"><a href="#commands">Commands</a></li>
         <li class="opt"><a href="#faq">FAQ</a></li>
@@ -68,7 +69,7 @@
     <h1 id="h-hero">One plugin shelf. A loadout per terminal.</h1>
     <div class="hero-aside">
       <p class="lede">ccshelf starts Claude Code with only the plugins, skills and MCP servers that a named profile asks for. Run <code>ccshelf run sre</code> in one terminal and <code>ccshelf run frontend</code> in another, at the same time.</p>
-      <p class="hero-links"><a class="btn" href="#install">Install ccshelf</a> <a href="#how">See what a profile turns off</a></p>
+      <p class="hero-links"><a class="btn" href="docs/getting-started.html">Get started</a> <a href="#install">Install ccshelf</a> <a href="#how">See what a profile turns off</a></p>
     </div>
   </div>
 
@@ -333,7 +334,7 @@
 <!-- INSTALL -->
 <section class="sec wrap" id="install" aria-labelledby="h-install">
   <div class="sec-head"><h2 id="h-install">Install and quick start</h2>
-    <p>Install the latest release with the script for your platform. It verifies the download before installing. You can also build from source.</p></div>
+    <p>Install the latest release with the script for your platform. It verifies the download before installing. You can also build from source. New here? Follow the <a href="docs/getting-started.html">getting started guide</a>.</p></div>
   <div class="sec-body">
     <h3 class="sub">Linux and macOS</h3>
     <div class="cmd">
@@ -372,6 +373,16 @@ ccshelf run --account personal sre-night --resume</code></pre>
     <p>Create a personal profile, list profiles from every source, see the resolved plugins and trust closure, print the exact <code>claude</code> command without running it, then run it. The last line shows the argument order: ccshelf flags first, then the profile name, then whatever goes to <code>claude</code>.</p>
     <p>Every command works with flags alone. On a terminal, ccshelf asks for missing values and prints the equivalent command line, so you can script it later.</p>
 
+    <h3 class="sub">Missing plugins</h3>
+    <div class="cmd">
+      <pre id="c-missing"><code>ccshelf run --install-missing sre-night
+ccshelf run --install-missing --yes sre-night
+ccshelf run --install-missing=sre-kit@acme --yes sre-night</code></pre>
+      <button class="copy" type="button" data-copy="c-missing" hidden>Copy commands</button>
+    </div>
+    <p>A profile chooses plugins. It does not install them. When a plugin of the profile is not installed, <code>ccshelf run</code> warns and prints the <code>/plugin install</code> command. With <code>--install-missing</code>, ccshelf prints <code>claude plugin install --scope user</code> for each missing plugin, asks you to confirm, and installs them. <code>--yes</code> skips the question. <code>--install-missing=id,id</code> installs only the plugins that you name, and each one must be in the profile.</p>
+    <p class="fine">It installs only from a marketplace that you already added, and it never adds one. It runs after the trust check and not for a profile from a project source. Managed policy applies, because Claude Code does the install. With <code>--yes</code>, plugins install without a question, so use it only for profiles that you trust. <code>dry-run</code> never installs. See <a href="docs/decisions.html">decision D-65</a>.</p>
+
     <h3 class="sub">For an organization</h3>
     <div class="cmd">
       <pre id="c-org"><code>ccshelf lint
@@ -390,7 +401,7 @@ ccshelf catalog build</code></pre>
   <div class="sec-body">
     <h3 class="sub">Launcher</h3>
     <dl class="cmds">
-      <div><dt><code>run &lt;profile&gt;</code></dt><dd>Start <code>claude</code> with the profile. Arguments after the name go to <code>claude</code>. Without a name, a picker appears on a terminal.</dd></div>
+      <div><dt><code>run &lt;profile&gt;</code></dt><dd>Start <code>claude</code> with the profile. Arguments after the name go to <code>claude</code>. Without a name, a picker appears on a terminal. <code>--install-missing</code> installs the plugins of the profile that are not installed.</dd></div>
       <div><dt><code>dry-run &lt;profile&gt;</code></dt><dd>Print the exact <code>claude</code> command and run nothing.</dd></div>
       <div><dt><code>show &lt;profile&gt;</code></dt><dd>The resolved plugins, MCP servers and trust closure.</dd></div>
       <div><dt><code>ls</code></dt><dd>List profiles from every source.</dd></div>
