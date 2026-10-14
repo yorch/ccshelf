@@ -163,6 +163,78 @@ func TestDoctorInstalledWithFakeClaude(t *testing.T) {
 	}
 }
 
+// TestDoctorInstalledAccount checks that doctor --installed runs 'claude
+// plugin list' under the account the launcher would use: --account, then
+// CLAUDE_CONFIG_DIR, then default_account.
+func TestDoctorInstalledAccount(t *testing.T) {
+	bin := testutil.BuildFakeClaude(t)
+	work := filepath.Join(t.TempDir(), "claude-work")
+	personal := filepath.Join(t.TempDir(), "claude-personal")
+	envDir := filepath.Join(t.TempDir(), "claude-env")
+	cfgDir := t.TempDir()
+	write(t, cfgDir, "config.toml", "default_account = \"work\"\n"+
+		"[accounts.work]\nconfig_dir = '"+work+"'\n"+
+		"[accounts.personal]\nconfig_dir = '"+personal+"'\n")
+	plugins := testutil.PluginsFile(t, "sre-kit@acme")
+
+	for _, tc := range []struct {
+		name, flag, env string
+		want            string
+		note            string
+	}{
+		{name: "default_account", want: work},
+		{name: "flag", flag: "personal", want: personal},
+		{name: "env", env: envDir, want: envDir, note: `CLAUDE_CONFIG_DIR is set. Ignoring account "work" from default`},
+		{name: "flag over env", flag: "personal", env: envDir, want: personal, note: "--account personal overrides CLAUDE_CONFIG_DIR"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newHarness(t, copyExample(t))
+			h.g.ClaudePath = bin
+			h.g.ConfigPath = filepath.Join(cfgDir, "config.toml")
+			h.g.Account = tc.flag
+			log := filepath.Join(t.TempDir(), "claude.log")
+			environ := []string{"FAKE_CLAUDE_PLUGINS=" + plugins, "FAKE_CLAUDE_LOG=" + log, "PATH=" + os.Getenv("PATH")}
+			if tc.env != "" {
+				environ = append(environ, "CLAUDE_CONFIG_DIR="+tc.env)
+			}
+			h.env.Environ = func() []string { return environ }
+			h.env.Getenv = func(k string) string {
+				if k == "CLAUDE_CONFIG_DIR" {
+					return tc.env
+				}
+				return ""
+			}
+			r := h.run("doctor", "--installed")
+			if r.code != 0 {
+				t.Fatalf("%d\n%s\n%s", r.code, r.out, r.err)
+			}
+			inv := testutil.ReadLog(t, log)
+			if len(inv) != 1 {
+				t.Fatalf("want one claude call, got %d", len(inv))
+			}
+			if got := inv[0].Env["CLAUDE_CONFIG_DIR"]; got != tc.want {
+				t.Errorf("CLAUDE_CONFIG_DIR = %q, want %q", got, tc.want)
+			}
+			if tc.note != "" && (!strings.Contains(r.err, "warn") || !strings.Contains(r.err, tc.note)) {
+				t.Errorf("missing account warning %q:\n%s", tc.note, r.err)
+			}
+			if tc.note == "" && strings.Contains(r.err, "warn:") {
+				t.Errorf("unexpected warning:\n%s", r.err)
+			}
+		})
+	}
+
+	t.Run("unknown account", func(t *testing.T) {
+		h := newHarness(t, copyExample(t))
+		h.g.ClaudePath = bin
+		h.g.ConfigPath = filepath.Join(cfgDir, "config.toml")
+		h.g.Account = "nope"
+		if r := h.run("doctor", "--installed"); r.code != 2 || !strings.Contains(r.err, "unknown account") {
+			t.Errorf("%d %s", r.code, r.err)
+		}
+	})
+}
+
 func TestDoctorUsage(t *testing.T) {
 	root := copyExample(t)
 	h := newHarness(t, root)

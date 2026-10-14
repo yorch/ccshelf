@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yorch/ccshelf/internal/account"
 	"github.com/yorch/ccshelf/internal/cache"
 	"github.com/yorch/ccshelf/internal/claude"
 	"github.com/yorch/ccshelf/internal/cli/clicore"
@@ -150,15 +149,7 @@ type session struct {
 
 // loadConfig reads the configuration named by --config or the default path.
 func loadConfig(cc *clicore.Context) (*config.Config, string, error) {
-	p, err := configPath(cc)
-	if err != nil {
-		return nil, "", err
-	}
-	cfg, err := config.Load(p)
-	if err != nil {
-		return nil, "", fmt.Errorf("configuration %s: %w", p, err)
-	}
-	return cfg, p, nil
+	return cc.LoadConfig()
 }
 
 // writableConfig is the configuration as a command that changes it read it:
@@ -264,45 +255,6 @@ func (w *writableConfig) save(cfg *config.Config) error {
 	return nil
 }
 
-// envMap turns NAME=value entries into a map.
-func envMap(list []string) map[string]string {
-	m := map[string]string{}
-	for _, e := range list {
-		if k, v, ok := strings.Cut(e, "="); ok {
-			m[k] = v
-		}
-	}
-	return m
-}
-
-// accountEnv resolves the account for a profile account name and returns the
-// environment additions.
-func accountEnv(cc *clicore.Context, cfg *config.Config, profileAccount string) (config.AccountChoice, map[string]string, error) {
-	choice, err := config.ResolveAccount(cc.G.Account, profileAccount, cfg, cc.Getenv)
-	if err != nil {
-		return choice, nil, ui.Usage(fmt.Errorf("account: %w", err))
-	}
-	extra := map[string]string{}
-	if choice.SetEnv {
-		list, err := account.Env(cfg, choice.Name)
-		if err != nil {
-			return choice, nil, fmt.Errorf("account %s: %w", choice.Name, err)
-		}
-		for k, v := range envMap(list) {
-			extra[k] = v
-		}
-	}
-	return choice, extra, nil
-}
-
-// printAccountNotes shows what an account choice ignored or overrode, so the
-// choice is never silent.
-func printAccountNotes(cc *clicore.Context, choice config.AccountChoice) {
-	for _, n := range choice.Notes {
-		warnf(cc, "%s", n)
-	}
-}
-
 // openOpts says what open prepares.
 type openOpts struct {
 	// prepare fetches and verifies the git sources and locates the plugin
@@ -338,7 +290,7 @@ func (l *launcher) openWith(ctx context.Context, cc *clicore.Context, o openOpts
 	if err != nil {
 		return nil, fmt.Errorf("working directory: %w", err)
 	}
-	choice, extra, err := accountEnv(cc, cfg, "")
+	choice, extra, err := cc.AccountEnv(cfg, "")
 	if err != nil {
 		return nil, err
 	}

@@ -262,7 +262,8 @@ Analyze the org data repo (--root, default the current directory): overlapping p
 The command skips the checks that need more input and lists them as skipped. It never passes them silently. These flags give the input:
 
 ```text
-- --installed reads 'claude plugin list' (read only).
+- --installed reads 'claude plugin list' (read only). It uses the account
+  from --account, CLAUDE_CONFIG_DIR or default_account, in that order.
 - --usage-file reads an OpenTelemetry JSONL export.
 - --usage-api asks the Enterprise Analytics API. It needs the admin key in
   CCSHELF_ANALYTICS_KEY. This is the only network call.
