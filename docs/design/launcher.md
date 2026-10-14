@@ -51,7 +51,7 @@ What breaks if Claude Code changes the instructions route: the route depends on 
 What breaks if Claude Code changes: the design depends on `--settings` honoring `enabledPlugins`, `skillOverrides`, `disableClaudeAiConnectors` and `deniedMcpServers`, and on `claude plugin list --json`. Gate on `claude --version`, and run the real-`claude` init-event test in CI against new releases.
 
 ## 2. What is shared between profiles
-The launcher never sets `CLAUDE_CONFIG_DIR`, so all profiles use the same `~/.claude` and `~/.claude.json`. Auth and parallel runs were tested. The rest is inferred from how `CLAUDE_CONFIG_DIR` is documented.
+Without an account (section 3), the launcher never sets `CLAUDE_CONFIG_DIR`, so all profiles use the same `~/.claude` and `~/.claude.json`. Profiles in one account share the rows below. Auth and parallel runs were tested. The rest is inferred from how `CLAUDE_CONFIG_DIR` is documented.
 
 | Thing | Shared? | Notes |
 |---|---|---|
@@ -79,7 +79,7 @@ Two independent axes:
 An account switch isolates credentials, user settings, installed plugins and marketplaces, history, memory and plugin cache. A profile then filters within that account.
 
 ### Three ways to combine, from least to most built-in
-1. **Honor the environment (works from day one).** The launcher inherits the environment, and its own `claude plugin list --json` call must run under the same environment. So `CLAUDE_CONFIG_DIR=~/.claude-work ccshelf run sre` just works, and so does any existing account switcher (e.g. quinnjr/claude-code-profiles, shell aliases) that sets that variable first. **Requirement:** the launcher must never unset or override an existing `CLAUDE_CONFIG_DIR`.
+1. **Honor the environment (works from day one).** The launcher inherits the environment, and its own `claude plugin list --json` call runs under the same environment. So `CLAUDE_CONFIG_DIR=~/.claude-work ccshelf run sre` just works, and so does any existing account switcher (e.g. quinnjr/claude-code-profiles, shell aliases) that sets that variable first. **Requirement:** the launcher never unsets an existing `CLAUDE_CONFIG_DIR`, and only an explicit `--account` flag replaces it (D-24).
 2. **Built-in accounts (nicer UX).** Config names accounts and the launcher sets the variable for the child:
    ```toml
    # ~/.config/ccshelf/config.toml
@@ -90,19 +90,42 @@ An account switch isolates credentials, user settings, installed plugins and mar
    [accounts.personal]
    config_dir = "~/.claude-personal"
    ```
-   Usage: `ccshelf run --account personal sre`. ccshelf flags go before the profile name. Everything after it is passed to `claude`, and a known ccshelf flag there is rejected. A profile may pin a default with the top-level `account = "work"` field. The precedence is: CLI flag, then profile field, then `default_account`, then Claude Code's default directory.
-   `ccshelf account add work` creates the dir and prints the one-time steps (run `claude` with the variable set and `/login` inside it). The launcher never copies, reads or moves credentials.
+   Usage: `ccshelf run --account personal sre`. ccshelf flags go before the profile name. Everything after it is passed to `claude`, and a known ccshelf flag there is rejected. A profile may pin a default with the top-level `account = "work"` field.
 3. **Delegate to an existing tool.** Keep using a config-dir switcher and run `ccshelf` inside it (way 1).
 
+### Which account a command uses
+`config.ResolveAccount` picks the account in this order (D-24):
+1. The `--account` flag. It wins over an existing `CLAUDE_CONFIG_DIR`, because the flag is the stated intent for this run. ccshelf prints a warning that says so.
+2. An existing `CLAUDE_CONFIG_DIR` in the environment. ccshelf passes it through unchanged. When a profile `account` or `default_account` would apply, ccshelf ignores it and prints a warning that names it.
+3. The `account` field of the profile.
+4. `default_account` in `config.toml`.
+5. None: Claude Code's default directory. ccshelf does not set the variable.
+
+`--account` is a global flag, so every command accepts it. The launcher commands that open the profile sources (`ls`, `show`, `diff`, `edit`, `new`, `trust`, `shell-init`, `dry-run` and `run`) resolve the account in this order. Their `claude plugin list` calls run under that account. `doctor --installed` is an exception: it reads only the inherited environment, so set `CLAUDE_CONFIG_DIR` yourself for it. Before it reads the profile, `run` uses the flag, the environment or `default_account`. Then it applies the profile's `account` field. A `plugin` profile source is read before that step. If the profile then selects another account, `run` refuses with exit 2 and tells you to pass `--account` explicitly. An unknown account name is a usage error (exit 2) that lists the known names. `dry-run` puts the variable in the command that it prints. The equivalent command that ccshelf prints after a prompt keeps `--account`.
+
+### Managing accounts
+- **`ccshelf account add <name>`** adds an account. The steps:
+  1. It checks the name: lower-case letters, digits and hyphens, at most 32. An account is a name, never a path.
+  2. It checks the directory (`--dir`, default `~/.claude-<name>`). The directory must be absolute after `~` and `$VAR` expansion. It must not be `~/.claude`, inside it or above it. It must not go through a symlink or belong to another account. If it exists, it must be empty or already this account's directory.
+  3. It creates the directory with mode 0700 and saves the account in `config.toml`. `--default` also sets `default_account`.
+  4. It prints the one-time steps that you run yourself: start `claude` with the variable set, `/login`, then the marketplace adds (`--marketplace`, repeatable) and plugin installs (`--plugin name@marketplace`, repeatable) inside the account.
+- **`ccshelf account ls`** lists the accounts and marks the default.
+- **`ccshelf account rm <name>`** removes the account from `config.toml`. When it was the default, `default_account` becomes unset. The directory, with its login, plugins and history, is never deleted.
+- **`ccshelf init --account-name <name>`** (with `--account-dir`) adds an account during setup. The `init` wizard also offers one.
+- **`ccshelf config set default_account <name>`** changes the default. You can change the accounts themselves only with `account add`, `account rm` or `config edit` (see [cli.md](cli.md)).
+
+The launcher never reads, copies or moves credentials, never touches the macOS Keychain and never deletes an account directory.
+
 ### What changes per account
-- **Installed plugins and marketplaces are per config dir**, so each account must install its plugins (`/plugin marketplace add ...` and installs) separately. The launcher's installed-plugin list is also per account. A profile can list plugins that exist in one account but not another. The launcher then reports "not installed in this account".
+- **Installed plugins and marketplaces are per config dir**, so each account must install its plugins (`/plugin marketplace add ...` and installs) separately. The launcher's installed-plugin list is also per account. A profile can list plugins that exist in one account but not another. `run` then warns "plugin <id> is not installed and was not written", and `doctor --installed` reports DOC008.
 - **Plugin cache is duplicated per account.** Do not symlink `plugins/` between accounts: that triggers "corrupted" warnings (#82272, #85325). Accept the duplication, or evaluate `CLAUDE_CODE_PLUGIN_SEED_DIR` (a read-only pre-populated plugin dir for containers, where plugins still must be enabled) as a way to dedupe. Untested.
 - **Org profiles are shared across accounts**, because they come from the profile sources, not from the config dir. The `plugin` source type needs the data-only plugin installed in each account that uses it. `git` and `dir` sources work in any account.
 - **Auth storage differs by OS** (see [platform.md](platform.md), "Facts from the docs"). Either way each account has its own login.
 - **Managed settings still apply to every account** (Claude Code reads them from system paths).
 - **Base preferences diverge**: the user layer (`settings.json`) is per account, while profile settings arrive through `--settings` and are common to all accounts.
 
-### Unverified, to test
+### Unverified, to test (O-12)
+The automated tests use a fake `claude`. They check the account choice and the environment of the child. These Claude Code behaviors still need a real second config dir:
 - `claude plugin list --json` under a non-default `CLAUDE_CONFIG_DIR` returns that dir's plugins (expected).
 - Masking, `--strict-mcp-config` and `--setting-sources` behave the same under a second config dir.
 - Whether a second login is needed to run the test: a human has to do the interactive `/login` in the second dir (e.g. in the prompt: `! CLAUDE_CONFIG_DIR=~/.claude-test claude`). Then Stage 0 tests can be repeated against it.

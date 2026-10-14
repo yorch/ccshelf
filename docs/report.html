@@ -138,7 +138,7 @@ section>input[type=search]{display:block}
 <body>
 <div class="shell">
 <aside class="rail">
-<div class="brand"><h1>ccshelf</h1><p>Research and design notes. Claude Code 2.1.290. Generated from the Markdown in docs/ (source hash c8e76355).</p></div>
+<div class="brand"><h1>ccshelf</h1><p>Research and design notes. Claude Code 2.1.290. Generated from the Markdown in docs/ (source hash 7051e8c4).</p></div>
 <nav aria-label="Sections"><div id="tabs" role="tablist" aria-orientation="vertical"></div></nav>
 <div class="legend" aria-label="Confidence markers"><b>How sure we are</b><br><span class="lg gv" aria-hidden="true">&#9679;</span>verified in docs, gh or the CLI<br><span class="lg gr" aria-hidden="true">&#9680;</span>reported by a research agent<br><span class="lg gu" aria-hidden="true">&#9675;</span>unverified or inferred</div>
 <button class="themebtn" id="themebtn" type="button">Switch theme</button>
@@ -565,7 +565,7 @@ draw(false);
 <p>What breaks if Claude Code changes the instructions route: the route depends on <code>--add-dir</code>, on the variable <code>CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD</code> and on the rule that an added directory loads <code>CLAUDE.md</code>. If Claude Code removes or renames the variable, the instructions are silently absent from the session. The stage 0 runs used <code>-p</code> mode only <span class="V">V</span>. For interactive mode the docs say the same CLAUDE.md hierarchy loads, but no interactive run was made <span class="U">U</span>. The built-in Explore and Plan subagents skip CLAUDE.md, so they do not see the instructions <span class="V">V</span>. In <code>-p</code> mode without compaction, Claude Code did not read the added CLAUDE.md again during the session, not even for a subagent that started later <span class="V">V</span>. After compaction, the docs say that Claude Code re-injects the project-root CLAUDE.md from disk <span class="V">V</span>, so an added-directory CLAUDE.md may be read from disk again, and an edit during a session could then reach that session <span class="U">U</span>. The read-only directory and the check before launch repair the file for the next launch. They do not protect the running session. Open points, all <span class="U">U</span>: whether Claude Code reloads skills or rules from the added directory during a session; whether a user <code>settings.json</code> env value of 0 turns the loading off (inferred from the precedence, not run); and whether the CLAUDE.md files of project <code>permissions.additionalDirectories</code> load when the variable is set. A real-<code>claude</code> check of the init event cannot show the instructions, so the opt-in integration test must ask the model for a marker phrase.</p>
 <p>What breaks if Claude Code changes: the design depends on <code>--settings</code> honoring <code>enabledPlugins</code>, <code>skillOverrides</code>, <code>disableClaudeAiConnectors</code> and <code>deniedMcpServers</code>, and on <code>claude plugin list --json</code>. Gate on <code>claude --version</code>, and run the real-<code>claude</code> init-event test in CI against new releases.</p>
 <h3 id="launcher-2-what-is-shared-between-profiles">2. What is shared between profiles</h3>
-<p>The launcher never sets <code>CLAUDE_CONFIG_DIR</code>, so all profiles use the same <code>~/.claude</code> and <code>~/.claude.json</code>. Auth and parallel runs were tested. The rest is inferred from how <code>CLAUDE_CONFIG_DIR</code> is documented.</p>
+<p>Without an account (section 3), the launcher never sets <code>CLAUDE_CONFIG_DIR</code>, so all profiles use the same <code>~/.claude</code> and <code>~/.claude.json</code>. Profiles in one account share the rows below. Auth and parallel runs were tested. The rest is inferred from how <code>CLAUDE_CONFIG_DIR</code> is documented.</p>
 <table><thead><tr><th>Thing</th><th>Shared?</th><th>Notes</th></tr></thead><tbody>
 <tr><td>Auth (login)</td><td>Yes</td><td>Tested: OAuth works with the flags used. Log in once.</td></tr>
 <tr><td>Projects and folder trust</td><td>Yes</td><td>Common per-project state in <code>~/.claude.json</code>.</td></tr>
@@ -591,7 +591,7 @@ draw(false);
 <p>An account switch isolates credentials, user settings, installed plugins and marketplaces, history, memory and plugin cache. A profile then filters within that account.</p>
 <h4 id="launcher-three-ways-to-combine-from-least-to-most-built-in">Three ways to combine, from least to most built-in</h4>
 <ol>
-<li><strong>Honor the environment (works from day one).</strong> The launcher inherits the environment, and its own <code>claude plugin list --json</code> call must run under the same environment. So <code>CLAUDE_CONFIG_DIR=~/.claude-work ccshelf run sre</code> just works, and so does any existing account switcher (e.g. quinnjr/claude-code-profiles, shell aliases) that sets that variable first. <strong>Requirement:</strong> the launcher must never unset or override an existing <code>CLAUDE_CONFIG_DIR</code>.</li>
+<li><strong>Honor the environment (works from day one).</strong> The launcher inherits the environment, and its own <code>claude plugin list --json</code> call runs under the same environment. So <code>CLAUDE_CONFIG_DIR=~/.claude-work ccshelf run sre</code> just works, and so does any existing account switcher (e.g. quinnjr/claude-code-profiles, shell aliases) that sets that variable first. <strong>Requirement:</strong> the launcher never unsets an existing <code>CLAUDE_CONFIG_DIR</code>, and only an explicit <code>--account</code> flag replaces it (D-24).</li>
 <li><strong>Built-in accounts (nicer UX).</strong> Config names accounts and the launcher sets the variable for the child:
 <pre><code># ~/.config/ccshelf/config.toml
 default_account = "work"            # top-level key; omit to use Claude Code's default dir
@@ -600,19 +600,45 @@ default_account = "work"            # top-level key; omit to use Claude Code's d
 config_dir = "~/.claude-work"       # sets CLAUDE_CONFIG_DIR for the child
 [accounts.personal]
 config_dir = "~/.claude-personal"</code></pre>
-<p>Usage: <code>ccshelf run --account personal sre</code>. ccshelf flags go before the profile name. Everything after it is passed to <code>claude</code>, and a known ccshelf flag there is rejected. A profile may pin a default with the top-level <code>account = "work"</code> field. The precedence is: CLI flag, then profile field, then <code>default_account</code>, then Claude Code's default directory. <code>ccshelf account add work</code> creates the dir and prints the one-time steps (run <code>claude</code> with the variable set and <code>/login</code> inside it). The launcher never copies, reads or moves credentials.</p></li>
+<p>Usage: <code>ccshelf run --account personal sre</code>. ccshelf flags go before the profile name. Everything after it is passed to <code>claude</code>, and a known ccshelf flag there is rejected. A profile may pin a default with the top-level <code>account = "work"</code> field.</p></li>
 <li><strong>Delegate to an existing tool.</strong> Keep using a config-dir switcher and run <code>ccshelf</code> inside it (way 1).</li>
 </ol>
+<h4 id="launcher-which-account-a-command-uses">Which account a command uses</h4>
+<p><code>config.ResolveAccount</code> picks the account in this order (D-24):</p>
+<ol>
+<li>The <code>--account</code> flag. It wins over an existing <code>CLAUDE_CONFIG_DIR</code>, because the flag is the stated intent for this run. ccshelf prints a warning that says so.</li>
+<li>An existing <code>CLAUDE_CONFIG_DIR</code> in the environment. ccshelf passes it through unchanged. When a profile <code>account</code> or <code>default_account</code> would apply, ccshelf ignores it and prints a warning that names it.</li>
+<li>The <code>account</code> field of the profile.</li>
+<li><code>default_account</code> in <code>config.toml</code>.</li>
+<li>None: Claude Code's default directory. ccshelf does not set the variable.</li>
+</ol>
+<p><code>--account</code> is a global flag, so every command accepts it. The launcher commands that open the profile sources (<code>ls</code>, <code>show</code>, <code>diff</code>, <code>edit</code>, <code>new</code>, <code>trust</code>, <code>shell-init</code>, <code>dry-run</code> and <code>run</code>) resolve the account in this order. Their <code>claude plugin list</code> calls run under that account. <code>doctor --installed</code> is an exception: it reads only the inherited environment, so set <code>CLAUDE_CONFIG_DIR</code> yourself for it. Before it reads the profile, <code>run</code> uses the flag, the environment or <code>default_account</code>. Then it applies the profile's <code>account</code> field. A <code>plugin</code> profile source is read before that step. If the profile then selects another account, <code>run</code> refuses with exit 2 and tells you to pass <code>--account</code> explicitly. An unknown account name is a usage error (exit 2) that lists the known names. <code>dry-run</code> puts the variable in the command that it prints. The equivalent command that ccshelf prints after a prompt keeps <code>--account</code>.</p>
+<h4 id="launcher-managing-accounts">Managing accounts</h4>
+<ul>
+<li><strong><code>ccshelf account add &lt;name&gt;</code></strong> adds an account. The steps:
+<ol>
+<li>It checks the name: lower-case letters, digits and hyphens, at most 32. An account is a name, never a path.</li>
+<li>It checks the directory (<code>--dir</code>, default <code>~/.claude-&lt;name&gt;</code>). The directory must be absolute after <code>~</code> and <code>$VAR</code> expansion. It must not be <code>~/.claude</code>, inside it or above it. It must not go through a symlink or belong to another account. If it exists, it must be empty or already this account's directory.</li>
+<li>It creates the directory with mode 0700 and saves the account in <code>config.toml</code>. <code>--default</code> also sets <code>default_account</code>.</li>
+<li>It prints the one-time steps that you run yourself: start <code>claude</code> with the variable set, <code>/login</code>, then the marketplace adds (<code>--marketplace</code>, repeatable) and plugin installs (<code>--plugin name@marketplace</code>, repeatable) inside the account.</li>
+</ol></li>
+<li><strong><code>ccshelf account ls</code></strong> lists the accounts and marks the default.</li>
+<li><strong><code>ccshelf account rm &lt;name&gt;</code></strong> removes the account from <code>config.toml</code>. When it was the default, <code>default_account</code> becomes unset. The directory, with its login, plugins and history, is never deleted.</li>
+<li><strong><code>ccshelf init --account-name &lt;name&gt;</code></strong> (with <code>--account-dir</code>) adds an account during setup. The <code>init</code> wizard also offers one.</li>
+<li><strong><code>ccshelf config set default_account &lt;name&gt;</code></strong> changes the default. You can change the accounts themselves only with <code>account add</code>, <code>account rm</code> or <code>config edit</code> (see <a href="#cli">cli.md</a>).</li>
+</ul>
+<p>The launcher never reads, copies or moves credentials, never touches the macOS Keychain and never deletes an account directory.</p>
 <h4 id="launcher-what-changes-per-account">What changes per account</h4>
 <ul>
-<li><strong>Installed plugins and marketplaces are per config dir</strong>, so each account must install its plugins (<code>/plugin marketplace add ...</code> and installs) separately. The launcher's installed-plugin list is also per account. A profile can list plugins that exist in one account but not another. The launcher then reports "not installed in this account".</li>
+<li><strong>Installed plugins and marketplaces are per config dir</strong>, so each account must install its plugins (<code>/plugin marketplace add ...</code> and installs) separately. The launcher's installed-plugin list is also per account. A profile can list plugins that exist in one account but not another. <code>run</code> then warns "plugin &lt;id&gt; is not installed and was not written", and <code>doctor --installed</code> reports DOC008.</li>
 <li><strong>Plugin cache is duplicated per account.</strong> Do not symlink <code>plugins/</code> between accounts: that triggers "corrupted" warnings (#82272, #85325). Accept the duplication, or evaluate <code>CLAUDE_CODE_PLUGIN_SEED_DIR</code> (a read-only pre-populated plugin dir for containers, where plugins still must be enabled) as a way to dedupe. Untested.</li>
 <li><strong>Org profiles are shared across accounts</strong>, because they come from the profile sources, not from the config dir. The <code>plugin</code> source type needs the data-only plugin installed in each account that uses it. <code>git</code> and <code>dir</code> sources work in any account.</li>
 <li><strong>Auth storage differs by OS</strong> (see <a href="#platform">platform.md</a>, "Facts from the docs"). Either way each account has its own login.</li>
 <li><strong>Managed settings still apply to every account</strong> (Claude Code reads them from system paths).</li>
 <li><strong>Base preferences diverge</strong>: the user layer (<code>settings.json</code>) is per account, while profile settings arrive through <code>--settings</code> and are common to all accounts.</li>
 </ul>
-<h4 id="launcher-unverified-to-test">Unverified, to test</h4>
+<h4 id="launcher-unverified-to-test-o-12">Unverified, to test (O-12)</h4>
+<p>The automated tests use a fake <code>claude</code>. They check the account choice and the environment of the child. These Claude Code behaviors still need a real second config dir:</p>
 <ul>
 <li><code>claude plugin list --json</code> under a non-default <code>CLAUDE_CONFIG_DIR</code> returns that dir's plugins (expected).</li>
 <li>Masking, <code>--strict-mcp-config</code> and <code>--setting-sources</code> behave the same under a second config dir.</li>
@@ -857,7 +883,7 @@ on_blocked = "warn"           # warn | fail. What to do when org policy blocks s
 <li><code>new &lt;p&gt; [--scope user|project] [--from &lt;p2&gt;]</code></li>
 <li><code>edit &lt;p&gt;</code></li>
 <li><code>trust &lt;p&gt;</code></li>
-<li><code>account add &lt;name&gt;</code></li>
+<li><code>account add &lt;name&gt; [--dir] [--default] [--marketplace] [--plugin]</code>, <code>account ls</code>, <code>account rm &lt;name&gt;</code> (named accounts, see <a href="#launcher">launcher.md</a>, section 3). The global <code>--account &lt;name&gt;</code> picks one for any command.</li>
 <li><code>config [show|path|source ls|add|pin|rm|set|unset|edit]</code> (change the configuration after <code>init</code>, see below)</li>
 <li><code>shell-init &lt;bash|zsh|fish|pwsh&gt;</code></li>
 <li><code>compile [--check]</code></li>
@@ -1573,7 +1599,7 @@ profiles/example.toml.sample          only with --example-profile: an all-commen
 <tr><td>Symlinks</td><td>Not used</td><td>Keep it that way: never depend on symlinks (Windows needs Developer Mode). Copy or content-address instead.</td></tr>
 <tr><td>MCP <code>npx</code> servers</td><td><code>command = "npx"</code></td><td>The MCP registry should allow a per-OS command override (e.g. <code>windows = ["cmd", "/c", "npx", ...]</code>) until the question above is settled.</td></tr>
 <tr><td>Policy detection</td><td>Read managed-settings files</td><td>File paths are known per OS, but Windows registry/MDM and server-managed settings can't be read reliably. Make detection best-effort. The launcher never probes a flag to learn the policy from an exit code (D-06). It plans from the sources it can read, and with <code>on_blocked = "fail"</code> it exits 3.</td></tr>
-<tr><td>Credentials</td><td>"Keychain per config dir"</td><td>Not our concern as long as we never set <code>CLAUDE_CONFIG_DIR</code>. On Linux/Windows credentials are one shared file with no documented locking, so concurrent token refresh is <strong>untested</strong> there.</td></tr>
+<tr><td>Credentials</td><td>"Keychain per config dir"</td><td>The launcher never reads or writes credentials. It sets <code>CLAUDE_CONFIG_DIR</code> only for a named account (<a href="#launcher">launcher.md</a>, section 3), and each account then has its own login. On Linux/Windows the credentials of one config dir are one shared file with no documented locking, so concurrent token refresh is <strong>untested</strong> there.</td></tr>
 <tr><td>Encoding</td><td>Not discussed</td><td>Write UTF-8 without BOM and with LF. Accept BOM and CRLF on read. Windows PowerShell 5 <code>&gt;</code> redirection writes UTF-16, which would break TOML/JSON. Document it and reject non-UTF-8 input with a clear error.</td></tr>
 <tr><td>Self-update</td><td>n/a</td><td>A running <code>.exe</code> can't be overwritten on Windows, but it can be renamed. <code>ccshelf update</code> renames it to <code>&lt;name&gt;.old</code> and renames the new file into place (D-40, <a href="#update">update.md</a>). It does not replace a package-managed copy without <code>--force</code>. Package managers (Homebrew, Scoop/WinGet, apt/deb later) and release downloads stay install paths.</td></tr>
 <tr><td>Distribution/trust</td><td>n/a</td><td>Unsigned binaries trigger macOS Gatekeeper (notarization) and Windows SmartScreen. Internal distribution needs signing or a package manager that handles it.</td></tr>
