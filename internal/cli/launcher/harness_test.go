@@ -53,6 +53,8 @@ type harness struct {
 	// Spawn seam.
 	spawned   [][]string
 	spawnCode int
+	// spawnDirs holds the working directory of each SpawnIn call.
+	spawnDirs []string
 	spawnHook func(args []string)
 	newGit    GitFactory
 	// now, when set, is the clock the commands see.
@@ -140,6 +142,15 @@ func (h *harness) build() *cobra.Command {
 		},
 		Spawn: func(ctx context.Context, bin string, args, _ []string, _ io.Reader, _, _ io.Writer) (int, error) {
 			h.spawnCtx = ctx
+			h.spawned = append(h.spawned, append([]string{bin}, args...))
+			if h.spawnHook != nil {
+				h.spawnHook(args)
+			}
+			return h.spawnCode, nil
+		},
+		SpawnIn: func(ctx context.Context, dir, bin string, args, _ []string, _ io.Reader, _, _ io.Writer) (int, error) {
+			h.spawnCtx = ctx
+			h.spawnDirs = append(h.spawnDirs, dir)
 			h.spawned = append(h.spawned, append([]string{bin}, args...))
 			if h.spawnHook != nil {
 				h.spawnHook(args)

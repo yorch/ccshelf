@@ -78,7 +78,16 @@ commit and prints the command that reviews the update. --refresh checks now.
 If another profile of the same source trusted a later commit of the branch,
 ccshelf offers that commit to this profile at once, with no network call and
 whatever the interval says. It offers only a commit that it can prove is
-later, and it runs only a commit that this profile trusts.`,
+later, and it runs only a commit that this profile trusts.
+
+--install-missing installs the plugins of the profile that claude does not
+list. It runs "claude plugin install --scope user <id>" for each one, in the
+cache directory and not in the project, after it prints the commands and you
+confirm (--yes confirms in advance). It installs only from a marketplace that
+you already added, and it never adds one. It does not work with a profile from a
+project source. Managed policy applies, because claude does the install. When
+claude refuses a plugin, ccshelf reports it and goes on as it does without the
+flag.`,
 		Example: `  ccshelf run sre
   ccshelf run sre -- -p "summarize this repo"
   ccshelf run --account personal sre --resume`,
@@ -300,6 +309,11 @@ func (s *session) buildLaunch(ctx context.Context, name string, pass []string, y
 			}
 		}
 		if len(missing) > 0 {
+			for _, f := range r.Chain {
+				if f.Source.Kind() == profile.KindProject {
+					return nil, ui.Usage(errors.New("--install-missing does not work with a profile from a project source, because a project can name plugins that run code"))
+				}
+			}
 			fresh, err := s.installMissing(ctx, bin, missing, yes)
 			if err != nil {
 				return nil, err

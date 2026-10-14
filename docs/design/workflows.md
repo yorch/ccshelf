@@ -160,6 +160,6 @@ error: nothing to add; give --plugin or --skill-off (exit 2)
 Trust is never auto-accepted. `ccshelf trust sre --accept <hash>` is the scripted form, and `--yes` does not apply to it.
 
 ## Not covered by any workflow yet
-- Installing missing plugins automatically (deliberately not done).
+- Installing missing plugins automatically (deliberately not done). `run --install-missing` is the opt-in, confirmed form (D-65).
 - Switching profiles inside a running session (a profile is fixed at launch).
 - Teams with different profiles per repo (the direnv approach can set a default profile per directory).

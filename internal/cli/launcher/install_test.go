@@ -78,7 +78,7 @@ func TestInstallMissingDeclinedStops(t *testing.T) {
 	h := newHarness(t)
 	h.writeProfile("mine", ghostProfile)
 	installedWith(t, "design-kit@acme")
-	h.prompt = ui.NewScripted(false)
+	h.prompt = ui.NewScripted(false, false)
 	if code := h.run("run", "--install-missing", "mine"); code != ui.ExitFailure {
 		t.Fatalf("code %d\n%s", code, h.errb)
 	}
@@ -112,19 +112,83 @@ func TestInstallMissingYesInstallsWithoutTerminal(t *testing.T) {
 	}
 }
 
-func TestInstallMissingFailureStops(t *testing.T) {
+func TestInstallMissingFailureDegradesToWarning(t *testing.T) {
 	h := newHarness(t)
 	h.writeProfile("mine", ghostProfile)
 	installedWith(t, "design-kit@acme")
 	h.spawnCode = 1
-	if code := h.run("run", "--install-missing", "--yes", "mine"); code != ui.ExitFailure {
+	if code := h.run("run", "--install-missing", "--yes", "mine"); code != 0 {
 		t.Fatalf("code %d\n%s", code, h.errb)
 	}
-	if h.started != 0 {
-		t.Errorf("started %d", h.started)
+	if h.started != 1 {
+		t.Errorf("a refused install must behave like a missing plugin: started %d", h.started)
 	}
-	if !strings.Contains(h.errb.String(), "ghost@acme") {
+	for _, want := range []string{"claude did not install: ghost@acme", "/plugin install ghost@acme"} {
+		if !strings.Contains(h.errb.String(), want) {
+			t.Errorf("stderr lacks %q: %s", want, h.errb)
+		}
+	}
+}
+
+func TestInstallMissingRunsInCacheDirNotProject(t *testing.T) {
+	h := newHarness(t)
+	h.writeProfile("mine", ghostProfile)
+	add := installedWith(t, "design-kit@acme")
+	h.spawnHook = func(args []string) { add(args[len(args)-1]) }
+	h.mustRun("run", "--install-missing", "--yes", "mine")
+	if len(h.spawnDirs) != 1 || h.spawnDirs[0] == "" || h.spawnDirs[0] == h.cwd {
+		t.Errorf("install must run in the cache directory, not the project: dirs %v cwd %q", h.spawnDirs, h.cwd)
+	}
+}
+
+func TestInstallMissingReportsPluginClaudeDidNotList(t *testing.T) {
+	h := newHarness(t)
+	h.writeProfile("mine", `name = "mine"
+description = "d"
+
+[plugins]
+include = ["ghost@acme", "phantom@acme"]
+`)
+	add := installedWith(t, "design-kit@acme")
+	h.spawnHook = func(args []string) {
+		if args[len(args)-1] == "ghost@acme" {
+			add("ghost@acme")
+		}
+	}
+	// Both installs exit 0, but only ghost appears in the fresh list.
+	h.mustRun("run", "--install-missing", "--yes", "mine")
+	if len(h.spawned) != 2 {
+		t.Fatalf("spawned %v", h.spawned)
+	}
+	if !strings.Contains(h.errb.String(), "installed: ghost@acme, phantom@acme") {
 		t.Errorf("stderr: %s", h.errb)
+	}
+	if !strings.Contains(h.errb.String(), "plugin phantom@acme is in the profile but not installed") {
+		t.Errorf("phantom is not in the fresh list, so it must still be reported missing: %s", h.errb)
+	}
+}
+
+func TestInstallMissingRefusesNpmAndDuplicateMarketplace(t *testing.T) {
+	h := newHarness(t)
+	h.writeProfile("mine", strings.ReplaceAll(ghostProfile, "ghost@acme", "left-pad@npm"))
+	installedWith(t, "design-kit@acme")
+	mk := filepath.Join(t.TempDir(), "mk.json")
+	testutil.WriteFile(t, mk, `[{"name":"npm","source":"github","repo":"a/b","installLocation":"/x"}]`)
+	t.Setenv("FAKE_CLAUDE_MARKETPLACES", mk)
+	h.mustRun("run", "--install-missing", "--yes", "mine")
+	if len(h.spawned) != 0 {
+		t.Errorf("an npm package must never be installed: %v", h.spawned)
+	}
+
+	h2 := newHarness(t)
+	h2.writeProfile("mine", ghostProfile)
+	installedWith(t, "design-kit@acme")
+	dup := filepath.Join(t.TempDir(), "dup.json")
+	testutil.WriteFile(t, dup, `[{"name":"acme","source":"github","repo":"a/b","installLocation":"/x"},{"name":"acme","source":"github","repo":"c/d","installLocation":"/y"}]`)
+	t.Setenv("FAKE_CLAUDE_MARKETPLACES", dup)
+	h2.mustRun("run", "--install-missing", "--yes", "mine")
+	if len(h2.spawned) != 0 {
+		t.Errorf("a marketplace listed twice must not be used: %v", h2.spawned)
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yorch/ccshelf/internal/cache"
 	"github.com/yorch/ccshelf/internal/claude"
 	"github.com/yorch/ccshelf/internal/ui"
 )
@@ -16,15 +17,18 @@ import (
 const installTimeout = 10 * time.Minute
 
 // installMissing installs the plugins of the profile that claude does not
-// list, for "run --install-missing". It never adds a marketplace, never
-// passes -y to claude (so claude still asks before it runs a command that a
+// list, for "run --install-missing". It never adds a marketplace, never passes
+// -y to claude (so claude still asks before it runs a command that a
 // marketplace declares) and never runs when the user did not confirm. Managed
-// policy applies, because claude itself does the install: when claude refuses,
-// the plugin stays missing and the error goes to the user.
+// policy applies, because claude itself does the install.
+//
+// It lists marketplaces and runs the installs in the cache directory, not the
+// project, so a project cannot add or shadow a marketplace (SR3). A plugin that
+// claude does not install stays missing: installMissing warns, and the caller
+// reports it as it does without the flag.
 //
 // It returns the fresh list of installed plugins when claude installed at
-// least one plugin, and nil when nothing changed. The caller reports the
-// plugins that are still missing.
+// least one plugin, and nil when nothing changed.
 func (s *session) installMissing(ctx context.Context, bin string, missing []string, yes bool) ([]claude.Plugin, error) {
 	cc := s.cc
 	var want []string
@@ -36,10 +40,14 @@ func (s *session) installMissing(ctx context.Context, bin string, missing []stri
 	if len(want) == 0 {
 		return nil, nil
 	}
+	dir, err := cache.Dir()
+	if err != nil {
+		return nil, ui.Failure(fmt.Errorf("cache directory: %w", err))
+	}
 
 	// A plugin installs only from a marketplace that the user already added.
 	// Adding a marketplace is a separate trust step that ccshelf does not take.
-	added, err := claude.ListMarketplaces(ctx, bin, s.cwd, s.env)
+	added, err := claude.ListMarketplaces(ctx, bin, dir, s.env)
 	if err != nil {
 		if cerr := ctx.Err(); cerr != nil {
 			return nil, fmt.Errorf("listing marketplaces: %w", cerr)
@@ -47,18 +55,24 @@ func (s *session) installMissing(ctx context.Context, bin string, missing []stri
 		return nil, ui.Failure(withHint(fmt.Errorf("listing marketplaces: %w", err),
 			"claude plugin marketplace list --json must work under the chosen account"))
 	}
-	known := map[string]bool{}
+	count := map[string]int{}
 	for _, m := range added {
-		known[m.Name] = true
+		count[m.Name]++
 	}
 	var plan []string
 	for _, id := range want {
 		_, mkt := claude.SplitID(id)
-		if !known[mkt] {
+		switch {
+		case mkt == "npm":
+			// claude reads <package>@npm as an npm install, not as a marketplace.
+			warnf(cc, "plugin %s is not installed. ccshelf does not install an npm package", id)
+		case count[mkt] == 0:
 			warnf(cc, "plugin %s is not installed and marketplace %s is not added. Add it inside Claude Code with: /plugin marketplace add <source>", id, mkt)
-			continue
+		case count[mkt] > 1:
+			warnf(cc, "plugin %s is not installed and marketplace %s is listed more than once. ccshelf does not install from it", id, mkt)
+		default:
+			plan = append(plan, id)
 		}
-		plan = append(plan, id)
 	}
 	if len(plan) == 0 {
 		return nil, nil
@@ -77,26 +91,31 @@ func (s *session) installMissing(ctx context.Context, bin string, missing []stri
 			return nil, err
 		}
 		if !ok {
-			return nil, ui.Failure(errors.New("not started: you declined to install the plugins of the profile"))
+			return nil, nil
 		}
 	}
 
-	var failed []string
+	var done, failed []string
 	for _, id := range plan {
 		ictx, cancel := context.WithTimeout(ctx, installTimeout)
-		code, err := s.l.opt.Spawn(ictx, bin, []string{"plugin", "install", "--scope", "user", id}, s.env, cc.Streams.In, cc.Streams.Err, cc.Streams.Err)
+		code, err := s.l.opt.SpawnIn(ictx, dir, bin, []string{"plugin", "install", "--scope", "user", id}, s.env, cc.Streams.In, cc.Streams.Err, cc.Streams.Err)
 		cancel()
 		if cerr := ctx.Err(); cerr != nil {
 			return nil, fmt.Errorf("installing plugin %s: %w", id, cerr)
 		}
 		if err != nil || code != 0 {
 			failed = append(failed, id)
-			warnf(cc, "claude could not install plugin %s", id)
+			continue
 		}
+		done = append(done, id)
 	}
 	if len(failed) > 0 {
-		return nil, ui.Failure(fmt.Errorf("not started: claude could not install: %s", strings.Join(failed, ", ")))
+		warnf(cc, "claude did not install: %s", strings.Join(failed, ", "))
 	}
+	if len(done) == 0 {
+		return nil, nil
+	}
+	okf(cc, "installed: %s", strings.Join(done, ", "))
 	fresh, err := claude.ListInstalled(ctx, bin, s.cwd, s.env)
 	if err != nil {
 		if cerr := ctx.Err(); cerr != nil {

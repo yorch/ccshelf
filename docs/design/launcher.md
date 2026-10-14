@@ -14,7 +14,7 @@ The launcher is a compiler plus a process starter. It is never in the data path:
    - `claude --version` for feature gating.
    - `claude plugin list --json` for installed plugin ids, install paths and scopes.
    - Managed-settings files and other policy signals.
-   - Report profile plugins that aren't installed, with the install command. Never install silently.
+   - Report profile plugins that aren't installed, with the install command. Never install silently. With `run --install-missing` (D-65), print the install commands, ask, then run `claude plugin install --scope user <id>` for each plugin whose marketplace is already added.
 3. **Compile into generated files**:
    - A settings file. Its `enabledPlugins` sets `false` for every installed plugin not in the profile (default-deny, regenerated each run so new installs don't leak). It sets `true` for the profile's plugins (whether `true` is needed is untested). The file also has `skillOverrides` for standalone skills, and `env`/`model`/`outputStyle`/`effort` defaults.
    - An MCP config file when the profile uses `strict` (its servers, or an empty list).
