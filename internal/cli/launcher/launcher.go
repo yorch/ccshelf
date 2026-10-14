@@ -15,7 +15,6 @@ import (
 
 	"github.com/yorch/ccshelf/internal/claude"
 	"github.com/yorch/ccshelf/internal/cli/clicore"
-	"github.com/yorch/ccshelf/internal/config"
 	"github.com/yorch/ccshelf/internal/policy"
 	"github.com/yorch/ccshelf/internal/settings"
 	"github.com/yorch/ccshelf/internal/ui"
@@ -163,14 +162,7 @@ func shell(cc *clicore.Context) string { return ui.ShellForGOOS(cc.GOOS) }
 
 // configPath returns the config file location honoring --config.
 func configPath(cc *clicore.Context) (string, error) {
-	if cc.G.ConfigPath != "" {
-		return cc.G.ConfigPath, nil
-	}
-	p, err := config.Path()
-	if err != nil {
-		return "", fmt.Errorf("locating the configuration file: %w", err)
-	}
-	return p, nil
+	return cc.ConfigPath()
 }
 
 // pickProfile returns the profile named in args, or asks for one. Without a

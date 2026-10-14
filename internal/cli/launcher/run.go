@@ -225,7 +225,7 @@ func (s *session) buildLaunch(ctx context.Context, name string, pass []string, y
 
 	// The profile's own account applies only now that it is known. A plugin
 	// source was prepared under the earlier choice, so it must not change.
-	choice, extra, err := accountEnv(cc, s.cfg, m.Account)
+	choice, extra, err := cc.AccountEnv(s.cfg, m.Account)
 	if err != nil {
 		return nil, err
 	}
@@ -236,7 +236,7 @@ func (s *session) buildLaunch(ctx context.Context, name string, pass []string, y
 	}
 	s.choice = choice
 	s.env = claude.Env(cc.Environ(), extra)
-	printAccountNotes(cc, choice)
+	cc.PrintAccountNotes(choice)
 
 	// What was raised while the sources were prepared (an unavailable source,
 	// a cached checkout used offline) is part of the structured warnings; it was
