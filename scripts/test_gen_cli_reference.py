@@ -58,6 +58,20 @@ Global Flags:
         self.assertEqual([name for name, _ in h.commands], ["build", "init"])
         self.assertEqual(h.global_flags, [("", "--json", "", "machine-readable output")])
 
+    def test_flag_with_an_optional_value(self):
+        h = parse_help('''Start.
+
+Usage:
+  ccshelf run [flags]
+
+Flags:
+  -h, --help                      help for run
+      --install-missing strings[=*]   install plugins. Without a value: all of them
+      --yes                       answer yes
+''')
+        self.assertEqual(h.flags[1], ("", "--install-missing", "strings", "install plugins. Without a value: all of them"))
+        self.assertEqual(h.flags[2][1], "--yes")
+
     def test_malformed_group_is_rejected(self):
         with self.assertRaises(ValueError):
             parse_help("Usage:\n  ccshelf [command]\nProfiles:\n  not a command row\n")

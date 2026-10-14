@@ -32,7 +32,7 @@ PROG = "ccshelf"
 # Cobra command groups have application-defined headings. Recognize headings
 # generically, then require command-shaped rows in non-reserved sections.
 SECTION_RE = re.compile(r"^([A-Za-z][^:\n]*):$")
-FLAG_RE = re.compile(r"^ {2}(?:(-\w), | {4})(--[\w-]+)(?: ([\w\[\]]+))?\s{2,}(\S.*)$")
+FLAG_RE = re.compile(r"^ {2}(?:(-\w), | {4})(--[\w-]+)(?: ([\w\[\]]+(?:\[=[^\]]*\])?))?\s{2,}(\S.*)$")
 CMD_RE = re.compile(r"^ {2}([\w-]+)\s{2,}(\S.*)$")
 
 
@@ -85,7 +85,8 @@ def parse_help(text: str) -> Help:
             m = FLAG_RE.match(line)
             if not m:
                 raise ValueError("cannot parse flag line: %r" % line)
-            entry = (m.group(1) or "", m.group(2), m.group(3) or "", m.group(4).strip())
+            # A flag with an optional value prints "type[=default]". The table keeps the type.
+            entry = (m.group(1) or "", m.group(2), re.sub(r"\[=[^\]]*\]$", "", m.group(3) or ""), m.group(4).strip())
             (h.flags if section == "Flags" else h.global_flags).append(entry)
         else:
             raise ValueError("unexpected line outside a known section: %r" % line)
