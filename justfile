@@ -21,9 +21,9 @@ cover_min := env("COVER_MIN", "70")
 site_url  := env("SITE_URL", "https://site.example.test/ccshelf")
 
 # Pinned versions of the development tools (keep in step with .github/workflows/ci.yml).
-golangci_lint_version := "v2.14.0"
-govulncheck_version   := "v1.8.0"
-goreleaser_version    := "v2.18.2"
+golangci_lint_version := "v2.15.0"
+govulncheck_version   := "v1.9.0"
+goreleaser_version    := "v2.20.1"
 actionlint_version    := "v1.7.12"
 
 targets := "darwin/amd64 darwin/arm64 linux/amd64 linux/arm64 windows/amd64 windows/arm64"
