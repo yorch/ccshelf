@@ -32,7 +32,9 @@ PROG = "ccshelf"
 # Cobra command groups have application-defined headings. Recognize headings
 # generically, then require command-shaped rows in non-reserved sections.
 SECTION_RE = re.compile(r"^([A-Za-z][^:\n]*):$")
-FLAG_RE = re.compile(r"^ {2}(?:(-\w), | {4})(--[\w-]+)(?: ([\w\[\]]+(?:\[=[^\]]*\])?))?\s{2,}(\S.*)$")
+# pflag 1.1.0 and later print a boolean flag as "--name[=true|false]". The table
+# shows no type for a boolean flag, as before.
+FLAG_RE = re.compile(r"^ {2}(?:(-\w), | {4})(--[\w-]+)(?:\[=true\|false\])?(?: ([\w\[\]]+(?:\[=[^\]]*\])?))?\s{2,}(\S.*)$")
 CMD_RE = re.compile(r"^ {2}([\w-]+)\s{2,}(\S.*)$")
 
 
