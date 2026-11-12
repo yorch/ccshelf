@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.11.1](https://github.com/yorch/ccshelf/compare/v0.11.0...v0.11.1) (2026-11-12)
+
+
+### Bug fixes
+
+* **deps:** build with go1.27.4 to fix GO-2026-6809 ([#77](https://github.com/yorch/ccshelf/issues/77)) ([12501af](https://github.com/yorch/ccshelf/commit/12501af72bdcb789f1730d41d2b9b28253fc073e))
+* **deps:** upgrade go modules, actions and pinned tools ([#79](https://github.com/yorch/ccshelf/issues/79)) ([a4c9061](https://github.com/yorch/ccshelf/commit/a4c906142a726e07b45ade46f45dae1c3521e998))
+
 ## [0.11.0](https://github.com/yorch/ccshelf/compare/v0.10.0...v0.11.0) (2026-10-14)
 
 
