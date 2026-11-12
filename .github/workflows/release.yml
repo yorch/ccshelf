@@ -43,11 +43,11 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  GORELEASER_VERSION: v2.18.2
-  COSIGN_VERSION: v3.1.3
-  SYFT_VERSION: 1.54.0
+  GORELEASER_VERSION: v2.20.1
+  COSIGN_VERSION: v3.1.4
+  SYFT_VERSION: 1.57.1
   # SHA-256 of syft_${SYFT_VERSION}_linux_amd64.tar.gz, from the release's checksums file.
-  SYFT_SHA256: 54a87372498168b2d033e876fd41fa4e8035b872699e525a57046e1f2f09c860
+  SYFT_SHA256: bf52519eb57f675d47c07d43213cb6dff6449f3d6d1147ff6701ed91f44eef0c
 
 jobs:
   verify:
@@ -210,7 +210,7 @@ jobs:
           tar -xzf "${RUNNER_TEMP}/${archive}" -C "${RUNNER_TEMP}/bin" syft
           echo "${RUNNER_TEMP}/bin" >> "$GITHUB_PATH"
       - name: goreleaser (snapshot, no signing, no publishing)
-        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
           distribution: goreleaser
           version: ${{ env.GORELEASER_VERSION }}
@@ -249,7 +249,7 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false # a poisoned build cache must never reach a release
-      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
         with:
           cosign-release: ${{ env.COSIGN_VERSION }}
       - name: Install syft (pinned release, checksum verified) for SBOMs
@@ -339,7 +339,7 @@ jobs:
           esac
           echo "Draft release $id for $TAG verified (name, tag_name, target commit)."
       - name: goreleaser
-        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
           distribution: goreleaser
           version: ${{ env.GORELEASER_VERSION }}
